@@ -1,13 +1,13 @@
 // ============================================================================
 // 文件：include/geometry/shape_type.h
-// 作用：定义绘图类型枚举 ShapeType，对应 Kotlin AnnotationLayer.kt 中的
-//       enum class ShapeType。
+// 作用：定义标注形状类型枚举 ShapeType，服务于终稿 FR-1.3 标注能力；
+//       每种类型对应 annotation 模块 ShapeFactory 的一条构造分支。
 // ============================================================================
 #pragma once
 
 namespace idc::geometry {
 
-// 绘图类型：每一种类型对应 ShapeFactory 里的一条构造分支。
+// 标注形状类型：每一种类型对应 ShapeFactory 里的一条构造分支。
 enum class ShapeType {
     LINE,               // 直线
     RECTANGLE,          // 矩形

@@ -58,7 +58,7 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
             if (distance <= 0.0) {
                 return std::make_unique<geometry::LineShape>(x1, y1, x1, y1);
             }
-            // Java 中 y 轴向下，atan2 需要按屏幕坐标计算
+            // 屏幕坐标 y 轴向下，atan2 需按此约定计算角度
             const double angleDeg = -std::atan2(dy, dx) * 180.0 / M_PI;
             const geometry::ArcType arcType =
                 req.type == ShapeType::ARC ? geometry::ArcType::OPEN :

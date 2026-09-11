@@ -23,10 +23,10 @@
 三种模式在数学上是包含关系（L1 ⊂ L2 ⊂ L3），在产品上并列呈现，但**共用同一套引擎代码**
 （NFR-0：模式仅为参数预设）：
 
-| 层级 | 模式 | 定位 |
-|---|---|---|
-| **L1** | 标准提取模式 | 兼容基线（极性恒为 `keep`） |
-| **L2** | 反向剔除模式 | ⭐ 差异化内核（按线删除、零伪造、无损） |
+| 层级     | 模式     | 定位                         |
+|--------|--------|----------------------------|
+| **L1** | 标准提取模式 | 兼容基线（极性恒为 `keep`）          |
+| **L2** | 反向剔除模式 | ⭐ 差异化内核（按线删除、零伪造、无损）       |
 | **L3** | 网格分割模式 | ⭐ 完备表达层（参数化网格 + 显式排序 + 重排） |
 
 ---
@@ -34,18 +34,27 @@
 ## 2. 库的组成（模块划分）
 
 代码按**功能 / 任务**分目录、分文件；`include/` 为对外接口，`src/` 为一一对应的实现。
+按对新项目的**主次**分为两层——先理解这一点，才不会把「复用来的支撑能力」误当作项目主体：
 
-| 模块 | 命名空间 | 职责 | 对应终稿 |
-|---|---|---|---|
-| `core` | `idc::core` | 基础数据类型：`Color` / `Point2D` / `Image` | §10.2 `Image` |
-| `geometry` | `idc::geometry` | 标注图形几何：`ShapeType` / `Shape` / `Path` | FR-1.3 标注几何 |
-| `processing` | `idc::processing` | 像素处理：颜色/通道、旋转/翻转/缩放 | FR-1.1 / FR-1.2 / FR-1.4 |
-| `annotation` | `idc::annotation` | 标注层：`AnnotationLayer` / `Rasterizer` / `ViewTransform` | FR-1.3 标注图层（可烧录） |
-| `preprocess` | `idc::preprocess` | 切割前的基础图像处理流水线：`PreprocessPipeline` | §9 `preprocess` 段 |
-| `history` | `idc::history` | 泛型撤销 / 重做栈：`HistoryManager<T>` | FR-1.5 / NFR-4 |
-| `engine` | `idc::engine` | ★ Grid-Selection-Emit 引擎接口骨架（数据结构 + 声明） | §2 / §10.2 全部核心概念 |
+- **① 核心引擎层（新项目主体）**：`engine`。承载本工具区别于常规裁剪的全部价值
+  （切割线 / 诱导网格 / 选择集 / 极性 / 排布导出），对应终稿 §8 的 **MVP 与 v2**，
+  是后续开发的主战场；当前为「数据结构 + 桩实现」。
+- **② 复用支撑层（前置能力）**：`core` / `processing` / `preprocess` / `geometry` /
+  `annotation` / `history`。由旧库重构保留，服务于终稿 **FR-1「基础图像处理」前置层**，
+  按 §8 多属 **v3**（标注图层最重、最后做）。它们是引擎的输入准备与辅助，**不是**主体。
 
-`examples/`（演示程序）与 `tests/`（极简自测）分别验证库的典型用法与关键行为。
+| 模块 | 命名空间 | 层 | 职责 | 对应终稿 | 实现分期（§8） |
+|---|---|---|---|---|---|
+| `engine` | `idc::engine` | ★ 核心 | Grid-Selection-Emit 引擎骨架（数据结构 + 声明） | §2 / §10.2 全部核心概念 | MVP / v2 |
+| `core` | `idc::core` | 支撑（地基） | 基础数据类型：`Color` / `Point2D` / `Image` | §10.2 `Image` | 已就绪，被各层依赖 |
+| `processing` | `idc::processing` | 支撑 | 像素处理：颜色/通道、旋转/翻转/缩放 | FR-1.1 / FR-1.2 / FR-1.4 | v3 |
+| `preprocess` | `idc::preprocess` | 支撑 | 切割前的基础图像处理流水线：`PreprocessPipeline` | §9 `preprocess` 段 / FR-1 | v3 |
+| `geometry` | `idc::geometry` | 支撑 | 标注图形几何：`ShapeType` / `Shape` / `Path` | FR-1.3 标注几何 | v3 |
+| `annotation` | `idc::annotation` | 支撑 | 标注层：`AnnotationLayer` / `Rasterizer` / `ViewTransform` | FR-1.3 标注图层（可烧录） | v3 |
+| `history` | `idc::history` | 支撑 | 泛型撤销 / 重做栈：`HistoryManager<T>` | FR-1.5 / NFR-4 | 贯穿各期 |
+
+> `examples/`（演示程序）与 `tests/`（极简自测）分别验证库的典型用法与关键行为。
+> 注：表中「层」表达**主次**（`engine` 为主体）；§4 的目录顺序仅为**物理布局**，二者不必一致。
 
 ---
 

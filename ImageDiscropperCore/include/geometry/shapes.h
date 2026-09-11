@@ -39,7 +39,6 @@ public:
     virtual std::unique_ptr<Shape> clone() const = 0;
 
     // 返回控制点列表，用于编辑模式下的可拖拽锚点。
-    // 对应 AnnotationLayer.kt: getControlPoint(pshape)
     virtual std::vector<core::Point2D> controlPoints() const = 0;
 };
 
@@ -197,7 +196,7 @@ private:
 
 // ---------------------------------------------------------------------------
 // PathShape：自由路径
-//           直接持有一条 Path，行为等价于 java.awt.geom.Path2D。
+//           直接持有一条 Path（对应 FR-1.3 的画笔 / 自由路径标注）。
 // ---------------------------------------------------------------------------
 class PathShape : public Shape {
 public:

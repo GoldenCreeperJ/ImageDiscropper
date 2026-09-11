@@ -31,13 +31,13 @@ public:
     double maxScale() const { return maxScale_; }
     void setScaleRange(double mn, double mx);
 
-    // 屏幕坐标 → 逻辑坐标。对应 Kotlin: screenToLogical(screenPoint)。
+    // 屏幕坐标 → 逻辑坐标。
     core::Point2D screenToLogical(const core::Point2D& screen) const;
     // 逻辑坐标 → 屏幕坐标。
     core::Point2D logicalToScreen(const core::Point2D& logical) const;
 
     // 以屏幕坐标 anchor 为中心，按滚轮增量 wheelRotation 缩放。
-    // wheelRotation 正值表示缩小、负值表示放大（与 Java Swing 保持一致）。
+    // wheelRotation 正值表示缩小、负值表示放大（沿用常见滚轮方向约定）。
     void scaleAboutPoint(double wheelRotation, const core::Point2D& anchor);
 
     // 将指定尺寸的图像适配到 viewport 中，居中放置。

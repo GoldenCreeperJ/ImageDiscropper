@@ -215,7 +215,7 @@ std::unique_ptr<Shape> EllipseShape::clone() const {
     return std::make_unique<EllipseShape>(x_, y_, w_, h_, type_);
 }
 
-// 控制点：中心 + 上下左右四点，对应 Kotlin 版本。
+// 控制点：中心 + 上下左右四点。
 std::vector<core::Point2D> EllipseShape::controlPoints() const {
     const double cx = x_ + w_ / 2.0;
     const double cy = y_ + h_ / 2.0;
@@ -248,7 +248,7 @@ Path ArcShape::toPath() const {
     const double cy = y_ + h_ / 2.0;
     const double rx = w_ / 2.0;
     const double ry = h_ / 2.0;
-    // Java 中角度以逆时针为正、y 轴向下，故 y 分量取负号
+    // 角度以逆时针为正、屏幕 y 轴向下，故 y 分量取负号
     const double startRad = angleStart_ * M_PI / 180.0;
     const double extentRad = angleExtent_ * M_PI / 180.0;
 
@@ -289,7 +289,7 @@ std::unique_ptr<Shape> ArcShape::clone() const {
     return std::make_unique<ArcShape>(x_, y_, w_, h_, angleStart_, angleExtent_, arcType_);
 }
 
-// 控制点：圆心 + 起点 + 终点，对应 Kotlin 版本。
+// 控制点：圆心 + 起点 + 终点。
 std::vector<core::Point2D> ArcShape::controlPoints() const {
     const double cx = x_ + w_ / 2.0;
     const double cy = y_ + h_ / 2.0;
@@ -416,7 +416,7 @@ std::unique_ptr<Shape> TextShape::clone() const {
     return std::make_unique<TextShape>(text_, x_, y_, fontSize_);
 }
 
-// 控制点：仅给出文本基线起点，与 Kotlin 版本一致。
+// 控制点：仅给出文本基线起点。
 std::vector<core::Point2D> TextShape::controlPoints() const {
     return {{x_, y_}};
 }

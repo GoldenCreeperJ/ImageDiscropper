@@ -10,8 +10,8 @@
 namespace idc::preprocess {
 
 // ---------------------------------------------------------------------------
-// PreprocessType：操作类型枚举
-// 分块依据：一个枚举值 = 一种独立的编辑动作，与 Kotlin sealed class 子类一一对应。
+// PreprocessType：预处理操作类型枚举
+// 分块依据：一个枚举值 = 一种独立的预处理动作，与 PreprocessConfig 变体的一个分支一一对应。
 // ---------------------------------------------------------------------------
 enum class PreprocessType {
     GRAY,    // 灰度化（黑白）
@@ -25,7 +25,7 @@ enum class PreprocessType {
 const char* preprocessTypeName(PreprocessType t);
 
 // ---------------------------------------------------------------------------
-// 各操作类型的参数结构（对应 Kotlin sealed class PreprocessConfig 的各子类）
+// 各预处理操作类型的参数结构（用 std::variant 组合为 PreprocessConfig）
 // 分块依据：一个 struct = 一种操作类型；成员即该操作的必要参数。
 // ---------------------------------------------------------------------------
 

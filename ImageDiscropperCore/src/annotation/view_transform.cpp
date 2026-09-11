@@ -41,7 +41,7 @@ void ViewTransform::scaleAboutPoint(const double wheelRotation, const core::Poin
     const core::Point2D oldLogical = screenToLogical(anchor);
     // 计算新 scale（wheelRotation > 0 时缩小，< 0 时放大）
     const double newScale = std::clamp(scale_ - wheelRotation * scaleStep_, minScale_, maxScale_);
-    // 保留两位小数，对应 Kotlin 中的 BigDecimal.setScale(2, HALF_UP)
+    // 保留两位小数（四舍五入），避免缩放值出现过长的浮点尾数
     scale_ = std::round(newScale * 100.0) / 100.0;
     // 反解新 offset，使得 anchor 仍然对应 oldLogical
     offset_ = {anchor.x - oldLogical.x * scale_, anchor.y - oldLogical.y * scale_};

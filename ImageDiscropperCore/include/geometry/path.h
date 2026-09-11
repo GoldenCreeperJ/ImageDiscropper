@@ -89,7 +89,7 @@ public:
     BoundingBox bounds() const;
 
     // 将所有曲线段离散化为折线段，flatness 越小折线越精细。
-    // 返回新的 Path，不修改原路径。对应 java.awt.geom.PathIterator 的 flatten。
+    // 返回新的 Path，不修改原路径。
     Path flattened(double flatness = 1.0) const;
 
     // 判断点是否位于路径内部（偶奇规则）。仅对闭合路径有意义。

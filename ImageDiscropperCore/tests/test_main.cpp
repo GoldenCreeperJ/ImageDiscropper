@@ -41,8 +41,8 @@ static void testCore() {
     using namespace idc::core;
 
     // 反色
-    Color c(10, 20, 30, 255);
-    Color inv = inverse(c);
+    constexpr Color c(10, 20, 30, 255);
+    const Color inv = inverse(c);
     CHECK(inv.r == 245 && inv.g == 235 && inv.b == 225 && inv.a == 255);
 
     // 感知反色：亮色 → 黑，暗色 → 白
@@ -50,7 +50,7 @@ static void testCore() {
     CHECK(perceivedInverse(Color(0, 0, 0)).r == 255);
 
     // 互补色：红色的互补色应接近青色
-    Color comp = complementary(Color(255, 0, 0));
+    const Color comp = complementary(Color(255, 0, 0));
     CHECK(comp.r < 32 && comp.g > 200 && comp.b > 200);
 
     // 图像读写与格式转换
@@ -59,7 +59,7 @@ static void testCore() {
     CHECK(img.getPixel(0, 0) == Color(100, 150, 200, 255));
     CHECK(img.getPixel(3, 2) == Color(100, 150, 200, 255));
 
-    Image gray = img.toGray();
+    const Image gray = img.toGray();
     CHECK(gray.isGray());
     // 灰度值 ≈ 0.299*100 + 0.587*150 + 0.114*200 ≈ 141
     CHECK(std::abs(static_cast<int>(gray.getGray(0, 0)) - 141) <= 1);
@@ -75,15 +75,15 @@ static void testGeometry() {
     using namespace idc::geometry;
 
     // 矩形包围盒
-    RectShape rect(10, 20, 30, 40);
-    BoundingBox bb = rect.bounds();
-    CHECK(bb.x == 10 && bb.y == 20 && bb.width == 30 && bb.height == 40);
+    const RectShape rect(10, 20, 30, 40);
+    const auto [x, y, width, height] = rect.bounds();
+    CHECK(x == 10 && y == 20 && width == 30 && height == 40);
     CHECK(rect.contains(core::Point2D{25, 40}));
     CHECK(!rect.contains(core::Point2D{5, 5}));
     CHECK(rect.controlPoints().size() == 4);
 
     // 椭圆包围盒与内部判定
-    EllipseShape ell(0, 0, 100, 50);
+    const EllipseShape ell(0, 0, 100, 50);
     CHECK(ell.contains(core::Point2D{50, 25}));   // 中心
     CHECK(!ell.contains(core::Point2D{99, 49}));  // 角落外
 
@@ -243,7 +243,7 @@ static void testPreprocess() {
     pipe.add(preprocess::RotateOp{90});
     pipe.add(preprocess::FlipOp{true});
 
-    core::Image out = pipe.apply(img);
+    const core::Image out = pipe.apply(img);
     CHECK(out.isGray());
     CHECK(out.width() == 16 && out.height() == 16);
 
@@ -278,13 +278,13 @@ static void testHistory() {
     CHECK(h.undoStack().back() == 3);
 
     // popToRedo：弹出栈顶到重做栈，返回该条目
-    auto popped = h.popToRedo();
+    const auto popped = h.popToRedo();
     CHECK(popped.has_value() && *popped == 3);
     CHECK(h.undoSize() == 2 && h.redoSize() == 1);
     CHECK(h.undoStack().back() == 2);
 
     // popFromRedo：从重做栈弹回到主栈，返回该条目
-    auto restored = h.popFromRedo();
+    const auto restored = h.popFromRedo();
     CHECK(restored.has_value() && *restored == 3);
     CHECK(h.undoSize() == 3 && h.redoSize() == 0);
     CHECK(h.undoStack().back() == 3);

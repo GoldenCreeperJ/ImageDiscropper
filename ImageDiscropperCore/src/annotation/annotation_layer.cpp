@@ -76,7 +76,7 @@ void AnnotationLayer::setImage(const core::Image& img) {
 }
 
 // 切换编辑模式：MOVE / EDIT / DRAW。
-// 切换时清空当前选中，与 Kotlin AnnotationLayer.editType setter 一致。
+// 切换时清空当前选中，避免跨模式残留选中项。
 void AnnotationLayer::setEditType(const EditType t) {
     editType_ = t;
     selectedIndex_.reset();

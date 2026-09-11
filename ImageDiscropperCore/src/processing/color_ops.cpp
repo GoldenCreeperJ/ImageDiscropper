@@ -1,8 +1,8 @@
 // ============================================================================
 // 文件：src/processing/color_ops.cpp
 // 作用：实现 include/processing/color_ops.h 中的颜色与通道级处理算法。
-//       对应 Kotlin ImageArray.kt 中的 gray / invert / split，
-//       以及颜色选取（pickColor）。
+//       含灰度化 / 按通道反色 / 按通道分离 / 颜色选取（pickColor），
+//       对应终稿 FR-1.4「黑白、反色、色道分离、颜色选取」。
 // ============================================================================
 #include "processing/color_ops.h"
 

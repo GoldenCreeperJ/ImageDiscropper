@@ -34,7 +34,7 @@ struct Point2D {
     bool operator!=(const Point2D& o) const { return !(*this == o); }
 };
 
-// 标量在左侧的乘法：允许写作 2.0 * p。对应 Kotlin: Double.times(Point2D)。
+// 标量在左侧的乘法：允许写作 2.0 * p。
 inline Point2D operator*(const double s, const Point2D& p) { return p * s; }
 
 // 二维欧氏距离，用于命中检测、半径计算等场景。
