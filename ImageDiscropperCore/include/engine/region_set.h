@@ -6,7 +6,8 @@
 //   - RegionSet 是若干 RectRegion 的有序集合，用于承载 split / remove 的产出，
 //     也是导出（§5）阶段的输入。
 //   - 仅承载“集合”语义（增删查、面积/包围盒统计），不含像素搬运逻辑。
-// 说明：接口骨架，全部为平凡数据结构操作，可内联实现。
+// 说明：RegionSet 以 Fragment（区域 + 序号 + 种类）为元素，使单元序号能贯穿
+//       split → applyPolarity → compose 全流程（坍缩位置映射与重排排序均依赖）。
 // ============================================================================
 #pragma once
 
@@ -33,49 +34,57 @@ struct Fragment {
 // ---------------------------------------------------------------------------
 class RegionSet {
 public:
-    // 追加一个区域到集合末尾。
-    void add(const RectRegion& r) { regions_.push_back(r); }
+    // 追加一个区域（兼容接口）：序号 -1、种类 RECT。
+    void add(const RectRegion& r) { fragments_.push_back(Fragment{r, -1, RegionKind::RECT}); }
+    // 追加一个带序号与种类的片段（split 产出用，序号贯穿后续合成）。
+    void add(const RectRegion& r, const int index, const RegionKind kind) {
+        fragments_.push_back(Fragment{r, index, kind});
+    }
+    // 追加一个现成片段。
+    void add(const Fragment& f) { fragments_.push_back(f); }
     // 清空集合。
-    void clear() { regions_.clear(); }
-    // 区域数量。
-    std::size_t size() const { return regions_.size(); }
+    void clear() { fragments_.clear(); }
+    // 片段数量。
+    std::size_t size() const { return fragments_.size(); }
     // 集合是否为空。
-    bool empty() const { return regions_.empty(); }
+    bool empty() const { return fragments_.empty(); }
 
-    // 只读 / 可写访问底层区域列表。
-    const std::vector<RectRegion>& regions() const { return regions_; }
-    std::vector<RectRegion>& regions() { return regions_; }
+    // 只读 / 可写访问底层片段列表。
+    const std::vector<Fragment>& fragments() const { return fragments_; }
+    std::vector<Fragment>& fragments() { return fragments_; }
 
-    // 下标访问（调用方保证索引合法）。
-    const RectRegion& operator[](const std::size_t i) const { return regions_[i]; }
+    // 下标访问（调用方保证索引合法），返回片段。
+    const Fragment& operator[](const std::size_t i) const { return fragments_[i]; }
 
-    // 迭代器透传，便于范围 for 遍历。
-    auto begin() const { return regions_.begin(); }
-    auto end() const { return regions_.end(); }
+    // 迭代器透传，便于范围 for 遍历片段。
+    auto begin() const { return fragments_.begin(); }
+    auto end() const { return fragments_.end(); }
+    auto begin() { return fragments_.begin(); }
+    auto end() { return fragments_.end(); }
 
-    // 所有区域的像素面积之和（用于 §6“保留区域为空”判定与统计）。
+    // 所有片段的像素面积之和（用于 §6“保留区域为空”判定与统计）。
     long long totalArea() const {
         long long sum = 0;
-        for (const auto& r : regions_) sum += r.area();
+        for (const auto& f : fragments_) sum += f.region.area();
         return sum;
     }
 
     // 计算集合的整体包围盒；空集合返回全 0 区域。
     RectRegion boundingBox() const {
-        if (regions_.empty()) return RectRegion{};
-        int l = regions_[0].left, t = regions_[0].top;
-        int r = regions_[0].right, b = regions_[0].bottom;
-        for (const auto& g : regions_) {
-            l = std::min(l, g.left);
-            t = std::min(t, g.top);
-            r = std::max(r, g.right);
-            b = std::max(b, g.bottom);
+        if (fragments_.empty()) return RectRegion{};
+        int l = fragments_[0].region.left, t = fragments_[0].region.top;
+        int r = fragments_[0].region.right, b = fragments_[0].region.bottom;
+        for (const auto& f : fragments_) {
+            l = std::min(l, f.region.left);
+            t = std::min(t, f.region.top);
+            r = std::max(r, f.region.right);
+            b = std::max(b, f.region.bottom);
         }
         return RectRegion(l, t, r, b);
     }
 
 private:
-    std::vector<RectRegion> regions_;
+    std::vector<Fragment> fragments_;
 };
 
 } // namespace idc::engine

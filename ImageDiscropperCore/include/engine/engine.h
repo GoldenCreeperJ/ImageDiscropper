@@ -6,11 +6,12 @@
 // 分块依据：
 //   - Tier / CutGenerator：模式层级与切割线生成方式（§2 表：切割线生成方式×极性×输出）。
 //   - SourceInfo / CutConfig / EngineConfig：对应终稿 §9 的操作配置数据结构。
-//   - generateCutLines / induceGrid / split / applyPolarity / compose / exportImage：
-//     流水线五个阶段的自由函数声明，串联出 §10.2 的概念流程。
-// 说明：★ 本文件是新项目的“接口骨架”，全部流水线函数仅声明；桩实现见
-//       src/engine/engine.cpp（返回空结果 + TODO），真正实现属于 MVP 及后续阶段，
-//       不在本次“适配既有项目”的范围内。
+//   - generateCutLines / induceGrid：桥接聚合配置的流水线阶段①② 声明；其余阶段函数
+//     （split / applyPolarity / compose / exportImage）声明已下沉到各自子头，本头聚合 include。
+// 说明：本头是统一管线 facade——聚合 include 各阶段子头，并直接声明桥接聚合配置的
+//       generateCutLines / induceGrid 与顶层编排 runEngine；split / applyPolarity / compose /
+//       exportImage 的声明已下沉到各自阶段头（解耦），定义仍分散在 src/engine/ 各阶段文件，
+//       避免上帝文件。runEngine 定义见 src/engine/engine.cpp。
 // ============================================================================
 #pragma once
 
@@ -20,11 +21,13 @@
 #include "core/image.h"
 #include "engine/composition.h"
 #include "engine/cut_line.h"
+#include "engine/export.h"
 #include "engine/grid.h"
 #include "engine/region.h"
 #include "engine/region_set.h"
 #include "engine/selection.h"
 #include "engine/sequence.h"
+#include "engine/split.h"
 #include "preprocess/preprocess_pipeline.h"
 
 namespace idc::engine {
@@ -77,6 +80,7 @@ struct EngineConfig {
     SourceInfo source;                          // 原图尺寸
     preprocess::PreprocessPipeline preprocess;  // 切割前的基础图像处理（FR-1）
     CutConfig cut;                              // 切割配置
+    std::vector<int> selectedCells;             // 显式选择集 S（单元序号）；空 = L1/L2 由生成器自动推导
     SequenceParams order;                       // 排序策略（FR-L3.5）
     CompositionParams emit;                     // 导出/合成配置（§5）
 };
@@ -84,27 +88,44 @@ struct EngineConfig {
 // ===========================================================================
 // Grid-Selection-Emit 流水线接口（终稿 §2）
 // 原图 → ① 切割线集合 → ② 诱导网格 → ③ 选择集 → ④ 极性 → ⑤ 排布导出
-// 以下函数均为接口骨架，桩实现见 src/engine/engine.cpp，留待 MVP 及后续阶段。
+// 各阶段函数声明已下沉到对应子头（解耦：实现文件只依赖自身阶段头，不再全量依赖本 facade）：
+//   split → engine/split.h；applyPolarity → engine/selection.h；
+//   compose → engine/composition.h；exportImage → engine/export.h。
+// 仅 generateCutLines / induceGrid 因桥接聚合配置（CutConfig / SourceInfo）留在本 facade，
+// 以避免 cut_line ↔ grid ↔ 配置头的循环依赖。本头已聚合 include 上述子头，下游只需
+// include engine/engine.h 即可获得完整流水线 API（向后兼容）。
 // ===========================================================================
 
-// ① 由切割配置生成贯穿全图的切割线集合。
+// ① 由切割配置生成贯穿全图的切割线集合（桥接 CutConfig，定义见 src/engine/cut_line.cpp）。
 CutLineSet generateCutLines(const CutConfig& cut, const SourceInfo& source);
 
-// ② 由切割线集合诱导 m × n 网格。
+// ② 由切割线集合诱导 m × n 网格（桥接 CutLineSet，定义见 src/engine/grid.cpp）。
 Grid induceGrid(const CutLineSet& lines, const SourceInfo& source);
 
-// split：按网格将图像切分为互不重叠、恰好铺满的区域集合（§10.2 概念流程）。
-RegionSet split(const core::Image& image, const Grid& grid);
+// ===========================================================================
+// 顶层编排入口（终稿 §10.2 概念流程）
+// generateCutLines → induceGrid → 构建选择集 → split → applyPolarity →
+// Sequence::build → compose，一次调用跑通整条 Grid-Selection-Emit 管线。
+// ===========================================================================
 
-// ③④ 依据选择集与极性求出最终保留集 R（keep → S；remove → 全集 \ S）。
-RegionSet applyPolarity(const RegionSet& all, const Selection& selection);
+// ---------------------------------------------------------------------------
+// EngineResult：一次引擎作业的结果。
+//   ok          —— 是否成功（E-1/E-6/E-7 等异常时为 false）。
+//   error       —— 失败原因（可读中文提示，供上层 UI/CLI 展示）。
+//   kept        —— 保留集 R（带单元序号的片段集合）。
+//   composition —— 合成/排布描述（画布尺寸 + 各片段落位）。
+//   collapsible —— 坍缩可行性判定结果（§5.4）；false 时上层应降级为重排。
+// ---------------------------------------------------------------------------
+struct EngineResult {
+    bool ok{false};
+    std::string error;
+    RegionSet kept;
+    Composition composition;
+    bool collapsible{false};
+};
 
-// ⑤ 依据序列与布局把保留块合成为输出描述（坍缩或重排）。
-Composition compose(const RegionSet& kept, const Sequence& sequence,
-                    const CompositionParams& params);
-
-// export：把合成结果落盘（分离多图 / 合并单图）；成功返回 true。
-bool exportImage(const Composition& composition, const core::Image& source,
-                 const std::string& outputPath);
+// 依据配置对图像跑通完整流水线，返回保留集与合成描述（不落盘）。
+// 落盘由 exportImage 单独完成，以分离“计算”与“I/O”（§10.2）。
+EngineResult runEngine(const core::Image& image, const EngineConfig& config);
 
 } // namespace idc::engine

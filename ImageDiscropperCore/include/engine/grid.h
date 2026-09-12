@@ -6,9 +6,10 @@
 // 分块依据：
 //   - GridParams：网格定义参数（FR-L3.1）与余量策略（FR-L3.2），纯配置数据。
 //   - Cell：一个单元格 = 一条竖带与一条横带的交集（§3.2），带行列号与序号。
-//   - Grid：由 GridParams 与图像尺寸铺出的单元格集合；build() 为“铺网格”逻辑，
-//     属于待实现算法，故仅声明，桩实现见 src/engine/grid.cpp。
-// 说明：接口骨架，只定义数据结构与访问器，不实现网格铺设算法。
+//   - Grid：由 GridParams 与图像尺寸铺出的单元格集合；build()（参数化）与
+//     buildFromLines()（线诱导）为“铺网格”逻辑，实现见 src/engine/grid.cpp。
+// 说明：Grid 提供两条铺设入口——build（参数化网格，L3）与 buildFromLines（切割线诱导，
+//       L1/L2/多矩形），二者产出统一的 cells_，下游 split/选择/合成只面向 Grid。
 // ============================================================================
 #pragma once
 
@@ -60,9 +61,12 @@ struct Cell {
 // ---------------------------------------------------------------------------
 class Grid {
 public:
-    // 依据网格参数与图像尺寸铺设单元格（FR-L3.1 / FR-L3.2）。
-    // 声明占位，桩实现见 src/engine/grid.cpp，真正实现留待 L3（v2）阶段。
+    // 依据网格参数与图像尺寸铺设单元格（FR-L3.1 / FR-L3.2 余量策略）。
     void build(const GridParams& params, int imageWidth, int imageHeight);
+
+    // 由切割线集合（xs / ys）诱导铺设 m×n 单元（终稿 §2 阶段②）。
+    // 单元 C[i][j] = [xs[i], xs[i+1]) × [ys[j], ys[j+1])，互不重叠且恰好铺满。
+    void buildFromLines(const std::vector<int>& xs, const std::vector<int>& ys);
 
     // 只读访问网格参数。
     const GridParams& params() const { return params_; }
@@ -70,6 +74,9 @@ public:
     const std::vector<Cell>& cells() const { return cells_; }
     // 单元格总数。
     std::size_t cellCount() const { return cells_.size(); }
+    // 解析后的列数 / 行数（build / buildFromLines 调用后有效）。
+    int colCount() const { return params_.cols; }
+    int rowCount() const { return params_.rows; }
 
     // 按行列号取单元格；越界返回 nullptr。
     const Cell* cellAt(const int row, const int col) const {

@@ -1,14 +1,16 @@
 // ============================================================================
 // 文件：tests/test_main.cpp
-// 作用：极简冒烟测试，覆盖 core / geometry / processing / annotation / preprocess /
-//       history / engine 七大模块的关键行为。使用 CHECK 宏 + 标准输出，不依赖第三方框架。
-//       其中 engine 仅测试 Grid-Selection-Emit 骨架中已可用的数据结构，
-//       不触及桩实现的切割/剔除/网格/导出算法（那些留待 MVP 及后续阶段）。
-// 分块依据：每个模块一个 testXxx() 函数，main 依次调用；便于定位失败范围。
+// 作用：极简冒烟测试入口，覆盖 core / geometry / processing / annotation / preprocess /
+//       history / engine 七大模块的关键行为，并调用引擎验收测试段（pipeline / export /
+//       boundary，定义于独立 test_engine_*.cpp）。使用共享 CHECK 宏，不依赖第三方框架。
+// 分块依据：每个模块一个 testXxx() 函数，main 依次调用；引擎的完整流水线/导出/边界
+//       验收拆分到 test_engine_*.cpp，经 test_harness.h 声明后在此统一调度，避免 God File。
 // ============================================================================
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+
+#include "test_harness.h" // 共享 CHECK 宏 + 引擎验收测试段声明
 
 #include "core/color.h"
 #include "core/image.h"
@@ -23,16 +25,6 @@
 #include "preprocess/preprocess_pipeline.h"
 #include "processing/color_ops.h"
 #include "processing/geometric_ops.h"
-
-// 简易断言宏：失败时打印文件 / 行号 / 表达式。
-#define CHECK(expr)                                                            \
-    do {                                                                       \
-        if (!(expr)) {                                                         \
-            std::cerr << "CHECK failed: " #expr " @ " << __FILE__ << ":"       \
-                      << __LINE__ << "\n";                                     \
-            std::exit(1);                                                      \
-        }                                                                      \
-    } while (0)
 
 // ---------------------------------------------------------------------------
 // core 模块测试：颜色运算、图像读写、格式转换
@@ -329,7 +321,7 @@ static void testEngine() {
     CHECK(set.size() == 2 && set.totalArea() == 200);
     CHECK(set.boundingBox() == RectRegion(0, 0, 30, 30));
 
-    // Selection：点选 / 全选 / 反选（resolve 为桩实现，不在此断言其结果）
+    // Selection：点选 / 全选 / 反选 / 极性设置（resolve 的完整语义见 test_engine_pipeline）
     Selection sel;
     sel.resize(4);
     sel.select(1);
@@ -371,7 +363,10 @@ int main() {
     testAnnotation();
     testPreprocess();
     testHistory();
-    testEngine();
+    testEngine();          // 引擎数据结构骨架
+    testEnginePipeline();  // 引擎流水线功能（§3.1）
+    testEngineExport();    // 引擎导出落盘（§5）
+    testEngineBoundary();  // 引擎边界异常（§6 / E-1~E-8）
     std::cout << "all tests passed.\n";
     return 0;
 }

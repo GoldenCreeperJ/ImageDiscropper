@@ -6,7 +6,7 @@
 //   - 切割线是本工具区别于常规裁剪的公理：贯穿全图的“直线”，而非线段（§3.2）。
 //   - 本文件只描述切割线数据与归一化接口，具体“如何由选框/网格生成切割线”
 //     属于 engine.h 的 generateCutLines 职责，不在此实现。
-// 说明：接口骨架，normalizeCutLines 仅为声明，实现留待 MVP 阶段。
+// 说明：normalizeCutLines 与 generateCutLines 的真实实现见 src/engine/cut_line.cpp。
 // ============================================================================
 #pragma once
 
@@ -53,7 +53,7 @@ struct CutLineSet {
 
 // 归一化切割线集合：对 xs / ys 分别去重、升序排序，并裁剪到 [0, width] /
 // [0, height]（对应终稿 §6“切割线超出图像边界时自动裁剪”），并保证包含边界值。
-// 声明占位，实现留待 MVP 阶段。
+// 实现见 src/engine/cut_line.cpp。
 void normalizeCutLines(CutLineSet& lines, int width, int height);
 
 } // namespace idc::engine

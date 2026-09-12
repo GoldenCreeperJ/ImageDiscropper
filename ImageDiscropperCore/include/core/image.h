@@ -80,11 +80,20 @@ public:
     // 将当前图像转换为 GRAY（按 ITU-R BT.601 亮度公式加权）。
     Image toGray() const;
 
-    // 重置图像尺寸，会清空原有像素数据。
-    void resize(int width, int height, ImageFormat fmt);
+    // 重新分配像素缓冲为新尺寸/格式，原像素数据被丢弃并清零。
+    // 注意：与 processing::resize（重采样缩放、保留内容）语义相反，本方法不保留原图内容。
+    void reallocate(int width, int height, ImageFormat fmt);
 
     // 用指定颜色填充整个图像。
     void fill(const Color& c);
+
+    // 裁剪子图：区间左闭右开 [left,right) × [top,bottom)，自动裁剪到图像边界。
+    // 空区域（宽或高 <= 0）返回同格式的 0×0 图像。引擎 split 与导出阶段依赖此接口。
+    Image crop(int left, int top, int right, int bottom) const;
+
+    // 将 src 直接覆盖贴到当前图像的 (destX, destY) 处，越界部分自动裁剪。
+    // 不做 alpha 混合（用于合成画布，各落位区域互不重叠）；格式不同时逐像素转换。
+    void blit(const Image& src, int destX, int destY);
 
 private:
     int width_{0};

@@ -21,6 +21,17 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# 第三方依赖（均由 vcpkg 提供，且全部以 PRIVATE 方式接入——不经公共头暴露给下游）：
+#   · stb           header-only 图像编码库，仅 image_io.cpp 内含 <stb_image_write.h> 并定义实现宏。
+#   · libwebp       WebP 编码库，仅 image_io.cpp 内含 <webp/encode.h>/<webp/decode.h>（补齐 stb 不支持的 WebP）。
+#   · nlohmann_json 单头 JSON 库，仅 engine_config_json.cpp 内含 <nlohmann/json.hpp>（配置文件存取）。
+# 三者均只在各自 .cpp 内部使用，公共头不出现其类型，故对下游零依赖扩散（依赖单向）。
+# ---------------------------------------------------------------------------
+find_package(Stb REQUIRED)
+find_package(WebP CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
+
+# ---------------------------------------------------------------------------
 # 收集所有源文件（按目录分组，便于阅读与后续维护）
 # ---------------------------------------------------------------------------
 # core：基础数据类型（Color / Point / Image）
@@ -61,13 +72,18 @@ set(IDC_HISTORY_SRC
     src/history/history_manager.cpp
 )
 
-# engine：Grid-Selection-Emit 引擎接口骨架（终稿 §2 / §10.2），当前为数据结构 + 桩实现
+# engine：Grid-Selection-Emit 统一引擎（终稿 §2 / §10.2）——切割线 / 网格 / 切分 /
+#         选择极性 / 排序 / 合成 / 导出 / 图像编码(stb+libwebp) / JSON 配置(nlohmann) / 顶层编排。
 set(IDC_ENGINE_SRC
     src/engine/cut_line.cpp
     src/engine/grid.cpp
+    src/engine/split.cpp
     src/engine/selection.cpp
     src/engine/sequence.cpp
     src/engine/composition.cpp
+    src/engine/export.cpp
+    src/engine/image_io.cpp
+    src/engine/engine_config_json.cpp
     src/engine/engine.cpp
 )
 
@@ -85,13 +101,25 @@ target_include_directories(image_discropper_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 
+# stb 头文件路径（PRIVATE）：仅 image_io.cpp 编译时需要，下游引用本库无需感知 stb。
+target_include_directories(image_discropper_core PRIVATE ${Stb_INCLUDE_DIR})
+
+# libwebp（WebP 编码）+ nlohmann/json（配置存取）以 PRIVATE 链接：仅本库 .cpp 内部使用，
+# 二者的头文件路径与符号均不经公共头暴露，下游链接 image_discropper_core 无需感知。
+target_link_libraries(image_discropper_core PRIVATE WebP::webp nlohmann_json::nlohmann_json)
+
 # ---------------------------------------------------------------------------
 # 演示程序与自测程序
 # ---------------------------------------------------------------------------
 add_executable(demo examples/demo_main.cpp)
 target_link_libraries(demo PRIVATE image_discropper_core)
 
-add_executable(unit_tests tests/test_main.cpp)
+add_executable(unit_tests
+    tests/test_main.cpp
+    tests/test_engine_pipeline.cpp
+    tests/test_engine_export.cpp
+    tests/test_engine_boundary.cpp
+)
 target_link_libraries(unit_tests PRIVATE image_discropper_core)
 
 enable_testing()

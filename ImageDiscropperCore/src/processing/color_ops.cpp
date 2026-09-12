@@ -10,9 +10,8 @@
 
 namespace idc::processing {
 
-// 灰度化：彩色图直接调用 core::Image::toGray 完成 BT.601 加权。
+// 灰度化：委托 core::Image::toGray——其内部已对 GRAY 输入短路返回副本，并完成 BT.601 加权。
 core::Image toGray(const core::Image& src) {
-    if (src.isGray()) return src.clone();
     return src.toGray();
 }
 

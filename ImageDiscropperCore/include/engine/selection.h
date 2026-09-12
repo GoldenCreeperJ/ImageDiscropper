@@ -6,13 +6,17 @@
 //   - Polarity：keep / remove 二元极性（§3.2 术语），L2 反向剔除的核心即此开关。
 //   - Selection：被选中的单元格序号集合 + 极性；提供点选 / 框选 / 全选 / 反选
 //     等集合操作（FR-L3.3），以及“按极性解析出最终保留集”的 resolve 接口。
-//   - resolve 属于待实现算法（依赖极性取补集），仅声明，桩实现见 selection.cpp。
-// 说明：接口骨架，不实现像素级剔除。
+//   - resolve 按极性取补集解析保留序号，真实实现见 src/engine/selection.cpp。
+//   - applyPolarity：阶段③④ 自由函数，把解析结果作用于区域全集过滤出保留集 R（声明由
+//     engine.h facade 下沉至此，使 selection.cpp 只依赖本头）。
+// 说明：Selection 只承载选择状态与极性；像素级剔除由 split / applyPolarity / compose 完成。
 // ============================================================================
 #pragma once
 
 #include <cstddef>
 #include <vector>
+
+#include "engine/region_set.h"
 
 namespace idc::engine {
 
@@ -64,7 +68,7 @@ public:
     // 按当前极性解析出“最终保留”的单元序号集合：
     //   KEEP   → 返回所有被选中的序号；
     //   REMOVE → 返回所有未被选中的序号（补集）。
-    // 声明占位，桩实现见 src/engine/selection.cpp，真正实现留待 MVP 阶段。
+    // 实现见 src/engine/selection.cpp。
     std::vector<std::size_t> resolve() const;
 
 private:
@@ -76,5 +80,9 @@ private:
     Polarity polarity_{Polarity::KEEP};
     std::vector<bool> selected_;
 };
+
+// ③④ 依据选择集与极性，从全集 all 过滤出最终保留集 R（终稿 §2 阶段③④）：
+//   keep → R = S；remove → R = 全集 \ S。定义见 src/engine/selection.cpp。
+RegionSet applyPolarity(const RegionSet& all, const Selection& selection);
 
 } // namespace idc::engine

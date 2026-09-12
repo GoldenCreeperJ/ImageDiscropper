@@ -5,9 +5,9 @@
 // 分块依据：
 //   - SortStrategy / SequenceParams：排序策略配置（row-major / column-major /
 //     custom，可叠加 reverse、snake）。
-//   - Sequence：排序结果——一个单元格序号的显式序列；build() 为“按策略生成序号”
-//     逻辑，属于待实现算法，仅声明，桩实现见 src/engine/sequence.cpp。
-// 说明：接口骨架，不实现排序算法。
+//   - Sequence：排序结果——一个单元格序号的显式序列；build() 按策略生成序号，
+//     真实实现见 src/engine/sequence.cpp。
+// 说明：Sequence 承载排序结果；build() 生成 row/column-major 序，custom 由 setCustom 提供。
 // ============================================================================
 #pragma once
 
@@ -41,7 +41,7 @@ struct SequenceParams {
 class Sequence {
 public:
     // 依据网格规模与排序参数生成序列（FR-L3.5）。
-    // 声明占位，桩实现见 src/engine/sequence.cpp，真正实现留待 L3（v2）阶段。
+    // 实现见 src/engine/sequence.cpp（row-major / column-major，可叠加 reverse / snake）。
     void build(const std::size_t cellCount, const std::size_t cols,
                const std::size_t rows, const SequenceParams& params);
 

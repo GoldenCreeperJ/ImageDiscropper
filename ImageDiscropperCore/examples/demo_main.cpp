@@ -6,15 +6,17 @@
 //       - processing：灰度、通道反色、旋转、翻转、缩放、颜色拾取
 //       - preprocess：PreprocessPipeline 顺序编排
 //       - view_transform：屏幕 ↔ 逻辑坐标换算、以指定点缩放
-//       - engine：Grid-Selection-Emit 引擎的配置骨架（仅构造数据结构，不触发桩算法）
+//       - engine：真正跑通 Grid-Selection-Emit 流水线（L2 剔除坍缩 / L3 网格重排）并导出到磁盘
 // 分块依据：每一步聚焦一个模块或一个典型场景，便于按需拷贝到实际项目。
 // ============================================================================
+#include <filesystem>
 #include <iostream>
 
 #include "core/color.h"
 #include "core/image.h"
 #include "core/point.h"
 #include "engine/engine.h"
+#include "engine/engine_config_json.h"
 #include "annotation/annotation_layer.h"
 #include "annotation/rasterizer.h"
 #include "annotation/shape_factory.h"
@@ -160,21 +162,90 @@ int main() {
     std::cout << "after scaleAboutPoint -> scale=" << vt.scale() << "\n";
 
     // ------------------------------------------------------------------
-    // 9. 引擎配置骨架演示：构造一次“L2 反向剔除”作业的 EngineConfig。
-    //    此处只组装数据结构（对应终稿 §9 的 JSON 配置），不调用尚未实现的
-    //    切割/剔除/导出流水线函数，那些属于新项目 MVP 阶段的开发内容。
+    // 9. 引擎实战演示：真正跑通 Grid-Selection-Emit 流水线并导出到磁盘。
+    //    9.1 L2 十字剔除 → 坍缩合并单图；9.2 同作业分离导出到文件夹；
+    //    9.3 L3 网格 → 选择四角单元 → 重排合并；9.4 配置 JSON 存取（NFR-4）。
+    //    输出写入 ./demo_output/（guideline §四：优先保证可演示）。
     // ------------------------------------------------------------------
-    engine::EngineConfig cfg;
-    cfg.source = engine::SourceInfo{composed.width(), composed.height()};
-    cfg.cut.tier = engine::Tier::L2;                 // 反向剔除模式
-    cfg.cut.generator = engine::CutGenerator::RECT;  // 单矩形选框诱导十字切割线
-    cfg.cut.rect = engine::RectRegion(60, 30, 140, 90);
-    cfg.cut.polarity = engine::Polarity::REMOVE;     // 剔除框内 → 保留四角
-    cfg.emit.mode = engine::EmitMode::MERGED;
-    cfg.emit.layout = engine::MergeLayout::COLLAPSE; // 坍缩式合并（§5.2）
-    std::cout << "engine config: tier=L2 polarity=REMOVE rect=("
-              << cfg.cut.rect.left << "," << cfg.cut.rect.top << ","
-              << cfg.cut.rect.right << "," << cfg.cut.rect.bottom << ")\n";
+    namespace fs = std::filesystem;
+    const fs::path outDir = "demo_output";
+    std::error_code ec;
+    fs::create_directories(outDir, ec);
+
+    // 9.1 / 9.2 L2 反向剔除（十字）：坍缩合并单图 + 分离导出到文件夹。
+    {
+        engine::EngineConfig cfg;
+        cfg.source = engine::SourceInfo{composed.width(), composed.height()};
+        cfg.cut.tier = engine::Tier::L2;                 // 反向剔除模式
+        cfg.cut.generator = engine::CutGenerator::RECT;  // 单矩形诱导十字切割线
+        cfg.cut.rect = engine::RectRegion(60, 30, 140, 90);
+        cfg.cut.polarity = engine::Polarity::REMOVE;     // 剔除十字 → 保留四角
+        cfg.emit.mode = engine::EmitMode::MERGED;
+        cfg.emit.layout = engine::MergeLayout::COLLAPSE; // 坍缩式合并（§5.2）
+
+        const engine::EngineResult r = engine::runEngine(composed, cfg);
+        std::cout << "[L2 collapse] ok=" << r.ok
+                  << " collapsible=" << r.collapsible
+                  << " kept=" << r.kept.size()
+                  << " canvas=" << r.composition.canvasWidth << "x" << r.composition.canvasHeight
+                  << "\n";
+        if (r.ok) {
+            const fs::path out = outDir / "l2_collapsed.png";
+            const bool w = engine::exportImage(r.composition, composed, out.string());
+            std::cout << "  exported -> " << out.string() << " (" << (w ? "OK" : "FAIL") << ")\n";
+        } else {
+            std::cout << "  error: " << r.error << "\n";
+        }
+
+        // 9.2 同一作业改为分离导出 → 文件夹（四角 4 张 PNG，直接写入，不压缩）。
+        cfg.emit.mode = engine::EmitMode::SEPARATE;
+        const engine::EngineResult rs = engine::runEngine(composed, cfg);
+        if (rs.ok) {
+            const fs::path folder = outDir / "l2_corners"; // 目标文件夹（不存在会自动创建）
+            const bool w = engine::exportImage(rs.composition, composed, folder.string());
+            std::cout << "[L2 separate] kept=" << rs.kept.size()
+                      << " -> " << folder.string() << "/ (" << (w ? "OK" : "FAIL") << ")\n";
+        }
+
+        // 9.4 把该 L2 作业配置序列化为 JSON 并回读（FR-L3.8 / NFR-4）。
+        const fs::path jf = outDir / "l2_config.json";
+        if (engine::saveEngineConfig(jf.string(), cfg)) {
+            engine::EngineConfig loaded;
+            const bool ok = engine::loadEngineConfig(jf.string(), loaded);
+            std::cout << "[config json] saved -> " << jf.string() << " reload=" << ok
+                      << " polarity="
+                      << (loaded.cut.polarity == engine::Polarity::REMOVE ? "remove" : "keep") << "\n";
+        }
+    }
+
+    // 9.3 L3 网格分割：composed 为 200×120，单元 50×40 → 4×3 = 12 格；
+    //     选择四角单元 {0,3,8,11}，按横优先重排到 2 列画布。
+    {
+        engine::EngineConfig cfg;
+        cfg.source = engine::SourceInfo{composed.width(), composed.height()};
+        cfg.cut.tier = engine::Tier::L3;
+        cfg.cut.generator = engine::CutGenerator::GRID;
+        cfg.cut.grid = engine::GridParams{0, 0, 50, 40, 0, 0, 0, 0, engine::RemainderPolicy::DISCARD};
+        cfg.cut.polarity = engine::Polarity::KEEP;
+        cfg.selectedCells = {0, 3, 8, 11};               // 4×3 网格的四角单元
+        cfg.order.strategy = engine::SortStrategy::ROW_MAJOR;
+        cfg.emit.mode = engine::EmitMode::MERGED;
+        cfg.emit.layout = engine::MergeLayout::REARRANGE; // 重排式合并（§5.3）
+        cfg.emit.cols = 2;
+
+        const engine::EngineResult r = engine::runEngine(composed, cfg);
+        std::cout << "[L3 rearrange] ok=" << r.ok
+                  << " kept=" << r.kept.size()
+                  << " canvas=" << r.composition.canvasWidth << "x" << r.composition.canvasHeight
+                  << "\n";
+        if (r.ok) {
+            const fs::path out = outDir / "l3_rearranged.png";
+            const bool w = engine::exportImage(r.composition, composed, out.string());
+            std::cout << "  exported -> " << out.string() << " (" << (w ? "OK" : "FAIL") << ")\n";
+        } else {
+            std::cout << "  error: " << r.error << "\n";
+        }
+    }
 
     std::cout << "demo finished.\n";
     return 0;
