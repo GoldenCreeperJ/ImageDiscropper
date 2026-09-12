@@ -24,12 +24,11 @@ namespace idc::cli {
 void printTopHelp() {
     std::cout << R"HELP(idc — 图像区域提取 / 反向剔除 / 网格分割工具（命令行）
 
-沿贯穿全图的切割线把图像切开、选择保留哪些单元、再按坍缩或重排重新拼合。
 三层模式共用同一 Grid-Selection-Emit 引擎（原图 → 切割线 → 诱导网格 → 选择集 → 极性 → 排布导出），
 模式仅为参数预设：
-  L1 标准提取 (extract)：极性恒 keep，保留选框 / 带，输出单图。
-  L2 反向剔除 (erase)  ：极性恒 remove，抽掉中缝两侧对接（十字 / 横线 / 竖线 / 多矩形并集）。
-  L3 网格分割 (grid)   ：基准点 + 单元尺寸周期铺满全图，自由点选 + 排序 + 重排。
+  L1 标准提取 (extract)
+  L2 反向剔除 (erase)
+  L3 网格分割 (grid)
 
 用法：
   idc <command> [options]

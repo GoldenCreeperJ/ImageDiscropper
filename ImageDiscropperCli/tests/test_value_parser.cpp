@@ -156,8 +156,11 @@ void testValueParser() {
     }
 
     // ---- checkNaming：非空且不含路径分隔符（防越界写盘）。----
+    // 覆盖 guideline §9.1 明列的两类模板：{name}_{index:03d} 与 {name}_r{row}c{col}
+    //（{row}/{col} 占位符的实际替换由 Core applyNaming 完成，此处仅校验模板合法性）。
     {
         CHECK(checkNaming("{name}_{index:03d}", err));
+        CHECK(checkNaming("{name}_r{row}c{col}", err));            // §9.1 行/列命名模板
         CHECK(checkNaming("cell_{index}", err));
         CHECK(!checkNaming("", err) && !err.empty());              // 空模板
         CHECK(!checkNaming("a/b_{index}", err));                   // 含 '/'
