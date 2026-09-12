@@ -77,6 +77,8 @@ struct Placement {
     RectRegion source;  // 在原图中的区域
     RectRegion dest;    // 在输出画布中的区域
     int index{-1};      // 序号（用于命名/排序）
+    int row{-1};        // 源网格行号（供 {row} 命名；-1 表示非网格来源）
+    int col{-1};        // 源网格列号（供 {col} 命名；-1 表示非网格来源）
 };
 
 // ---------------------------------------------------------------------------
@@ -88,8 +90,9 @@ struct Composition {
     std::vector<Placement> placements;
     // 导出设置（compose 从 CompositionParams 透传，供 exportImage 落盘时使用）：
     ExportFormat format{ExportFormat::PNG};    // 导出图像格式
-    std::string naming{"{name}_{index:03d}"};  // 分离导出命名模板（{name}/{index}/{index:03d}）
+    std::string naming{"{name}_{index:03d}"};  // 分离导出命名模板（{name}/{index}/{index:03d}/{row}/{col}）
     int quality{90};                           // 有损格式（JPEG/WebP）质量参数
+    core::Color padColor{core::kTransparent};  // 合并画布空位/余量填充色（exportMerged 使用）
 };
 
 // 判定保留集能否无空洞、无重叠地坍缩为矩形图（终稿 §5.4 定理）：

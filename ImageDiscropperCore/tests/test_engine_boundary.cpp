@@ -8,6 +8,8 @@
 // ============================================================================
 #include "test_harness.h"
 
+#include <filesystem>
+#include <fstream>
 #include <vector>
 
 #include "core/image.h"
@@ -91,7 +93,7 @@ void testEngineBoundary() {
     // ---- E-5：网格单元部分越界 → 余量策略 DISCARD / KEEP_PARTIAL / PAD。----
     {
         Grid g;
-        GridParams p{0, 0, 30, 30, 0, 0, 0, 0, RemainderPolicy::DISCARD}; // 自动铺满
+        GridParams p{0, 0, 30, 30, RemainderPolicy::DISCARD}; // 周期铺满全图，行列数自动推导
         g.build(p, 100, 100);
         CHECK(g.colCount() == 3 && g.rowCount() == 3 && g.cellCount() == 9); // 丢弃 10px 余量
 
@@ -130,8 +132,11 @@ void testEngineBoundary() {
         CHECK(r.kept.empty());
     }
 
-    // ---- E-8：导出路径为空 / 目录不存在 → 返回 false（不崩溃）。----
+    // ---- E-8：导出路径为空 / 父路径不可创建 → 返回 false（不崩溃）。----
+    // 说明：合并导出现已自动创建父目录（与分离一致），故“目录不存在”改为断言成功并清理；
+    //       仍保留 E-8 失败用例：父路径被同名普通文件占用时 ensureDirectory 失败 → false。
     {
+        namespace fs = std::filesystem;
         EngineConfig cfg;
         cfg.source = SourceInfo{100, 80};
         cfg.cut.generator = CutGenerator::RECT;
@@ -142,7 +147,15 @@ void testEngineBoundary() {
         const EngineResult r = runEngine(img, cfg);
         CHECK(r.ok);
         CHECK(!exportImage(r.composition, img, ""));                            // 空路径（合并）
-        CHECK(!exportImage(r.composition, img, "idc_no_such_dir_xyz/out.png")); // 目录不存在（合并单图不自动建目录）
+        // 父目录不存在 → 自动创建并写出成功（修复后行为），随后清理临时目录。
+        const std::string autoDir = "idc_auto_dir_xyz";
+        CHECK(exportImage(r.composition, img, autoDir + "/out.png"));
+        fs::remove_all(autoDir);
+        // 父路径被普通文件占用 → 无法创建父目录 → false（E-8）。
+        const std::string blocker = "idc_blocker_xyz";
+        { std::ofstream ofs(blocker); ofs << "x"; }
+        CHECK(!exportImage(r.composition, img, blocker + "/out.png"));
+        fs::remove(blocker);
         // 分离导出：目标文件夹不存在会自动创建（见 test_engine_export），但空路径仍报错（E-8）。
         cfg.emit.mode = EmitMode::SEPARATE;
         const EngineResult rs = runEngine(img, cfg);

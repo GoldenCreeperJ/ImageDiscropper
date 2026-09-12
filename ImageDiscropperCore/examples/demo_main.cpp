@@ -225,7 +225,7 @@ int main() {
         cfg.source = engine::SourceInfo{composed.width(), composed.height()};
         cfg.cut.tier = engine::Tier::L3;
         cfg.cut.generator = engine::CutGenerator::GRID;
-        cfg.cut.grid = engine::GridParams{0, 0, 50, 40, 0, 0, 0, 0, engine::RemainderPolicy::DISCARD};
+        cfg.cut.grid = engine::GridParams{0, 0, 50, 40, engine::RemainderPolicy::DISCARD};
         cfg.cut.polarity = engine::Polarity::KEEP;
         cfg.selectedCells = {0, 3, 8, 11};               // 4×3 网格的四角单元
         cfg.order.strategy = engine::SortStrategy::ROW_MAJOR;

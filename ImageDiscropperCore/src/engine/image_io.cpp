@@ -1,15 +1,18 @@
 // ============================================================================
 // 文件：src/engine/image_io.cpp
-// 作用：image_io.h 的实现——把 core::Image 编码为 PNG/JPEG/BMP/WebP，
-//       支持写盘与编码到内存两种出口（终稿 §5.5）。
-// 分块依据：stb（header-only）负责 PNG/JPEG/BMP，实现宏 STB_IMAGE_WRITE_IMPLEMENTATION
-//       必须且只能在全工程唯一一个 .cpp 中定义——即本文件；WebP 由 libwebp 补齐
-//       （stb 不支持 WebP 写）。二者均只在本文件内使用，其余模块经 image_io.h 间接调用，
-//       不直接接触 stb / libwebp，避免重复符号与依赖扩散。
+// 作用：image_io.h 的实现——图像编解码 I/O（终稿 §5.5）：把 core::Image 编码为
+//       PNG/JPEG/BMP/WebP（写盘 / 编码到内存两种出口），并从文件解码图像为 core::Image。
+// 分块依据：stb（header-only）负责解码（stb_image）与 PNG/JPEG/BMP 编码（stb_image_write），
+//       其实现宏 STB_IMAGE_IMPLEMENTATION / STB_IMAGE_WRITE_IMPLEMENTATION 必须且只能在全工程
+//       唯一一个 .cpp 中定义——即本文件；WebP 编码由 libwebp 补齐（stb 不支持 WebP 写）。
+//       三者均只在本文件内使用，其余模块经 image_io.h 间接调用，不直接接触 stb / libwebp，
+//       避免重复符号与依赖扩散。
 // ============================================================================
 #include "engine/image_io.h"
 
-// stb_image_write：全工程仅此一处定义实现宏（header-only 库要求）。
+// stb_image（解码）+ stb_image_write（编码）：全工程仅此一处定义各自实现宏（header-only 库要求）。
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
 
@@ -19,6 +22,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <fstream>
 
 namespace idc::engine {
@@ -75,6 +79,26 @@ bool encodeWebP(const core::Image& image, const int quality, std::vector<std::ui
 }
 
 } // namespace
+
+// 从文件解码图像为 core::Image（统一加载为 RGBA，4 通道）；成功返回 true 并填充 out。
+// 底层用 stb_image，支持 PNG/JPEG/BMP/WebP/GIF/TGA 等；path 为空 / 文件不存在 / 无法读取 /
+// 格式不支持时返回 false（对应 CLI 输入文件错误 / E-8）。
+bool readImageFile(const std::string& path, core::Image& out) {
+    if (path.empty()) return false;
+    int w = 0, h = 0, channels = 0;
+    // 强制按 RGBA（4 通道）加载，与 core::Image 的 RGBA 布局一致，便于后续统一处理。
+    unsigned char* data = stbi_load(path.c_str(), &w, &h, &channels, 4);
+    if (data == nullptr || w <= 0 || h <= 0) {
+        stbi_image_free(data); // data 可能为 nullptr，stbi_image_free 对 nullptr 安全。
+        return false;          // 解码失败：文件不存在 / 非图像 / 不支持的格式。
+    }
+    // core::Image 的 RGBA 缓冲为紧凑行主序（w*h*4，无行填充），与 stb 输出布局一致，直接整体拷贝。
+    out.reallocate(w, h, core::ImageFormat::RGBA);
+    std::memcpy(out.data(), data,
+                static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4);
+    stbi_image_free(data);
+    return true;
+}
 
 // 将图像编码到内存缓冲；成功返回 true。支持 PNG/JPEG/BMP（stb）与 WebP（libwebp）。
 bool encodeImageToMemory(const core::Image& image, const ExportFormat format,

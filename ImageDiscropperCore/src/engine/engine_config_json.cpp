@@ -199,12 +199,12 @@ RectRegion rectFromJson(const json& v) {
                       jInt(at(v, "x2"), 0), jInt(at(v, "y2"), 0));
 }
 
+// 网格参数 ↔ JSON：仅「基准点 + 单元尺寸 + 余量策略」（终稿 §4.4.4）；
+// 行列数由图像边界自动推导，不作为配置字段（无 gap / cols / rows）。
 json gridToJson(const GridParams& g) {
     return json{
         {"originX", g.originX}, {"originY", g.originY},
         {"cellWidth", g.cellWidth}, {"cellHeight", g.cellHeight},
-        {"gapX", g.gapX}, {"gapY", g.gapY},
-        {"cols", g.cols}, {"rows", g.rows},
         {"remainder", remainderName(g.remainder)},
     };
 }
@@ -212,8 +212,6 @@ GridParams gridFromJson(const json& v) {
     GridParams g;
     g.originX = jInt(at(v, "originX"), 0); g.originY = jInt(at(v, "originY"), 0);
     g.cellWidth = jInt(at(v, "cellWidth"), 1); g.cellHeight = jInt(at(v, "cellHeight"), 1);
-    g.gapX = jInt(at(v, "gapX"), 0); g.gapY = jInt(at(v, "gapY"), 0);
-    g.cols = jInt(at(v, "cols"), 0); g.rows = jInt(at(v, "rows"), 0);
     g.remainder = remainderFromName(jStr(at(v, "remainder"), "discard"));
     return g;
 }

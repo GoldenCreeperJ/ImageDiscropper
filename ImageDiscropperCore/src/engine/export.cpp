@@ -7,7 +7,8 @@
 //       编码委托 image_io（stb），本文件只做编排、命名与目录管理。
 // 说明：SEPARATE 时 outputPath 为目标文件夹——不存在则自动创建（含多级父目录），仅在创建
 //       失败（如被同名文件占用 / 权限不足）时返回 false（E-8）；MERGED 时 outputPath 为单图
-//       文件路径，格式优先由扩展名推断，无有效扩展名时回退到 Composition::format。
+//       文件路径，其父目录不存在时同样自动创建，格式优先由扩展名推断，无有效扩展名时回退到
+//       Composition::format。
 // ============================================================================
 #include "engine/export.h"
 
@@ -82,12 +83,16 @@ void replaceAll(std::string& s, const std::string& from, const std::string& to) 
     }
 }
 
-// 应用命名模板：{name} → 文件夹名；{index:03d} → 零填充序号；{index} → 普通序号。
-std::string applyNaming(const std::string& tpl, const std::string& name, const int index) {
+// 应用命名模板：{name} → 文件夹名；{index:03d} → 零填充序号；{index} → 普通序号；
+// {row}/{col} → 源网格行/列号（非网格来源即 -1 时按 0 处理）。
+std::string applyNaming(const std::string& tpl, const std::string& name, const int index,
+                        const int row, const int col) {
     std::string out = tpl.empty() ? std::string("{name}_{index:03d}") : tpl;
     replaceAll(out, "{name}", name);
     replaceAll(out, "{index:03d}", zeroPad(index, kIndexWidth));
     replaceAll(out, "{index}", std::to_string(index));
+    replaceAll(out, "{row}", std::to_string(row < 0 ? 0 : row));
+    replaceAll(out, "{col}", std::to_string(col < 0 ? 0 : col));
     return out;
 }
 
@@ -121,7 +126,7 @@ bool exportSeparate(const Composition& composition, const core::Image& source,
         const core::Image sub =
             source.crop(p.source.left, p.source.top, p.source.right, p.source.bottom);
         const int idx = (p.index >= 0) ? p.index : i; // 优先用单元序号命名。
-        const fs::path file = dir / (applyNaming(composition.naming, name, idx) + ext);
+        const fs::path file = dir / (applyNaming(composition.naming, name, idx, p.row, p.col) + ext);
         if (!writeImageFile(file.string(), sub, fmt, composition.quality, core::kTransparent))
             allOk = false;
         ++i;
@@ -129,23 +134,27 @@ bool exportSeparate(const Composition& composition, const core::Image& source,
     return allOk;
 }
 
-// 合并模式导出：构建画布、填充透明底、逐片段 blit，写单图。
+// 合并模式导出：构建画布、以 padColor 填充、逐片段 blit，写单图。
+// 父目录不存在时自动创建（与分离导出行为一致，修复“合并导出不创建父目录”）。
 bool exportMerged(const Composition& composition, const core::Image& source,
                   const std::string& outputPath) {
+    const fs::path outPath(outputPath);
+    const fs::path parent = outPath.parent_path();
+    if (!parent.empty() && !ensureDirectory(parent)) return false; // E-8：父目录不可创建。
+
     bool known = false;
     ExportFormat fmt = formatFromExt(extensionOf(outputPath), known);
     if (!known) fmt = composition.format; // 扩展名不明时以配置格式为准。
 
-    // RGBA 画布，默认以透明填充（对应 CompositionParams::padColor 默认 kTransparent）；
-    // 重排空位 / PAD 余量在源区域裁剪后由画布底色天然补齐。
+    // RGBA 画布，以透传的 padColor 填充（重排空位 / PAD 余量在源区域裁剪后由画布底色补齐）。
     core::Image canvas(composition.canvasWidth, composition.canvasHeight, core::ImageFormat::RGBA);
-    canvas.fill(core::kTransparent);
+    canvas.fill(composition.padColor);
     for (const Placement& p : composition.placements) {
         const core::Image sub =
             source.crop(p.source.left, p.source.top, p.source.right, p.source.bottom);
         canvas.blit(sub, p.dest.left, p.dest.top);
     }
-    return writeImageFile(outputPath, canvas, fmt, composition.quality, core::kTransparent);
+    return writeImageFile(outputPath, canvas, fmt, composition.quality, composition.padColor);
 }
 
 } // namespace

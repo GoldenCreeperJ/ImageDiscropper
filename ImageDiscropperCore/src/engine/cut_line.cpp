@@ -64,27 +64,21 @@ CutLineSet generateCutLines(const CutConfig& cut, const SourceInfo& source) {
             break;
         }
         case CutGenerator::GRID: {
-            // 参数化网格（L3）：由基准点 + 单元尺寸 + 间距推导单元左右/上下边界线。
-            // 注：runEngine 对 GRID 直接走 Grid::build（可处理余量策略），此处产线供
+            // 参数化网格（L3 / 终稿 §4.4.4）：以基准点为相位锚、单元尺寸为周期，双向生成
+            // 贯穿全图的切割线。切割线是“贯穿全图的直线”，故只产线位置（不产单元区间、无间距）；
+            // 虚拟起点由 originX % cellWidth 倒推到 (-cw,0]，负值经 normalizeCutLines 裁剪到 0。
+            // 注：runEngine 对 GRID 直接走 Grid::build（处理余量策略），此处产线供
             //     UI 显示切割线或一致性校验之用。
             const GridParams& g = cut.grid;
-            const int stepX = g.cellWidth + g.gapX;
-            const int stepY = g.cellHeight + g.gapY;
-            if (stepX > 0) {
-                for (int i = 0; ; ++i) {
-                    const int xl = g.originX + i * stepX;
-                    if (xl >= W) break;
-                    lines.xs.push_back(xl);                            // 单元左边界
-                    lines.xs.push_back(std::min(xl + g.cellWidth, W)); // 单元右边界
-                }
+            if (g.cellWidth > 0) {
+                int x = g.originX % g.cellWidth;
+                if (x > 0) x -= g.cellWidth;      // 虚拟起点 ∈ (-cw, 0]
+                for (; x < W; x += g.cellWidth) lines.xs.push_back(x);
             }
-            if (stepY > 0) {
-                for (int i = 0; ; ++i) {
-                    const int yt = g.originY + i * stepY;
-                    if (yt >= H) break;
-                    lines.ys.push_back(yt);                            // 单元上边界
-                    lines.ys.push_back(std::min(yt + g.cellHeight, H));// 单元下边界
-                }
+            if (g.cellHeight > 0) {
+                int y = g.originY % g.cellHeight;
+                if (y > 0) y -= g.cellHeight;     // 虚拟起点 ∈ (-ch, 0]
+                for (; y < H; y += g.cellHeight) lines.ys.push_back(y);
             }
             break;
         }

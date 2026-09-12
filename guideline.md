@@ -1,4 +1,4 @@
-﻿# 给 AI Agent 的任务说明书
+# 给 AI Agent 的任务说明书
 > **任务目标**：依据《图像区域提取、反向剔除与网格分割工具 · 需求规格说明（终稿 v1.0）》，快速生成一个可运行的CLI壳，实现 MVP 范围内的完整功能。
 >
 > **使用方式**：本说明书是终稿的可执行化版本。Agent 应把本说明书当作**唯一的施工图**，终稿中未在此处明确的内容，以终稿为准；两者冲突时，以终稿为准。
@@ -183,7 +183,7 @@ image-tool erase --input photo.jpg \
   --rect 100,100,200,150 \
   --rect 400,300,500,400 \
   --rect 700,500,800,600 \
-  --output-dir ./out/ --format png --zip
+  --output-dir ./out/ --format png
 ```
 
 **删除区域的形式化定义**：
@@ -368,7 +368,7 @@ image-tool <version> (core <core-version>)
 |------------------------|----------------------|
 | `l1_extract.sh`        | L1 矩形保留              |
 | `l2_erase_collapse.sh` | L2 十字切割 + 坍缩合并       |
-| `l2_erase_separate.sh` | L2 十字切割 + 分离导出 + zip |
+| `l2_erase_separate.sh` | L2 十字切割 + 分离导出到文件夹 |
 | `l3_grid_compose.sh`   | L3 网格选择 + 重排合并       |
 
 每个脚本必须：
@@ -400,7 +400,7 @@ image-tool <version> (core <core-version>)
 | IT-5  | `erase --rect --merge collapse`  | 输出尺寸为 `(W−Δx) × (H−Δy)`。 |
 | IT-6  | `erase --hband --merge collapse` | 输出尺寸正确。                  |
 | IT-7  | `erase --vband --merge collapse` | 输出尺寸正确。                  |
-| IT-8  | `erase --rect --zip`             | 生成 zip，且可解压。             |
+| IT-8  | `erase` 多矩形并集剔除             | 删除各十字带并集，坍缩尺寸正确。             |
 | IT-9  | `grid --keep` + `--compose`      | 输出画布尺寸正确，单元格位置正确。        |
 | IT-10 | `grid --sort column-major`       | 排序结果与预期一致。               |
 | IT-11 | `grid --sort custom --order`     | 自定义序列生效。                 |

@@ -124,3 +124,12 @@ target_link_libraries(unit_tests PRIVATE image_discropper_core)
 
 enable_testing()
 add_test(NAME unit_tests COMMAND unit_tests)
+
+# ---------------------------------------------------------------------------
+# 作为子工程被根 CMakeLists 引入时，向父作用域回传 Core 版本号，供 CLI 的
+# --version 输出 "idc <version> (core <core-version>)"（guideline §6.2）。
+# 独立构建（Core 即顶层）时跳过——此时不存在父作用域。
+# ---------------------------------------------------------------------------
+if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set(IDC_CORE_VERSION "${PROJECT_VERSION}" PARENT_SCOPE)
+endif()

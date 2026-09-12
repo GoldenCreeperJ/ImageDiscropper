@@ -166,7 +166,7 @@ void testEnginePipeline() {
         cfg.source = SourceInfo{300, 300};
         cfg.cut.tier = Tier::L3;
         cfg.cut.generator = CutGenerator::GRID;
-        cfg.cut.grid = GridParams{0, 0, 100, 100, 0, 0, 3, 3, RemainderPolicy::DISCARD};
+        cfg.cut.grid = GridParams{0, 0, 100, 100, RemainderPolicy::DISCARD}; // 300/100 → 3×3 自动推导
         cfg.cut.polarity = Polarity::KEEP;
         cfg.selectedCells = {0, 2, 6, 8}; // 四角单元
         cfg.order.strategy = SortStrategy::ROW_MAJOR;

@@ -135,7 +135,7 @@ void testEngineExport() {
         g.source = SourceInfo{300, 300};
         g.cut.tier = Tier::L3;
         g.cut.generator = CutGenerator::GRID;
-        g.cut.grid = GridParams{0, 0, 100, 100, 0, 0, 3, 3, RemainderPolicy::DISCARD};
+        g.cut.grid = GridParams{0, 0, 100, 100, RemainderPolicy::DISCARD}; // 300/100 → 3×3 自动推导
         g.cut.polarity = Polarity::KEEP;
         g.selectedCells = {0, 4, 8}; // 对角：非整行整列 → 不可坍缩。
         g.emit.mode = EmitMode::MERGED;

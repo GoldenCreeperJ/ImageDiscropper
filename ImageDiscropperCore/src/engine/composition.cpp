@@ -49,6 +49,34 @@ int collapsedOffset(const std::vector<std::pair<int, int>>& iv, const int start)
     return acc;
 }
 
+// 按序列把保留块排成输出顺序（分离与重排共用）。sequence.order()[k]=单元序号，
+// 仅保留属于 kept 的序号；再补入序列未覆盖的块（含 index<0 的兼容情形），保持原顺序。
+std::vector<const Fragment*> orderBySequence(const std::vector<Fragment>& frags,
+                                             const Sequence& sequence) {
+    std::vector<const Fragment*> ordered;
+    ordered.reserve(frags.size());
+    int maxIdx = -1;
+    for (const Fragment& f : frags) maxIdx = std::max(maxIdx, f.index);
+    if (!sequence.empty() && maxIdx >= 0) {
+        std::vector<const Fragment*> byIndex(static_cast<std::size_t>(maxIdx) + 1, nullptr);
+        for (const Fragment& f : frags) {
+            if (f.index >= 0 && f.index <= maxIdx) byIndex[f.index] = &f;
+        }
+        for (const int idx : sequence.order()) {
+            if (idx >= 0 && idx <= maxIdx && byIndex[idx]) ordered.push_back(byIndex[idx]);
+        }
+    }
+    std::vector<char> used(static_cast<std::size_t>(maxIdx) + 1, 0);
+    for (const Fragment* f : ordered) {
+        if (f->index >= 0 && f->index <= maxIdx) used[f->index] = 1;
+    }
+    for (const Fragment& f : frags) {
+        const bool isUsed = (f.index >= 0 && f.index <= maxIdx) ? used[f.index] != 0 : false;
+        if (!isUsed) ordered.push_back(&f);
+    }
+    return ordered;
+}
+
 } // namespace
 
 // 判定保留集能否无空洞、无重叠地坍缩为矩形图（终稿 §5.4 定理）：
@@ -102,19 +130,24 @@ Composition compose(const RegionSet& kept, const Sequence& sequence,
     comp.format = params.format;
     comp.naming = params.naming;
     comp.quality = params.quality;
+    comp.padColor = params.padColor; // 透传填充色，供 exportMerged 填充画布（修复 --pad-color 不生效）。
     const std::vector<Fragment>& frags = kept.fragments();
     if (frags.empty()) return comp; // 空保留集：返回空合成（E-7 由上层处理）。
 
     // ---- 分离模式：每块独立成图，dest 从各自 (0,0) 起，无统一画布。----
+    // 按 sequence 排序（修复“分离导出忽略 --sort”），落盘顺序即排序结果。
     if (params.mode == EmitMode::SEPARATE) {
         comp.canvasWidth = 0;
         comp.canvasHeight = 0;
+        const std::vector<const Fragment*> ordered = orderBySequence(frags, sequence);
         int out = 0;
-        for (const Fragment& f : frags) {
+        for (const Fragment* f : ordered) {
             Placement p;
-            p.source = f.region;
-            p.dest = RectRegion(0, 0, f.region.width(), f.region.height());
+            p.source = f->region;
+            p.dest = RectRegion(0, 0, f->region.width(), f->region.height());
             p.index = out++;
+            p.row = f->row;
+            p.col = f->col;
             comp.placements.push_back(p);
         }
         return comp;
@@ -142,6 +175,8 @@ Composition compose(const RegionSet& kept, const Sequence& sequence,
             p.source = f.region;
             p.dest = RectRegion(dx, dy, dx + f.region.width(), dy + f.region.height());
             p.index = out++;
+            p.row = f.row;
+            p.col = f.col;
             comp.placements.push_back(p);
         }
         return comp;
@@ -168,31 +203,8 @@ Composition compose(const RegionSet& kept, const Sequence& sequence,
     comp.canvasWidth = cols * cw;
     comp.canvasHeight = rows * ch;
 
-    // 按 sequence 顺序取出 kept 块：order()[k] = 单元序号，仅保留属于 kept 的序号。
-    std::vector<const Fragment*> ordered;
-    ordered.reserve(frags.size());
-    int maxIdx = -1;
-    for (const Fragment& f : frags) maxIdx = std::max(maxIdx, f.index);
-    if (!sequence.empty() && maxIdx >= 0) {
-        std::vector<const Fragment*> byIndex(static_cast<std::size_t>(maxIdx) + 1, nullptr);
-        for (const Fragment& f : frags) {
-            if (f.index >= 0 && f.index <= maxIdx) byIndex[f.index] = &f;
-        }
-        for (const int idx : sequence.order()) {
-            if (idx >= 0 && idx <= maxIdx && byIndex[idx]) ordered.push_back(byIndex[idx]);
-        }
-    }
-    // 补入 sequence 未覆盖的 kept 块（含 index<0 的兼容情形），保持原顺序。
-    {
-        std::vector<char> used(static_cast<std::size_t>(maxIdx) + 1, 0);
-        for (const Fragment* f : ordered) {
-            if (f->index >= 0 && f->index <= maxIdx) used[f->index] = 1;
-        }
-        for (const Fragment& f : frags) {
-            const bool isUsed = (f.index >= 0 && f.index <= maxIdx) ? used[f.index] != 0 : false;
-            if (!isUsed) ordered.push_back(&f);
-        }
-    }
+    // 按 sequence 顺序取出 kept 块（分离与重排共用同一排序助手）。
+    const std::vector<const Fragment*> ordered = orderBySequence(frags, sequence);
 
     // 按填充顺序落位到 cols×rows 画布格子（第 k 个 → 行 k/cols、列 k%cols）。
     int out = 0;
@@ -204,6 +216,8 @@ Composition compose(const RegionSet& kept, const Sequence& sequence,
         p.source = f->region;
         p.dest = RectRegion(c * cw, r * ch, c * cw + f->region.width(), r * ch + f->region.height());
         p.index = out;
+        p.row = f->row;
+        p.col = f->col;
         comp.placements.push_back(p);
         ++out;
     }
