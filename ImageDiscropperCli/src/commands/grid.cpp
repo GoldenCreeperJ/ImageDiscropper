@@ -124,6 +124,22 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
         config.emitParams.layout = engine::MergeLayout::REARRANGE;
         config.emitParams.cols = cols; // 画布列数（单元数，非像素）
         config.emitParams.rows = rows; // 画布行数（单元数，非像素）
+        // 重排填充顺序（与选择排序 --sort 正交）：--merge-sort 行/列优先，--merge-decorate 蛇形/倒序。
+        // --sort 决定「块的先后列表」，--merge-sort/--merge-decorate 决定「该列表如何铺进输出画布」。
+        engine::SortStrategy msort = engine::SortStrategy::ROW_MAJOR;
+        if (args.has("--merge-sort")) {
+            if (!parseSort(args.get("--merge-sort"), msort, err)) return argError(err);
+            if (msort == engine::SortStrategy::CUSTOM)
+                return argError("--merge-sort 不支持 custom",
+                                "重排填充顺序仅 row-major / column-major（自定义块序请用 --sort custom）");
+        }
+        config.emitParams.mergeOrder.strategy = msort;
+        if (args.has("--merge-decorate")) {
+            bool mrev = false, msnk = false;
+            if (!parseDecorate(args.get("--merge-decorate"), mrev, msnk, err)) return argError(err);
+            config.emitParams.mergeOrder.reverse = mrev;
+            config.emitParams.mergeOrder.snake = msnk;
+        }
     } else { // 缺省：分离导出到文件夹（不存在会自动创建）。
         if (!args.has("--output-dir"))
             return argError("分离导出缺少 --output-dir",

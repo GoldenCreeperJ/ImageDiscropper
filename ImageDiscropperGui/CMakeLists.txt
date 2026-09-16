@@ -57,16 +57,20 @@ set(IDC_GUI_MODEL_SRC
     src/model/engine_bridge.cpp
 )
 
-# canvas：QGraphicsView/Scene 画布，图层化渲染底图/遮罩/切割线/选区。
+# canvas：QGraphicsView/Scene 画布，图层化渲染底图/遮罩/切割线/网格线/选区。
 set(IDC_GUI_CANVAS_SRC
     include/gui/canvas/z_order.h
     include/gui/canvas/canvas_scene.h
     include/gui/canvas/canvas_view.h
     include/gui/canvas/mask_layer.h
+    include/gui/canvas/grid_layer.h
+    include/gui/canvas/cell_picker_item.h
     include/gui/canvas/selection_rect_item.h
     src/canvas/canvas_scene.cpp
     src/canvas/canvas_view.cpp
     src/canvas/mask_layer.cpp
+    src/canvas/grid_layer.cpp
+    src/canvas/cell_picker_item.cpp
     src/canvas/selection_rect_item.cpp
 )
 

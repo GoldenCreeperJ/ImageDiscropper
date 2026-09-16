@@ -2,7 +2,8 @@
 // 文件：tests/test_engine_pipeline.cpp
 // 作用：引擎功能验收（终稿 §3.1 / §4 / §5.4）——通过 runEngine 跑通完整流水线，
 //       断言 L1 保留尺寸、L2 十字四角位置与坍缩尺寸、极性开关、L3 网格/选择/排序/重排，
-//       以及 Sequence::build 的 row-major / column-major / reverse / snake / custom 序号。
+//       以及 Sequence::build 的 row-major / column-major / reverse / snake / custom 序号，
+//       并重排填充顺序 MergeOrder（行/列优先 + 蛇形 + 倒序）与「仅 L3 可重排」限制。
 // 分块依据：只覆盖“计算路径”（不落盘）；导出落盘见 test_engine_export.cpp，
 //       边界异常见 test_engine_boundary.cpp，避免单文件膨胀。
 // ============================================================================
@@ -180,6 +181,59 @@ void testEnginePipeline() {
         // 单元 100×100，2×2 画布 → 200×200。
         CHECK(r.composition.canvasWidth == 200 && r.composition.canvasHeight == 200);
         CHECK(r.composition.placements.size() == 4);
+    }
+
+    // ---- L3 重排填充顺序 MergeOrder（行/列优先 + 蛇形 + 倒序）：与选择排序正交。----
+    // 选择序 row-major、selectedCells={0,1,2,3} → 块列表 [c0,c1,c2,c3]；单元 100×100、2×2 画布。
+    {
+        const Image img = makeImage(300, 300);
+        auto base = [&]() {
+            EngineConfig cfg;
+            cfg.source = SourceInfo{300, 300};
+            cfg.cut.tier = Tier::L3;
+            cfg.cut.generator = CutGenerator::GRID;
+            cfg.cut.grid = GridParams{0, 0, 100, 100, RemainderPolicy::DISCARD};
+            cfg.cut.polarity = Polarity::KEEP;
+            cfg.selectedCells = {0, 1, 2, 3};
+            cfg.order.strategy = SortStrategy::ROW_MAJOR;
+            cfg.emitParams.mode = EmitMode::MERGED;
+            cfg.emitParams.layout = MergeLayout::REARRANGE;
+            cfg.emitParams.cols = 2;
+            cfg.emitParams.rows = 2;
+            return cfg;
+        };
+        // 行优先（默认）：槽序 [0,1,2,3] → 块1 落 slot1=(r0,c1)。
+        { const EngineResult r = runEngine(img, base());
+          CHECK(r.ok && r.composition.placements.size() == 4);
+          CHECK(r.composition.placements[1].dest.left == 100 && r.composition.placements[1].dest.top == 0); }
+        // 列优先：槽序 [0,2,1,3] → 块1 落 slot2=(r1,c0)。
+        { EngineConfig cfg = base(); cfg.emitParams.mergeOrder.strategy = SortStrategy::COLUMN_MAJOR;
+          const EngineResult r = runEngine(img, cfg); CHECK(r.ok);
+          CHECK(r.composition.placements[1].dest.left == 0 && r.composition.placements[1].dest.top == 100); }
+        // 蛇形（行优先）：槽序 [0,1,3,2] → 块2 落 slot3=(r1,c1)。
+        { EngineConfig cfg = base(); cfg.emitParams.mergeOrder.snake = true;
+          const EngineResult r = runEngine(img, cfg); CHECK(r.ok);
+          CHECK(r.composition.placements[2].dest.left == 100 && r.composition.placements[2].dest.top == 100); }
+        // 倒序（行优先）：槽序 [3,2,1,0] → 块0 落 slot3=(r1,c1)。
+        { EngineConfig cfg = base(); cfg.emitParams.mergeOrder.reverse = true;
+          const EngineResult r = runEngine(img, cfg); CHECK(r.ok);
+          CHECK(r.composition.placements[0].dest.left == 100 && r.composition.placements[0].dest.top == 100); }
+    }
+
+    // ---- 仅 L3 可重排：非 L3 显式 REARRANGE → 报错。----
+    {
+        const Image img = makeImage(100, 80);
+        EngineConfig cfg;
+        cfg.source = SourceInfo{100, 80};
+        cfg.cut.tier = Tier::L2;
+        cfg.cut.generator = CutGenerator::RECT;
+        cfg.cut.rect = RectRegion(30, 20, 70, 60);
+        cfg.cut.polarity = Polarity::REMOVE;
+        cfg.emitParams.mode = EmitMode::MERGED;
+        cfg.emitParams.layout = MergeLayout::REARRANGE; // L2 重排 → 拒绝
+        const EngineResult r = runEngine(img, cfg);
+        CHECK(!r.ok);
+        CHECK(r.error.find("L3") != std::string::npos);
     }
 
     // ---- 排序策略：Sequence::build 生成序号（FR-L3.5）。----

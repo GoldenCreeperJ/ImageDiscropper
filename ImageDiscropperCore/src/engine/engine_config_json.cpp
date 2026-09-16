@@ -308,6 +308,12 @@ json engineConfigToJson(const EngineConfig& config) {
     merge["cellWidth"] = optIntToJson(config.emitParams.cellWidth);
     merge["cellHeight"] = optIntToJson(config.emitParams.cellHeight);
     merge["padColor"] = colorToHex(config.emitParams.padColor);
+    // arrange：重排填充顺序（仅 REARRANGE 用；与顶层 order 选择排序正交）。
+    json arrange;
+    arrange["strategy"] = strategyName(config.emitParams.mergeOrder.strategy);
+    arrange["reverse"] = config.emitParams.mergeOrder.reverse;
+    arrange["snake"] = config.emitParams.mergeOrder.snake;
+    merge["arrange"] = arrange;
     json emit;
     emit["mode"] = emitModeName(config.emitParams.mode);
     emit["merge"] = merge;
@@ -396,6 +402,11 @@ bool engineConfigFromJson(const json& value, EngineConfig& out) {
         }
     }
     out.emitParams.padColor = colorFromHex(jStr(at(merge, "padColor"), "#00000000"));
+    // arrange：重排填充顺序（缺失取默认 row-major / 无 reverse / 无 snake）。
+    const json& arrange = at(merge, "arrange");
+    out.emitParams.mergeOrder.strategy = strategyFromName(jStr(at(arrange, "strategy"), "row-major"));
+    out.emitParams.mergeOrder.reverse = jBool(at(arrange, "reverse"), false);
+    out.emitParams.mergeOrder.snake = jBool(at(arrange, "snake"), false);
 
     return true;
 }

@@ -85,6 +85,13 @@ void SelectionRectItem::setCutEdges(const bool left, const bool right, const boo
     update();
 }
 
+// 设置高亮态（多矩形下标记当前选中项）：仅值变化时重绘，避免拖拽期逐帧无谓 update。
+void SelectionRectItem::setHighlighted(const bool on) {
+    if (highlighted_ == on) return;
+    highlighted_ = on;
+    update();
+}
+
 // 包围盒：选区外扩手柄尺寸；若有边被标记为贯穿切割线，则并入整幅图像范围（线贯穿全图）。
 QRectF SelectionRectItem::boundingRect() const {
     const qreal m = handleSize_ + 2.0;
@@ -111,9 +118,9 @@ void SelectionRectItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*
     const QRectF r = rect_.normalized();
 
     // 统一橙色画笔（§4.2：橙色实线 2px；cosmetic 使线宽不随缩放变化）。切割线与选区框共用此笔，
-    // 故二者同色、同图元、天然合一。
-    QPen pen(QColor(255, 140, 0));
-    pen.setWidth(2);
+    // 故二者同色、同图元、天然合一。高亮态（多矩形选中项）颜色略深、线宽略粗以示区分。
+    QPen pen(highlighted_ ? QColor(255, 90, 0) : QColor(255, 140, 0));
+    pen.setWidth(highlighted_ ? 3 : 2);
     pen.setCosmetic(true);
     painter->setPen(pen);
 
@@ -128,8 +135,8 @@ void SelectionRectItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*
         if (cutEdge_[EdgeBottom]) painter->drawLine(QPointF(0.0, r.bottom()), QPointF(W, r.bottom()));
     }
 
-    // 选区填充与边框（叠在切割线之上）。
-    painter->setBrush(QColor(255, 165, 0, 30));
+    // 选区填充与边框（叠在切割线之上）；高亮态填充略深。
+    painter->setBrush(QColor(255, 165, 0, highlighted_ ? 60 : 30));
     painter->setPen(pen);
     painter->drawRect(r);
 
@@ -212,13 +219,40 @@ void SelectionRectItem::clampToImage(QRectF& r) const {
     if (r.bottom() > imgH_) r.translate(0, imgH_ - r.bottom());
 }
 
-// 对四边做边缘/中心吸附。
-void SelectionRectItem::applySnap() {
+// 边缘/中心吸附。preserveSize=true（整体移动）：保持宽高不变，只取「最接近目标的某条边」
+// 所需的整体平移量（位移最小且 ≤ 阈值），避免逐边独立吸附把移动变成尺寸突变。
+// preserveSize=false（缩放/拖边）：四边各自独立吸附（本就在改尺寸）。
+void SelectionRectItem::applySnap(const bool preserveSize) {
     if (!hasBounds_) return;
     const QRectF r = rect_.normalized();
     const qreal th = handleSize_;
     const std::array<qreal, 3> xs{0.0, imgW_ / 2.0, static_cast<qreal>(imgW_)};
     const std::array<qreal, 3> ys{0.0, imgH_ / 2.0, static_cast<qreal>(imgH_)};
+
+    if (preserveSize) {
+        // 水平：左/右边中找一个到某 x 目标位移最小的吸附，整体平移 dx（宽高不变）。
+        const std::array<qreal, 2> xedges{r.left(), r.right()};
+        const std::array<qreal, 2> yedges{r.top(), r.bottom()};
+        qreal bestDx = th + 1.0;
+        for (const qreal e : xedges)
+            for (const qreal t : xs) {
+                const qreal d = t - e;
+                if (std::abs(d) <= th && std::abs(d) < std::abs(bestDx)) bestDx = d;
+            }
+        qreal bestDy = th + 1.0;
+        for (const qreal e : yedges)
+            for (const qreal t : ys) {
+                const qreal d = t - e;
+                if (std::abs(d) <= th && std::abs(d) < std::abs(bestDy)) bestDy = d;
+            }
+        const qreal dx = (std::abs(bestDx) <= th) ? bestDx : 0.0;
+        const qreal dy = (std::abs(bestDy) <= th) ? bestDy : 0.0;
+        QRectF nr = r.translated(dx, dy);
+        clampToImage(nr);
+        rect_ = nr;
+        return;
+    }
+
     const qreal l = snap1(r.left(), th, xs);
     const qreal rr = snap1(r.right(), th, xs);
     const qreal t = snap1(r.top(), th, ys);
@@ -298,7 +332,9 @@ void SelectionRectItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
 // 释放：应用吸附、先退出拖拽态再发最终信号（使上层这一次做完整回设与面板回同步）。
 void SelectionRectItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
     const bool wasDragging = (mode_ != DragMode::None);
-    if (wasDragging && snapEnabled_) applySnap();
+    // 整体移动须保持宽高：吸附时只平移不逐边独立吸附（否则移动会变成尺寸突变）。
+    const bool preserveSize = (mode_ == DragMode::Move);
+    if (wasDragging && snapEnabled_) applySnap(preserveSize);
     prepareGeometryChange();
     // 先置拖拽态为 None、再 emit：这样释放这一次 isDragging()==false，上层会照常回设选区框
     // 并同步面板；而拖拽过程中（mouseMoveEvent 的 emit）isDragging()==true，上层跳过回设。

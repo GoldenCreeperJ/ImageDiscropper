@@ -10,13 +10,17 @@
 | 文件 | 命令 / 层级 | 极性 | 装配要点 |
 |---|---|---|---|
 | `extract.cpp` | `extract` / L1 | 恒 KEEP | `--rect/--hband/--vband` 三选一；输出恒 MERGED+COLLAPSE 单图；带需读图后按 W/H 构造贯穿全图矩形 |
-| `erase.cpp` | `erase` / L2 | 恒 REMOVE | 单 `--rect` = 十字切割；多 `--rect` = MULTI_RECT 并集；`--hband/--vband` = 删整条带；缺省 SEPARATE，`--merge collapse/rearrange` 时 MERGED |
-| `grid.cpp` | `grid` / L3 | KEEP 或 REMOVE | `--grid x0,y0,cw,ch` + `--keep/--remove`（可重复）或 `--sort custom --order`；用 Core `Grid::build`+`cellAt` 把 `r,c` 映射为线性 `index` 填 `selectedCells`；`--compose` 恒 MERGED+REARRANGE |
-| `config_command.cpp` | `config` | 由 JSON 决定 | `--load` 读配置；JSON 不含图像 / 输出路径，故执行时仍需 `--input` 与 `--output`/`--output-dir`；`--save-config` 为加载后再序列化的 dry-run |
+| `erase.cpp` | `erase` / L2 | 恒 REMOVE | 单 `--rect` = 十字切割；多 `--rect` = MULTI_RECT 并集；`--hband/--vband` = 删整条带；缺省 SEPARATE，`--merge collapse` 时 MERGED（**拒绝 `--merge rearrange`：重排为 L3 专属**） |
+| `grid.cpp` | `grid` / L3 | KEEP 或 REMOVE | `--grid x0,y0,cw,ch` + `--keep/--remove`（可重复）或 `--sort custom --order`；用 Core `Grid::build`+`cellAt` 把 `r,c` 映射为线性 `index` 填 `selectedCells`；`--compose` 恒 MERGED+REARRANGE（**`--canvas` 的 cols/rows 必填且须为正**），`--merge-sort`/`--merge-decorate` 写 `MergeOrder` |
+| `config.cpp` | `config` | 由 JSON 决定 | `--load` 读配置；JSON 不含图像 / 输出路径，故执行时仍需 `--input` 与 `--output`/`--output-dir`；`--save-config` 为加载后再序列化的 dry-run |
 
 **关键约定**：
 - `grid` 的三种选择来源互斥：`--sort custom` 时用 `--order`（禁 `--keep/--remove/--decorate`，极性 KEEP）；
   否则用 `--keep` 或 `--remove`（二选一，禁 `--order`）。
 - 单元 `r,c` → `index` 的映射**必须**经 Core 的 `Grid`（行列数由图像边界自动推导），CLI 不自算几何（A-0.1）。
-- `config_command` 的 `explicitCollapse` 由加载配置的 `emit.mode==MERGED && emit.layout==COLLAPSE` 推导，
+- `config.cpp` 的 `explicitCollapse` 由加载配置的 `emit.mode==MERGED && emit.layout==COLLAPSE` 推导，
   以便坍缩不可行时返回退出码 2（IT-18）。
+- **合并重排仅 L3**：`grid --compose` 强制 `--canvas` 的 cols/rows 必填且为正；`config.cpp` 对加载配置中的
+  REARRANGE 同样校验「仅 L3 + cols/rows 必填」，违反则退出码 1（不交 Core 默认值兜底）；`erase` 拒绝 `--merge rearrange`。
+- **填充顺序与选择排序正交**：`--merge-sort`（row-major/column-major，不支持 custom）与 `--merge-decorate`
+  （none/reverse/snake/reverse-snake/snake-reverse）复用 `value_parser` 解析，写入 `MergeOrder{strategy,reverse,snake}`。

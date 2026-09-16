@@ -9,8 +9,8 @@
 | 命令 | 层级 | 极性 | 输出 |
 |---|---|---|---|
 | `extract` | L1 标准提取 | 恒 keep | 合并单图（坍缩） |
-| `erase` | L2 反向剔除 | 恒 remove | 分离到文件夹 / 坍缩 / 重排 |
-| `grid` | L3 网格分割 | keep 或 remove | 分离 / 重排合并 |
+| `erase` | L2 反向剔除 | 恒 remove | 分离到文件夹 / 坍缩（重排为 L3 专属，`erase` 拒绝 `--merge rearrange`） |
+| `grid` | L3 网格分割 | keep 或 remove | 分离 / 重排合并（`--merge-sort`/`--merge-decorate` 控制填充顺序） |
 | `config` | 配置驱动 | 由 JSON 决定 | 由 JSON 的 emit 决定 |
 
 ## 目录结构
@@ -50,14 +50,25 @@ idc extract --input photo.jpg --rect 100,100,300,250 --output out.png
 # L2：十字切割，坍缩合并 / 分离导出
 idc erase  --input photo.jpg --rect 100,100,300,250 --merge collapse --output out.png
 idc erase  --input photo.jpg --rect 100,100,300,250 --output-dir ./out/ --format png
-# L3：网格保留四角并重排到 2x2 画布
+# L3：网格保留四角并重排到 2x2 画布（--compose 时 --canvas 的 cols/rows 必填且须为正）
 idc grid   --input photo.jpg --grid 100,100,200,150 --keep 0,0 --keep 0,2 --keep 2,0 --keep 2,2 \
            --compose --canvas 2x2 --output result.png
+# L3：重排时另控填充顺序（与 --sort 选择排序正交；--merge-sort 不支持 custom）
+idc grid   --input photo.jpg --grid 100,100,200,150 --keep 0,0 --keep 0,1 --keep 1,0 --keep 1,1 \
+           --compose --canvas 2x2 --merge-sort column-major --merge-decorate snake --output result.png
 # 配置驱动
 idc config --load my-config.json --input photo.jpg --output result.png
 ```
 
 完整选项见 `idc <command> --help`。
+
+### 合并重排（仅 L3 `grid`）
+
+- **仅 L3 `grid --compose` 支持重排**；`erase`（L2）与 `config` 加载的非 L3 配置若指定 `rearrange` 均判**参数错误（退出码 1）**。
+- **`--canvas <cols>x<rows>` 的 cols/rows 必填且须为正**（`grid --compose` 与 `config` 的 REARRANGE 配置同此约束），不再由 Core 用默认值兜底。
+- **填充顺序与选择排序正交**：`--sort`（row-major/column-major/custom）决定保留块的先后列表；
+  `--merge-sort <row-major|column-major>`（不支持 custom）+ `--merge-decorate <none|reverse|snake|reverse-snake|snake-reverse>`
+  决定该列表铺进 cols×rows 画布的路径，映射到 Core 的 `MergeOrder{strategy,reverse,snake}`。
 
 ### 全局选项
 

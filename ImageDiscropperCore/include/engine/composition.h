@@ -23,7 +23,7 @@
 #include "engine/region.h"
 #include "engine/region_set.h"
 #include "engine/selection.h"
-#include "engine/sequence.h"
+#include "engine/sequence.h" // SortStrategy（MergeOrder 复用其 ROW_MAJOR / COLUMN_MAJOR）
 
 namespace idc::engine {
 
@@ -40,7 +40,19 @@ enum class EmitMode {
 // ---------------------------------------------------------------------------
 enum class MergeLayout {
     COLLAPSE,   // 坍缩式：剩余块按原相对位置紧贴拼接（L1/L2 主用，§5.2）
-    REARRANGE,  // 重排式：按序列填入指定 cols × rows 画布（L3 主用，§5.3）
+    REARRANGE,  // 重排式：按序列填入指定 cols × rows 画布（L3 专属，§5.3）
+};
+
+// ---------------------------------------------------------------------------
+// MergeOrder：合并重排的「填充顺序」——决定保留块列表按什么路径铺进 cols×rows 输出画布。
+// 与 L3 选择排序（SequenceParams / Sequence）正交：后者决定「块的先后列表」（含自定义拖拽序），
+// 本结构决定「这个列表以行优先/列优先 + 蛇形? + 倒序? 的路径落入输出画布的哪些槽位」。
+// 仅 REARRANGE 使用；strategy 只取 ROW_MAJOR / COLUMN_MAJOR（CUSTOM 在 compose 中按 ROW_MAJOR 处理）。
+// ---------------------------------------------------------------------------
+struct MergeOrder {
+    SortStrategy strategy{SortStrategy::ROW_MAJOR}; // 行优先 / 列优先（不含自定义）
+    bool reverse{false};  // 整体倒序：填充路径整体逆序
+    bool snake{false};    // 蛇形：隔行（行优先）/ 隔列（列优先）反向
 };
 
 // ---------------------------------------------------------------------------
@@ -59,6 +71,7 @@ enum class ExportFormat {
 struct CompositionParams {
     EmitMode mode{EmitMode::MERGED};                 // 分离 or 合并
     MergeLayout layout{MergeLayout::COLLAPSE};       // 坍缩 or 重排
+    MergeOrder mergeOrder;                           // 重排填充顺序（仅 REARRANGE；与 order 选择排序正交）
     std::optional<int> cols;                         // 重排画布列数（可选）
     std::optional<int> rows;                         // 重排画布行数（可选）
     std::optional<int> cellWidth;                    // 重排单元宽（可选）

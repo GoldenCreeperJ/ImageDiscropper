@@ -16,6 +16,7 @@ class QLineEdit;
 class QSpinBox;
 class QPushButton;
 class QLabel;
+class QCheckBox;
 
 namespace idc::gui {
 
@@ -36,6 +37,12 @@ public:
     void setCollapsible(bool collapsible);
     // 更新导出前信息文字（画布尺寸、保留块数等；由 MainWindow 回灌）。
     void setPreviewInfo(const QString& text);
+    // 回灌重排上下文（由 MainWindow 依 Core 引擎结果调用）：保留块数 + 网格单元尺寸。
+    // 用于「自动 cols/rows（依格数开方）」与画布/单元尺寸不足的内联警告。
+    void setRearrangeContext(int keptCount, int cellW, int cellH);
+    // 当前重排参数下的警告文本（cols*rows < 保留块数，或 cw/ch < 网格单元尺寸）；无警告返回空串。
+    // MainWindow 在导出前调用，非空则弹窗二次确认。
+    QString rearrangeWarning() const;
 
 signals:
     // 请求导出（MainWindow 负责路径校验与调用 EngineBridge）。
@@ -50,12 +57,29 @@ private slots:
     void onFileEdited();  // 文件手动键入提交 → 写回 Document。
     void onBrowseDir();
     void onBrowseFile();
+    // 合并重排参数（FR-L3.7）：列/行、单元尺寸、填充色。
+    void onMergeGridEdited();   // 列数或行数变更。
+    void onMergeCellEdited();   // 单元宽或高变更。
+    void onPadColorClicked();   // 点击填充色按钮 → 弹色对话框。
+    // 重排填充顺序（MergeOrder）：行/列优先、蛇形、倒序——与 L3 选择排序正交。
+    void onMergeSortChanged(int index);
+    void onMergeSnakeToggled(bool on);
+    void onMergeReverseToggled(bool on);
+    void onAutoGridClicked();     // 「按格数自动」：依保留块数开方重算 cols/rows 并填入。
 
 private:
     // 依当前输出模式切换目录/文件字段的可用性与可见性。
     void updateFieldVisibility();
     // 依当前格式返回保存对话框的过滤器字符串。
     QString saveFilter() const;
+    // 依 Document 的 padColor 更新填充色按钮的背景色块。
+    void updatePadColorSwatch();
+    // 依 Core 坍缩可行性与 Document 模式刷新各输出模式项可用性（坍缩依可行性、重排仅 L3）。
+    void refreshModeItemStates();
+    // 依保留块数开方计算 cols/rows 并填入 spinbox（未手动改过时）。
+    void applyAutoGrid();
+    // 重算并显示重排内联警告（红字）。
+    void updateRearrangeWarning();
 
     Document* doc_{nullptr};
 
@@ -74,6 +98,27 @@ private:
     QLabel* namingLabel_{nullptr};
     QLabel* infoLabel_{nullptr};      // 导出前信息（替代缩略图）
     QPushButton* exportBtn_{nullptr};
+
+    // 合并重排参数控件（仅「合并重排」模式显示；FR-L3.7 / §4.6）。
+    QWidget* rearrangeRow_{nullptr};
+    QSpinBox* mergeCols_{nullptr};      // 重排列数（0=自动推导）
+    QSpinBox* mergeRows_{nullptr};      // 重排行数（0=自动推导）
+    QSpinBox* mergeCellW_{nullptr};     // 重排单元宽（0=用保留块原尺寸）
+    QSpinBox* mergeCellH_{nullptr};     // 重排单元高（0=原尺寸）
+    QPushButton* padColorBtn_{nullptr}; // 填充色按钮（背景显示当前色）
+
+    // 重排填充顺序控件（MergeOrder；仅「合并重排」显示）与自动/警告。
+    QComboBox* mergeSortCombo_{nullptr};   // 0=行优先 1=列优先
+    QCheckBox* mergeSnake_{nullptr};       // 蛇形填充
+    QCheckBox* mergeReverse_{nullptr};     // 倒序填充
+    QPushButton* autoGridBtn_{nullptr};    // 「按格数自动」重算 cols/rows
+    QLabel* rearrangeWarn_{nullptr};       // 内联警告（红字）
+    // 重排上下文（MainWindow 回灌）：保留块数 + 网格单元尺寸（供自动 cols/rows 与警告）。
+    int keptCount_{0};
+    int cellW_{0};
+    int cellH_{0};
+    bool mergeGridTouched_{false};         // 用户手动改过 cols/rows → 停止自动填充
+    bool collapsible_{true};               // 最近一次 Core 坍缩可行性（供模式项启用/禁用）
 };
 
 } // namespace idc::gui

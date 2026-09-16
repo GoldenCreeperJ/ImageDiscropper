@@ -12,3 +12,6 @@
 
 > 语义：`push` 追加新条目并清空重做栈（新操作切断「未来」）；`popToRedo` 撤销、
 > `popFromRedo` 重做。
+> 主栈经 `undoStack()`（只读 / 可写两个重载）对外暴露：可写重载供使用方对「当前有效条目」
+> 原地编辑（如标注 EDIT 模式改样式，不新增历史条目）。当前由 `annotation::AnnotationLayer`
+> 复用为其标注撤销重做栈。

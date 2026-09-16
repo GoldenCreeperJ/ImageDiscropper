@@ -6,8 +6,12 @@
 // ============================================================================
 #include "panels/export_panel.h"
 
+#include <QCheckBox>
+#include <QColor>
+#include <QColorDialog>
 #include <QComboBox>
 #include <QFileDialog>
+#include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -15,7 +19,10 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <QStandardItemModel>
+#include <QStringList>
 #include <QVBoxLayout>
+
+#include <cmath>
 
 #include "engine/engine.h"
 #include "model/document.h"
@@ -76,6 +83,60 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     fh->addWidget(fileBtn_);
     form->addWidget(fileRow_);
 
+    // 合并重排参数行（FR-L3.7 / §4.6）：仅「合并重排」模式显示。
+    // 列/行/单元尺寸以 0 表示「自动」（setSpecialValueText 显示为“自动”），交 Core compose 推导。
+    rearrangeRow_ = new QWidget(box);
+    auto* rf = new QFormLayout(rearrangeRow_);
+    rf->setContentsMargins(0, 0, 0, 0);
+    rf->setSpacing(4);
+    mergeCols_ = new QSpinBox(rearrangeRow_);
+    mergeRows_ = new QSpinBox(rearrangeRow_);
+    mergeCellW_ = new QSpinBox(rearrangeRow_);
+    mergeCellH_ = new QSpinBox(rearrangeRow_);
+    for (QSpinBox* s : {mergeCols_, mergeRows_, mergeCellW_, mergeCellH_}) {
+        s->setRange(0, 100000);
+        s->setValue(0);
+        s->setKeyboardTracking(false);          // 提交才触发，避免逐键刷新。
+        s->setSpecialValueText(QStringLiteral("自动")); // 最小值 0 显示为「自动」。
+    }
+    mergeCols_->setToolTip(QStringLiteral("重排画布列数；自动=依保留块数推导。"));
+    mergeRows_->setToolTip(QStringLiteral("重排画布行数；自动=依保留块数推导。"));
+    mergeCellW_->setToolTip(QStringLiteral("重排单元宽；自动=用保留块原尺寸。"));
+    mergeCellH_->setToolTip(QStringLiteral("重排单元高；自动=用保留块原尺寸。"));
+    rf->addRow(QStringLiteral("列数"), mergeCols_);
+    rf->addRow(QStringLiteral("行数"), mergeRows_);
+    autoGridBtn_ = new QPushButton(QStringLiteral("按格数自动"), rearrangeRow_);
+    autoGridBtn_->setToolTip(QStringLiteral("依保留块数 n 计算 cols=ceil(sqrt(n))、rows=ceil(n/cols) 并填入。"));
+    rf->addRow(QString(), autoGridBtn_);
+    rf->addRow(QStringLiteral("单元宽"), mergeCellW_);
+    rf->addRow(QStringLiteral("单元高"), mergeCellH_);
+    // 重排填充顺序（MergeOrder）：与 L3 选择排序正交——决定块列表以何种路径铺进 cols×rows 画布。
+    mergeSortCombo_ = new QComboBox(rearrangeRow_);
+    mergeSortCombo_->addItems({QStringLiteral("行优先"), QStringLiteral("列优先")});
+    mergeSortCombo_->setToolTip(QStringLiteral("重排填充顺序：块列表按行优先/列优先铺进画布（与选择排序正交）。"));
+    mergeSnake_ = new QCheckBox(QStringLiteral("蛇形"), rearrangeRow_);
+    mergeSnake_->setToolTip(QStringLiteral("隔行（行优先）/隔列（列优先）反向填充。"));
+    mergeReverse_ = new QCheckBox(QStringLiteral("倒序"), rearrangeRow_);
+    mergeReverse_->setToolTip(QStringLiteral("填充路径整体逆序。"));
+    auto* orderRow = new QWidget(rearrangeRow_);
+    auto* oh = new QHBoxLayout(orderRow);
+    oh->setContentsMargins(0, 0, 0, 0);
+    oh->addWidget(mergeSortCombo_);
+    oh->addWidget(mergeSnake_);
+    oh->addWidget(mergeReverse_);
+    oh->addStretch(1);
+    rf->addRow(QStringLiteral("填充顺序"), orderRow);
+    padColorBtn_ = new QPushButton(rearrangeRow_);
+    padColorBtn_->setToolTip(QStringLiteral("空位/余量填充色（默认透明）。点击选择。"));
+    rf->addRow(QStringLiteral("填充色"), padColorBtn_);
+    // 内联警告（红字）：cols*rows < 保留块数 或 cw/ch < 网格单元尺寸时提示（导出前另弹窗确认）。
+    rearrangeWarn_ = new QLabel(rearrangeRow_);
+    rearrangeWarn_->setWordWrap(true);
+    rearrangeWarn_->setStyleSheet(QStringLiteral("color:#c0392b;"));
+    rearrangeWarn_->setVisible(false);
+    rf->addRow(rearrangeWarn_);
+    form->addWidget(rearrangeRow_);
+
     // 格式。
     form->addWidget(new QLabel(QStringLiteral("格式"), box));
     formatCombo_ = new QComboBox(box);
@@ -114,6 +175,16 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     connect(dirBtn_, &QPushButton::clicked, this, &ExportPanel::onBrowseDir);
     connect(fileBtn_, &QPushButton::clicked, this, &ExportPanel::onBrowseFile);
     connect(exportBtn_, &QPushButton::clicked, this, &ExportPanel::exportRequested);
+    // 重排参数：列/行共用一个槽、单元宽/高共用一个槽（信号多出的 int 参数自动丢弃）。
+    connect(mergeCols_, &QSpinBox::valueChanged, this, &ExportPanel::onMergeGridEdited);
+    connect(mergeRows_, &QSpinBox::valueChanged, this, &ExportPanel::onMergeGridEdited);
+    connect(mergeCellW_, &QSpinBox::valueChanged, this, &ExportPanel::onMergeCellEdited);
+    connect(mergeCellH_, &QSpinBox::valueChanged, this, &ExportPanel::onMergeCellEdited);
+    connect(padColorBtn_, &QPushButton::clicked, this, &ExportPanel::onPadColorClicked);
+    connect(autoGridBtn_, &QPushButton::clicked, this, &ExportPanel::onAutoGridClicked);
+    connect(mergeSortCombo_, &QComboBox::currentIndexChanged, this, &ExportPanel::onMergeSortChanged);
+    connect(mergeSnake_, &QCheckBox::toggled, this, &ExportPanel::onMergeSnakeToggled);
+    connect(mergeReverse_, &QCheckBox::toggled, this, &ExportPanel::onMergeReverseToggled);
 }
 
 // 绑定 Document 并同步一次。
@@ -151,20 +222,43 @@ void ExportPanel::syncFromDocument() {
     dirEdit_->setText(doc_->outputDir());
     fileEdit_->setText(doc_->outputFile());
 
+    // 重排参数回填（blockSignals 防回环）。
+    for (QSpinBox* s : {mergeCols_, mergeRows_, mergeCellW_, mergeCellH_}) s->blockSignals(true);
+    mergeCols_->setValue(doc_->mergeCols());
+    mergeRows_->setValue(doc_->mergeRows());
+    mergeCellW_->setValue(doc_->mergeCellW());
+    mergeCellH_->setValue(doc_->mergeCellH());
+    for (QSpinBox* s : {mergeCols_, mergeRows_, mergeCellW_, mergeCellH_}) s->blockSignals(false);
+    updatePadColorSwatch();
+
+    // 重排填充顺序回填（MergeOrder；blockSignals 防回环）。
+    mergeSortCombo_->blockSignals(true);
+    mergeSortCombo_->setCurrentIndex(doc_->mergeOrder().strategy == idc::engine::SortStrategy::COLUMN_MAJOR ? 1 : 0);
+    mergeSortCombo_->blockSignals(false);
+    mergeSnake_->blockSignals(true);
+    mergeSnake_->setChecked(doc_->mergeOrder().snake);
+    mergeSnake_->blockSignals(false);
+    mergeReverse_->blockSignals(true);
+    mergeReverse_->setChecked(doc_->mergeOrder().reverse);
+    mergeReverse_->blockSignals(false);
+
     updateFieldVisibility();
+    refreshModeItemStates();   // 依模式(L3?)/坍缩可行性刷新各输出模式项可用性。
+    updateRearrangeWarning();  // 重算内联警告。
     const bool lossy = (doc_->format() == idc::engine::ExportFormat::JPEG ||
                         doc_->format() == idc::engine::ExportFormat::WEBP);
     qualityLabel_->setVisible(lossy);
     quality_->setVisible(lossy);
 }
 
-// 依 Core 坍缩可行性启用/禁用「合并坍缩」；不可行且当前选中坍缩时切到重排。
+// 依 Core 坍缩可行性与 Document 模式刷新模式项：不可行且当前选中坍缩时回退。
 void ExportPanel::setCollapsible(const bool collapsible) {
-    if (auto* m = qobject_cast<QStandardItemModel*>(modeCombo_->model())) {
-        if (QStandardItem* it = m->item(1)) it->setEnabled(collapsible);
-    }
+    collapsible_ = collapsible;
+    refreshModeItemStates();
+    // 当前选中「坍缩」但不可坍缩：回退到重排（仅 L3 可用），否则退回分离导出。
     if (!collapsible && modeCombo_->currentIndex() == 1) {
-        modeCombo_->setCurrentIndex(2); // 触发 onModeChanged(2) → 写回重排。
+        const bool isL3 = doc_ && doc_->mode() == idc::engine::Tier::L3;
+        modeCombo_->setCurrentIndex(isL3 ? 2 : 0); // 触发 onModeChanged → 写回 Document。
     }
 }
 
@@ -182,7 +276,10 @@ void ExportPanel::onModeChanged(const int index) {
         case 2: doc_->setEmit(idc::engine::EmitMode::MERGED, idc::engine::MergeLayout::REARRANGE); break;
         default: break;
     }
+    // 进入重排：若用户未手动指定 cols/rows，依保留块数开方自动填入具体值。
+    if (index == 2 && !mergeGridTouched_) applyAutoGrid();
     updateFieldVisibility();
+    updateRearrangeWarning();
 }
 
 // 格式变更 → 写回 Document + 质量字段显隐。
@@ -242,12 +339,53 @@ void ExportPanel::onBrowseFile() {
     }
 }
 
-// 依当前输出模式切换目录/文件/命名行显隐。
+// 重排列数/行数变更 → 标记手动 + 写回 Document（0=自动，交 Core 推导）+ 重算警告。
+void ExportPanel::onMergeGridEdited() {
+    mergeGridTouched_ = true;   // 用户手动改过 → 停止自动填充。
+    if (doc_) doc_->setMergeGrid(mergeCols_->value(), mergeRows_->value());
+    updateRearrangeWarning();
+}
+
+// 重排单元宽/高变更 → 写回 Document（0=用保留块原尺寸）+ 重算警告。
+void ExportPanel::onMergeCellEdited() {
+    if (doc_) doc_->setMergeCellSize(mergeCellW_->value(), mergeCellH_->value());
+    updateRearrangeWarning();
+}
+
+// 点击填充色按钮 → 弹带 Alpha 的取色对话框，写回 Document 并刷新色块。
+void ExportPanel::onPadColorClicked() {
+    if (!doc_) return;
+    const idc::core::Color cur = doc_->padColor();
+    const QColor init(cur.r, cur.g, cur.b, cur.a);
+    const QColor picked = QColorDialog::getColor(init, this, QStringLiteral("选择填充色"),
+                                                 QColorDialog::ShowAlphaChannel);
+    if (!picked.isValid()) return; // 用户取消。
+    doc_->setPadColor(idc::core::Color(static_cast<std::uint8_t>(picked.red()),
+                                       static_cast<std::uint8_t>(picked.green()),
+                                       static_cast<std::uint8_t>(picked.blue()),
+                                       static_cast<std::uint8_t>(picked.alpha())));
+    updatePadColorSwatch();
+}
+
+// 依 Document 的 padColor 更新填充色按钮背景色块（含 Alpha 预览文案）。
+void ExportPanel::updatePadColorSwatch() {
+    if (!padColorBtn_ || !doc_) return;
+    const idc::core::Color c = doc_->padColor();
+    padColorBtn_->setStyleSheet(QStringLiteral(
+        "QPushButton{background:rgba(%1,%2,%3,%4);border:1px solid #999;border-radius:4px;min-height:20px;}")
+        .arg(c.r).arg(c.g).arg(c.b).arg(c.a));
+    padColorBtn_->setText(c.a == 0 ? QStringLiteral("透明")
+                                   : QStringLiteral("RGBA(%1,%2,%3,%4)").arg(c.r).arg(c.g).arg(c.b).arg(c.a));
+}
+
+// 依当前输出模式切换目录/文件/命名/重排行显隐。
 void ExportPanel::updateFieldVisibility() {
-    const bool separate = (modeCombo_->currentIndex() == 0);
+    const int idx = modeCombo_->currentIndex();
+    const bool separate = (idx == 0);
     dirRow_->setVisible(separate);
     namingRow_->setVisible(separate);
     fileRow_->setVisible(!separate);
+    rearrangeRow_->setVisible(idx == 2); // 仅「合并重排」显示重排参数。
 }
 
 // 依当前格式返回保存对话框过滤器。
@@ -260,6 +398,97 @@ QString ExportPanel::saveFilter() const {
         case idc::engine::ExportFormat::BMP:  return QStringLiteral("BMP 图像 (*.bmp)");
     }
     return QStringLiteral("所有文件 (*)");
+}
+
+// 依 Core 坍缩可行性与 Document 模式，刷新「合并坍缩」「合并重排」两项的可用性：
+// 坍缩项依 collapsible_；重排项仅 L3 可用（Core runEngine 硬约束，非 L3 重排会报错）。
+void ExportPanel::refreshModeItemStates() {
+    auto* m = qobject_cast<QStandardItemModel*>(modeCombo_->model());
+    if (!m) return;
+    const bool isL3 = doc_ && doc_->mode() == idc::engine::Tier::L3;
+    if (QStandardItem* it = m->item(1)) it->setEnabled(collapsible_);
+    if (QStandardItem* it = m->item(2)) it->setEnabled(isL3);
+}
+
+// 回灌重排上下文（MainWindow 依 Core 引擎结果调用）：保留块数 + 网格单元尺寸。
+void ExportPanel::setRearrangeContext(const int keptCount, const int cellW, const int cellH) {
+    keptCount_ = keptCount < 0 ? 0 : keptCount;
+    cellW_ = cellW < 0 ? 0 : cellW;
+    cellH_ = cellH < 0 ? 0 : cellH;
+    // 处于重排模式且用户未手动指定 cols/rows 时，依新的保留块数自动开方填入。
+    if (modeCombo_->currentIndex() == 2 && !mergeGridTouched_) applyAutoGrid();
+    updateRearrangeWarning();
+}
+
+// 「按格数自动」按钮：清除手动标记并按格数开方重算 cols/rows。
+void ExportPanel::onAutoGridClicked() {
+    mergeGridTouched_ = false;
+    applyAutoGrid();
+    updateRearrangeWarning();
+}
+
+// 依保留块数 n 计算 cols=ceil(sqrt(n))、rows=ceil(n/cols) 并填入 spinbox（写回 Document）。
+void ExportPanel::applyAutoGrid() {
+    const int n = keptCount_;
+    if (n <= 0) return;                       // 无保留块：不覆盖用户设置。
+    int cols = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(n))));
+    if (cols < 1) cols = 1;
+    int rows = (n + cols - 1) / cols;         // ceil(n/cols)
+    if (rows < 1) rows = 1;
+    for (QSpinBox* s : {mergeCols_, mergeRows_}) s->blockSignals(true);
+    mergeCols_->setValue(cols);
+    mergeRows_->setValue(rows);
+    for (QSpinBox* s : {mergeCols_, mergeRows_}) s->blockSignals(false);
+    if (doc_) doc_->setMergeGrid(cols, rows); // 写回（值不变时 setMergeGrid 早退，不会无限回环）。
+}
+
+// 重排填充顺序：行/列优先（与 L3 选择排序正交）。
+void ExportPanel::onMergeSortChanged(const int index) {
+    if (doc_) doc_->setMergeOrderStrategy(index == 1 ? idc::engine::SortStrategy::COLUMN_MAJOR
+                                                     : idc::engine::SortStrategy::ROW_MAJOR);
+}
+
+// 重排填充：蛇形。
+void ExportPanel::onMergeSnakeToggled(const bool on) {
+    if (doc_) doc_->setMergeOrderSnake(on);
+}
+
+// 重排填充：倒序。
+void ExportPanel::onMergeReverseToggled(const bool on) {
+    if (doc_) doc_->setMergeOrderReverse(on);
+}
+
+// 生成当前重排参数下的警告文本（无警告返回空串）：
+//   ① cols*rows < 保留块数：多出的块无处安放（Core 会扩行，但与用户显式设定不符）；
+//   ② cw/ch > 0 且 < 网格单元尺寸：块按自身尺寸落位会溢出格子、相互覆盖或越界被裁剪。
+QString ExportPanel::rearrangeWarning() const {
+    if (modeCombo_->currentIndex() != 2) return QString();  // 非重排模式无警告。
+    QStringList msgs;
+    const int cols = mergeCols_->value();
+    const int rows = mergeRows_->value();
+    if (keptCount_ > 0 && cols > 0 && rows > 0 && cols * rows < keptCount_) {
+        msgs << QStringLiteral("画布 %1×%2=%3 格 < 保留块数 %4，多出的块将被丢弃或覆盖。")
+                    .arg(cols).arg(rows).arg(cols * rows).arg(keptCount_);
+    }
+    const int cw = mergeCellW_->value();
+    const int ch = mergeCellH_->value();
+    if (cw > 0 && cellW_ > 0 && cw < cellW_) {
+        msgs << QStringLiteral("单元宽 %1 < 网格单元宽 %2，块会溢出格子并被相邻块覆盖/裁剪。")
+                    .arg(cw).arg(cellW_);
+    }
+    if (ch > 0 && cellH_ > 0 && ch < cellH_) {
+        msgs << QStringLiteral("单元高 %1 < 网格单元高 %2，块会溢出格子并被相邻块覆盖/裁剪。")
+                    .arg(ch).arg(cellH_);
+    }
+    return msgs.join(QStringLiteral("\n"));
+}
+
+// 重算并显示内联警告（红字）。
+void ExportPanel::updateRearrangeWarning() {
+    if (!rearrangeWarn_) return;
+    const QString w = rearrangeWarning();
+    rearrangeWarn_->setText(w.isEmpty() ? QString() : QStringLiteral("警告：") + w);
+    rearrangeWarn_->setVisible(!w.isEmpty());
 }
 
 } // namespace idc::gui

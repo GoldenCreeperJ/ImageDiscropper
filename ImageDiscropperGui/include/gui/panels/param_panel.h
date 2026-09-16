@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：panels/param_panel.h
 // 作用：右侧「参数面板」（guideline §4.5）——随模式切换的 QStackedWidget：
-//       L1 形状+坐标、L2 子功能+坐标+坍缩可行性提示、L3 占位（第二阶段接入）。
+//       L1 形状+坐标、L2 子功能+坐标+坤缩可行性提示、L3 网格定义+选择集+排序（第二阶段）。
 //       面板只把用户输入写回 Document（数值直接输入回车生效，NFR-5），不含几何逻辑（A-0.1）。
 // 分块依据：每个模式一页，页内控件与该模式的一两个 Document 字段对应；坍缩提示由 MainWindow
 //           依 Core 的 isCollapsible 结果回灌（面板不自算可行性）。
@@ -16,7 +16,10 @@
 class QComboBox;
 class QSpinBox;
 class QLabel;
+class QCheckBox;
+class QPushButton;
 class QStackedWidget;
+class QListWidget;
 
 namespace idc::gui {
 
@@ -38,10 +41,35 @@ public:
     // 由 MainWindow 依 Core isCollapsible 结果回灌坍缩可行性提示（L2 页）。
     void setCollapseHint(bool collapsible, const QString& reason);
 
+    // L2 多矩形：仅刷新列表中第 index 行的坐标文本（若为选中行则同步 spinbox），
+    // 不重建整个列表——供画布拖拽期间实时回显矩形尺寸（此时 syncPanels 被跳过）。
+    void updateRectListItem(int index);
+    // L2 多矩形：把列表选中行置为 index（已是则免打扰），触发 rectSelected 与 spinbox 回填。
+    void selectRectRow(int index);
+
+signals:
+    // L2 多矩形：列表选中行变化（-1 = 无），供 MainWindow 高亮画布上对应选区框。
+    void rectSelected(int index);
+
 private slots:
     void onL1ShapeChanged(int index);
     void onL2SubChanged(int index);
     void onCoordEdited(); // L1/L2 坐标变更统一入口。
+    void onConvertToGrid(); // L2「转为网格模式编辑」：把当前选区送入 L3。
+    // L2 多矩形并集（仅 MULTI_RECT）。
+    void onRectListSelectionChanged(); // 列表选中项 → 把该矩形坐标载入 spinbox。
+    void onRectDelClicked();           // 删除选中矩形。
+    void onRectClearClicked();         // 清空矩形列表。
+    // L3 网格参数 / 选择集 / 排序。
+    void onGridOriginEdited();          // 基准点 x0/y0 变更。
+    void onCellSizeEdited();            // 单元尺寸 cw/ch 变更。
+    void onRemainderChanged(int index); // 余量策略变更。
+    void onSortStrategyChanged(int index); // 排序策略变更。
+    void onSortReverseToggled(bool on);    // 整体逆序。
+    void onSortSnakeToggled(bool on);      // 蛇形排序。
+    void onSelectAllCells();            // 全选。
+    void onInvertCells();               // 反选。
+    void onClearCells();                // 清空选择集。
 
 private:
     // 构建 L1 / L2 / L3 三页并加入 stack_。
@@ -68,6 +96,26 @@ private:
     QSpinBox* l2x2_{nullptr};
     QSpinBox* l2y2_{nullptr};
     QLabel* collapseHint_{nullptr};
+    QPushButton* l2ToGridBtn_{nullptr};  // 「转为网格模式编辑」入口（G-15）
+
+    // L2 多矩形并集控件（仅 MULTI_RECT 显示）。
+    QWidget* l2MultiBox_{nullptr};         // 多矩形列表分组容器
+    QListWidget* l2RectList_{nullptr};     // 矩形列表
+    QPushButton* l2RectDelBtn_{nullptr};   // 删除选中
+    QPushButton* l2RectClearBtn_{nullptr}; // 清空
+    bool syncingRectList_{false};          // 重建列表时抑制选中信号回环
+
+    // L3 控件（网格定义 / 选择集 / 排序）。
+    QSpinBox* gx0_{nullptr};
+    QSpinBox* gy0_{nullptr};
+    QSpinBox* gcw_{nullptr};
+    QSpinBox* gch_{nullptr};
+    QComboBox* gRemainder_{nullptr};
+    QLabel* gGridInfo_{nullptr};   // 派生行列数（只读，由 Core 回灌）
+    QLabel* gSelInfo_{nullptr};    // 已选单元数（只读）
+    QComboBox* gSort_{nullptr};
+    QCheckBox* gReverse_{nullptr};
+    QCheckBox* gSnake_{nullptr};
 };
 
 } // namespace idc::gui

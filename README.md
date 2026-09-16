@@ -42,11 +42,11 @@ CLI ──────┘
 |---|---|---|---|---|
 | [`ImageDiscropperCore/`](ImageDiscropperCore) | Core | 静态库 `image_discropper_core` | 纯逻辑：Grid-Selection-Emit 统一引擎 + 基础图像处理，无 GUI 依赖 | ✅ MVP / v2 已落地 |
 | [`ImageDiscropperCli/`](ImageDiscropperCli) | CLI | 可执行 `idc` + 静态库 `idc_cli_lib` | 命令行薄壳：解析参数 → 调用 Core → 格式化输出 → 返回退出码 | ✅ 已落地 |
-| `gui/`（规划中） | GUI | 桌面前端 | 交互式画布、拖拽切割线、实时预览 | ⏳ 未落地 |
+| [`ImageDiscropperGui/`](ImageDiscropperGui) | GUI | 可执行 `idc_gui` | Qt6 桌面前端：交互式画布、拖拽切割线 / 选区、实时预览、参数面板 | ✅ 已落地 |
 
 顶层 [`CMakeLists.txt`](CMakeLists.txt) 只做「模块编排 + 全局约定」：统一 C++17、
-按依赖顺序先引入 Core 再引入 CLI、开放 `ctest`。第三方库（stb / libwebp / nlohmann_json）
-由 Core 以 PRIVATE 封装，CLI 经 Core 公共头间接使用，无需感知。
+按依赖顺序先引入 Core 再引入 CLI 与 GUI、开放 `ctest`。第三方库（stb / libwebp / nlohmann_json）
+由 Core 以 PRIVATE 封装，CLI / GUI 经 Core 公共头间接使用，无需感知；GUI 另需 vcpkg 的 qtbase。
 
 ---
 
@@ -81,12 +81,12 @@ CLI 命令与终稿功能的对应（详见 [`ImageDiscropperCli/README.md`](Ima
 
 ## 4. 构建与运行
 
-工程使用 CMake（>= 3.28）+ vcpkg（`stb` / `libwebp` / `nlohmann-json`，均由 Core PRIVATE 接入）。
+工程使用 CMake（>= 3.28）+ vcpkg（`stb` / `libwebp` / `nlohmann-json` 由 Core PRIVATE 接入；`qtbase` 供 GUI 使用）。
 **以仓库根为 CMake 源目录**加载工程：
 
 ```bash
 cmake -S . -B build            # 需配置 vcpkg 工具链
-cmake --build build            # 产出 build/bin/idc(.exe) 与 build/bin/demo(.exe)
+cmake --build build            # 产出 build/bin/idc(.exe)、idc_gui(.exe) 与 demo(.exe)
 ctest --test-dir build         # 同时运行 Core unit_tests 与 CLI cli_tests（IT-1~IT-18）
 ```
 
@@ -114,6 +114,7 @@ idc config  --load my-config.json --input photo.jpg --output result.png
 | [`guideline.md`](guideline.md) | 给 AI Agent 的 CLI 施工图（终稿的可执行化版本） |
 | [`ImageDiscropperCore/README.md`](ImageDiscropperCore/README.md) | Core 层：模块划分、概念映射、构建 |
 | [`ImageDiscropperCli/README.md`](ImageDiscropperCli/README.md) | CLI 层：命令、选项、退出码、Core API 清单 |
+| [`ImageDiscropperGui/README.md`](ImageDiscropperGui/README.md) | GUI 层：Qt6 桌面前端的画布 / 面板 / 文档模型与交互 |
 
 每个源码子目录下均有独立的 `README.md` 说明其职责边界与分块依据（guideline Strict Rule 1）。
 
@@ -125,6 +126,6 @@ idc config  --load my-config.json --input photo.jpg --output result.png
 |---|---|---|
 | **MVP** | 统一引擎 + L2 反向剔除（单矩形/横线/竖线）+ L1 标准提取 + 分离与坍缩导出 | ✅ 已落地 |
 | **v2** | L3 网格分割（排序 + 重排合并）+ 配置预设、多矩形并集剔除 | ✅ 已落地 |
-| **v3** | 基础图像处理（FR-1）、标注图层 | ⏳ Core 支撑层已重构保留，GUI 未落地 |
+| **v3** | 基础图像处理（FR-1）、标注图层 | ⏳ Core 支撑层已重构保留（尚未接入 CLI / GUI）；GUI 前端已落地 |
 
 > 本地处理、无损优先（NFR-1 / NFR-2）：图像不上传服务器；切割为纯像素搬运，仅 JPEG 输出有损。

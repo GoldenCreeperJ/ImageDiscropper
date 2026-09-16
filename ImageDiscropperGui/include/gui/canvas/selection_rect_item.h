@@ -48,6 +48,10 @@ public:
     // 是否启用坐标吸附（默认开启，NFR-7）。
     void setSnapEnabled(const bool on) { snapEnabled_ = on; }
 
+    // 高亮态（多矩形场景）：标记本选区框为「当前选中」，绘制时颜色/线宽略微加强以示区分。
+    // 单矩形选区不使用（恒 false），外观不变。仅在值变化时重绘（避免拖拽期逐帧无谓 update）。
+    void setHighlighted(const bool on);
+
     // QGraphicsItem 接口。
     QRectF boundingRect() const override;
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
@@ -76,8 +80,9 @@ private:
     int hitEdge(const QPointF& scenePos) const;
     // 把矩形平移钳制到图像边界内。
     void clampToImage(QRectF& r) const;
-    // 对当前 rect_ 的四边做边缘/中心吸附。
-    void applySnap();
+    // 对当前 rect_ 做边缘/中心吸附。preserveSize=true（整体移动）时**保持宽高不变**，
+    // 只按最接近目标的那条边把整个矩形平移到位；false（缩放/拖边）时四边各自独立吸附（本就改变尺寸）。
+    void applySnap(bool preserveSize);
 
     QRectF rect_{};
     int imgW_{0};
@@ -85,6 +90,7 @@ private:
     bool hasBounds_{false};
     qreal handleSize_{8.0};
     bool snapEnabled_{true};
+    bool highlighted_{false};  // 多矩形下是否为当前选中项（绘制颜色/线宽略微加强）。
     bool cutEdge_[4]{false, false, false, false}; // 哪几条边延伸为贯穿切割线（场景依 Core 下发）
 
     DragMode mode_{DragMode::None};

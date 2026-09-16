@@ -8,8 +8,8 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 
 ## 目录结构与职责
 
-采用与 Core / CLI 一致的 **include/src 分离**：头文件在 `include/gui/<模块>/`（对外可见的类声明边界），
-实现与各模块 `README.md` 在 `src/<模块>/`。构建包含根为 `include/gui`，故源码内以 `"canvas/…"`、`"model/…"` 形式互相引用。
+采用与 Core / CLI 一致的 **include/src 分离**：头文件与其**声明边界 `README.md`** 在 `include/gui/<模块>/`，
+实现与其**实现说明 `README.md`** 在 `src/<模块>/`（与 Core 的 include/src 双侧 README 约定一致）。构建包含根为 `include/gui`，故源码内以 `"canvas/…"`、`"model/…"` 形式互相引用。
 
 | 模块     | 头文件                | 实现 + README                  | 职责                                                          |
 | -------- | --------------------- | ------------------------------ | ------------------------------------------------------------- |
@@ -57,6 +57,9 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
    依 Core `generateCutLines` 结果下发（`setCutEdges`），GUI 不自算几何（A-0.1 / A-0.11）；`rectChanged` → 写回
    `Document` → Core 重算 → 即时刷新遮罩（NFR-6）。因为线与选区本是同一图元、同一位置来源，物理上不可能再出现
    旧实现的「蓝/橙双线并存、拖拽手柄错位、切割线达上限与选区分离」等双重表示问题。
+7. **合并重排仅 L3、自动 cols/rows、双警告**：导出面板的「合并重排」项**仅 L3 启用**（非 L3 置灰，`Document.setMode` 离开 L3 亦自动复位为坍缩）；
+   重排的 cols/rows 首次由**保留块数开方**自动填入（cols=ceil(√n)、rows=ceil(n/cols)，用户可再改）；当 cols×rows < 保留块数、
+   或单元宽/高 < 网格单元宽/高时，面板内联**红字警告** + 导出前**弹窗二次确认**；填充顺序（行/列优先 + 蛇形 + 倒序）与 L3 选择排序正交，写回 `Document.mergeOrder_`。
 
 ## 已核对的 Core API（均来自实际头文件，非假设）
 
@@ -64,7 +67,8 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 - 切割线：`engine::generateCutLines(const CutConfig&, const SourceInfo&) -> CutLineSet`。
 - 配置：`EngineConfig{source,preprocess,cut,selectedCells,order,emitParams}`；
   `CutConfig{tier,generator(RECT/HORIZONTAL_LINE/VERTICAL_LINE/MULTI_RECT/GRID),rect,rects,grid,polarity}`。
-- 导出：`CompositionParams{mode,layout,cols,rows,cellWidth,cellHeight,padColor,format,naming,quality,keepMetadata}`；
+- 导出：`CompositionParams{mode,layout,mergeOrder,cols,rows,cellWidth,cellHeight,padColor,format,naming,quality,keepMetadata}`
+  （`mergeOrder` = 重排填充顺序 `MergeOrder{strategy,reverse,snake}`，仅 REARRANGE、与选择排序正交）；
   `Composition{canvasWidth,canvasHeight,placements,...}`；`engine::exportImage(...)`。
 - 区域：`RectRegion{left,top,right,bottom,width(),height(),area()}`；`RegionSet{size(),empty(),fragments(),boundingBox()}`；
   `Fragment{region,index,kind,row,col}`。
@@ -95,17 +99,9 @@ L1（矩形/横带/竖带）与 L2（十字/横线/竖线）切割线与极性�
 
 后续阶段（逐步细化）：
 
-- **第二阶段 L3 网格**：网格线层、单元选择（单击/框选/全选/反选）、排序面板、自定义序拖拽、重排合并、
+- **第二阶段 L2多矩形 + L3 网格**：网格线层、单元选择（单击/框选/全选/反选）、排序面板、自定义序拖拽、重排合并、
   多矩形并集剔除、「转为网格模式编辑」入口。
 - **第三阶段 预处理 + 撤销重做 + 配置**：图像处理面板（旋转/翻转/缩放/黑白/反色/色道/取色）、
   `HistoryManager` 撤销重做、配置加载/保存。
 - **第四阶段 标注图层**：全标注类型经 Core `geometry` + `annotation`，图层面板与属性面板，切割时标注随像素切开。
 - **第五阶段 文档与性能**：完整使用说明与设计说明、8000×8000 ≥30fps 性能验证、逐项对照 §10 验收。
-
-### 待在 Core 侧补齐的能力缺口（后续阶段，require.md 优先）
-
-- **马赛克**：require FR-1.4 要求“马赛克”，但 `processing` 无对应函数 → 第三阶段在 Core `processing` 新增 `mosaic`。
-- **任意角度旋转**：require FR-1.1 要求“任意角度 + 插值 + 背景填充”，但 `processing::rotate` 仅支持 90 的整数倍
-  → 第三阶段在 Core 扩展任意角度旋转。
-
-以上两处 GUI 不自行补实现（A-0.1/A-0.3），待 Core 补齐后再接面板。

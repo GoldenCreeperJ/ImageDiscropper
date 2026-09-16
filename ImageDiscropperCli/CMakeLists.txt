@@ -43,7 +43,7 @@ set(IDC_CLI_LIB_SRC
     src/commands/extract.cpp     # L1 标准提取
     src/commands/erase.cpp       # L2 反向剔除（十字 / 横线 / 竖线 / 多矩形并集）
     src/commands/grid.cpp        # L3 网格分割
-    src/commands/config_command.cpp  # 配置文件：--load 执行 / --save-config 序列化
+    src/commands/config.cpp      # 配置文件：--load 执行 / --save-config 序列化
 )
 
 add_library(idc_cli_lib STATIC ${IDC_CLI_LIB_SRC})

@@ -82,6 +82,8 @@ void CanvasView::updateHandleSize() {
     if (!scene_ || m11 <= 0.0) return;
     const qreal hs = 8.0 / m11;
     if (scene_->selectionItem()) scene_->selectionItem()->setHandleSize(hs); // 手柄与抓边条带同步随缩放换算。
+    scene_->setMultiRectHandleSize(hs); // L2 多矩形选区框手柄同步随缩放换算。
+    if (scene_->cellPickerItem()) scene_->cellPickerItem()->setOverlayScale(hs); // L3 点选阈值/边框同步随缩放换算。
 }
 
 // 开始平移。

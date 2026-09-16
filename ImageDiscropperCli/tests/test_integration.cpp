@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：tests/test_integration.cpp
-// 作用：集成测试 IT-1~IT-18（guideline §9.2）——进程内直接调用 cliMain，端到端验证
+// 作用：集成测试 IT-1~IT-21（guideline §9.2）——进程内直接调用 cliMain，端到端验证
 //       三层命令 + config + 全局选项的「退出码 / 输出尺寸 / 像素落位 / 错误文本」。
 //       不启动子进程（链接 idc_cli_lib），用 rdbuf 重定向捕获 stdout/stderr。
 // 分块依据：一测试关注点一文件（严禁上帝文件）；复用共享 CHECK 宏（cli_test_harness.h）。
@@ -89,7 +89,7 @@ bool readDims(const std::string& path, int& w, int& h) {
 
 } // namespace
 
-// 集成测试段：IT-1~IT-18。
+// 集成测试段：IT-1~IT-21。
 void testIntegration() {
     using idc::engine::EngineConfig;
 
@@ -344,6 +344,52 @@ void testIntegration() {
         CHECK(r.code == 2);
         CHECK(r.err.find("坍缩") != std::string::npos);
         CHECK(r.err.find("rearrange") != std::string::npos);
+    }
+
+    // ---- IT-19：grid --merge-sort column-major → 输出画布按「列优先」填充（与 --sort 选择序正交）。----
+    // 选择序默认 row-major：块列表 [cell0 红, cell1 绿, cell2 蓝, cell3 黄]；
+    // 列优先填充槽序 [0,2,1,3]：红→TL、绿→BL、蓝→TR、黄→BR。
+    {
+        const std::string out = (root / "it19.png").string();
+        const Captured r = runCli({"grid", "--input", in, "--grid", "0,0,100,75",
+                                   "--keep", "0,0", "--keep", "0,1", "--keep", "1,0", "--keep", "1,1",
+                                   "--compose", "--canvas", "2x2", "--merge-sort", "column-major",
+                                   "--output", out});
+        CHECK(r.code == 0);
+        Image o;
+        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(o.width() == 200 && o.height() == 150);
+        CHECK(isRed(o.getPixel(50, 37)));      // TL = 块0（红）
+        CHECK(isBlue(o.getPixel(150, 37)));    // TR = 块2（蓝）
+        CHECK(isGreen(o.getPixel(50, 112)));   // BL = 块1（绿）
+        CHECK(isYellow(o.getPixel(150, 112))); // BR = 块3（黄）
+    }
+
+    // ---- IT-20：grid --merge-decorate reverse → 输出画布填充路径整体逆序。----
+    // 块列表 [红,绿,蓝,黄]；row-major + reverse 槽序 [3,2,1,0]：红→BR、绿→BL、蓝→TR、黄→TL。
+    {
+        const std::string out = (root / "it20.png").string();
+        const Captured r = runCli({"grid", "--input", in, "--grid", "0,0,100,75",
+                                   "--keep", "0,0", "--keep", "0,1", "--keep", "1,0", "--keep", "1,1",
+                                   "--compose", "--canvas", "2x2", "--merge-decorate", "reverse",
+                                   "--output", out});
+        CHECK(r.code == 0);
+        Image o;
+        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(isYellow(o.getPixel(50, 37)));   // TL = 块3（黄）
+        CHECK(isBlue(o.getPixel(150, 37)));    // TR = 块2（蓝）
+        CHECK(isGreen(o.getPixel(50, 112)));   // BL = 块1（绿）
+        CHECK(isRed(o.getPixel(150, 112)));    // BR = 块0（红）
+    }
+
+    // ---- IT-21：erase --merge rearrange → 退出码 1（重排为 L3 专属，L2 命令直接拒绝）。----
+    {
+        const std::string out = (root / "it21.png").string();
+        const Captured r = runCli({"erase", "--input", in, "--rect", "50,40,150,120",
+                                   "--merge", "rearrange", "--output", out});
+        CHECK(r.code == 1);
+        CHECK(r.err.find("rearrange") != std::string::npos);
+        CHECK(r.err.find("L3") != std::string::npos);
     }
 
     // ---- 清理临时目录（不污染仓库 / 系统临时区）。----

@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：src/commands/config_command.cpp
+// 文件：src/commands/config.cpp
 // 作用：实现 cmdConfig——配置文件命令（guideline §4.2.4）。两条用途：
 //       ① config --load <json> --input <img> (--output | --output-dir)：从 §9 schema 的 JSON
 //          还原 EngineConfig 并执行（复用 Core 的 loadEngineConfig，绝不自实现解析，A-0.2）。
@@ -70,6 +70,18 @@ int cmdConfig(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     if (!args.has("--input"))
         return argError("执行配置需要 --input",
                         "配置文件（§9）不含图像路径，请用 --input <file> 指定要切割的图像");
+
+    // --- 重排前置校验（与 grid --compose 的 --canvas 强制一致）：仅 L3 可重排，且必须显式给定 cols/rows。---
+    //     手写/转换来的配置若违反，直接判参数错误（退出码 1），不交 Core 用默认值兜底。
+    if (config.emitParams.mode == engine::EmitMode::MERGED &&
+        config.emitParams.layout == engine::MergeLayout::REARRANGE) {
+        if (config.cut.tier != engine::Tier::L3)
+            return argError("合并重排仅 L3 支持",
+                            "配置 emit.merge.layout=rearrange 要求 cut.tier=L3；其他层请改用 collapse 或分离导出");
+        if (!config.emitParams.cols.has_value() || !config.emitParams.rows.has_value())
+            return argError("合并重排需要 cols 与 rows",
+                            "请在配置 emit.merge 中同时给出正的 cols 和 rows（重排画布列/行数）");
+    }
 
     // 输出目标由 emit.mode 决定：分离 → --output-dir（文件夹）；合并 → --output（单图）。
     const bool separate = (config.emitParams.mode == engine::EmitMode::SEPARATE);

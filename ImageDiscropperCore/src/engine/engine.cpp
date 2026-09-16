@@ -178,10 +178,22 @@ EngineResult runEngine(const core::Image& image, const EngineConfig& config) {
                        config.order);
     }
 
-    // 布局决策：MERGED+COLLAPSE 但不可坍缩时降级为 REARRANGE（§5.4 推论 / 测试项）。
+    // 布局决策 +「仅 L3 可重排」限制（重排是 L3 网格的专属合成方式，§5.3）。
     CompositionParams emitParams = config.emitParams;
-    if (emitParams.mode == EmitMode::MERGED &&
-        emitParams.layout == MergeLayout::COLLAPSE && !result.collapsible) {
+    const bool isL3 = (config.cut.tier == Tier::L3);
+    const bool merged = (emitParams.mode == EmitMode::MERGED);
+    // 显式选择重排但非 L3 → 直接报错（不静默改布局）。
+    if (merged && emitParams.layout == MergeLayout::REARRANGE && !isL3) {
+        result.error = "合并重排仅 L3 网格模式支持：请改用合并坍缩或分离导出";
+        return result;
+    }
+    // MERGED+COLLAPSE 但不可坍缩：L3 降级为重排（§5.4 推论）；L1/L2 无重排可用 → 报错。
+    if (merged && emitParams.layout == MergeLayout::COLLAPSE && !result.collapsible) {
+        if (!isL3) {
+            result.error = "保留集不可坍缩（§5.4），且 L1/L2 不支持合并重排："
+                           "请调整切割线使删除区覆盖整行/整列，或改用分离导出";
+            return result;
+        }
         emitParams.layout = MergeLayout::REARRANGE;
     }
 

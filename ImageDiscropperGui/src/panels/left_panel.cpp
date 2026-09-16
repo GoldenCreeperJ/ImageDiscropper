@@ -67,8 +67,7 @@ LeftPanel::LeftPanel(QWidget* parent) : QWidget(parent) {
     auto* l3Btn = new QPushButton(QStringLiteral("网格分割 (L3)"), modeBox);
     l3Btn->setCheckable(true);
     l3Btn->setStyleSheet(kModeStyle);
-    l3Btn->setEnabled(false); // 第二阶段接入 L3 网格与排序。
-    l3Btn->setToolTip(QStringLiteral("以基准点+单元尺寸铺满全图，选择单元并排序导出。（第二阶段接入）"));
+    l3Btn->setToolTip(QStringLiteral("以基准点 + 单元尺寸铺满全图，选择单元并排序导出。"));
     modeGroup_->addButton(l3Btn, 3);
     modeLay->addWidget(l3Btn);
 
@@ -160,7 +159,8 @@ void LeftPanel::onModeToggled(const int id, const bool checked) {
 // 极性按钮切换 → 写回 Document，实时刷新遮罩（NFR-6）。
 void LeftPanel::onPolarityToggled(const int id, const bool checked) {
     if (!checked || !doc_) return;
-    doc_->setPolarity(id == 1 ? idc::engine::Polarity::REMOVE : idc::engine::Polarity::KEEP);
+    if (id == 1) doc_->setPolarity(idc::engine::Polarity::REMOVE);
+    else if (id == 0) doc_->setPolarity(idc::engine::Polarity::KEEP);
 }
 
 } // namespace idc::gui

@@ -67,11 +67,10 @@ const char* editTypeName(const EditType t) {
 // 构造：默认底图为空、模式为 DRAW、当前工具为 LINE、颜色黑、线宽 2、不填充。
 AnnotationLayer::AnnotationLayer() = default;
 
-// 设置底图：拷贝一份到内部，同时清空形状与垃圾栈（新的底图意味着新的编辑会话）。
+// 设置底图：拷贝一份到内部，同时清空形状与重做栈（新的底图意味着新的编辑会话）。
 void AnnotationLayer::setImage(const core::Image& img) {
     image_ = img.clone();
-    annotations_.clear();
-    garbage_.clear();
+    history_.clearAll();          // 新底图 = 新会话：一并清空主栈与重做栈
     selectedIndex_.reset();
 }
 
@@ -86,8 +85,8 @@ void AnnotationLayer::setEditType(const EditType t) {
 
 // 修改颜色：EDIT 模式下作用到选中形状；否则修改当前工具颜色。
 void AnnotationLayer::changeColor(const core::Color& c) {
-    if (editType_ == EditType::EDIT && selectedIndex_ && *selectedIndex_ < annotations_.size()) {
-        annotations_[*selectedIndex_].color = c;
+    if (editType_ == EditType::EDIT && selectedIndex_ && *selectedIndex_ < history_.undoStack().size()) {
+        history_.undoStack()[*selectedIndex_].color = c;
     } else {
         currentColor_ = c;
     }
@@ -95,8 +94,8 @@ void AnnotationLayer::changeColor(const core::Color& c) {
 
 // 修改线宽。
 void AnnotationLayer::changeStrokeWidth(const int w) {
-    if (editType_ == EditType::EDIT && selectedIndex_ && *selectedIndex_ < annotations_.size()) {
-        annotations_[*selectedIndex_].strokeWidth = std::max(1, w);
+    if (editType_ == EditType::EDIT && selectedIndex_ && *selectedIndex_ < history_.undoStack().size()) {
+        history_.undoStack()[*selectedIndex_].strokeWidth = std::max(1, w);
     } else {
         currentStrokeWidth_ = std::max(1, w);
     }
@@ -104,8 +103,8 @@ void AnnotationLayer::changeStrokeWidth(const int w) {
 
 // 修改填充开关。
 void AnnotationLayer::changeFill(const bool fill) {
-    if (editType_ == EditType::EDIT && selectedIndex_ && *selectedIndex_ < annotations_.size()) {
-        annotations_[*selectedIndex_].fillType = fill;
+    if (editType_ == EditType::EDIT && selectedIndex_ && *selectedIndex_ < history_.undoStack().size()) {
+        history_.undoStack()[*selectedIndex_].fillType = fill;
     } else {
         currentFill_ = fill;
     }
@@ -119,7 +118,7 @@ void AnnotationLayer::changeFontSize(const double size) { currentFontSize_ = std
 
 // ------ 形状提交与命中 ------
 
-// 提交一个新形状：将其封装为 Annotation 追加到 annotations_，同时清空垃圾栈
+// 提交一个新形状：将其封装为 Annotation 推入撤销重做主栈（HistoryManager::push）
 // （新操作切断"未来"，符合常见撤销重做语义）。
 void AnnotationLayer::addAnnotation(std::unique_ptr<geometry::Shape> shape) {
     if (!shape) return;
@@ -129,8 +128,7 @@ void AnnotationLayer::addAnnotation(std::unique_ptr<geometry::Shape> shape) {
     ps.strokeWidth = currentStrokeWidth_;
     ps.fillType = currentFill_;
     ps.shape = std::move(shape);
-    annotations_.push_back(std::move(ps));
-    garbage_.clear();
+    history_.push(std::move(ps));   // push 内部会清空重做栈（新操作切断“未来”）
 }
 
 // 命中检测：从顶层（最后绘制的）开始遍历，返回第一个命中的索引。
@@ -139,8 +137,9 @@ void AnnotationLayer::addAnnotation(std::unique_ptr<geometry::Shape> shape) {
 //   - 未填充形状：使用 Path::distanceToOutline 判断点是否靠近轮廓
 //     （容差 = 5.0 + strokeWidth）
 std::optional<std::size_t> AnnotationLayer::hitTest(const core::Point2D& p) const {
-    for (std::size_t i = annotations_.size(); i-- > 0;) {
-        const Annotation& ps = annotations_[i];
+    const std::vector<Annotation>& anns = history_.undoStack();
+    for (std::size_t i = anns.size(); i-- > 0;) {
+        const Annotation& ps = anns[i];
         if (!ps.shape) continue;
         const geometry::Path path = ps.shape->toPath();
 
@@ -161,37 +160,34 @@ void AnnotationLayer::selectAnnotation(const std::optional<std::size_t> idx) {
 
 // 获取当前选中形状指针（可写）；未选中或越界返回 nullptr。
 Annotation* AnnotationLayer::selectedAnnotation() {
-    if (!selectedIndex_ || *selectedIndex_ >= annotations_.size()) return nullptr;
-    return &annotations_[*selectedIndex_];
+    if (!selectedIndex_ || *selectedIndex_ >= history_.undoStack().size()) return nullptr;
+    return &history_.undoStack()[*selectedIndex_];
 }
 
 // 获取当前选中形状指针（只读）。
 const Annotation* AnnotationLayer::selectedAnnotation() const {
-    if (!selectedIndex_ || *selectedIndex_ >= annotations_.size()) return nullptr;
-    return &annotations_[*selectedIndex_];
+    if (!selectedIndex_ || *selectedIndex_ >= history_.undoStack().size()) return nullptr;
+    return &history_.undoStack()[*selectedIndex_];
 }
 
 // ------ 撤销 / 重做 / 清除 ------
 
-// 撤销：把 annotations_ 末尾的形状搬到 garbage_ 末尾；annotations_ 为空时不做任何事。
+// 撤销：把主栈栈顶形状移入重做栈（复用 HistoryManager::popToRedo）；主栈为空时不做任何事。
 void AnnotationLayer::revoke() {
-    if (annotations_.empty()) return;
-    garbage_.push_back(std::move(annotations_.back()));
-    annotations_.pop_back();
+    if (!history_.canUndo()) return;
+    history_.popToRedo();
     selectedIndex_.reset();
 }
 
-// 重做：把 garbage_ 末尾的形状搬回 annotations_ 末尾；garbage_ 为空时不做任何事。
+// 重做：把重做栈栈顶形状移回主栈（复用 HistoryManager::popFromRedo）；重做栈为空时不做任何事。
 void AnnotationLayer::redo() {
-    if (garbage_.empty()) return;
-    annotations_.push_back(std::move(garbage_.back()));
-    garbage_.pop_back();
+    if (!history_.canRedo()) return;
+    history_.popFromRedo();
 }
 
-// 清除所有形状与垃圾栈，但保留底图；同时清空选中。
+// 清除所有形状与重做栈，但保留底图；同时清空选中。
 void AnnotationLayer::clear() {
-    annotations_.clear();
-    garbage_.clear();
+    history_.clearAll();
     selectedIndex_.reset();
 }
 
@@ -203,7 +199,7 @@ core::Image AnnotationLayer::burnIn() const {
         ? core::Image(1, 1, core::ImageFormat::RGBA)
         : image_.toRGBA();
 
-    for (const Annotation& ps : annotations_) {
+    for (const Annotation& ps : history_.undoStack()) {
         if (!ps.shape) continue;
         PaintStyle style;
         style.color = ps.color;

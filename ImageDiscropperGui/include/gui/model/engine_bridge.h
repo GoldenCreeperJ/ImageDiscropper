@@ -7,6 +7,7 @@
 //   - loadImage    委托 Core engine::readImageFile（解码）。
 //   - runPreview   委托 Core engine::runEngine（仅区域数学，不搬像素，适合实时预览）。
 //   - cutLines     委托 Core engine::generateCutLines（取得贯穿全图的切割线供渲染）。
+//   - buildGrid    委托 Core Grid::build / induceGrid（取得诱导网格供 L3 画网格线与单元）。
 //   - exportResult 委托 Core engine::runEngine + engine::exportImage（全分辨率落盘）。
 // 说明：本类无状态、可拷贝；把 Core 的返回值原样透传给上层，错误文本转为 QString。
 // ============================================================================
@@ -37,6 +38,12 @@ public:
     // GUI 不自算切割线几何——只把 Core 给出的 xs/ys 交给选区图元画成橙色贯穿线（A-0.1）。
     idc::engine::CutLineSet cutLines(const idc::engine::CutConfig& cut,
                                      const idc::engine::SourceInfo& src) const;
+
+    // 依切割配置产出诱导网格（供 L3 画网格线与单元选择）。与 runEngine 内部一致：
+    // GRID 生成器走 Grid::build（处理余量策略），其余生成器走切割线诱导 induceGrid。
+    // GUI 不自算网格几何——只把 Core 产出的 Grid 交给画布渲染（A-0.1）。
+    idc::engine::Grid buildGrid(const idc::engine::CutConfig& cut,
+                                const idc::engine::SourceInfo& src) const;
 
     // 导出（委托 Core runEngine + exportImage，对全分辨率工作图操作，无损）。
     // outputPath：分离模式为目标目录，合并模式为单图文件路径。

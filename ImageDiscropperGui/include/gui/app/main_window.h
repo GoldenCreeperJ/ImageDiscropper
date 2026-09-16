@@ -59,6 +59,11 @@ private slots:
     // 画布交互响应。
     void onRubberSelect(const QRectF& sceneRect);   // 框选新建选区。
     void onSelectionEdited(const QRectF& sceneRect);// 拖动/缩放/拖边既有选区（拖边＝移动切割线）。
+    void onMultiRectEdited(int index, const QRectF& sceneRect); // L2 多矩形：拖动/缩放第 index 个选区框。
+    void onRectSelected(int index);                 // L2 多矩形：面板列表选中行→高亮画布对应选区框。
+    void onCellToggled(int index);                  // L3 单击切换某单元。
+    void onCellsMarquee(const std::vector<int>& indices); // L3 拖拽框选单元。
+    void onCellReordered(int fromIndex, int toIndex); // L3 CUSTOM 拖拽调序。
     void onNudge(int dx, int dy);                   // 方向键微调选区。
     void onCursor(const QPointF& scenePos);         // 光标坐标/像素颜色回报。
     void onZoomChanged(qreal factor);               // 视图缩放倍数变化 → 更新状态栏放大倍数。

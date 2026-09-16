@@ -20,6 +20,7 @@
 #include "annotation/rasterizer.h"
 #include "geometry/shape_type.h"
 #include "geometry/shapes.h"
+#include "history/history_manager.h"
 
 namespace idc::annotation {
 
@@ -68,8 +69,8 @@ public:
     void setImage(const core::Image& img);
     // 获取当前底图（只读引用）。
     const core::Image& image() const { return image_; }
-    // 获取当前形状列表（只读引用）。
-    const std::vector<Annotation>& annotations() const { return annotations_; }
+    // 获取当前形状列表（只读引用）——即撤销重做主栈（当前有效标注）。
+    const std::vector<Annotation>& annotations() const { return history_.undoStack(); }
 
     // ------ 当前工具属性 ------
     EditType editType() const { return editType_; }
@@ -106,11 +107,11 @@ public:
     const Annotation* selectedAnnotation() const;
 
     // ------ 撤销 / 重做 / 清除 ------
-    // 撤销：弹出最后一个形状到"垃圾栈"，可再次 redo 恢复。
+    // 撤销：把最后一个形状移入重做栈（history_.popToRedo），可再次 redo 恢复。
     void revoke();
-    // 重做：从垃圾栈恢复最近撤销的形状。
+    // 重做：从重做栈恢复最近撤销的形状（history_.popFromRedo）。
     void redo();
-    // 清除所有形状（同时清空垃圾栈），保留底图。
+    // 清除所有形状（同时清空重做栈），保留底图。
     void clear();
 
     // ------ 合成 ------
@@ -119,8 +120,10 @@ public:
 
 private:
     core::Image image_;                              // 当前底图
-    std::vector<Annotation> annotations_;                     // 已提交形状列表（当前有效）
-    std::vector<Annotation> garbage_;                    // 撤销后的形状，等待重做
+    // 已提交形状列表 + 撤销重做：复用通用 history::HistoryManager<Annotation>——其主栈
+    // （undoStack）即「当前有效标注列表」，重做栈承载被撤销、等待恢复的标注；不再自建
+    // annotations_ / garbage_ 两个向量（消除与 history 模块的重复实现）。
+    history::HistoryManager<Annotation> history_;
     EditType editType_{EditType::DRAW};              // 当前编辑模式
 
     // 当前工具属性

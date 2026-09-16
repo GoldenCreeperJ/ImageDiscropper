@@ -153,10 +153,11 @@ void MainWindow::buildMenus() {
     connect(aUsage, &QAction::triggered, this, [this] {
         QMessageBox::information(this, QStringLiteral("使用说明"),
             QStringLiteral("1) 文件→打开图像。\n"
-                           "2) 左侧选择模式（L1 标准提取 / L2 反向剔除）与极性（保留/删除框内）。\n"
-                           "3) 在画布上拖拽出选区；橙色切割线贯穿全图（与选区同色），绿色为保留、红色为删除。\n"
+                           "2) 左侧选择模式（L1 标准提取 / L2 反向剔除 / L3 网格分割）与极性（保留/删除框内）。\n"
+                           "3) L1/L2：在画布上拖拽出选区；橙色切割线贯穿全图（与选区同色），绿色为保留、红色为删除。\n"
                            "4) 可拖动选区/四角手柄调整，或直接拖动橙色切割线（＝选区边）移动对应边；方向键微调（Shift 大步）。\n"
-                           "5) 右侧「导出」页选择输出模式与路径，点击导出（Ctrl+S）。"));
+                           "5) L3：在右侧「参数」页设定基准点、单元尺寸与余量策略，网格线自动铺满全图；用全选/反选/清空与排序策略控制输出。\n"
+                           "6) 右侧「导出」页选择输出模式与路径，点击导出（Ctrl+S）。"));
     });
     QAction* aAbout = mHelp->addAction(QStringLiteral("关于"));
     connect(aAbout, &QAction::triggered, this, [this] {
@@ -186,7 +187,7 @@ void MainWindow::buildToolbar() {
     connect(aFit, &QAction::triggered, this, [this] { view_->fitToWindow(); });
     tb->addSeparator();
 
-    // 模式切换（§4.3）：三个可选动作，L2 强调；L3 第二阶段接入先禁用。
+    // 模式切换（§4.3）：三个可选动作（L1 标准提取 / L2 反向剔除 / L3 网格分割）。
     auto* group = new QActionGroup(this);
     group->setExclusive(true);
     modeActionL1_ = group->addAction(QStringLiteral("标准提取 (L1)"));
@@ -197,8 +198,7 @@ void MainWindow::buildToolbar() {
         tb->addAction(a);
     }
     modeActionL1_->setChecked(true);
-    modeActionL3_->setEnabled(false);
-    modeActionL3_->setToolTip(QStringLiteral("网格分割将在第二阶段接入。"));
+    modeActionL3_->setToolTip(QStringLiteral("网格分割：铺满全图的网格 + 单元选择 + 排序。"));
     connect(modeActionL1_, &QAction::triggered, this, [this] { onModeAction(1); });
     connect(modeActionL2_, &QAction::triggered, this, [this] { onModeAction(2); });
     connect(modeActionL3_, &QAction::triggered, this, [this] { onModeAction(3); });
@@ -238,8 +238,13 @@ void MainWindow::connectAll() {
     connect(view_, &CanvasView::toggleMasksRequested, this, &MainWindow::onToggleMasks);
     connect(view_, &CanvasView::resetViewRequested, view_, &CanvasView::fitToWindow);
     connect(scene_, &CanvasScene::selectionEdited, this, &MainWindow::onSelectionEdited);
+    connect(scene_, &CanvasScene::multiRectEdited, this, &MainWindow::onMultiRectEdited);
+    connect(scene_, &CanvasScene::cellToggled, this, &MainWindow::onCellToggled);
+    connect(scene_, &CanvasScene::cellsMarqueeSelected, this, &MainWindow::onCellsMarquee);
+    connect(scene_, &CanvasScene::cellReordered, this, &MainWindow::onCellReordered);
 
     connect(exportPanel_, &ExportPanel::exportRequested, this, &MainWindow::onExport);
+    connect(param_, &ParamPanel::rectSelected, this, &MainWindow::onRectSelected);
 }
 
 // 依工作图重建降采样预览底图（NFR-3）。
@@ -258,16 +263,98 @@ void MainWindow::rebuildPreviewPixmap() {
 // 跑 Core 预览并刷新画布与状态（A-0.8 实时预览）。
 void MainWindow::refreshPreview() {
     stMode_->setText(modeName(doc_.mode()));
+    // 重排为 L3 专属：先把重排上下文清零（非 L3 保持 0），L3 分支再回灌真实保留块数/格尺寸。
+    exportPanel_->setRearrangeContext(0, 0, 0);
 
     // 无图像：清空叠加层。
     if (!doc_.hasImage()) {
         scene_->clearCutLines();
+        scene_->clearGrid();
+        scene_->clearMultiRects();
         scene_->updateMasks(idc::engine::EngineResult{});
         stCount_->setText(QStringLiteral("保留块: 0"));
         stHint_->setText(QStringLiteral("请打开图像"));
         exportPanel_->setPreviewInfo(QStringLiteral("尚未加载图像。"));
         return;
     }
+
+    // L3 网格分割：网格由「基准点 + 单元尺寸 + 余量策略」定义，不依赖选区矩形，
+    // 故在选区判定之前单独处理。网格线交给 GridLayer 画灰色虚线；橙色选区框在 L3 隐藏
+    // （单元点选交互由后续增量接入）。遮罩仍复用 runEngine 的 kept 结果（红底 + 绿块）。
+    if (doc_.mode() == idc::engine::Tier::L3) {
+        const idc::engine::EngineConfig cfg = doc_.buildEngineConfig();
+        // 依 Core 网格产出刷新网格线，并回灌派生行列数（供参数面板只读显示）。
+        const idc::engine::Grid grid = bridge_.buildGrid(cfg.cut, cfg.source);
+        doc_.setDerivedGridSize(grid.rowCount(), grid.colCount());
+        scene_->updateGrid(grid, true);
+        scene_->clearCutLines();                   // L3 不画 L1/L2 的橙色贯穿切割线。
+        scene_->clearMultiRects();                 // L3 不显示 L2 多矩形轮廓。
+        scene_->syncSelection(doc_.rect(), false); // 隐藏橙色选区框。
+        // 把当前选择集与排序策略下发给点选图元（高亮已选单元）。
+        scene_->updateCellSelection(doc_.selectedCells(), doc_.order().strategy);
+
+        const idc::engine::EngineResult res = bridge_.runPreview(doc_.working(), cfg);
+        scene_->updateMasks(res);
+
+        const int kept = res.ok ? static_cast<int>(res.kept.size()) : 0;
+        stCount_->setText(QStringLiteral("保留块: %1").arg(kept));
+        stHint_->setText(res.ok ? QStringLiteral("就绪") : QString::fromStdString(res.error));
+        exportPanel_->setCollapsible(res.collapsible);
+        // 回灌重排上下文：保留块数 + 网格单元尺寸（供自动 cols/rows 与画布/单元尺寸警告）。
+        exportPanel_->setRearrangeContext(kept, doc_.gridParams().cellWidth, doc_.gridParams().cellHeight);
+        if (res.ok) {
+            exportPanel_->setPreviewInfo(QStringLiteral("网格: %1×%2 · 输出画布 %3×%4 · 保留 %5 块")
+                .arg(grid.rowCount()).arg(grid.colCount())
+                .arg(res.composition.canvasWidth).arg(res.composition.canvasHeight).arg(kept));
+        } else {
+            exportPanel_->setPreviewInfo(QStringLiteral("无有效结果：%1").arg(QString::fromStdString(res.error)));
+        }
+        return;
+    }
+
+    // 非 L3：清空网格线（若从 L3 切回）。
+    scene_->clearGrid();
+
+    // L2 多矩形并集剔除：选区来自 rects_（非单 rect_），单独处理。
+    // 用 Core 诱导网格画灰色网格线（各矩形十字带并集诱导），但不启动单元点选图元——
+    // picker 会 grab 鼠标、阻断画布框选（多矩形靠框选逐个追加）。橙色轮廓标出各矩形，
+    // 单选区框隐藏。遮罩复用 runPreview 的 kept 结果（A-0.1：GUI 不算并集）。
+    if (doc_.mode() == idc::engine::Tier::L2 && doc_.l2Sub() == L2Sub::MULTI_RECT) {
+        scene_->updateMultiRects(doc_.rects());     // 增量刷新可拖拽选区框（拖拽中不回设正在拖者）。
+        scene_->clearCutLines();
+        scene_->syncSelection(doc_.rect(), false);  // 隐藏单选区框（改用多矩形轮廓）。
+        if (doc_.rects().empty()) {
+            // 尚无矩形：不跑引擎（Core 对空 rects 的 MULTI_RECT 会报错），提示框选追加。
+            scene_->updateGridLines(idc::engine::Grid{}, false);
+            scene_->updateMasks(idc::engine::EngineResult{});
+            stCount_->setText(QStringLiteral("保留块: 0"));
+            stHint_->setText(QStringLiteral("在画布上拖拽以追加矩形"));
+            exportPanel_->setPreviewInfo(QStringLiteral("等待矩形…"));
+            return;
+        }
+        const idc::engine::EngineConfig cfg = doc_.buildEngineConfig();
+        const idc::engine::Grid grid = bridge_.buildGrid(cfg.cut, cfg.source);
+        scene_->updateGridLines(grid, true);
+        const idc::engine::EngineResult res = bridge_.runPreview(doc_.working(), cfg);
+        scene_->updateMasks(res);
+
+        const int kept = res.ok ? static_cast<int>(res.kept.size()) : 0;
+        stCount_->setText(QStringLiteral("保留块: %1").arg(kept));
+        stHint_->setText(res.ok ? QStringLiteral("就绪") : QString::fromStdString(res.error));
+        param_->setCollapseHint(res.collapsible, res.ok ? QString() : QString::fromStdString(res.error));
+        exportPanel_->setCollapsible(res.collapsible);
+        if (res.ok) {
+            exportPanel_->setPreviewInfo(QStringLiteral("多矩形: %1 个 · 输出画布 %2×%3 · 保留 %4 块")
+                .arg(static_cast<int>(doc_.rects().size()))
+                .arg(res.composition.canvasWidth).arg(res.composition.canvasHeight).arg(kept));
+        } else {
+            exportPanel_->setPreviewInfo(QStringLiteral("无有效结果：%1").arg(QString::fromStdString(res.error)));
+        }
+        return;
+    }
+
+    // 非多矩形：清空多矩形轮廓（从 MULTI_RECT 切回其他子功能/模式时）。
+    scene_->clearMultiRects();
 
     // 有图但无选区：提示用户拖拽创建选区（不跑引擎，避免 E-1 噪声）。
     if (!doc_.hasRect()) {
@@ -333,7 +420,7 @@ void MainWindow::showFirstRunGuide() {
         QStringLiteral("本工具沿「贯穿全图的切割线」切开图像，再决定保留哪些块、如何重新拼合。\n\n"
                        "• 标准提取 (L1)：保留选区内的区域，最易上手（默认）。\n"
                        "• 反向剔除 (L2)：删除选区诱导的十字带，保留其余——核心特色。\n"
-                       "• 网格分割 (L3)：铺满全图的网格 + 选择 + 排序（第二阶段接入）。\n\n"
+                       "• 网格分割 (L3)：铺满全图的网格 + 单元选择 + 排序。\n\n"
                        "L1/L2/L3 共用同一引擎，模式只是参数预设。"));
 }
 
@@ -401,6 +488,18 @@ void MainWindow::onExport() {
     if (!doc_.hasRect()) { notify(QStringLiteral("请先在画布创建选区"), true); return; }
 
     const idc::engine::EngineConfig cfg = doc_.buildEngineConfig();
+
+    // 合并重排参数警告（cols*rows < 保留块数，或 cw/ch < 网格单元尺寸）：导出前弹窗二次确认。
+    // 内联红字已在导出面板实时显示，此处按需求再加一道模态确认。
+    const QString rearrangeWarn = exportPanel_->rearrangeWarning();
+    if (!rearrangeWarn.isEmpty()) {
+        const QMessageBox::StandardButton ret = QMessageBox::warning(
+            this, QStringLiteral("重排参数警告"),
+            rearrangeWarn + QStringLiteral("\n\n仍要继续导出吗？"),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (ret != QMessageBox::Yes) return;
+    }
+
     QString path;
     if (cfg.emitParams.mode == idc::engine::EmitMode::SEPARATE) {
         path = doc_.outputDir();
@@ -439,14 +538,21 @@ void MainWindow::onImageChanged() {
 // 参数变更：刷新预览并同步面板。
 void MainWindow::onDocChanged() {
     refreshPreview();
-    // 拖拽选区期间跳过面板/工具栏全量回同步：模式/极性/格式/质量/命名等均与 rect 无关，
+    // 拖拽选区（单矩形或多矩形）期间跳过面板/工具栏全量回同步：模式/极性/格式/质量/命名等均与 rect 无关，
     // 逐帧 syncPanels 是纯浪费且加剧拖拽卡顿；释放时会照常同步一次。
-    if (!scene_->isDraggingSelection()) syncPanels();
+    if (!scene_->isDraggingSelection() && !scene_->isDraggingMultiRect()) syncPanels();
 }
 
 // 框选新建选区：把场景矩形钳制到图像内并写回 Document。
 void MainWindow::onRubberSelect(const QRectF& sceneRect) {
     if (!doc_.hasImage()) return;
+    // L3 网格分割不用矩形选区：框选（含从图像外起拖、未被 CellPickerItem grab 而落到视图橡皮筋的情形）
+    // → 把命中的单元并入选择集（与 picker 自身框选发出的 cellsMarqueeSelected 走同一 addCells 路径）。
+    if (doc_.mode() == idc::engine::Tier::L3) {
+        const std::vector<int> idx = scene_->cellsIntersecting(sceneRect);
+        if (!idx.empty()) doc_.addCells(idx);
+        return;
+    }
     const qreal W = doc_.width(), H = doc_.height();
     const qreal l = std::clamp(sceneRect.left(), 0.0, W);
     const qreal t = std::clamp(sceneRect.top(), 0.0, H);
@@ -454,12 +560,53 @@ void MainWindow::onRubberSelect(const QRectF& sceneRect) {
     const qreal b = std::clamp(sceneRect.bottom(), 0.0, H);
     idc::engine::RectRegion rr(qRound(l), qRound(t), qRound(r), qRound(b));
     if (rr.width() <= 0 || rr.height() <= 0) return; // 忽略退化选区。
+    // L2 多矩形并集：框选逐个追加矩形（而非替换单选区）。
+    if (doc_.mode() == idc::engine::Tier::L2 && doc_.l2Sub() == L2Sub::MULTI_RECT) {
+        doc_.addRect(rr);
+        return;
+    }
     doc_.setRect(rr);
 }
 
 // 拖动/缩放既有选区：同框选处理（选区框已做钳制与吸附）。
 void MainWindow::onSelectionEdited(const QRectF& sceneRect) {
     onRubberSelect(sceneRect);
+}
+
+// L2 多矩形：拖动/缩放第 index 个选区框 → 写回 Document 对应矩形（选区框已钳制到图像内）。
+void MainWindow::onMultiRectEdited(const int index, const QRectF& sceneRect) {
+    if (index < 0 || !doc_.hasImage()) return;
+    if (doc_.mode() != idc::engine::Tier::L2 || doc_.l2Sub() != L2Sub::MULTI_RECT) return;
+    const idc::engine::RectRegion rr(qRound(sceneRect.left()), qRound(sceneRect.top()),
+                                     qRound(sceneRect.right()), qRound(sceneRect.bottom()));
+    doc_.updateRect(static_cast<std::size_t>(index), rr);
+    // 拖拽期间 syncPanels 被跳过（避免逐帧重建），故在此定向刷新：
+    // 让列表跟随选中被拖矩形（并高亮），并实时回显其新尺寸。
+    param_->selectRectRow(index);
+    param_->updateRectListItem(index);
+}
+
+// L2 多矩形：面板列表选中行变化 → 高亮画布上对应选区框（-1 清除高亮）。
+void MainWindow::onRectSelected(const int index) {
+    if (scene_) scene_->setActiveMultiRect(index);
+}
+
+// L3 单击切换某单元：写回 Document（触发刷新与点选图元高亮更新）。
+void MainWindow::onCellToggled(const int index) {
+    if (!doc_.hasImage() || doc_.mode() != idc::engine::Tier::L3) return;
+    doc_.toggleCell(index);
+}
+
+// L3 拖拽框选：把命中的单元并入选择集（去重）。
+void MainWindow::onCellsMarquee(const std::vector<int>& indices) {
+    if (!doc_.hasImage() || doc_.mode() != idc::engine::Tier::L3) return;
+    doc_.addCells(indices);
+}
+
+// L3 CUSTOM 拖拽调序：把 from 单元移到 to 单元原序位（重排选择集顺序即自定义输出序）。
+void MainWindow::onCellReordered(const int from, const int to) {
+    if (!doc_.hasImage() || doc_.mode() != idc::engine::Tier::L3) return;
+    doc_.moveCellOrder(from, to);
 }
 
 // 方向键微调选区（保持尺寸，钳制到图像内）。
@@ -508,14 +655,14 @@ void MainWindow::onToggleMasks() {
     notify(v ? QStringLiteral("已显示预览遮罩") : QStringLiteral("已隐藏预览遮罩"), false);
 }
 
-// 工具栏/快捷键切换模式（L3 尚未接入）。
+// 工具栏/快捷键切换模式（L1/L2/L3）。
 void MainWindow::onModeAction(const int tierInt) {
-    if (tierInt == 3) {
-        notify(QStringLiteral("L3 网格分割将在第二阶段接入"), false);
-        syncPanels(); // 复位工具栏选中态到当前实际模式。
-        return;
+    switch (tierInt) {
+        case 1: doc_.setMode(idc::engine::Tier::L1); break;
+        case 2: doc_.setMode(idc::engine::Tier::L2); break;
+        case 3: doc_.setMode(idc::engine::Tier::L3); break;
+        default: break;
     }
-    doc_.setMode(tierInt == 1 ? idc::engine::Tier::L1 : idc::engine::Tier::L2);
 }
 
 // K/R 快捷键切换极性。

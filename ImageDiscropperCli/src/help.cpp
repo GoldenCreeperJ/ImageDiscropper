@@ -104,14 +104,14 @@ void helpErase() {
 
 语义：极性恒为 remove，"按线删除"——抽掉中缝、两侧对接，尺寸变小（W−Δx × H−Δy）。
       单矩形 → 十字切割（保留四角）；--rect 多次 → 多矩形并集剔除；横线 / 竖线 → 删整条带。
-      缺省分离导出（各保留块一张图）；--merge 合并为单图（坍缩或重排）。
+      缺省分离导出（各保留块一张图）；--merge collapse 合并为单图（重排 rearrange 为 L3 grid 专属，erase 不支持）。
 
 选项：
   --input <file>         [必填] 输入图像路径
   --rect x1,y1,x2,y2     [三选一，可重复] 一次 = 单矩形十字切割；多次 = 多矩形并集剔除
   --hband y1,y2          [三选一] 删除 y∈[y1,y2) 的整条横带
   --vband x1,x2          [三选一] 删除 x∈[x1,x2) 的整条竖带
-  --merge <mode>         collapse（坍缩）或 rearrange（重排）；缺省为分离导出
+  --merge <mode>         仅 collapse（坍缩）；缺省为分离导出（rearrange 重排为 L3 grid 专属，erase 不支持）
   --output <file>        [合并时必填] 合并输出路径
   --output-dir <dir>     [分离时必填] 分离输出目录（不存在会自动创建）
   --format <fmt>         输出格式 png/jpeg/webp/bmp（默认 png；合并时优先按 --output 扩展名）
@@ -120,7 +120,7 @@ void helpErase() {
 
 约束：
   --rect / --hband / --vband 三者互斥；--merge 与 --output-dir 不得同时出现。
-  显式 --merge collapse 但选择集不可坍缩时 → 退出码 2（提示改用 rearrange）。
+  显式 --merge collapse 但选择集不可坍缩时 → 退出码 2（L2 无重排可用，请调整切割线使删除区覆盖整行/整列，或改分离导出）。
 
 示例：
   idc erase --input photo.jpg --rect 100,100,300,250 --output-dir ./out/ --format png
@@ -128,7 +128,7 @@ void helpErase() {
   idc erase --input photo.jpg --rect 100,100,200,150 --rect 400,300,500,400 --merge collapse --output out.png
 
 常见错误：
-  退出码 1：缺必填 / 互斥冲突 / 坐标非法    退出码 2：坍缩不可行（改用 --merge rearrange）
+  退出码 1：缺必填 / 互斥冲突 / 坐标非法 / --merge rearrange（L2 不支持重排）    退出码 2：坍缩不可行（L2 无重排，见上）
   退出码 3：输入图像错误    退出码 4：输出目录 / 文件写入失败
 )HELP";
 }
@@ -152,6 +152,8 @@ void helpGrid() {
   --pad-color <hex>      填充色 #RRGGBB / #AARRGGBB，默认透明
   --compose              合并为单图（重排）；缺省为分离导出
   --canvas ColxRow       [--compose 时必填] 重排画布的单元列 × 行（如 2x2）
+  --merge-sort <strategy>  重排填充顺序 row-major（默认）/ column-major（与 --sort 选择序正交；不支持 custom）
+  --merge-decorate <method>  重排填充修饰 none（默认）/ reverse / snake / reverse-snake / snake-reverse
   --output <file>        [--compose 时必填] 合并输出路径
   --output-dir <dir>     [分离时必填] 分离输出目录
   --format <fmt>         输出格式 png/jpeg/webp/bmp
@@ -159,7 +161,8 @@ void helpGrid() {
   -h, --help             显示本帮助
 
 约束：
-  --keep 与 --remove 互斥；--compose 与 --output-dir 互斥；--decorate 在 --sort custom 下不可用。
+  --keep 与 --remove 互斥；--compose 与 --output-dir 互斥；--decorate 在 --sort custom 下不可用；--merge-sort 不支持 custom（重排填充仅行/列优先，自定义块序用 --sort custom）。
+  --compose 时 --canvas 的 cols/rows 必填且须为正（重排画布列 × 行）。
   说明：Core 先施加 snake 再整体 reverse（固定次序），故 reverse-snake 与 snake-reverse 结果相同。
 
 示例：

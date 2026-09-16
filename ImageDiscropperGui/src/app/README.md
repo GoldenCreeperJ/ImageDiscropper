@@ -17,7 +17,11 @@ Core 调用集中在 `EngineBridge`，状态集中在 `Document`。
 ```
 Document.imageChanged → onImageChanged → rebuildPreviewPixmap + syncPanels + refreshPreview
 Document.changed      → onDocChanged   → refreshPreview + syncPanels
-CanvasView.rubberSelect / CanvasScene.selectionEdited → 写回 Document.setRect
+CanvasView.rubberSelect / CanvasScene.selectionEdited → onRubberSelect：L1/L2 写回 Document.setRect（MULTI_RECT 则 addRect）；
+    L3 时把框选矩形经 scene_->cellsIntersecting 换成命中单元并 addCells（含从图像外起拖、未被 CellPickerItem grab 而落到视图橡皮筋的情形）
+CanvasScene.multiRectEdited(index, rect) → onMultiRectEdited：L2 MULTI_RECT 下拖动/缩放第 index 个选区框 → Document.updateRect(index)（与单选区同为可拖拽 SelectionRectItem）；
+    拖拽期 syncPanels 被跳过，故另调 param_->selectRectRow(index)（列表跟随选中+高亮）与 param_->updateRectListItem(index)（实时回显新尺寸）
+ParamPanel.rectSelected(index) → onRectSelected → scene_->setActiveMultiRect(index)：高亮画布上对应选区框（颜色略微加强，-1 清除）
 CanvasView.nudgeSelection → onNudge（方向键平移选区，钳制到图像内）
 CanvasView.cursorScenePos → onCursor（状态栏坐标 + 像素 RGB）
 CanvasView.zoomChanged → onZoomChanged（状态栏缩放倍数；所有缩放入口汇聚于 updateHandleSize 发出）
@@ -28,6 +32,13 @@ ExportPanel.exportRequested → onExport
 `refreshPreview()` 是核心：无图→清空；无选区→提示拖拽（不跑引擎，避免 E-1 噪声）；
 有选区→`buildEngineConfig` + `EngineBridge.runPreview` → 刷新切割线（`bridge_.cutLines`）/遮罩/选区，
 并回写状态栏与面板提示（保留块数、输出画布尺寸、坍缩可行性）。
+L2 MULTI_RECT 分支：`scene_->updateMultiRects(doc_.rects())` 增量刷新可拖拽选区框（不 clear+重建）。
+拖拽期间（`isDraggingSelection()` 或 `isDraggingMultiRect()`）跳过 `syncPanels()` 与对正在拖图元的回设，避免逐帧量化抖动与卡顿；释放时照常同步一次。
+重排上下文回灌：顶部先 `exportPanel_->setRearrangeContext(0,0,0)` 清零（非 L3），L3 分支再回灌真实的
+保留块数与网格单元宽/高（供导出面板自动 cols/rows 与警告判定）。
+
+`onExport()` 在 `buildEngineConfig` 后、解析路径前调 `exportPanel_->rearrangeWarning()`：若重排参数存在风险
+（cols×rows < 保留块数、或单元宽/高 < 网格单元宽/高）则弹 `QMessageBox::warning` 二次确认，选 No 则中止导出。
 
 ## 菜单 / 工具栏 / 快捷键
 

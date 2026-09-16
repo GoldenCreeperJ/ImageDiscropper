@@ -61,6 +61,10 @@ public:
 
     // 只读访问整个主栈。
     const std::vector<T>& undoStack() const { return undoStack_; }
+    // 可写访问整个主栈：供需要对「当前有效条目」做原地修改的使用方（例如标注 EDIT
+    // 模式就地改样式，不新增历史条目）。注意：直接改动不会清空重做栈——语义上视为对
+    // 当前状态的编辑，而非一次新的可撤销操作。
+    std::vector<T>& undoStack() { return undoStack_; }
     // 只读访问整个重做栈。
     const std::vector<T>& redoStack() const { return redoStack_; }
 

@@ -182,7 +182,8 @@ Composition compose(const RegionSet& kept, const Sequence& sequence,
         return comp;
     }
 
-    // ---- 重排合并（§5.3）：按 sequence 序填入 cols×rows 画布，空位补 padColor。----
+    // ---- 重排合并（§5.3）：块列表按 sequence 序（L3 选择排序），再按 mergeOrder 的填充路径
+    //      （行/列优先 + 蛇形 + 倒序）落入 cols×rows 画布，空位补 padColor。两者正交。----
     // 单元尺寸缺省取 kept 区域的最大宽/高（不缩放，纯像素搬运，NFR-2）。
     int cw = 0, ch = 0;
     for (const Fragment& f : frags) {
@@ -203,15 +204,29 @@ Composition compose(const RegionSet& kept, const Sequence& sequence,
     comp.canvasWidth = cols * cw;
     comp.canvasHeight = rows * ch;
 
-    // 按 sequence 顺序取出 kept 块（分离与重排共用同一排序助手）。
+    // 按 sequence 顺序取出 kept 块（分离与重排共用同一排序助手）——这是「块的先后列表」，
+    // 由 L3 选择排序（含自定义拖拽序）决定，与下面的「输出填充路径」正交。
     const std::vector<const Fragment*> ordered = orderBySequence(frags, sequence);
 
-    // 按填充顺序落位到 cols×rows 画布格子（第 k 个 → 行 k/cols、列 k%cols）。
+    // 输出画布填充路径：由 mergeOrder（行/列优先 + 蛇形 + 倒序）在 cols×rows 上生成「槽位访问序」。
+    // 复用 Sequence::build 的同一套 row/column-major + snake + reverse 逻辑（CUSTOM 无意义，按 ROW_MAJOR）。
+    // slots[k] = 第 k 个被访问的输出槽线性序号（r*cols+c）；第 k 个块落入 slots[k]。
+    const SortStrategy fillStrategy =
+        (params.mergeOrder.strategy == SortStrategy::CUSTOM) ? SortStrategy::ROW_MAJOR
+                                                             : params.mergeOrder.strategy;
+    Sequence fill;
+    fill.build(static_cast<std::size_t>(cols) * static_cast<std::size_t>(rows),
+               static_cast<std::size_t>(cols), static_cast<std::size_t>(rows),
+               SequenceParams{fillStrategy, params.mergeOrder.reverse, params.mergeOrder.snake});
+    const std::vector<int>& slots = fill.order();
+
+    // 按填充路径落位：第 k 个块 → 第 k 个被访问的输出槽（slots[k] 解出 r/c）。
     int out = 0;
     for (const Fragment* f : ordered) {
-        const int r = out / cols;
-        const int c = out % cols;
-        if (r >= rows) break; // 超出画布行数（cols*rows 已保证容纳，此为防御）。
+        if (static_cast<std::size_t>(out) >= slots.size()) break; // 防御：cols*rows 已保证容纳，槽位不应先耗尽。
+        const int slot = slots[static_cast<std::size_t>(out)];
+        const int r = slot / cols;
+        const int c = slot % cols;
         Placement p;
         p.source = f->region;
         p.dest = RectRegion(c * cw, r * ch, c * cw + f->region.width(), r * ch + f->region.height());

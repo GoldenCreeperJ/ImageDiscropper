@@ -38,6 +38,18 @@ idc::engine::CutLineSet EngineBridge::cutLines(const idc::engine::CutConfig& cut
     return idc::engine::generateCutLines(cut, src);
 }
 
+// 依切割配置产出诱导网格（镜像 runEngine 的网格产出：GRID 走 Grid::build、其余走线诱导）。
+idc::engine::Grid EngineBridge::buildGrid(const idc::engine::CutConfig& cut,
+                                          const idc::engine::SourceInfo& src) const {
+    idc::engine::Grid grid;
+    if (cut.generator == idc::engine::CutGenerator::GRID) {
+        grid.build(cut.grid, src.width, src.height);  // 参数化网格，含余量策略。
+    } else {
+        grid = idc::engine::induceGrid(idc::engine::generateCutLines(cut, src), src);
+    }
+    return grid;
+}
+
 // 导出（委托 Core runEngine + exportImage，对全分辨率工作图操作）。
 bool EngineBridge::exportResult(const idc::core::Image& work, const idc::engine::EngineConfig& cfg,
                                 const QString& outputPath, QString& err) const {

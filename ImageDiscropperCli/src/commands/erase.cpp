@@ -2,11 +2,12 @@
 // 文件：src/commands/erase.cpp
 // 作用：实现 cmdErase——L2 反向剔除模式（终稿 §4.3 / guideline §4.2.2）的命令行薄壳。
 //       支持四种剔除：单矩形十字切割、横线带、竖线带、多矩形并集（--rect 多次）。极性恒 remove；
-//       缺省分离导出到文件夹，给出 --merge collapse/rearrange 时合并为单图。职责仅四件（A-0.1）：
+//       缺省分离导出到文件夹，给出 --merge collapse 时合并为单图（重排 rearrange 仅 L3 grid 支持，
+//       本命令拒绝）。职责仅四件（A-0.1）：
 //       解析参数 → 按 §5.3 校验 → 装配 EngineConfig → 交 job 执行；不含任何切割/几何/极性逻辑。
 // 分块依据：一命令一文件（严禁上帝文件）；执行/退出码复用 job（NFR-0 同一通道），值解析复用
 //       value_parser，报错样板复用 command_support（A-0.2）。分离/合并输出目标的判定在本命令内完成
-//       （与 grid 的差异：erase 无 --compose/--canvas，合并方式由 --merge 决定，重排列数用 Core 默认）。
+//       （与 grid 的差异：erase 无 --compose/--canvas，合并方式只 collapse——重排为 L3 专属）。
 // 说明：显式 --merge collapse 但选择集不可坍缩时由 job 返回退出码 2（§4.2.2.4）。四种剔除在合法
 //       参数下删除区恒为若干整行/整列（多矩形并集亦然，§4.2.2.2），故通常可坍缩；该分支主要为
 //       防御性对齐规范，真正稳定触发退出码 2 的场景见 config 命令的手写配置（IT-18）。
@@ -62,6 +63,10 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     if (hasMerge) {
         engine::MergeLayout layout = engine::MergeLayout::COLLAPSE;
         if (!parseMerge(args.get("--merge"), layout, err)) return argError(err);
+        // 仅 L3 可重排（Core runEngine 硬约束）：erase 为 L2，显式 rearrange 直接拒绝。
+        if (layout == engine::MergeLayout::REARRANGE)
+            return argError("erase（L2）不支持 --merge rearrange",
+                            "合并重排仅 L3 grid 命令支持；L2 请用 --merge collapse，或去掉 --merge 分离导出");
         config.emitParams.mode = engine::EmitMode::MERGED;
         config.emitParams.layout = layout;
         explicitCollapse = (layout == engine::MergeLayout::COLLAPSE);
