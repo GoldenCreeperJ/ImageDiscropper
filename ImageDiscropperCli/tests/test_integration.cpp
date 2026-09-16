@@ -258,8 +258,8 @@ void testIntegration() {
         cfg.cut.generator = idc::engine::CutGenerator::RECT;
         cfg.cut.polarity = idc::engine::Polarity::REMOVE;
         cfg.cut.rect = idc::engine::RectRegion(50, 40, 150, 120);
-        cfg.emit.mode = idc::engine::EmitMode::MERGED;
-        cfg.emit.layout = idc::engine::MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = idc::engine::EmitMode::MERGED;
+        cfg.emitParams.layout = idc::engine::MergeLayout::COLLAPSE;
         cfg.source.width = 200;
         cfg.source.height = 150;
         const std::string cfgPath = (root / "it12.json").string();
@@ -332,8 +332,8 @@ void testIntegration() {
         cfg.cut.grid.cellHeight = 75;
         cfg.cut.grid.remainder = idc::engine::RemainderPolicy::DISCARD;
         cfg.selectedCells.push_back(0); // 仅删 cell0 → 保留 {1,2,3} 不构成整行/整列补集
-        cfg.emit.mode = idc::engine::EmitMode::MERGED;
-        cfg.emit.layout = idc::engine::MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = idc::engine::EmitMode::MERGED;
+        cfg.emitParams.layout = idc::engine::MergeLayout::COLLAPSE;
         cfg.source.width = 200;
         cfg.source.height = 150;
         const std::string cfgPath = (root / "it18.json").string();

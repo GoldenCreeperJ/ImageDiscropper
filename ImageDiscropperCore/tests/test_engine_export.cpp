@@ -63,7 +63,7 @@ void testEngineExport() {
     cfg.cut.generator = CutGenerator::RECT;
     cfg.cut.rect = RectRegion(30, 20, 70, 60);
     cfg.cut.polarity = Polarity::REMOVE;
-    cfg.emit.mode = EmitMode::SEPARATE; // 分离
+    cfg.emitParams.mode = EmitMode::SEPARATE; // 分离
     {
         const EngineResult r = runEngine(img, cfg);
         CHECK(r.ok);
@@ -90,8 +90,8 @@ void testEngineExport() {
     }
 
     // ---- 合并坍缩 → 单图，校验画布尺寸 (W−Δx)×(H−Δy) 落盘。----
-    cfg.emit.mode = EmitMode::MERGED;
-    cfg.emit.layout = MergeLayout::COLLAPSE;
+    cfg.emitParams.mode = EmitMode::MERGED;
+    cfg.emitParams.layout = MergeLayout::COLLAPSE;
     {
         const EngineResult r = runEngine(img, cfg);
         CHECK(r.ok);
@@ -138,8 +138,8 @@ void testEngineExport() {
         g.cut.grid = GridParams{0, 0, 100, 100, RemainderPolicy::DISCARD}; // 300/100 → 3×3 自动推导
         g.cut.polarity = Polarity::KEEP;
         g.selectedCells = {0, 4, 8}; // 对角：非整行整列 → 不可坍缩。
-        g.emit.mode = EmitMode::MERGED;
-        g.emit.layout = MergeLayout::COLLAPSE; // 请求坍缩，但应被降级为重排。
+        g.emitParams.mode = EmitMode::MERGED;
+        g.emitParams.layout = MergeLayout::COLLAPSE; // 请求坍缩，但应被降级为重排。
         const EngineResult r = runEngine(big, g);
         CHECK(r.ok);
         CHECK(!r.collapsible); // 判定为不可坍缩。

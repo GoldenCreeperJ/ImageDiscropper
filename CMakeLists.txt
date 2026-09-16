@@ -43,3 +43,8 @@ enable_testing()
 
 # CLI：命令行薄壳 idc（guideline §0 A-0.1，终稿 §10.1 CLI 层）。
 add_subdirectory(ImageDiscropperCli)
+
+# GUI：Qt 6 桌面应用 idc_gui（guideline §2，终稿 §10.1 GUI 层）。
+# 依赖 vcpkg 的 qtbase（Widgets/Gui/Core）；链接 image_discropper_core 静态库。
+# 若当前环境未安装 Qt6，可注释本行以仅构建 Core 与 CLI。
+add_subdirectory(ImageDiscropperGui)

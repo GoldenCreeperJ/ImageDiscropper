@@ -42,8 +42,8 @@ void testEnginePipeline() {
         cfg.cut.generator = CutGenerator::RECT;
         cfg.cut.rect = RectRegion(30, 20, 70, 60); // x1,y1,x2,y2
         cfg.cut.polarity = Polarity::KEEP;
-        cfg.emit.mode = EmitMode::MERGED;
-        cfg.emit.layout = MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = EmitMode::MERGED;
+        cfg.emitParams.layout = MergeLayout::COLLAPSE;
         const EngineResult r = runEngine(img, cfg);
         CHECK(r.ok);
         CHECK(r.collapsible);
@@ -61,8 +61,8 @@ void testEnginePipeline() {
         cfg.cut.generator = CutGenerator::HORIZONTAL_LINE;
         cfg.cut.rect = RectRegion(0, 20, 100, 60); // 仅用 y1,y2
         cfg.cut.polarity = Polarity::KEEP;
-        cfg.emit.mode = EmitMode::MERGED;
-        cfg.emit.layout = MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = EmitMode::MERGED;
+        cfg.emitParams.layout = MergeLayout::COLLAPSE;
         const EngineResult r = runEngine(img, cfg);
         CHECK(r.ok);
         CHECK(r.composition.canvasWidth == 100 && r.composition.canvasHeight == 40);
@@ -76,8 +76,8 @@ void testEnginePipeline() {
         cfg.cut.generator = CutGenerator::VERTICAL_LINE;
         cfg.cut.rect = RectRegion(30, 0, 70, 80); // 仅用 x1,x2
         cfg.cut.polarity = Polarity::KEEP;
-        cfg.emit.mode = EmitMode::MERGED;
-        cfg.emit.layout = MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = EmitMode::MERGED;
+        cfg.emitParams.layout = MergeLayout::COLLAPSE;
         const EngineResult r = runEngine(img, cfg);
         CHECK(r.ok);
         CHECK(r.composition.canvasWidth == 40 && r.composition.canvasHeight == 80);
@@ -92,8 +92,8 @@ void testEnginePipeline() {
         cfg.cut.generator = CutGenerator::RECT;
         cfg.cut.rect = RectRegion(30, 20, 70, 60);
         cfg.cut.polarity = Polarity::REMOVE;
-        cfg.emit.mode = EmitMode::MERGED;
-        cfg.emit.layout = MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = EmitMode::MERGED;
+        cfg.emitParams.layout = MergeLayout::COLLAPSE;
         const EngineResult r = runEngine(img, cfg);
         CHECK(r.ok);
         CHECK(r.collapsible);
@@ -117,8 +117,8 @@ void testEnginePipeline() {
         cfg.cut.generator = CutGenerator::HORIZONTAL_LINE;
         cfg.cut.rect = RectRegion(0, 20, 100, 60);
         cfg.cut.polarity = Polarity::REMOVE;
-        cfg.emit.mode = EmitMode::MERGED;
-        cfg.emit.layout = MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = EmitMode::MERGED;
+        cfg.emitParams.layout = MergeLayout::COLLAPSE;
         const EngineResult r = runEngine(img, cfg);
         CHECK(r.ok);
         CHECK(r.collapsible);
@@ -133,8 +133,8 @@ void testEnginePipeline() {
         cfg.cut.generator = CutGenerator::VERTICAL_LINE;
         cfg.cut.rect = RectRegion(30, 0, 70, 80);
         cfg.cut.polarity = Polarity::REMOVE;
-        cfg.emit.mode = EmitMode::MERGED;
-        cfg.emit.layout = MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = EmitMode::MERGED;
+        cfg.emitParams.layout = MergeLayout::COLLAPSE;
         const EngineResult r = runEngine(img, cfg);
         CHECK(r.ok);
         CHECK(r.collapsible);
@@ -148,8 +148,8 @@ void testEnginePipeline() {
         cfg.source = SourceInfo{100, 80};
         cfg.cut.generator = CutGenerator::RECT;
         cfg.cut.rect = RectRegion(30, 20, 70, 60);
-        cfg.emit.mode = EmitMode::MERGED;
-        cfg.emit.layout = MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = EmitMode::MERGED;
+        cfg.emitParams.layout = MergeLayout::COLLAPSE;
         cfg.cut.polarity = Polarity::KEEP;
         const EngineResult rk = runEngine(img, cfg);
         cfg.cut.polarity = Polarity::REMOVE;
@@ -170,10 +170,10 @@ void testEnginePipeline() {
         cfg.cut.polarity = Polarity::KEEP;
         cfg.selectedCells = {0, 2, 6, 8}; // 四角单元
         cfg.order.strategy = SortStrategy::ROW_MAJOR;
-        cfg.emit.mode = EmitMode::MERGED;
-        cfg.emit.layout = MergeLayout::REARRANGE;
-        cfg.emit.cols = 2;
-        cfg.emit.rows = 2;
+        cfg.emitParams.mode = EmitMode::MERGED;
+        cfg.emitParams.layout = MergeLayout::REARRANGE;
+        cfg.emitParams.cols = 2;
+        cfg.emitParams.rows = 2;
         const EngineResult r = runEngine(img, cfg);
         CHECK(r.ok);
         CHECK(r.kept.size() == 4);

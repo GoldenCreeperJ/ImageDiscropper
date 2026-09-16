@@ -48,8 +48,8 @@ int cmdExtract(const std::vector<std::string>& tokens, const GlobalOptions& go) 
     engine::EngineConfig config;
     config.cut.tier = engine::Tier::L1;
     config.cut.polarity = engine::Polarity::KEEP;
-    config.emit.mode = engine::EmitMode::MERGED;
-    config.emit.layout = engine::MergeLayout::COLLAPSE;
+    config.emitParams.mode = engine::EmitMode::MERGED;
+    config.emitParams.layout = engine::MergeLayout::COLLAPSE;
 
     // --- §5.3 第 5 步：几何格式校验（在调用 Core 之前，错误一律退出码 1）。---
     // 带的两个坐标先暂存，待读取图像尺寸后再构造「贯穿全图」的带矩形（横带宽=W、竖带高=H）。
@@ -74,7 +74,7 @@ int cmdExtract(const std::vector<std::string>& tokens, const GlobalOptions& go) 
         config.cut.generator = engine::CutGenerator::VERTICAL_LINE;
     }
     // 公共导出选项：--format（合并时作为扩展名回退）/ --naming（L1 合并单图用不到，但保持一致）。
-    if (!applyFormatNaming(args, config.emit, err)) return argError(err);
+    if (!applyFormatNaming(args, config.emitParams, err)) return argError(err);
 
     // --- §5.3 第 6 步：输入图像可读（失败退出码 3）。---
     const JobOptions opt = makeJobOptions(go, /*explicitCollapse=*/false);

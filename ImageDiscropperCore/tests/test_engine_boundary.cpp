@@ -142,8 +142,8 @@ void testEngineBoundary() {
         cfg.cut.generator = CutGenerator::RECT;
         cfg.cut.rect = RectRegion(30, 20, 70, 60);
         cfg.cut.polarity = Polarity::KEEP;
-        cfg.emit.mode = EmitMode::MERGED;
-        cfg.emit.layout = MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = EmitMode::MERGED;
+        cfg.emitParams.layout = MergeLayout::COLLAPSE;
         const EngineResult r = runEngine(img, cfg);
         CHECK(r.ok);
         CHECK(!exportImage(r.composition, img, ""));                            // 空路径（合并）
@@ -157,7 +157,7 @@ void testEngineBoundary() {
         CHECK(!exportImage(r.composition, img, blocker + "/out.png"));
         fs::remove(blocker);
         // 分离导出：目标文件夹不存在会自动创建（见 test_engine_export），但空路径仍报错（E-8）。
-        cfg.emit.mode = EmitMode::SEPARATE;
+        cfg.emitParams.mode = EmitMode::SEPARATE;
         const EngineResult rs = runEngine(img, cfg);
         CHECK(rs.ok);
         CHECK(!exportImage(rs.composition, img, ""));                           // 空路径（分离）

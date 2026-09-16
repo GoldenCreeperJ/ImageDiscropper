@@ -302,19 +302,19 @@ json engineConfigToJson(const EngineConfig& config) {
 
     // emit：输出模式 / 合并布局 / 格式 / 命名 / 质量 / 元数据。
     json merge;
-    merge["layout"] = layoutName(config.emit.layout);
-    merge["cols"] = optIntToJson(config.emit.cols);
-    merge["rows"] = optIntToJson(config.emit.rows);
-    merge["cellWidth"] = optIntToJson(config.emit.cellWidth);
-    merge["cellHeight"] = optIntToJson(config.emit.cellHeight);
-    merge["padColor"] = colorToHex(config.emit.padColor);
+    merge["layout"] = layoutName(config.emitParams.layout);
+    merge["cols"] = optIntToJson(config.emitParams.cols);
+    merge["rows"] = optIntToJson(config.emitParams.rows);
+    merge["cellWidth"] = optIntToJson(config.emitParams.cellWidth);
+    merge["cellHeight"] = optIntToJson(config.emitParams.cellHeight);
+    merge["padColor"] = colorToHex(config.emitParams.padColor);
     json emit;
-    emit["mode"] = emitModeName(config.emit.mode);
+    emit["mode"] = emitModeName(config.emitParams.mode);
     emit["merge"] = merge;
-    emit["format"] = formatName(config.emit.format);
-    emit["naming"] = config.emit.naming;
-    emit["quality"] = config.emit.quality;
-    emit["keepMetadata"] = config.emit.keepMetadata;
+    emit["format"] = formatName(config.emitParams.format);
+    emit["naming"] = config.emitParams.naming;
+    emit["quality"] = config.emitParams.quality;
+    emit["keepMetadata"] = config.emitParams.keepMetadata;
     root["emit"] = emit;
 
     return root;
@@ -371,31 +371,31 @@ bool engineConfigFromJson(const json& value, EngineConfig& out) {
 
     // emit。
     const json& emit = at(value, "emit");
-    out.emit.mode = emitModeFromName(jStr(at(emit, "mode"), "merged"));
-    out.emit.format = formatFromName(jStr(at(emit, "format"), "png"));
-    out.emit.naming = jStr(at(emit, "naming"), "{name}_{index:03d}");
-    out.emit.quality = jInt(at(emit, "quality"), 90);
-    out.emit.keepMetadata = jBool(at(emit, "keepMetadata"), false);
+    out.emitParams.mode = emitModeFromName(jStr(at(emit, "mode"), "merged"));
+    out.emitParams.format = formatFromName(jStr(at(emit, "format"), "png"));
+    out.emitParams.naming = jStr(at(emit, "naming"), "{name}_{index:03d}");
+    out.emitParams.quality = jInt(at(emit, "quality"), 90);
+    out.emitParams.keepMetadata = jBool(at(emit, "keepMetadata"), false);
     const json& merge = at(emit, "merge");
-    out.emit.layout = layoutFromName(jStr(at(merge, "layout"), "collapse"));
-    out.emit.cols = jsonToOptInt(at(merge, "cols"));
-    out.emit.rows = jsonToOptInt(at(merge, "rows"));
-    out.emit.cellWidth = jsonToOptInt(at(merge, "cellWidth"));
-    out.emit.cellHeight = jsonToOptInt(at(merge, "cellHeight"));
+    out.emitParams.layout = layoutFromName(jStr(at(merge, "layout"), "collapse"));
+    out.emitParams.cols = jsonToOptInt(at(merge, "cols"));
+    out.emitParams.rows = jsonToOptInt(at(merge, "rows"));
+    out.emitParams.cellWidth = jsonToOptInt(at(merge, "cellWidth"));
+    out.emitParams.cellHeight = jsonToOptInt(at(merge, "cellHeight"));
     // 兼容 §9 示例的 "cellSize"：{width,height} / {w,h} / [w,h] 三种写法。
-    if (!out.emit.cellWidth && !out.emit.cellHeight) {
+    if (!out.emitParams.cellWidth && !out.emitParams.cellHeight) {
         const json& cs = at(merge, "cellSize");
         if (cs.is_array() && cs.size() >= 2) {
-            out.emit.cellWidth = jInt(cs[0], 0);
-            out.emit.cellHeight = jInt(cs[1], 0);
+            out.emitParams.cellWidth = jInt(cs[0], 0);
+            out.emitParams.cellHeight = jInt(cs[1], 0);
         } else if (cs.is_object()) {
             const int w = cs.contains("width") ? jInt(at(cs, "width"), 0) : jInt(at(cs, "w"), 0);
             const int h = cs.contains("height") ? jInt(at(cs, "height"), 0) : jInt(at(cs, "h"), 0);
-            out.emit.cellWidth = w;
-            out.emit.cellHeight = h;
+            out.emitParams.cellWidth = w;
+            out.emitParams.cellHeight = h;
         }
     }
-    out.emit.padColor = colorFromHex(jStr(at(merge, "padColor"), "#00000000"));
+    out.emitParams.padColor = colorFromHex(jStr(at(merge, "padColor"), "#00000000"));
 
     return true;
 }

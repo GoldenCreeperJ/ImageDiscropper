@@ -32,7 +32,7 @@ constexpr int kIndexWidth = 3;
 // 转小写（用于扩展名比较，ASCII 足够）。
 std::string toLower(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                   [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return s;
 }
 
@@ -67,7 +67,7 @@ const char* extForFormat(const ExportFormat fmt) {
 }
 
 // 整数零填充到固定宽度（命名模板 {index:03d}）。
-std::string zeroPad(int v, const int width) {
+std::string zeroPad(const int v, const int width) {
     std::string s = std::to_string(v < 0 ? 0 : v);
     while (static_cast<int>(s.size()) < width) s.insert(s.begin(), '0');
     return s;

@@ -82,7 +82,7 @@ struct EngineConfig {
     CutConfig cut;                              // 切割配置
     std::vector<int> selectedCells;             // 显式选择集 S（单元序号）；空 = L1/L2 由生成器自动推导
     SequenceParams order;                       // 排序策略（FR-L3.5）
-    CompositionParams emit;                     // 导出/合成配置（§5）
+    CompositionParams emitParams;               // 导出/合成配置（§5；成员名避开 Qt emit 关键字宏）
 };
 
 // ===========================================================================

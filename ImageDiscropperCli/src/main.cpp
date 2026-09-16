@@ -30,7 +30,7 @@ static void enableUtf8Console() {
 #endif
 
 // 程序入口：argv[1..] → std::vector<std::string> → cliMain。
-int main(int argc, char** argv) {
+int main(const int argc, char** argv) {
 #ifdef _WIN32
     enableUtf8Console(); // 必须先于任何输出，避免首行中文乱码。
 #endif

@@ -62,13 +62,13 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     if (hasMerge) {
         engine::MergeLayout layout = engine::MergeLayout::COLLAPSE;
         if (!parseMerge(args.get("--merge"), layout, err)) return argError(err);
-        config.emit.mode = engine::EmitMode::MERGED;
-        config.emit.layout = layout;
+        config.emitParams.mode = engine::EmitMode::MERGED;
+        config.emitParams.layout = layout;
         explicitCollapse = (layout == engine::MergeLayout::COLLAPSE);
         if (!args.has("--output"))
             return argError("合并导出缺少 --output", "请用 --output <file> 指定合并输出路径");
     } else {
-        config.emit.mode = engine::EmitMode::SEPARATE;
+        config.emitParams.mode = engine::EmitMode::SEPARATE;
         if (!args.has("--output-dir"))
             return argError("分离导出缺少 --output-dir",
                             "请用 --output-dir <dir> 指定输出文件夹（不存在会自动创建）");
@@ -110,7 +110,7 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
         config.cut.generator = engine::CutGenerator::VERTICAL_LINE;
     }
     // 公共导出选项：--format（分离时决定扩展名 / 合并时作扩展名回退）/ --naming（分离命名模板）。
-    if (!applyFormatNaming(args, config.emit, err)) return argError(err);
+    if (!applyFormatNaming(args, config.emitParams, err)) return argError(err);
 
     // --- §5.3 第 6 步：读图（失败退出码 3）。---
     const JobOptions opt = makeJobOptions(go, explicitCollapse);

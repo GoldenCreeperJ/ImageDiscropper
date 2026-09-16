@@ -72,7 +72,7 @@ int cmdConfig(const std::vector<std::string>& tokens, const GlobalOptions& go) {
                         "配置文件（§9）不含图像路径，请用 --input <file> 指定要切割的图像");
 
     // 输出目标由 emit.mode 决定：分离 → --output-dir（文件夹）；合并 → --output（单图）。
-    const bool separate = (config.emit.mode == engine::EmitMode::SEPARATE);
+    const bool separate = (config.emitParams.mode == engine::EmitMode::SEPARATE);
     const std::string outKey = separate ? "--output-dir" : "--output";
     if (!args.has(outKey))
         return argError("执行配置需要 " + outKey,
@@ -80,8 +80,8 @@ int cmdConfig(const std::vector<std::string>& tokens, const GlobalOptions& go) {
                                  : "配置为合并导出，请用 --output <file> 指定输出路径");
 
     // 显式坍缩：仅 MERGED+COLLAPSE 时为真——不可坍缩则 job 返回退出码 2（IT-18 触发路径）。
-    const bool explicitCollapse = (config.emit.mode == engine::EmitMode::MERGED &&
-                                   config.emit.layout == engine::MergeLayout::COLLAPSE);
+    const bool explicitCollapse = (config.emitParams.mode == engine::EmitMode::MERGED &&
+                                   config.emitParams.layout == engine::MergeLayout::COLLAPSE);
     const JobOptions opt = makeJobOptions(go, explicitCollapse);
 
     // --- §5.3 第 6 步：读图（失败退出码 3）。---

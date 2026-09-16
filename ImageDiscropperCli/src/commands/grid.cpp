@@ -120,24 +120,24 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
             return argError("--compose 需要 --output", "请用 --output <file> 指定合并输出路径");
         int cols = 0, rows = 0;
         if (!parseCanvas(args.get("--canvas"), cols, rows, err)) return argError(err);
-        config.emit.mode = engine::EmitMode::MERGED;
-        config.emit.layout = engine::MergeLayout::REARRANGE;
-        config.emit.cols = cols; // 画布列数（单元数，非像素）
-        config.emit.rows = rows; // 画布行数（单元数，非像素）
+        config.emitParams.mode = engine::EmitMode::MERGED;
+        config.emitParams.layout = engine::MergeLayout::REARRANGE;
+        config.emitParams.cols = cols; // 画布列数（单元数，非像素）
+        config.emitParams.rows = rows; // 画布行数（单元数，非像素）
     } else { // 缺省：分离导出到文件夹（不存在会自动创建）。
         if (!args.has("--output-dir"))
             return argError("分离导出缺少 --output-dir",
                             "请用 --output-dir <dir> 指定输出文件夹，或加 --compose + --canvas + --output 合并为单图");
-        config.emit.mode = engine::EmitMode::SEPARATE;
+        config.emitParams.mode = engine::EmitMode::SEPARATE;
     }
 
     // --- §5.3 第 5 步：填充色与公共导出选项 --format / --naming。---
     if (args.has("--pad-color")) {
         core::Color pad;
         if (!parseColor(args.get("--pad-color"), pad, err)) return argError(err);
-        config.emit.padColor = pad; // Core 已透传至合并画布填充色（见文件头说明）。
+        config.emitParams.padColor = pad; // Core 已透传至合并画布填充色（见文件头说明）。
     }
-    if (!applyFormatNaming(args, config.emit, err)) return argError(err);
+    if (!applyFormatNaming(args, config.emitParams, err)) return argError(err);
 
     // --- §5.3 第 5 步：选择单元 (r,c) 的格式解析（映射为序号需网格，故读图后再映射）。---
     std::vector<std::pair<int, int>> chosen; // 保持出现顺序（custom 下即输出序）。

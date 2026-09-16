@@ -180,8 +180,8 @@ int main() {
         cfg.cut.generator = engine::CutGenerator::RECT;  // 单矩形诱导十字切割线
         cfg.cut.rect = engine::RectRegion(60, 30, 140, 90);
         cfg.cut.polarity = engine::Polarity::REMOVE;     // 剔除十字 → 保留四角
-        cfg.emit.mode = engine::EmitMode::MERGED;
-        cfg.emit.layout = engine::MergeLayout::COLLAPSE; // 坍缩式合并（§5.2）
+        cfg.emitParams.mode = engine::EmitMode::MERGED;
+        cfg.emitParams.layout = engine::MergeLayout::COLLAPSE; // 坍缩式合并（§5.2）
 
         const engine::EngineResult r = engine::runEngine(composed, cfg);
         std::cout << "[L2 collapse] ok=" << r.ok
@@ -198,7 +198,7 @@ int main() {
         }
 
         // 9.2 同一作业改为分离导出 → 文件夹（四角 4 张 PNG，直接写入，不压缩）。
-        cfg.emit.mode = engine::EmitMode::SEPARATE;
+        cfg.emitParams.mode = engine::EmitMode::SEPARATE;
         const engine::EngineResult rs = engine::runEngine(composed, cfg);
         if (rs.ok) {
             const fs::path folder = outDir / "l2_corners"; // 目标文件夹（不存在会自动创建）
@@ -229,9 +229,9 @@ int main() {
         cfg.cut.polarity = engine::Polarity::KEEP;
         cfg.selectedCells = {0, 3, 8, 11};               // 4×3 网格的四角单元
         cfg.order.strategy = engine::SortStrategy::ROW_MAJOR;
-        cfg.emit.mode = engine::EmitMode::MERGED;
-        cfg.emit.layout = engine::MergeLayout::REARRANGE; // 重排式合并（§5.3）
-        cfg.emit.cols = 2;
+        cfg.emitParams.mode = engine::EmitMode::MERGED;
+        cfg.emitParams.layout = engine::MergeLayout::REARRANGE; // 重排式合并（§5.3）
+        cfg.emitParams.cols = 2;
 
         const engine::EngineResult r = engine::runEngine(composed, cfg);
         std::cout << "[L3 rearrange] ok=" << r.ok

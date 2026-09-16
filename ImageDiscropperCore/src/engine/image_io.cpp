@@ -12,8 +12,8 @@
 
 // stb_image（解码）+ stb_image_write（编码）：全工程仅此一处定义各自实现宏（header-only 库要求）。
 #define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
 #define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image.h>
 #include <stb_image_write.h>
 
 // libwebp：WebP 编码（WebPEncodeRGBA 见 encode.h；释放编码缓冲的 WebPFree 见 decode.h）。
@@ -56,7 +56,7 @@ std::vector<std::uint8_t> toRGBBuffer(const core::Image& img, const core::Color&
 }
 
 // stb 内存写回调：把编码字节追加到 vector<uint8_t>（供编码到内存出口）。
-void stbAppendCallback(void* context, void* data, int size) {
+void stbAppendCallback(void* context, void* data, const int size) {
     auto* out = static_cast<std::vector<std::uint8_t>*>(context);
     const auto* p = static_cast<const std::uint8_t*>(data);
     out->insert(out->end(), p, p + size);

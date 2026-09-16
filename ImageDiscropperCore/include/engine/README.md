@@ -35,7 +35,7 @@ CutLineSet lines = generateCutLines(cfg.cut, cfg.source);   // ①
 Grid grid        = induceGrid(lines, cfg.source);           // ②
 RegionSet all    = split(image, grid);                      // split
 RegionSet kept   = applyPolarity(all, selection);           // ③④
-Composition comp = compose(kept, sequence, cfg.emit);       // ⑤
+Composition comp = compose(kept, sequence, cfg.emitParams); // ⑤
 exportImage(comp, image, outputPath);                       // export
 
 // 或一次跑通（不落盘，返回保留集 + 合成描述）：

@@ -179,13 +179,13 @@ EngineResult runEngine(const core::Image& image, const EngineConfig& config) {
     }
 
     // 布局决策：MERGED+COLLAPSE 但不可坍缩时降级为 REARRANGE（§5.4 推论 / 测试项）。
-    CompositionParams emit = config.emit;
-    if (emit.mode == EmitMode::MERGED &&
-        emit.layout == MergeLayout::COLLAPSE && !result.collapsible) {
-        emit.layout = MergeLayout::REARRANGE;
+    CompositionParams emitParams = config.emitParams;
+    if (emitParams.mode == EmitMode::MERGED &&
+        emitParams.layout == MergeLayout::COLLAPSE && !result.collapsible) {
+        emitParams.layout = MergeLayout::REARRANGE;
     }
 
-    result.composition = compose(kept, sequence, emit);
+    result.composition = compose(kept, sequence, emitParams);
     result.kept = kept;
     result.ok = true;
     return result;

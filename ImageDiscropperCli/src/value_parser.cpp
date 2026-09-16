@@ -19,7 +19,7 @@ namespace {
 // 转小写（ASCII 足够，用于枚举 / 扩展名比较）。
 std::string toLower(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                   [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return s;
 }
 

@@ -50,9 +50,11 @@ public:
     }
 
     // 全选 / 全不选 / 反选（FR-L3.3）。
-    void selectAll() { for (auto& b : selected_) b = true; }
-    void deselectAll() { for (auto& b : selected_) b = false; }
-    void invert() { for (auto& b : selected_) b = !b; }
+    // 注意：std::vector<bool> 迭代解引用返回 _Vb_reference 代理（右值），不能绑定
+    //       auto& 非 const 引用；整体操作改用向量特化的 assign / flip()。
+    void selectAll() { selected_.assign(selected_.size(), true); }
+    void deselectAll() { selected_.assign(selected_.size(), false); }
+    void invert() { selected_.flip(); }
 
     // 单元总数与被选中数量。
     std::size_t cellCount() const { return selected_.size(); }

@@ -345,8 +345,8 @@ static void testEngine() {
     cfg.cut.generator = CutGenerator::RECT;
     cfg.cut.rect = RectRegion(300, 200, 900, 700);
     cfg.cut.polarity = Polarity::REMOVE;
-    cfg.emit.mode = EmitMode::MERGED;
-    cfg.emit.layout = MergeLayout::COLLAPSE;
+    cfg.emitParams.mode = EmitMode::MERGED;
+    cfg.emitParams.layout = MergeLayout::COLLAPSE;
     CHECK(cfg.source.width == 1920 && cfg.cut.tier == Tier::L2);
     CHECK(cfg.cut.polarity == Polarity::REMOVE);
 
