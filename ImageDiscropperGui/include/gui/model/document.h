@@ -6,7 +6,7 @@
 // 分块依据：
 //   - Document 只做「状态存储 + 参数翻译」，绝不含切割/几何/排序/极性判定逻辑
 //     （那些全在 Core；A-0.1）。组装 EngineConfig 只是字段搬运与枚举映射。
-//   - 真正调用 Core 的动作集中在 EngineBridge（唯一触 Core 处），Document 不碰 Core API。
+//   - 真正调用 Core 的动作集中在桥接类（切割/预处理 EngineBridge、标注域 AnnotationBridge），Document 不碰 Core API。
 // 说明：状态变更统一发 changed() 信号；换图发 imageChanged()（需重建预览 pixmap）。
 //       MainWindow 监听这两个信号驱动预览刷新与面板同步。
 // ============================================================================
@@ -169,6 +169,11 @@ public:
     idc::engine::CutConfig buildCutConfig() const;
     // 构建一次完整作业的配置（供 runEngine / exportImage 使用）。
     idc::engine::EngineConfig buildEngineConfig() const;
+    // 反向映射（G-13 配置加载 / G-12 撤销重做共用）：把一份 EngineConfig 的字段搬回 Document 状态，
+    // 与 buildEngineConfig 互逆——生成器+tier 还原 L1 形状/L2 子功能，搬运几何/选择集/排序/导出参数。
+    // 不还原 source 尺寸（图像不随配置/快照改变）；直接改字段后只发一次 changed()（避免逐 setter 多次刷新）。
+    // 维持模型不变式：非 L3 不得为重排（复位为坍缩）、网格单元尺寸非正时回退默认，杜绝非法组合。
+    void applyEngineConfig(const idc::engine::EngineConfig& cfg);
 
 signals:
     // 换图：需重建预览 pixmap、重置视图。

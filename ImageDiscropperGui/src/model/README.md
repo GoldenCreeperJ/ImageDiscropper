@@ -23,6 +23,7 @@ L3 网格参数 `GridParams`（默认单元 100×100，避免 `GridParams` 默�
   （`RECT` / `HORIZONTAL_LINE` / `VERTICAL_LINE` / `MULTI_RECT`）；L3 → `GRID`（携带 `GridParams`）。
   `MULTI_RECT` 时 `buildCutConfig` 另把 `rects_` 搬运进 `CutConfig::rects`（Core 对每个矩形诱导十字带后取并集，方案 A）。
 - `buildCutConfig()` / `buildEngineConfig()`：**纯字段搬运 + 枚举映射**，不含任何几何/极性判定。
+- `applyEngineConfig(cfg)`：`buildEngineConfig` 的**互逆反向映射**（G-13 配置加载 / G-12 撤销重做共用）——生成器+tier 还原 L1 形状/L2 子功能，搬运几何/选择集/排序/导出参数（optional 画布/单元尺寸 nullopt↔0）；直接改字段后只发一次 `changed()`；不还原 source 尺寸（图像不随配置/快照变）；守卫「非 L3 不得重排」「网格单元尺寸为正」不变式。
 - 信号：`imageChanged()`（换图，需重建预览 pixmap）、`changed()`（任意参数变更，仅需刷新预览）。
 - `setMode()` 套用模式定义极性（L1→KEEP、L2→REMOVE；L1≡keep、L2≡remove）；**切入 L3 保留当前极性不变**（L3 极性独立，从 L2 进 L3 沿用 remove）；**离开 L3 时若 `layout_==REARRANGE` 自动复位为 COLLAPSE**（模型层维持「重排仅 L3」不变式）。
 - `setPolarity()` 反向耦合：在 L1/L2 下切换极性会同步切换模式（KEEP→L1、REMOVE→L2）；L3 极性独立、不改模式。
@@ -48,6 +49,8 @@ L3 网格参数 `GridParams`（默认单元 100×100，避免 `GridParams` 默�
 | `cutLines(cut, src)`               | `engine::generateCutLines`（取贯穿切割线供渲染） |
 | `buildGrid(cut, src)`              | GRID→`Grid::build`、其余→`generateCutLines`+`induceGrid`（镜像 `runEngine` 网格产出，供 L3 网格线渲染） |
 | `exportResult(work, cfg, out, err)`| `engine::runEngine` + `engine::exportImage`（全分辨率落盘，无损） |
+| `saveConfig(path, cfg, err)`       | `engine::saveEngineConfig`（§9 schema JSON 落盘，G-13） |
+| `loadConfig(path, out, err)`       | `engine::loadEngineConfig`（从 JSON 还原配置，G-13；nlohmann 在 Core 侧 PRIVATE，GUI 不感知） |
 
 > 其余 GUI 代码只与 `EngineBridge` 交互，不直接 include 引擎实现细节，
 > 以此保证「GUI 不含切割/几何/导出逻辑」（A-0.1/A-0.3）。

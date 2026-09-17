@@ -53,6 +53,14 @@ public:
     bool exportResult(const idc::core::Image& work, const idc::engine::EngineConfig& cfg,
                       const QString& outputPath, QString& err) const;
 
+    // ---- 配置文件存取（G-13 / FR-L3.8 / NFR-4；委托 Core，GUI 不自实现 JSON，A-0.1/A-0.3）----
+    // 保存：把一次作业配置序列化为终稿 §9 schema 的 JSON 文件（缩进美化）。
+    // path 为空或写盘失败（Core E-8）返回 false 并给出中文错误 err。
+    bool saveConfig(const QString& path, const idc::engine::EngineConfig& cfg, QString& err) const;
+    // 加载：从 JSON 文件还原配置（§9 schema）。path 为空、读盘失败或 JSON 解析失败返回 false
+    // 并给出中文错误 err；成功返回 true 并填充 out（由上层 Document::applyEngineConfig 反向映射）。
+    bool loadConfig(const QString& path, idc::engine::EngineConfig& out, QString& err) const;
+
     // ---- 预处理（FR-1；委托 Core pixel_ops::*，GUI 不自实现像素运算，A-0.1/A-0.3）----
     // 每个方法对输入图做一次变换并返回新图（不修改入参）；上层据此刷新 Document 工作图。
     // 说明：本 GUI 采用「即时累积」预处理——每次操作把工作图变换后写回，原图始终保留

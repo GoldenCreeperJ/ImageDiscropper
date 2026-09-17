@@ -112,6 +112,7 @@ L2「多矩形并集剔除」下，选区来自 `Document::rects()`（多个矩�
 用 `Shape::worldPath()`（= `xform_` 作用于 `toPath()` 的已变换路径）→`toQPainterPath()` 以**矢量方式叠加**渲染（pen=颜色/线宽、brush=填充?颜色:透明，z=`kAnnotation`=10），
 **不改底图像素**（A-0.15）；烧录仅在导出时发生（见 `AnnotationBridge::burnIn`）。控制点取 `controlPointsWorld()`，与变换后几何一致。
 文字标注用 `dynamic_cast<TextShape*>` 取 `text()/fontSize()`；若 `xform_` 非单位阵，则 `painter->setTransform(toQTransform(xf), true)` 在**局部坐标**画真实字形（矢量仿射，旋转/缩放不失真、不丢字，无需像素兜底）。
+描边/填充/字形的**实际绘制统一委托 `util::paintAnnotation`**（与导出输出预览的标注烘焙共用同一实现，消除重复）；`AnnotationItem::paint` 只负责算有效变换 `xf`、普通态传缓存 `path_`（预览态传 `xf.applyToPath(toPath())`），并额外绘制选中高亮 / OBB 手柄（图元专属交互，不入公共函数）。
 
 - **增量维护**：`CanvasScene::updateAnnotations(model)` 按数量增删末位图元、逐个刷新几何与选中态，**绝不 clear+重建**；
   拖拽中跳过对正在拖图元的几何回设（`isDragging()`），规避「emit 触发重建→删掉正在处理事件的图元→崩溃」陷阱。

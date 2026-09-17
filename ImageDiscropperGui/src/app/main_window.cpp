@@ -2,7 +2,7 @@
 // 文件：app/main_window.cpp
 // 作用：实现主窗口的装配、数据流编排与状态栏呈现（见同名头文件说明）。
 // 分块依据：
-//   - buildCentral/buildMenus/buildToolbar/buildStatus/buildShortcuts/connectAll 各管一块装配；
+//   - buildCentral/buildMenus/buildToolbar/buildStatus/connectAll 各管一块装配（单键快捷键在 keyPressEvent 处理）；
 //   - on* 槽把用户意图落到 Document，再经 refreshPreview 调 EngineBridge（Core）刷新画布；
 //   - MainWindow 不含任何切割/几何/导出实现（A-0.1），只做编排与呈现。
 // ============================================================================
@@ -32,6 +32,7 @@
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTabWidget>
+#include <QTimer>
 #include <QToolBar>
 #include <QVBoxLayout>
 
@@ -45,6 +46,7 @@
 #include "panels/param_panel.h"
 #include "panels/tool_panel.h"
 #include "util/image_qt_adapter.h"
+#include "util/output_preview_renderer.h"
 #include "util/path_qt_adapter.h"
 
 #ifndef IDC_GUI_VERSION
@@ -52,6 +54,12 @@
 #endif
 
 namespace idc::gui {
+
+// 输出预览（G-11 / §4.6）尺寸参数：
+//   kExportSrcMaxDim   —— 预览专用小源图的最长边上限（缩略图只在此小图上 blit，保证快）。
+//   kExportPreviewMaxDim —— 输出缩略图的最长边上限（像素少、仅示意，与面板标签框相区隔）。
+constexpr int kExportSrcMaxDim = 512;
+constexpr int kExportPreviewMaxDim = 192;
 
 // 构造：装配全部部件并显示首次引导。
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
@@ -62,10 +70,19 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     buildMenus();
     buildToolbar();
     buildStatus();
+
+    // 全局撤销/重做（G-12）：防抖定时器把拖拽/连点的连续参数变更合并为一条历史。
+    docHistoryTimer_ = new QTimer(this);
+    docHistoryTimer_->setSingleShot(true);
+    docHistoryTimer_->setInterval(500); // 500ms 静默即视为一次离散操作结束（拖拽释放/滑块停手）。
+    connect(docHistoryTimer_, &QTimer::timeout, this, &MainWindow::onDocHistoryTimeout);
+
     connectAll();
 
     syncPanels();
     refreshPreview();
+    resetDocHistory();          // 以初始参数态为撤销基线（G-12）。
+    updateUndoRedoEnabled();
     notify(QStringLiteral("请打开一张图像开始（Ctrl+O）。"), false);
     showFirstRunGuide();
 }
@@ -138,18 +155,27 @@ void MainWindow::buildMenus() {
     aExport->setShortcut(QKeySequence::Save);
     connect(aExport, &QAction::triggered, this, &MainWindow::onExport);
     mFile->addSeparator();
+    // 配置文件加载/保存（G-13 / FR-L3.8）：复用 Core loadEngineConfig/saveEngineConfig（§9 schema）。
+    QAction* aLoadCfg = mFile->addAction(QStringLiteral("加载配置(&L)…"));
+    aLoadCfg->setToolTip(QStringLiteral("从 JSON 配置文件还原切割/排序/导出参数（§9 schema）；可撤销。"));
+    connect(aLoadCfg, &QAction::triggered, this, &MainWindow::onLoadConfig);
+    QAction* aSaveCfg = mFile->addAction(QStringLiteral("保存配置(&C)…"));
+    aSaveCfg->setToolTip(QStringLiteral("把当前切割/排序/导出参数存为 JSON 配置文件，可复用于同尺寸图像。"));
+    connect(aSaveCfg, &QAction::triggered, this, &MainWindow::onSaveConfig);
+    mFile->addSeparator();
     QAction* aExit = mFile->addAction(QStringLiteral("退出(&X)"));
     connect(aExit, &QAction::triggered, this, &QWidget::close);
 
-    // ---- 编辑（撤销/重做第三阶段接入）----
+    // ---- 编辑（全局撤销/重做 G-12：上下文路由，复用 Core HistoryManager）----
     QMenu* mEdit = menuBar()->addMenu(QStringLiteral("编辑(&E)"));
-    QAction* aUndo = mEdit->addAction(QStringLiteral("撤销(&U)"));
-    aUndo->setShortcut(QKeySequence::Undo);
-    aUndo->setEnabled(false);
-    aUndo->setToolTip(QStringLiteral("撤销/重做将在第三阶段接入（复用 Core HistoryManager）。"));
-    QAction* aRedo = mEdit->addAction(QStringLiteral("重做(&R)"));
-    aRedo->setShortcut(QKeySequence::Redo);
-    aRedo->setEnabled(false);
+    aUndo_ = mEdit->addAction(QStringLiteral("撤销(&U)"));
+    aUndo_->setShortcut(QKeySequence::Undo);
+    aUndo_->setToolTip(QStringLiteral("撤销（Ctrl+Z）：标注上下文（绘制工具激活/选中标注）撤销标注，否则撤销文档参数变更。"));
+    connect(aUndo_, &QAction::triggered, this, &MainWindow::onUndo);
+    aRedo_ = mEdit->addAction(QStringLiteral("重做(&R)"));
+    aRedo_->setShortcut(QKeySequence::Redo);
+    aRedo_->setToolTip(QStringLiteral("重做（Ctrl+Y）：与撤销对称。"));
+    connect(aRedo_, &QAction::triggered, this, &MainWindow::onRedo);
     mEdit->addSeparator();
     QAction* aClear = mEdit->addAction(QStringLiteral("清除选区(&C)"));
     aClear->setShortcut(QKeySequence(Qt::Key_Escape));
@@ -182,13 +208,12 @@ void MainWindow::buildMenus() {
     });
 
     // ---- 标注（第四阶段 G-4/G-5）：撤销/重做/删除选中/清除全部/属性定位 ----
-    // 标注撤销/重做复用 Core AnnotationLayer 内建分层快照（全局跨状态撤销 G-12 本轮不做）。
+    // 标注撤销/重做复用 Core AnnotationLayer 内建分层快照；快捷键 Ctrl+Z/Y 已统一交给编辑菜单
+    // （上下文路由：标注上下文时自动转发到此处），故本菜单项不再绑定快捷键，避免冲突。
     QMenu* mAnno = menuBar()->addMenu(QStringLiteral("标注(&A)"));
     QAction* aAnnoUndo = mAnno->addAction(QStringLiteral("撤销标注(&U)"));
-    aAnnoUndo->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Z));
     connect(aAnnoUndo, &QAction::triggered, this, &MainWindow::onAnnoUndo);
     QAction* aAnnoRedo = mAnno->addAction(QStringLiteral("重做标注(&R)"));
-    aAnnoRedo->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Y));
     connect(aAnnoRedo, &QAction::triggered, this, &MainWindow::onAnnoRedo);
     mAnno->addSeparator();
     QAction* aAnnoDel = mAnno->addAction(QStringLiteral("删除选中标注(&D)"));
@@ -250,6 +275,10 @@ void MainWindow::buildToolbar() {
     QAction* aExport = tb->addAction(QStringLiteral("导出"));
     connect(aExport, &QAction::triggered, this, &MainWindow::onExport);
     tb->addSeparator();
+    // 撤销/重做（G-12 / §4.7 工具栏按钮）：复用编辑菜单同一 QAction，共享 Ctrl+Z/Y 快捷键与动态启用态。
+    if (aUndo_) tb->addAction(aUndo_);
+    if (aRedo_) tb->addAction(aRedo_);
+    tb->addSeparator();
 
     QAction* aZoomIn = tb->addAction(QStringLiteral("放大"));
     connect(aZoomIn, &QAction::triggered, this, [this] { view_->zoomIn(); });
@@ -297,6 +326,8 @@ void MainWindow::buildStatus() {
 void MainWindow::connectAll() {
     connect(&doc_, &Document::imageChanged, this, &MainWindow::onImageChanged);
     connect(&doc_, &Document::changed, this, &MainWindow::onDocChanged);
+    // 全局撤销/重做（G-12）：参数变更同时驱动防抖历史采集（与 onDocChanged 刷新并行，互不干扰）。
+    connect(&doc_, &Document::changed, this, &MainWindow::scheduleHistoryCapture);
 
     connect(view_, &CanvasView::rubberSelect, this, &MainWindow::onRubberSelect);
     connect(view_, &CanvasView::nudgeSelection, this, &MainWindow::onNudge);
@@ -325,7 +356,7 @@ void MainWindow::connectAll() {
     connect(imagePanel_, &ImagePanel::resetRequested, this, &MainWindow::onResetPreprocess);
 
     // ---- 标注（G-4/G-5）：模型/画布/面板 → MainWindow 编排 ----
-    connect(&annoBridge_, &AnnotationBridge::changed, this, &MainWindow::onAnnoModelChanged);
+    connect(&annoBridge_, &AnnotationBridge::changed, this, &MainWindow::onAnnoBridgeChanged);
     // 绘制拖拽预览（橡皮筋）：begin/updateShape 仅发 pendingChanged，必须连到实时刷新预览图元，
     // 否则拖拽过程中形状不显示、只有松手提交（changed）后才可见。
     connect(&annoBridge_, &AnnotationBridge::pendingChanged, this, &MainWindow::onAnnoPendingChanged);
@@ -354,6 +385,8 @@ void MainWindow::connectAll() {
     // 「导出时烧录标注」开关已迁至导出面板（原属图层面板）。
     connect(exportPanel_, &ExportPanel::burnInChanged, this, &MainWindow::onBurnInChanged);
     exportPanel_->setBurnInChecked(annoBridge_.burnInEnabled()); // 初始同步一次（两侧默认 false，对齐意图）。
+    // 切到「导出」页时补渲染输出预览（A：不可见时不渲染，切回时若已脏则重算）。
+    connect(rightTabs_, &QTabWidget::currentChanged, this, &MainWindow::onRightTabChanged);
     connect(annoPropPanel_, &AnnotationPropPanel::colorPicked, this, &MainWindow::onAnnoColorPicked);
     connect(annoPropPanel_, &AnnotationPropPanel::strokeChanged, this, &MainWindow::onAnnoStrokeChanged);
     connect(annoPropPanel_, &AnnotationPropPanel::fillChanged, this, &MainWindow::onAnnoFillChanged);
@@ -366,12 +399,21 @@ void MainWindow::connectAll() {
 void MainWindow::rebuildPreviewPixmap() {
     if (!doc_.hasImage()) {
         scene_->clearAll();
+        exportSrcPixmap_ = QPixmap();   // 无图像：清空输出预览小源图。
         return;
     }
     preview_ = makePreview(doc_.working(), previewMaxDim_);
     const QPixmap pm = toPixmap(preview_.image);
     // 场景坐标 = 原图像素坐标；底图用放大系数把预览 pixmap 铺到原图尺寸。
     scene_->setBaseImage(pm, preview_.scaleX, preview_.scaleY, doc_.width(), doc_.height());
+    // 输出预览（G-11）专用小源图：把底图再降到最长边 ≤ kExportSrcMaxDim，使缩略图只在小图上 blit。
+    const int longest = std::max(pm.width(), pm.height());
+    exportSrcPixmap_ = (longest > kExportSrcMaxDim)
+        ? pm.scaled(kExportSrcMaxDim, kExportSrcMaxDim, Qt::KeepAspectRatio, Qt::SmoothTransformation)
+        : pm;
+    // working（原图）→ 小源图 的放大系数（供 util::composeOutputThumbnail 把 Composition 源区域映射到小图坐标）。
+    exportSrcScaleX_ = exportSrcPixmap_.width()  > 0 ? static_cast<double>(doc_.width())  / exportSrcPixmap_.width()  : 1.0;
+    exportSrcScaleY_ = exportSrcPixmap_.height() > 0 ? static_cast<double>(doc_.height()) / exportSrcPixmap_.height() : 1.0;
     view_->fitToWindow();
 }
 
@@ -387,6 +429,7 @@ void MainWindow::refreshPreview() {
         scene_->clearGrid();
         scene_->clearMultiRects();
         scene_->updateMasks(idc::engine::EngineResult{});
+        updateExportPreview(idc::engine::EngineResult{});
         stCount_->setText(QStringLiteral("保留块: 0"));
         stHint_->setText(QStringLiteral("请打开图像"));
         exportPanel_->setPreviewInfo(QStringLiteral("尚未加载图像。"));
@@ -410,6 +453,7 @@ void MainWindow::refreshPreview() {
 
         const idc::engine::EngineResult res = bridge_.runPreview(doc_.working(), cfg);
         scene_->updateMasks(res);
+        updateExportPreview(res);
 
         const int kept = res.ok ? static_cast<int>(res.kept.size()) : 0;
         stCount_->setText(QStringLiteral("保留块: %1").arg(kept));
@@ -442,6 +486,7 @@ void MainWindow::refreshPreview() {
             // 尚无矩形：不跑引擎（Core 对空 rects 的 MULTI_RECT 会报错），提示框选追加。
             scene_->updateMultiRectCutLines(idc::engine::Grid{}, false);
             scene_->updateMasks(idc::engine::EngineResult{});
+            updateExportPreview(idc::engine::EngineResult{});
             stCount_->setText(QStringLiteral("保留块: 0"));
             stHint_->setText(QStringLiteral("在画布上拖拽以追加矩形"));
             exportPanel_->setPreviewInfo(QStringLiteral("等待矩形…"));
@@ -452,6 +497,7 @@ void MainWindow::refreshPreview() {
         scene_->updateMultiRectCutLines(grid, true);
         const idc::engine::EngineResult res = bridge_.runPreview(doc_.working(), cfg);
         scene_->updateMasks(res);
+        updateExportPreview(res);
 
         const int kept = res.ok ? static_cast<int>(res.kept.size()) : 0;
         stCount_->setText(QStringLiteral("保留块: %1").arg(kept));
@@ -475,6 +521,7 @@ void MainWindow::refreshPreview() {
     if (!doc_.hasRect()) {
         scene_->clearCutLines();
         scene_->updateMasks(idc::engine::EngineResult{});
+        updateExportPreview(idc::engine::EngineResult{});
         scene_->syncSelection(doc_.rect(), false);
         stCount_->setText(QStringLiteral("保留块: 0"));
         stHint_->setText(QStringLiteral("在画布上拖拽以创建选区"));
@@ -490,6 +537,7 @@ void MainWindow::refreshPreview() {
     // 下发给选区框绘制为橙色贯穿线——切割线即选区边的延伸，拖动选区边＝移动切割线（同一图元）。
     scene_->updateCutLines(bridge_.cutLines(cfg.cut, cfg.source), doc_.rect());
     scene_->updateMasks(res);
+    updateExportPreview(res);
     // 拖拽进行中不用 Document 的取整矩形回设选区框：它已被手势精确定位（qreal 亚像素），
     // 逐帧回设会带来整数量化抖动 + 覆盖全图 boundingRect 的 prepareGeometryChange/update 卡顿；
     // 释放时（已退出拖拽态）会照常回设，保证最终与 Document 一致。
@@ -511,6 +559,40 @@ void MainWindow::refreshPreview() {
     } else {
         exportPanel_->setPreviewInfo(QStringLiteral("无有效结果：%1").arg(QString::fromStdString(res.error)));
     }
+}
+
+// 依引擎结果刷新导出面板的输出预览缩略图（G-11 / §4.6）：先缓存 res.ok/composition，再转 renderExportPreviewFromCache。
+// 缓存让后续「不影响切割几何」的事件（烧录开关/标注变更）只需重渲染缩略图、无需重跑 Core。
+void MainWindow::updateExportPreview(const idc::engine::EngineResult& res) {
+    lastExportResOk_ = res.ok;
+    lastComposition_ = res.composition;   // 拷贝 placements（相对 Core 区域计算是小头），供轻量重渲染复用。
+    renderExportPreviewFromCache();
+}
+
+// 用缓存的 lastComposition_/lastExportResOk_ 重渲染输出预览（不重跑 Core）。
+// A：导出选项卡不可见时只置脏标志，切回该页由 onRightTabChanged 调本函数补渲染，省去后台无谓开销。
+void MainWindow::renderExportPreviewFromCache() {
+    if (rightTabs_ && rightTabs_->currentWidget() != exportPanel_) { exportPreviewDirty_ = true; return; }
+    exportPreviewDirty_ = false;
+    if (!lastExportResOk_) { exportPanel_->setPreviewPixmap(QPixmap()); return; }
+    exportPanel_->setPreviewPixmap(composeOutputThumbnail(
+        lastComposition_, exportPreviewSource(), 1.0 / exportSrcScaleX_, 1.0 / exportSrcScaleY_,
+        kExportPreviewMaxDim));
+}
+
+// 右侧选项卡切换：切到「导出」页且预览已脏时用缓存补渲染一次（不重跑 Core）。
+void MainWindow::onRightTabChanged() {
+    if (rightTabs_ && rightTabs_->currentWidget() == exportPanel_ && exportPreviewDirty_) renderExportPreviewFromCache();
+}
+
+// 输出预览的源图（B）：默认用未烧录的小源图；若「导出时烧录标注」开启且有标注，则委托 util::bakeAnnotationsInto
+// 把各标注按世界路径矢量烘焙到小源图副本上（working→小图变换），使预览与最终「烧录后随像素被切割落位」一致。
+// 渲染逻辑已下沉到 util（无状态），本方法只做「是否烧录 + 取哪张源图」的编排（app 层只编排，A-0.1）。
+QPixmap MainWindow::exportPreviewSource() const {
+    if (exportSrcPixmap_.isNull()) return exportSrcPixmap_;
+    if (!annoBridge_.burnInEnabled() || annoBridge_.count() == 0) return exportSrcPixmap_;
+    return bakeAnnotationsInto(exportSrcPixmap_, 1.0 / exportSrcScaleX_, 1.0 / exportSrcScaleY_,
+                               annoBridge_.annotations());
 }
 
 // 同步三个面板 + 工具栏模式动作到 Document。
@@ -599,6 +681,8 @@ void MainWindow::openImageFromPath(const QString& path) {
     }
     doc_.setImage(std::move(img), path); // 触发 imageChanged。
     annoBridge_.setBaseImage(doc_.working()); // 新图＝新标注会话（Core setImage 清空旧标注）。
+    resetDocHistory();          // 换图开新撤销会话：清空跨图历史（快照不含图像，跨图撤销无意义）。
+    updateUndoRedoEnabled();
     notify(QStringLiteral("已打开：%1（%2×%3）").arg(path).arg(doc_.width()).arg(doc_.height()), false);
 }
 
@@ -916,9 +1000,12 @@ void MainWindow::onToolSelected(const AnnoTool tool) {
 }
 
 // 标注列表/预览变化：增量重绘画布标注层，并同步属性面板回显。
-void MainWindow::onAnnoModelChanged() {
+void MainWindow::onAnnoBridgeChanged() {
     scene_->updateAnnotations(annoBridge_);
     annoPropPanel_->syncFromModel();
+    updateUndoRedoEnabled(); // 标注增删改影响标注上下文与可撤销性，刷新编辑菜单启用态。
+    // B：若「导出时烧录标注」开启，标注变化只需反映到输出预览——用缓存重渲染、不重跑 Core（切割几何不受标注影响）。
+    if (annoBridge_.burnInEnabled()) renderExportPreviewFromCache();
 }
 
 // 绘制拖拽预览（橡皮筋）变化：仅刷新预览图元（不重建已提交标注，避免逐帧开销），实现“绘制即实时成形”。
@@ -930,6 +1017,7 @@ void MainWindow::onAnnoPendingChanged() {
 void MainWindow::onAnnoSelectionChanged() {
     scene_->updateAnnotations(annoBridge_);
     annoPropPanel_->syncFromModel();
+    updateUndoRedoEnabled(); // 选中标注会使 Ctrl+Z/Y 路由到标注撤销，刷新启用态。
 }
 
 // 工具变化：同步工具面板按钮组，并按「是否 SELECT」切换画布绘制态门控。
@@ -937,6 +1025,7 @@ void MainWindow::onAnnoToolChanged() {
     toolPanel_->syncFromModel();
     view_->setAnnotationDrawActive(annoBridge_.currentTool() != AnnoTool::SELECT);
     annoPropPanel_->syncFromModel();
+    updateUndoRedoEnabled(); // 工具激活态决定 Ctrl+Z/Y 是否路由到标注撤销，刷新启用态。
 }
 
 // 绘制手势起点：依当前工具分派——文字落点取文本；折线/画笔起笔；其余两点形状记起点。
@@ -1039,7 +1128,7 @@ void MainWindow::onAnnotationTransformed(const int index, const double sx, const
     const std::optional<std::size_t> sel = annoBridge_.selectedIndex();
     if (!sel || static_cast<int>(*sel) != index) return;
     annoBridge_.transformSelected(sx, sy, rotateDeg);
-    // 提交后模型发 changed → onAnnoModelChanged → syncFromModel 依最新累积值回显面板（忠实反映底层，不回弹）。
+    // 提交后模型发 changed → onAnnoBridgeChanged → syncFromModel 依最新累积值回显面板（忠实反映底层，不回弹）。
 }
 
 // 手柄拖拽**进行中**：把逐帧**绝对**预览值实时回显到属性面板变换区（仅回显，不写模型；下标防御误触）。
@@ -1080,7 +1169,10 @@ void MainWindow::onAnnotationVisibilityChanged(const bool visible) {
     annoBridge_.setLayerVisible(visible);
     scene_->setAnnotationsVisible(visible);
 }
-void MainWindow::onBurnInChanged(const bool on) { annoBridge_.setBurnIn(on); }
+void MainWindow::onBurnInChanged(const bool on) {
+    annoBridge_.setBurnIn(on);
+    renderExportPreviewFromCache();   // B：烧录开关只影响输出预览（叠加/去除标注），用缓存重渲染、不重跑 Core。
+}
 
 // 标注菜单动作：撤销/重做/删除选中/清除全部（均复用 Core AnnotationLayer）。
 void MainWindow::onAnnoUndo() { annoBridge_.undo(); }
@@ -1098,6 +1190,118 @@ void MainWindow::onAnnoClearAll() {
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     if (ret != QMessageBox::Yes) return;
     annoBridge_.clearAll();
+}
+
+// ===========================================================================
+// 全局撤销/重做（G-12）与配置文件（G-13）：MainWindow 只做编排——
+// 文档参数态历史复用 Core HistoryManager<EngineConfig>（capture=buildEngineConfig、
+// restore=applyEngineConfig）；标注历史沿用 Core AnnotationLayer 内建快照，由上下文路由分发。
+// 配置存取经 EngineBridge 委托 Core save/loadEngineConfig（A-0.1：Core 调用集中在桥）。
+// ===========================================================================
+
+// 保存配置（G-13）：把当前作业配置写为 §9 schema 的 JSON 文件（委托 EngineBridge → Core）。
+void MainWindow::onSaveConfig() {
+    const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("保存配置"), QString(),
+        QStringLiteral("ImageDiscropper 配置 (*.json);;所有文件 (*)"));
+    if (path.isEmpty()) return;
+    QString err;
+    if (bridge_.saveConfig(path, doc_.buildEngineConfig(), err))
+        notify(QStringLiteral("配置已保存：%1").arg(path), false);
+    else
+        notify(QStringLiteral("保存配置失败：%1").arg(err), true);
+}
+
+// 加载配置（G-13）：读 JSON → Document::applyEngineConfig 反向映射；载入本身可撤销（入同一历史栈）。
+void MainWindow::onLoadConfig() {
+    const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("加载配置"), QString(),
+        QStringLiteral("ImageDiscropper 配置 (*.json);;所有文件 (*)"));
+    if (path.isEmpty()) return;
+    idc::engine::EngineConfig cfg;
+    QString err;
+    if (!bridge_.loadConfig(path, cfg, err)) { notify(QStringLiteral("加载配置失败：%1").arg(err), true); return; }
+    // 先冲刷未落定的防抖变更，保证「栈顶＝载入前当前态」，使加载配置可一步撤销回去。
+    if (docHistoryTimer_->isActive()) { docHistoryTimer_->stop(); onDocHistoryTimeout(); }
+    suppressHistory_ = true;
+    doc_.applyEngineConfig(cfg);   // 触发 changed → refreshPreview + syncPanels（还原期间不采集历史）。
+    suppressHistory_ = false;
+    docHistory_.push(doc_.buildEngineConfig()); // 新态压栈（其下即载入前态），维持「栈顶＝当前态」不变式。
+    updateUndoRedoEnabled();
+    notify(QStringLiteral("配置已加载：%1").arg(path), false);
+}
+
+// 编辑菜单撤销（G-12）：上下文路由——标注上下文转发到标注撤销，否则走文档参数撤销。
+void MainWindow::onUndo() {
+    if (annotationContextActive()) onAnnoUndo();
+    else undoDocument();
+}
+
+// 编辑菜单重做（G-12）：与撤销对称的上下文路由。
+void MainWindow::onRedo() {
+    if (annotationContextActive()) onAnnoRedo();
+    else redoDocument();
+}
+
+// 标注上下文判定：绘制工具激活（非 SELECT）或存在选中标注时，Ctrl+Z/Y 路由到标注撤销/重做。
+bool MainWindow::annotationContextActive() const {
+    return annoBridge_.currentTool() != AnnoTool::SELECT || annoBridge_.selectedIndex().has_value();
+}
+
+// 参数变更→重启防抖定时器（还原期间被 suppressHistory_ 抑制，避免 undo/redo 自身再入栈）。
+void MainWindow::scheduleHistoryCapture() {
+    if (suppressHistory_) return;
+    docHistoryTimer_->start(); // 连续变更（拖拽/连点）只在静默 500ms 后合并为一条历史。
+}
+
+// 防抖到点：把当前参数态快照压入历史（栈顶＝当前态），并刷新撤销/重做启用态。
+void MainWindow::onDocHistoryTimeout() {
+    if (suppressHistory_) return;
+    docHistory_.push(doc_.buildEngineConfig());
+    updateUndoRedoEnabled();
+}
+
+// 清空历史并以当前参数态为唯一基线（构造/换图后调用；栈顶＝当前态，undoSize==1 时不可撤销）。
+void MainWindow::resetDocHistory() {
+    if (docHistoryTimer_) docHistoryTimer_->stop();
+    docHistory_.clearAll();
+    docHistory_.push(doc_.buildEngineConfig());
+}
+
+// 文档参数撤销：栈顶恒为当前态，需至少两态（基线 + 一次变更）才可撤销；
+// 弹出当前态到重做栈后，还原新栈顶（上一态）。还原经 applyEngineConfig 触发 changed 刷新画布/面板。
+void MainWindow::undoDocument() {
+    if (docHistory_.undoSize() <= 1) { notify(QStringLiteral("没有可撤销的参数变更"), false); return; }
+    docHistory_.popToRedo();
+    const idc::engine::EngineConfig* prev = docHistory_.top();
+    if (!prev) return;
+    suppressHistory_ = true;
+    doc_.applyEngineConfig(*prev);
+    suppressHistory_ = false;
+    updateUndoRedoEnabled();
+    notify(QStringLiteral("已撤销"), false);
+}
+
+// 文档参数重做：从重做栈弹回最近撤销的态并还原（与 undoDocument 对称）。
+void MainWindow::redoDocument() {
+    if (!docHistory_.canRedo()) { notify(QStringLiteral("没有可重做的参数变更"), false); return; }
+    auto st = docHistory_.popFromRedo();
+    if (!st) return;
+    suppressHistory_ = true;
+    doc_.applyEngineConfig(*st);
+    suppressHistory_ = false;
+    updateUndoRedoEnabled();
+    notify(QStringLiteral("已重做"), false);
+}
+
+// 依文档历史深度与标注上下文刷新编辑菜单撤销/重做启用态。
+// 文档侧：栈顶为当前态，需 >1 态才可撤销、重做栈非空才可重做；标注上下文激活时按上下文放行
+// （Core 标注历史无法在不触碰 Core 的前提下精确查询可用性，故按工具/选中态放行，空历史时撤销为无害空操作）。
+void MainWindow::updateUndoRedoEnabled() {
+    if (!aUndo_ || !aRedo_) return;
+    const bool docCanUndo = docHistory_.undoSize() > 1;
+    const bool docCanRedo = docHistory_.canRedo();
+    const bool annoCtx = annotationContextActive();
+    aUndo_->setEnabled(docCanUndo || annoCtx);
+    aRedo_->setEnabled(docCanRedo || annoCtx);
 }
 
 } // namespace idc::gui

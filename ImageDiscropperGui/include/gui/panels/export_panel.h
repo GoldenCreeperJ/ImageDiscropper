@@ -5,7 +5,8 @@
 //       面板把导出参数写回 Document，点击导出发 exportRequested 交 MainWindow 执行（A-0.1）。
 // 分块依据：导出参数（写 Document）与导出动作（发信号交上层调 Core）分离；路径可手动键入或经
 //           文件对话框选择，均在面板内回灌 Document，实际 runEngine+exportImage 由 EngineBridge 承担。
-// 说明：§4.6「导出前预览缩略图」在本阶段以文字信息（画布尺寸/保留块数）替代，缩略图列入后续阶段。
+// 说明：§4.6「导出前预览缩略图」已实现——MainWindow 按 Core Composition 渲染低分辨率输出缩略图，
+//       经 setPreviewPixmap 回灌到本面板的 previewLabel_（与文字信息 setPreviewInfo 并存，G-11）。
 // ============================================================================
 #pragma once
 
@@ -17,6 +18,7 @@ class QSpinBox;
 class QPushButton;
 class QLabel;
 class QCheckBox;
+class QPixmap;
 
 namespace idc::gui {
 
@@ -37,6 +39,9 @@ public:
     void setCollapsible(bool collapsible);
     // 更新导出前信息文字（画布尺寸、保留块数等；由 MainWindow 回灌）。
     void setPreviewInfo(const QString& text);
+    // 显示输出图像预览缩略图（G-11 / §4.6；由 MainWindow 按 Core Composition 渲染后回灌）。
+    // 传入空 pixmap 表示当前无有效输出，标签回退到占位文案。
+    void setPreviewPixmap(const QPixmap& pm);
     // 回灌重排上下文（由 MainWindow 依 Core 引擎结果调用）：保留块数 + 网格单元尺寸。
     // 用于「自动 cols/rows（依格数开方）」与画布/单元尺寸不足的内联警告。
     void setRearrangeContext(int keptCount, int cellW, int cellH);
@@ -101,7 +106,8 @@ private:
     QWidget* namingRow_{nullptr};     // 命名模板整行（仅分离导出显示）
     QLineEdit* naming_{nullptr};      // 分离命名模板
     QLabel* namingLabel_{nullptr};
-    QLabel* infoLabel_{nullptr};      // 导出前信息（替代缩略图）
+    QLabel* previewLabel_{nullptr};   // 输出图像预览缩略图（G-11 / §4.6）
+    QLabel* infoLabel_{nullptr};      // 导出前文字信息（画布尺寸/保留块数）
     QCheckBox* burnIn_{nullptr};      // 导出时烧录标注（把标注合成进像素随切割）
     QPushButton* exportBtn_{nullptr};
 

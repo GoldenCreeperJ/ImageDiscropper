@@ -41,12 +41,16 @@ endif()
 #   · 实现在 src/<模块>/（.cpp 与各模块 README.md）。
 # .h 一并列入目标，确保 AUTOMOC 扫描到 Q_OBJECT 头。
 # ---------------------------------------------------------------------------
-# util：core::Image 与 Qt 图像类型的适配、降采样预览（视图关注点，非引擎逻辑）。
+# util：core::Image 与 Qt 图像类型的适配、降采样预览、标注矢量绘制与导出输出预览渲染（视图关注点，非引擎逻辑）。
 set(IDC_GUI_UTIL_SRC
+    include/gui/util/annotation_qt_painter.h
     include/gui/util/image_qt_adapter.h
+    include/gui/util/output_preview_renderer.h
     include/gui/util/path_qt_adapter.h
     include/gui/util/preview_scaler.h
+    src/util/annotation_qt_painter.cpp
     src/util/image_qt_adapter.cpp
+    src/util/output_preview_renderer.cpp
     src/util/path_qt_adapter.cpp
     src/util/preview_scaler.cpp
 )

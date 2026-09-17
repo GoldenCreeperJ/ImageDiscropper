@@ -12,7 +12,7 @@
 |---|---|---|
 | `left_panel.h` | `LeftPanel`（`QWidget`） | 左侧：模式切换 L1/L2/L3、极性开关（保留绿 / 删除红）（工具/图层已迁出为独立面板） |
 | `param_panel.h` | `ParamPanel`（`QWidget`） | 右侧「参数」页：`QStackedWidget` 分 L1/L2/L3 三页；含 L2 多矩形列表与选中同步（`rectSelected` / `selectRectRow` / `updateRectListItem`） |
-| `export_panel.h` | `ExportPanel`（`QWidget`） | 右侧「导出」页：输出模式 / 目录 / 文件 / 格式 / 质量 / 命名 + 合并重排（自动 cols·rows、双警告）+ 导出时烧录标注开关（`burnInChanged`/`setBurnInChecked`）+ 导出按钮 |
+| `export_panel.h` | `ExportPanel`（`QWidget`） | 右侧「导出」页：输出模式 / 目录 / 文件 / 格式 / 质量 / 命名 + 合并重排（自动 cols·rows、双警告）+ 导出时烧录标注开关（`burnInChanged`/`setBurnInChecked`）+ 导出按钮；**输出图像预览缩略图（G-11 / §4.6）**：`setPreviewPixmap` 显示由 MainWindow 按 Core `Composition` 渲染的低分辨率预览（与文字信息 `setPreviewInfo` 并存） |
 | `image_panel.h` | `ImagePanel`（`QWidget`） | 右侧「图像」页：预处理（旋转 / 翻转 / 缩放 / 尺寸 / 黑白 / 色道反色 / 色道分离 / 重置，反色与分离共用 R/G/B 通道选择），发 `*Requested` 意图信号 |
 | `tool_panel.h` | `ToolPanel`（`QWidget`） | 左侧「标注工具」组（§4.5.5）：选择/移动 + 各形状 + 多线段 + 文字 + 画笔的互斥按钮组（`QButtonGroup`），发 `toolSelected(AnnoTool)` |
 | `layer_panel.h` | `LayerPanel`（`QWidget`） | 左侧「图层」组（§4.5.6）：底图/遮罩/网格线/切割线/选取边框/标注显示开关（标注烧录开关已迁至导出面板），发 `baseVisibilityChanged`/`maskVisibilityChanged`/`gridVisibilityChanged`/`cutLineVisibilityChanged`/`selectionVisibilityChanged`/`annotationVisibilityChanged`；`setMaskVisible` 供外部切换遮罩时反向同步 |

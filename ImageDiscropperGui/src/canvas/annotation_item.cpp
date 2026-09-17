@@ -21,6 +21,7 @@
 
 #include "canvas/z_order.h"
 #include "geometry/shapes.h"
+#include "util/annotation_qt_painter.h"
 #include "util/path_qt_adapter.h"
 
 namespace idc::gui {
@@ -103,7 +104,6 @@ void AnnotationItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, Q
     if (path_.isEmpty() && !isText) return;
     painter->setRenderHint(QPainter::Antialiasing, true);
 
-    const QColor color = toQColor(ann_.color);
     const bool previewing = (activeHandle_ != Handle::None) && ann_.shape;
 
     // 有效世界变换：拖拽手柄时用预览变换（起点变换 ∘ 局部缩放旋转），否则用形状当前变换。
@@ -113,34 +113,12 @@ void AnnotationItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, Q
                         : ann_.shape->transform();
     }
 
-    // TEXT：Core TextShape 的 toPath 仅给出矩形边界，这里直接绘制真实字形（渲染关注点）。
-    if (isText) {
-        if (const auto* ts = dynamic_cast<const idc::geometry::TextShape*>(ann_.shape.get())) {
-            painter->save();
-            // 字形在**局部坐标**绘制，套用有效变换（含拖拽预览）——旋转/缩放/翻转由 QPainter 以矢量
-            // 完成，字形不失真、不丢字（无需像素兜底）。
-            if (!xf.isIdentity()) painter->setTransform(toQTransform(xf), /*combine=*/true);
-            QFont f = painter->font();
-            f.setPixelSize(static_cast<int>(ts->fontSize()));
-            painter->setFont(f);
-            painter->setPen(color);
-            const QRectF r = toQPainterPath(ann_.shape->toPath()).boundingRect();
-            painter->drawText(r.topLeft() + QPointF(0, r.height() * 0.8),
-                              QString::fromStdString(ts->text()));
-            painter->restore();
-        }
-    } else {
-        // 描边路径：预览时用预览世界路径（由 Core applyToPath 得出，线宽仍为世界单位，与提交后一致）。
-        QPainterPath drawPath = path_;
-        if (previewing) drawPath = toQPainterPath(xf.applyToPath(ann_.shape->toPath()));
-        QPen pen(color);
-        pen.setWidthF(static_cast<qreal>(ann_.strokeWidth));
-        pen.setJoinStyle(Qt::RoundJoin);
-        pen.setCapStyle(Qt::RoundCap);
-        painter->setPen(pen);
-        painter->setBrush(ann_.fillType ? QBrush(color) : Qt::NoBrush);
-        painter->drawPath(drawPath);
-    }
+    // 几何绘制（描边 / 填充 / 文字字形）委托公共渲染函数 util/annotation_qt_painter——与导出输出预览
+    // 的标注烘焙同一实现，消除重复、保证两处外观一致。普通态用缓存的 path_（＝worldPath 翻译）；拖拽
+    // 预览态用 xf.applyToPath(toPath()) 的实时路径（线宽仍为世界单位，与提交后一致）。
+    QPainterPath drawPath = path_;
+    if (previewing && !isText && ann_.shape) drawPath = toQPainterPath(xf.applyToPath(ann_.shape->toPath()));
+    paintAnnotation(*painter, ann_, drawPath, xf);
 
     // 选中高亮：定向包围盒（虚线）+ 8 个缩放手柄 + 1 个旋转手柄。
     if (selected_ && ann_.shape) {

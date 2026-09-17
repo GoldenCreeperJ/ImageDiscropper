@@ -16,6 +16,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPixmap>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QStandardItemModel>
@@ -154,7 +155,18 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
 
     root->addWidget(box);
 
-    // 导出前信息（本阶段以文字替代缩略图）。
+    // 输出图像预览（G-11 / §4.6）：固定尺寸的缩略图标签，由 MainWindow 按 Core Composition 回灌。
+    // 固定尺寸使 setPreviewPixmap 能依确定的框内缩放（不随布局时序变化），且不撑宽右侧面板。
+    root->addWidget(new QLabel(QStringLiteral("输出预览"), this));
+    previewLabel_ = new QLabel(QStringLiteral("（无输出预览）"), this);
+    previewLabel_->setFixedSize(200, 160);
+    previewLabel_->setAlignment(Qt::AlignCenter);
+    previewLabel_->setStyleSheet(QStringLiteral(
+        "QLabel{background:#2b2b2b;border:1px solid #888;border-radius:4px;color:#bbb;}"));
+    previewLabel_->setToolTip(QStringLiteral("输出图像的低分辨率预览（仅示意，导出仍为原分辨率）。"));
+    root->addWidget(previewLabel_);
+
+    // 导出前文字信息（与缩略图并存：画布尺寸/保留块数）。
     infoLabel_ = new QLabel(QStringLiteral("尚未计算预览。"), this);
     infoLabel_->setWordWrap(true);
     root->addWidget(infoLabel_);
@@ -272,6 +284,26 @@ void ExportPanel::setCollapsible(const bool collapsible) {
 // 更新导出前信息文字。
 void ExportPanel::setPreviewInfo(const QString& text) {
     if (infoLabel_) infoLabel_->setText(text);
+}
+
+// 显示输出图像预览缩略图（G-11 / §4.6）：等比缩到标签框内（仅缩小、不放大，避免小图被拉伸模糊）。
+// 传入空 pixmap（无有效输出/无图像）时清空并回退到占位文案。
+void ExportPanel::setPreviewPixmap(const QPixmap& pm) {
+    if (!previewLabel_) return;
+    if (pm.isNull()) {
+        previewLabel_->setPixmap(QPixmap());
+        previewLabel_->setText(QStringLiteral("（无输出预览）"));
+        return;
+    }
+    // 预留 4px 内边距，避免缩略图压到边框。
+    const int boxW = previewLabel_->width() - 4;
+    const int boxH = previewLabel_->height() - 4;
+    QPixmap shown = pm;
+    if (pm.width() > boxW || pm.height() > boxH) {
+        shown = pm.scaled(boxW, boxH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }
+    previewLabel_->setText(QString());
+    previewLabel_->setPixmap(shown);
 }
 
 // 反向同步「导出时烧录标注」复选框（MainWindow 依 AnnotationBridge::burnInEnabled 回灌）。

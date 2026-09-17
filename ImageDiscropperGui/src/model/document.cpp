@@ -471,4 +471,68 @@ idc::engine::EngineConfig Document::buildEngineConfig() const {
     return cfg;
 }
 
+// 反向映射（G-13 配置加载 / G-12 撤销重做共用）：把 EngineConfig 搬回 Document 状态，与 buildEngineConfig 互逆。
+// 直接改私有字段（不走各 setter）后只发一次 changed()，避免逐字段多次触发刷新；图像/source 尺寸不还原。
+void Document::applyEngineConfig(const idc::engine::EngineConfig& cfg) {
+    // ---- 模式与极性 ----
+    mode_ = cfg.cut.tier;
+    polarity_ = cfg.cut.polarity;
+
+    // ---- 生成器 + tier → L1 形状 / L2 子功能（逆向 buildCutConfig 的映射）----
+    // L3 恒为 GRID、无子选项；未知生成器回退到各模式默认值，保证枚举有效。
+    switch (cfg.cut.tier) {
+        case idc::engine::Tier::L1:
+            switch (cfg.cut.generator) {
+                case idc::engine::CutGenerator::HORIZONTAL_LINE: l1Shape_ = L1Shape::HBAND; break;
+                case idc::engine::CutGenerator::VERTICAL_LINE:   l1Shape_ = L1Shape::VBAND; break;
+                default:                                         l1Shape_ = L1Shape::RECT;  break;
+            }
+            break;
+        case idc::engine::Tier::L2:
+            switch (cfg.cut.generator) {
+                case idc::engine::CutGenerator::HORIZONTAL_LINE: l2Sub_ = L2Sub::HLINE;      break;
+                case idc::engine::CutGenerator::VERTICAL_LINE:   l2Sub_ = L2Sub::VLINE;      break;
+                case idc::engine::CutGenerator::MULTI_RECT:      l2Sub_ = L2Sub::MULTI_RECT; break;
+                default:                                         l2Sub_ = L2Sub::CROSS;      break;
+            }
+            break;
+        case idc::engine::Tier::L3:
+            break; // 网格模式无 L1/L2 子选项。
+    }
+
+    // ---- 切割几何 ----
+    rect_ = cfg.cut.rect;
+    hasRect_ = rect_.width() > 0 && rect_.height() > 0; // 退化矩形视为无选区（与 setRect 校验一致）。
+    rects_ = cfg.cut.rects;
+    grid_ = cfg.cut.grid;
+    // 网格单元尺寸必须为正（Core Grid::build 要求，E-5）；非法配置回退默认 100×100，避免产不出单元。
+    if (grid_.cellWidth <= 0) grid_.cellWidth = 100;
+    if (grid_.cellHeight <= 0) grid_.cellHeight = 100;
+
+    // ---- 选择集与排序 ----
+    selectedCells_ = cfg.selectedCells;
+    order_ = cfg.order;
+
+    // ---- 导出参数 ----
+    emitMode_ = cfg.emitParams.mode;
+    layout_ = cfg.emitParams.layout;
+    format_ = cfg.emitParams.format;
+    quality_ = cfg.emitParams.quality;
+    naming_ = QString::fromStdString(cfg.emitParams.naming);
+    padColor_ = cfg.emitParams.padColor;
+    mergeOrder_ = cfg.emitParams.mergeOrder;
+    // optional 画布/单元尺寸：nullopt（未指定）→ 0（交 Core 自动推导），与 buildEngineConfig 的「0 视为未指定」互逆。
+    mergeCols_ = cfg.emitParams.cols.value_or(0);
+    mergeRows_ = cfg.emitParams.rows.value_or(0);
+    mergeCellW_ = cfg.emitParams.cellWidth.value_or(0);
+    mergeCellH_ = cfg.emitParams.cellHeight.value_or(0);
+
+    // ---- 维持模型不变式：合并重排为 L3 专属（Core runEngine 硬约束）----
+    // 载入/还原出「非 L3 + 重排」的非法组合时复位为坍缩，与 setMode 的守卫一致，避免引擎拿到非法配置。
+    if (mode_ != idc::engine::Tier::L3 && layout_ == idc::engine::MergeLayout::REARRANGE)
+        layout_ = idc::engine::MergeLayout::COLLAPSE;
+
+    emit changed();
+}
+
 } // namespace idc::gui

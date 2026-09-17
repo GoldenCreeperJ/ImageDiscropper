@@ -8,7 +8,7 @@ Document 发 `changed()` → MainWindow 刷新预览；反向同步用 `blockSig
 | ---- | ---- |
 | `left_panel.{h,cpp}`  | 左侧：模式切换 L1/L2/L3、极性开关（保留绿 / 删除红）（工具/图层已迁出） |
 | `param_panel.{h,cpp}` | 右侧「参数」页：QStackedWidget 分 L1/L2/L3 三页 |
-| `export_panel.{h,cpp}`| 右侧「导出」页：输出模式、目录/文件、格式、质量、命名、**导出时烧录标注开关**、导出按钮 |
+| `export_panel.{h,cpp}`| 右侧「导出」页：输出模式、目录/文件、格式、质量、命名、**导出时烧录标注开关**、**输出图像预览缩略图（G-11）**、导出按钮 |
 | `image_panel.{h,cpp}` | 右侧「图像」页：预处理（旋转/翻转/缩放/尺寸/黑白/反色/色道分离/重置） |
 | `tool_panel.{h,cpp}`  | 左侧「标注工具」组：选择/各形状/多线段/文字/画笔互斥按钮（G-4） |
 | `layer_panel.{h,cpp}` | 左侧「图层」组：底图/遮罩/网格线/切割线/选取边框/标注显示开关（G-5；标注烧录开关已迁至导出面板） |
@@ -53,7 +53,10 @@ Document 发 `changed()` → MainWindow 刷新预览；反向同步用 `blockSig
   首次切到重排且用户未手改过（`mergeGridTouched_==false`）时 `applyAutoGrid()` 自动填入 cols=ceil(√n)、rows=ceil(n/cols)（具体数字，用户可再改）。
 - **双警告**：`rearrangeWarning()` 当 cols×rows < 保留块数、或单元宽/高 < 网格单元宽/高时返回警告文本；
   `updateRearrangeWarning()` 将其以**内联红字** `rearrangeWarn_` 呈现；导出前的**弹窗确认**由 MainWindow 调 `rearrangeWarning()` 完成。
-- `setPreviewInfo(text)`：以文字回显输出画布尺寸/保留块数/可行性（本阶段替代缩略图）。
+- `setPreviewInfo(text)`：以文字回显输出画布尺寸/保留块数/可行性。
+- **输出图像预览缩略图（G-11 / §4.6）**：`setPreviewPixmap(pm)` 把 MainWindow 按 Core `Composition` 渲染的低分辨率缩略图
+  显示在固定尺寸（200×160）的 `previewLabel_` 上（等比缩到框内、仅缩不放）；传空 pixmap 时回退到占位文案「（无输出预览）」。
+  与 `setPreviewInfo` 的文字信息并存；渲染逻辑（小源图 blit）在 MainWindow，面板只负责展示（A-0.1）。
 - **导出时烧录标注**（`burnIn_`，默认 false）：勾选后导出把标注合成进像素（随像素一起被切割）；`toggled`→`burnInChanged(bool)` 交 MainWindow 写回 `AnnotationBridge::setBurnIn`；`setBurnInChecked(bool)` 供反向同步（`blockSignals` 防回环）。此开关原属图层面板，因属导出行为而迁入导出面板。
 - 导出按钮 `emit exportRequested()`，实际导出由 MainWindow 经 EngineBridge 完成。
 

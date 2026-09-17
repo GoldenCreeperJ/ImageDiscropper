@@ -70,6 +70,22 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
    累积、**不改子类参数化几何**（类型/文字字形不退化），渲染/命中走 `worldPath()`；负缩放即翻转（拖手柄越过对边自然产生）。
    属性面板变换区 spin 显示 Core 累积的**绝对带符号值**（`obbScaleX()`/`obbScaleY()`/`obbRotationDeg()`，含负）、**改动即生效无「应用」按钮**
    （每 spin 按单轴换算增量下发，避免取整误差牵连其余轴）。矩阵运算全在 Core，GUI 只采集手柄拖拽、把世界光标经 `worldToLocal` 映回局部算系数（A-0.1）。
+10. **全局撤销/重做＝双历史 + 上下文路由（G-12，不改 Core）**：撤销分两条独立历史——①**文档参数态**用 Core `HistoryManager<EngineConfig>`
+   快照（`capture=Document::buildEngineConfig`、`restore=Document::applyEngineConfig`，与 G-13 配置同构、复用同一对互逆映射）；②**标注**沿用 Core
+   `AnnotationLayer` 内建分层快照（`AnnotationBridge::undo/redo`）。编辑菜单/工具栏的 Ctrl+Z/Y 经 `MainWindow::onUndo/onRedo` **上下文路由**：
+   标注工具激活（非 SELECT）或存在选中标注时转发到标注撤销，否则走文档参数撤销——两条历史不再各绑 Ctrl+Z/Y（消除原标注菜单与编辑菜单的快捷键冲突）。
+   文档历史用 **500ms 防抖定时器**把拖拽/连点的连续 `changed()` 合并为一条（栈顶恒为「当前态」，`undoSize>1` 才可撤销）；还原期以 `suppressHistory_` 抑制再采集防回环。
+   **预处理不纳入全局撤销**（快照仅参数态、不含像素），靠现有「重置预处理」回退——此为产品决策，与 guideline §4.7「预处理可撤销」的理想态有意取舍。
+11. **配置文件加载/保存（G-13，复用 Core）**：文件菜单「加载配置/保存配置」经 `EngineBridge::saveConfig/loadConfig` 委托 Core `saveEngineConfig/loadEngineConfig`
+   （终稿 §9 schema 的 JSON，GUI 不自实现 JSON、不感知 nlohmann，A-0.1/A-0.3）；加载走 `Document::applyEngineConfig` 反向映射回各状态字段（生成器+tier 还原 L1 形状/L2 子功能，
+   并守卫「非 L3 不得重排」「网格单元尺寸为正」不变式），且**加载本身入同一撤销栈**（可一步撤销回载入前）。
+12. **导出前输出图像预览（G-11 / §4.6，只渲染不重算）**：导出面板新增 `previewLabel_` 缩略图，由 `util::composeOutputThumbnail`（`util/output_preview_renderer`，无状态自由函数）按
+   `refreshPreview` **已算好**的 `EngineResult.composition` 渲染——**不再跑 Core、不落盘**：把 `rebuildPreviewPixmap` 缓存的**小源图**
+   `exportSrcPixmap_`（最长边 ≤ 512，与画布底图分离）按 `placements` 的 `source→dest` 用 `QPainter::drawPixmap` blit 到最长边 ≤ 192 的小画布。
+   合并模式（坍缩/重排）按真实画布等比缩放、所见即所得；分离模式（无统一画布）拼成触图（cols=ceil(√n)）。源区域坐标经 `exportSrcScale*`
+   （working→小图放大系数）映射，故即便原图 8000×8000 也只在小图上运算（**像素少、速度快**）。面板只负责展示（`setPreviewPixmap`，仅缩不放）；**渲染逻辑下沉到 `util/`（离屏预览），MainWindow 只编排缓存与门控（A-0.1）**。
+   **B（烧录可见）**：`exportPreviewSource()` 委托 `util::bakeAnnotationsInto`，在「导出时烧录标注」开启且有标注时，把各标注按 `worldPath` 矢量绘到小源图副本（working→小图变换，文字绘字形；实际绘制复用 `util::paintAnnotation`，与画布图元同一外观）——**只烘焙一次**，随后逐块 blit 自动让标注随像素被切割落位，与真实导出一致；细线在大图上按缩略比例自然淡化（忠实）。
+   **A（按需渲染）**：`updateExportPreview` 先缓存 `lastComposition_/lastExportResOk_`，再由 `renderExportPreviewFromCache` 仅在「导出」页为当前选项卡时渲染，否则置 `exportPreviewDirty_`；`onRightTabChanged` 切回该页时用缓存补渲染。烧录开关/标注变更（`onBurnInChanged`/`onAnnoBridgeChanged`，仅烧录开启时）**不重跑 Core**，仅用缓存重渲染缩略图（切割几何不受标注影响），保证预览实时。
 
 ## 已核对的 Core API（均来自实际头文件，非假设）
 
@@ -77,6 +93,8 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 - 切割线：`engine::generateCutLines(const CutConfig&, const SourceInfo&) -> CutLineSet`。
 - 配置：`EngineConfig{source,preprocess,cut,selectedCells,order,emitParams}`；
   `CutConfig{tier,generator(RECT/HORIZONTAL_LINE/VERTICAL_LINE/MULTI_RECT/GRID),rect,rects,grid,polarity}`。
+- 配置存取（G-13）：`engine::saveEngineConfig(path, cfg)` / `engine::loadEngineConfig(path, out&)`（§9 schema JSON，nlohmann 在 Core 侧 PRIVATE）。
+- 撤销历史（G-12）：`history::HistoryManager<T>{push,popToRedo,popFromRedo,top,canUndo,canRedo,undoSize,clearAll}`（模板头实现，GUI 以 `T=EngineConfig` 实例化）。
 - 导出：`CompositionParams{mode,layout,mergeOrder,cols,rows,cellWidth,cellHeight,padColor,format,naming,quality,keepMetadata}`
   （`mergeOrder` = 重排填充顺序 `MergeOrder{strategy,reverse,snake}`，仅 REARRANGE、与选择排序正交）；
   `Composition{canvasWidth,canvasHeight,placements,...}`；`engine::exportImage(...)`。
@@ -111,12 +129,14 @@ L1（矩形/横带/竖带）与 L2（十字/横线/竖线）切割线与极性�
 
 - **第二阶段 L2多矩形 + L3 网格（已完成）**：网格线层、单元选择（单击/框选/全选/反选）、排序面板、自定义序拖拽、重排合并、
   多矩形并集剔除、「转为网格模式编辑」入口。覆盖 G-7（多矩形）/G-9/G-15。
-- **第三阶段 预处理（已完成）+ 撤销重做 + 配置（待接入）**：图像处理面板（旋转/翻转/缩放/尺寸/黑白/反色/色道分离/重置）
+- **第三阶段 预处理（已完成）**：图像处理面板（旋转/翻转/缩放/尺寸/黑白/反色/色道分离/重置）
   已接入（覆盖 G-3）：面板发意图信号 → MainWindow 经 `EngineBridge` 调 Core `pixel_ops::*` 变换工作图 → 写回 `Document`
-  （原图始终保留供「重置预处理」；维度变化时自动清除失效选区）；`HistoryManager` 撤销重做（G-12）、配置加载/保存（G-13）待接入。
+  （原图始终保留供「重置预处理」；维度变化时自动清除失效选区）。撤销重做（G-12）与配置加载/保存（G-13）已于第五阶段补齐。
   §4.5.4「颜色选取（取色器）」与标注属性强相关，并入第四阶段。
 - **第四阶段 标注图层 + 图层管理（已完成）**：`AnnotationBridge`（标注域桥）驱动 Core `geometry`+`annotation`，画布 `AnnotationItem` 矢量叠加渲染（不改底图），
   左侧标注工具面板（选择/矩形/正方/菱形/圆/椭圆/圆角矩/四种三角/直线/多线段/文字/画笔）与图层面板（底图/遮罩/网格线/切割线/选取边框/标注显隐 + 烧录开关），
   右侧标注属性页（颜色/粗细/填充/文字/字号）；支持添加/选择/移动/编辑/删除、标注撤销/重做（Core 分层快照）、导出可选烧录（烧录后随像素被切开）。
-  覆盖 G-4/G-5。**已知限制**：本轮无箭头（Core `ShapeType` 无 ARROW）；全局撤销重做（G-12）、配置加载/保存（G-13）待接入。（移动标注经 Core `Shape::translateWorld` 世界系平移，保留具体类型，不再退化为 PATH。）
-- **第五阶段 文档与性能**：完整使用说明与设计说明、8000×8000 ≥30fps 性能验证、逐项对照 §10 验收。
+  覆盖 G-4/G-5。**已知限制**：本轮无箭头（Core `ShapeType` 无 ARROW）。（移动标注经 Core `Shape::translateWorld` 世界系平移，保留具体类型，不再退化为 PATH。）
+- **第五阶段 全局撤销重做 + 配置 + 文档与性能（进行中）**：已补齐 G-12（双历史 + 上下文路由的全局撤销/重做，编辑菜单+工具栏 Ctrl+Z/Y）、
+  G-13（文件菜单加载/保存配置，复用 Core `save/loadEngineConfig`）与 G-11 的**导出前输出图像预览缩略图**（导出面板，详见「关键设计决策」#10/#11/#12）。
+  剩余：完整使用说明与设计说明、8000×8000 ≥30fps 性能验证、逐项对照 §10 验收。

@@ -10,8 +10,8 @@
 
 | 文件 | 声明 | 职责 |
 |---|---|---|
-| `document.h` | `Document`（`QObject`） | 会话状态单一真相源：持有图像 / 模式 / 极性 / 选区 / L2 多矩形 / L3 网格与选择集 / 导出与重排参数，`buildEngineConfig`，变更发 `changed()` / `imageChanged()` |
-| `engine_bridge.h` | `EngineBridge`（无状态、可拷贝） | GUI 中**唯一**触碰切割引擎的类：`loadImage` / `runPreview` / `cutLines` / `buildGrid` / `exportResult` 委托 `engine::*` |
+| `document.h` | `Document`（`QObject`） | 会话状态单一真相源：持有图像 / 模式 / 极性 / 选区 / L2 多矩形 / L3 网格与选择集 / 导出与重排参数，`buildEngineConfig` 组装、`applyEngineConfig` 反向还原（G-12/G-13），变更发 `changed()` / `imageChanged()` |
+| `engine_bridge.h` | `EngineBridge`（无状态、可拷贝） | GUI 中**唯一**触碰切割引擎的类：`loadImage` / `runPreview` / `cutLines` / `buildGrid` / `exportResult` / `saveConfig` / `loadConfig` 委托 `engine::*` |
 | `annotation_bridge.h` | `AnnoTool` / `AnnotationBridge`（`QObject`） | 标注域桥：把画布手势/面板意图翻译为对 Core `buildShape`/`addAnnotation`/`hitTest`/`rasterize` 的调用（绘制/选择/移动/删除/撤销重做/图层可见/导出烧录），发 `changed()`/`selectionChanged()`/`toolChanged()` 驱动重绘 |
 
 > 命名空间统一 `idc::gui`。数据流：交互 → `Document` → `EngineBridge`（runEngine / generateCutLines / exportImage）→ `CanvasScene` 渲染。

@@ -7,6 +7,7 @@
 #include "model/engine_bridge.h"
 
 #include "engine/image_io.h" // readImageFile（loadImage 委托 Core 解码）。
+#include "engine/engine_config_json.h" // saveEngineConfig/loadEngineConfig（配置文件存取，G-13）。
 #include "pixel_ops/color_ops.h"     // toGray/invertChannels/splitChannels（预处理颜色变换）。
 #include "pixel_ops/geometric_ops.h" // rotate/flip/resize/scale（预处理几何变换）。
 
@@ -68,6 +69,34 @@ bool EngineBridge::exportResult(const idc::core::Image& work, const idc::engine:
     // 再落盘：分离模式 outputPath 为目录，合并模式为单图文件路径（由 Core 内部区分）。
     if (!idc::engine::exportImage(res.composition, work, outputPath.toStdString())) {
         err = QStringLiteral("导出失败：无法写入 %1").arg(outputPath);
+        return false;
+    }
+    return true;
+}
+
+// ---- 配置文件存取（G-13）：逐个委托 Core saveEngineConfig/loadEngineConfig，不自实现 JSON（A-0.1）----
+
+// 保存配置：委托 Core saveEngineConfig（§9 schema、缩进美化）；path 空或写盘失败透传中文错误。
+bool EngineBridge::saveConfig(const QString& path, const idc::engine::EngineConfig& cfg, QString& err) const {
+    if (path.isEmpty()) {
+        err = QStringLiteral("未指定配置文件路径");
+        return false;
+    }
+    if (!idc::engine::saveEngineConfig(path.toStdString(), cfg)) {
+        err = QStringLiteral("无法写入配置文件：%1").arg(path);
+        return false;
+    }
+    return true;
+}
+
+// 加载配置：委托 Core loadEngineConfig；path 空、读盘或解析失败透传中文错误，成功填充 out。
+bool EngineBridge::loadConfig(const QString& path, idc::engine::EngineConfig& out, QString& err) const {
+    if (path.isEmpty()) {
+        err = QStringLiteral("未指定配置文件路径");
+        return false;
+    }
+    if (!idc::engine::loadEngineConfig(path.toStdString(), out)) {
+        err = QStringLiteral("无法读取或解析配置文件：%1").arg(path);
         return false;
     }
     return true;
