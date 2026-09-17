@@ -52,6 +52,14 @@ public:
     // 单矩形选区不使用（恒 false），外观不变。仅在值变化时重绘（避免拖拽期逐帧无谓 update）。
     void setHighlighted(const bool on);
 
+    // ---- 图层显隐（图层面板开关）----
+    // 贯穿切割线（标记边向全图延伸的那段橙色线）是否绘制；关闭后延伸段不绘制且**不可抓拖**
+    // （命中跨度回落到选区自身那段），但仍可拖动选区边框本身。
+    void setCutLinesVisible(const bool on);
+    // 选区边框（橙色矩形描边 + 半透明填充 + 四角手柄）是否绘制；关闭后**选区不可交互**
+    // （同时置 Qt::NoButton，无法移动/缩放/拖边，遵循「隐藏图层=不可交互」，与标注一致）。
+    void setBorderVisible(const bool on);
+
     // QGraphicsItem 接口。
     QRectF boundingRect() const override;
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
@@ -76,7 +84,8 @@ private:
     // 命中测试：返回被点中的角手柄序号(0..3)，未命中返回 -1。
     int hitHandle(const QPointF& scenePos) const;
     // 命中测试：返回被点中的边序号(EdgeLeft..EdgeBottom)，未命中返回 -1。竖边比 x、横边比 y，
-    // 落在 ±handleSize_ 抓边条带内且沿线绘制跨度（标记边贯穿全图、否则仅选区那段）即命中。
+    // 落在 ±handleSize_ 抓边条带内且沿线绘制跨度即命中；跨度：标记为切割线的边**且切割线可见**
+    // 时贯穿全图（可抓延伸段），否则仅选区那段。
     int hitEdge(const QPointF& scenePos) const;
     // 把矩形平移钳制到图像边界内。
     void clampToImage(QRectF& r) const;
@@ -92,6 +101,8 @@ private:
     bool snapEnabled_{true};
     bool highlighted_{false};  // 多矩形下是否为当前选中项（绘制颜色/线宽略微加强）。
     bool cutEdge_[4]{false, false, false, false}; // 哪几条边延伸为贯穿切割线（场景依 Core 下发）
+    bool cutLinesVisible_{true};  // 贯穿切割线绘制开关（图层面板；关掉隐藏延伸段且延伸段不可抓，但边框仍可拖）
+    bool borderVisible_{true};    // 选区边框/填充/手柄绘制开关（图层面板；关掉后选区整体不可交互）
 
     DragMode mode_{DragMode::None};
     int dragEdge_{-1};       // Edge 模式下正在拖动的边序号

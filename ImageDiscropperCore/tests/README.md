@@ -10,7 +10,7 @@
 | 文件 | 职责 |
 |---|---|
 | `test_harness.h` | 共享的 `CHECK` 断言宏 + 三个引擎测试段（`testEnginePipeline` / `Export` / `Boundary`）声明 |
-| `test_main.cpp` | `main()` 入口：core / geometry / processing / annotation / preprocess / history / engine 数据结构冒烟测试 + 调用三个引擎验收段 |
+| `test_main.cpp` | `main()` 入口：core / geometry / pixel_ops / annotation / preprocess / history / engine 数据结构冒烟测试 + 调用三个引擎验收段 |
 | `test_engine_pipeline.cpp` | §3.1 功能：L1 十字/横线/竖线保留尺寸；L2 四角位置与坍缩尺寸；极性开关；L3 网格/单元选择/排序（row·col-major·reverse·snake·custom）/重排 |
 | `test_engine_export.cpp` | §5 导出：分离导出写入文件夹（自动创建）与命名模板、坍缩合并尺寸、坍缩不可行→降级重排、PNG/BMP/JPEG/WebP 四格式写盘成功 |
 | `test_engine_boundary.cpp` | §6 边界：E-1~E-8 全覆盖 + 空块跳过 + 像素归属无重复无丢失（左闭右开校验） |

@@ -176,8 +176,8 @@ static void strokePolylines(core::Image& img,
 void rasterize(core::Image& image, const geometry::Shape& shape, const PaintStyle& style) {
     if (image.empty()) return;
 
-    // 1. 展平路径
-    const geometry::Path path = shape.toPath();
+    // 1. 展平路径（取世界路径：已套用形状的非破坏性变换，故缩放/旋转/翻转后的烧录与画布一致）。
+    const geometry::Path path = shape.worldPath();
     const geometry::Path flat = path.flattened(0.5);
     const auto polys = extractPolylines(flat);
     if (polys.empty()) return;

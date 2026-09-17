@@ -10,9 +10,9 @@
 **分块依据**：
 1. `shape_factory.h` —— 只负责「给定两个锚点 + `ShapeType`，构造 `Shape`」。
 2. `rasterizer.h` —— 只负责「把 `Shape` 画到 `Image` 上」：描边、填充、Alpha 混合、抗锯齿。
-3. `annotation_layer.h` —— 管理标注集合、编辑模式、颜色/线宽/填充属性，撤销重做复用 `history::HistoryManager<Annotation>`；
+3. `annotation_layer.h` —— 管理标注集合、编辑模式、颜色/线宽/填充属性，删除指定项（`removeAnnotation`），撤销重做复用 `history::HistoryManager<Annotation>`；
    `burnIn()` 把底图与全部标注合成为一张图像（即「烧录」）。
-4. `view_transform.h` —— 屏幕坐标 ↔ 逻辑坐标换算、以指定点缩放、图像适配视口（供 GUI 使用）。
+4. `view_transform.h` —— 屏幕坐标 ↔ 逻辑坐标换算、以指定点缩放、图像适配视口；Core 提供的 Qt 无关视口工具，当前由 examples/tests 使用（GUI 改用 QGraphicsView 自带变换，未直接用本类）。
 
 | 文件 | 职责 |
 |---|---|

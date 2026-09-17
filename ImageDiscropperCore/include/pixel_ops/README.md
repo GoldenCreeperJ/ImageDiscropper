@@ -1,4 +1,4 @@
-# include/processing
+# include/pixel_ops
 
 **目录作用**：像素级处理算法，作用于 `core::Image`。对应终稿 FR-1「基础图像处理」中
 在切割之前执行的调整能力（FR-1.1 旋转、FR-1.2 翻转、FR-1.4 调整）。

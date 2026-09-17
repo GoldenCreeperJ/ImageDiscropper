@@ -1,14 +1,13 @@
 // ============================================================================
 // 文件：panels/left_panel.cpp
 // 作用：实现左侧面板的构建与 Document 双向同步（见同名头文件说明）。
-// 分块依据：build 阶段用 QGroupBox 分区（模式 / 极性 / 工具占位 / 图层占位）；
+// 分块依据：build 阶段用 QGroupBox 分区（模式 / 极性）；工具 / 图层已迁出为独立面板；
 //           槽函数只把用户选择写回 Document，不触碰任何引擎逻辑（A-0.1）。
 // ============================================================================
 #include "panels/left_panel.h"
 
 #include <QButtonGroup>
 #include <QGroupBox>
-#include <QLabel>
 #include <QPushButton>
 #include <QVBoxLayout>
 
@@ -19,11 +18,13 @@ namespace idc::gui {
 namespace {
 
 // 模式按钮的强调样式：L2（核心特色）用橙色强调，其余中性；选中态高亮（§4.3）。
+// 【深色模式】未选态背景为硬编码浅色（#f2f2f2/#fdeede），若不显式指定文字色，
+// 跟随系统深色主题时会继承调色板的白字→白字浅底不可读；故显式给未选态深色文字。
 const char* kModeStyle =
-    "QPushButton{padding:6px;border:1px solid #bbb;border-radius:4px;background:#f2f2f2;}"
+    "QPushButton{padding:6px;border:1px solid #bbb;border-radius:4px;background:#f2f2f2;color:#1b1b1b;}"
     "QPushButton:checked{background:#3b7ddd;color:#fff;border-color:#3b7ddd;}";
 const char* kL2Style =
-    "QPushButton{padding:6px;border:1px solid #d9a05b;border-radius:4px;background:#fdeede;}"
+    "QPushButton{padding:6px;border:1px solid #d9a05b;border-radius:4px;background:#fdeede;color:#1b1b1b;}"
     "QPushButton:checked{background:#e67e22;color:#fff;border-color:#e67e22;}";
 // 极性按钮：keep 绿、remove 红，选中态填充对应色（§4.4）。
 const char* kKeepStyle =
@@ -37,7 +38,7 @@ const char* kRemoveStyle =
 
 // 构建面板布局。
 LeftPanel::LeftPanel(QWidget* parent) : QWidget(parent) {
-    setMinimumWidth(180); // §4.1：左侧面板默认约 220px（初始宽由主窗口分隔条设定），可拖拽调宽。
+    setMinimumWidth(220); // 左侧面板下限（实际左栏最小宽由主窗 leftScroll 控制，需容纳标注工具 3 列网格）。
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(8, 8, 8, 8);
     root->setSpacing(12); // 分组间距 12px（§5.1）。
@@ -98,21 +99,8 @@ LeftPanel::LeftPanel(QWidget* parent) : QWidget(parent) {
     connect(polarityGroup_, &QButtonGroup::idToggled, this, &LeftPanel::onPolarityToggled);
     root->addWidget(polBox);
 
-    // ---- 工具占位（标注工具，第四阶段接入）----
-    auto* toolBox = new QGroupBox(QStringLiteral("工具"), this);
-    auto* toolLay = new QVBoxLayout(toolBox);
-    auto* toolHint = new QLabel(QStringLiteral("标注工具（第四阶段接入）"), toolBox);
-    toolHint->setEnabled(false);
-    toolLay->addWidget(toolHint);
-    root->addWidget(toolBox);
-
-    // ---- 图层占位（图层管理，第四阶段接入）----
-    auto* layerBox = new QGroupBox(QStringLiteral("图层"), this);
-    auto* layerLay = new QVBoxLayout(layerBox);
-    auto* layerHint = new QLabel(QStringLiteral("底图 / 标注图层（第四阶段接入）"), layerBox);
-    layerHint->setEnabled(false);
-    layerLay->addWidget(layerHint);
-    root->addWidget(layerBox);
+    // 工具 / 图层分组已迁出为独立的 ToolPanel / LayerPanel（第四阶段 G-4/G-5），
+    // 由主窗口左侧容器统一装配，本面板专注模式 + 极性。
 
     root->addStretch(1); // 底部弹性，使分组靠上。
 }

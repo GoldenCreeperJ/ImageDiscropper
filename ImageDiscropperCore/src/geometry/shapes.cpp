@@ -30,9 +30,6 @@ const char* shapeTypeName(const ShapeType t) {
         case ShapeType::ROUNDSQUARE: return "ROUNDSQUARE";
         case ShapeType::ELLIPSE: return "ELLIPSE";
         case ShapeType::CIRCLE: return "CIRCLE";
-        case ShapeType::ARC: return "ARC";
-        case ShapeType::PIE: return "PIE";
-        case ShapeType::CHORD: return "CHORD";
         case ShapeType::POLYLINE: return "POLYLINE";
         case ShapeType::PATH: return "PATH";
         case ShapeType::TEXT: return "TEXT";
@@ -72,7 +69,15 @@ bool LineShape::contains(const core::Point2D&) const { return false; }
 
 // 深拷贝。
 std::unique_ptr<Shape> LineShape::clone() const {
-    return std::make_unique<LineShape>(x1_, y1_, x2_, y2_);
+    auto s = std::make_unique<LineShape>(x1_, y1_, x2_, y2_);
+    copyXformTo(*s);   // 保留非破坏性变换（缩放/旋转/翻转），避免深拷贝丢失。
+    return s;
+}
+
+// 平移：两个端点各偏移 (dx, dy)。
+void LineShape::translate(const double dx, const double dy) {
+    x1_ += dx; y1_ += dy;
+    x2_ += dx; y2_ += dy;
 }
 
 // 控制点：两个端点。
@@ -118,8 +123,13 @@ bool RectShape::contains(const core::Point2D& p) const {
 }
 
 std::unique_ptr<Shape> RectShape::clone() const {
-    return std::make_unique<RectShape>(x_, y_, w_, h_);
+    auto s = std::make_unique<RectShape>(x_, y_, w_, h_);
+    copyXformTo(*s);   // 保留非破坏性变换。
+    return s;
 }
+
+// 平移：左上角偏移 (dx, dy)，宽高不变。
+void RectShape::translate(const double dx, const double dy) { x_ += dx; y_ += dy; }
 
 // 控制点：四个角点。
 std::vector<core::Point2D> RectShape::controlPoints() const {
@@ -164,8 +174,13 @@ bool RoundRectShape::contains(const core::Point2D& p) const {
 }
 
 std::unique_ptr<Shape> RoundRectShape::clone() const {
-    return std::make_unique<RoundRectShape>(x_, y_, w_, h_, arcW_, arcH_, type_);
+    auto s = std::make_unique<RoundRectShape>(x_, y_, w_, h_, arcW_, arcH_, type_);
+    copyXformTo(*s);   // 保留非破坏性变换。
+    return s;
 }
+
+// 平移：左上角偏移 (dx, dy)，宽高与圆角不变。
+void RoundRectShape::translate(const double dx, const double dy) { x_ += dx; y_ += dy; }
 
 // 控制点：四个角点，圆角不额外提供控制点。
 std::vector<core::Point2D> RoundRectShape::controlPoints() const {
@@ -212,96 +227,19 @@ bool EllipseShape::contains(const core::Point2D& p) const {
 }
 
 std::unique_ptr<Shape> EllipseShape::clone() const {
-    return std::make_unique<EllipseShape>(x_, y_, w_, h_, type_);
+    auto s = std::make_unique<EllipseShape>(x_, y_, w_, h_, type_);
+    copyXformTo(*s);   // 保留非破坏性变换。
+    return s;
 }
+
+// 平移：外接矩形左上角偏移 (dx, dy)（圆心随之平移），半径不变。
+void EllipseShape::translate(const double dx, const double dy) { x_ += dx; y_ += dy; }
 
 // 控制点：中心 + 上下左右四点。
 std::vector<core::Point2D> EllipseShape::controlPoints() const {
     const double cx = x_ + w_ / 2.0;
     const double cy = y_ + h_ / 2.0;
     return {{cx, cy}, {cx, y_}, {cx, y_ + h_}, {x_, cy}, {x_ + w_, cy}};
-}
-
-// ===========================================================================
-// ArcShape
-// ===========================================================================
-
-// 构造：外接矩形 + 起始角 + 张角（度）+ 闭合方式。
-ArcShape::ArcShape(const double x, const double y, const double w, const double h,
-                   const double angleStart, const double angleExtent, const ArcType arcType)
-    : x_(x), y_(y), w_(w), h_(h),
-      angleStart_(angleStart), angleExtent_(angleExtent), arcType_(arcType) {}
-
-// 根据 arcType_ 返回 ARC / CHORD / PIE 三种类型之一。
-ShapeType ArcShape::type() const {
-    switch (arcType_) {
-        case ArcType::OPEN: return ShapeType::ARC;
-        case ArcType::CHORD: return ShapeType::CHORD;
-        case ArcType::PIE: return ShapeType::PIE;
-    }
-    return ShapeType::ARC;
-}
-
-// 转为路径：将弧线离散化为若干 LINE_TO；CHORD 闭合弦、PIE 连回圆心。
-Path ArcShape::toPath() const {
-    const double cx = x_ + w_ / 2.0;
-    const double cy = y_ + h_ / 2.0;
-    const double rx = w_ / 2.0;
-    const double ry = h_ / 2.0;
-    // 角度以逆时针为正、屏幕 y 轴向下，故 y 分量取负号
-    const double startRad = angleStart_ * M_PI / 180.0;
-    const double extentRad = angleExtent_ * M_PI / 180.0;
-
-    Path p;
-    if (arcType_ == ArcType::PIE) {
-        p.moveTo(cx, cy);
-        p.lineTo(cx + rx * std::cos(startRad), cy - ry * std::sin(startRad));
-    } else {
-        p.moveTo(cx + rx * std::cos(startRad), cy - ry * std::sin(startRad));
-    }
-
-    // 分段数根据张角大小动态调整，最少 8 段。
-    const int segments = std::max(8, static_cast<int>(std::ceil(std::abs(angleExtent_) / 5.0)));
-    for (int i = 1; i <= segments; ++i) {
-        const double t = startRad + extentRad * static_cast<double>(i) / segments;
-        p.lineTo(cx + rx * std::cos(t), cy - ry * std::sin(t));
-    }
-
-    if (arcType_ == ArcType::PIE) {
-        p.closePath(); // 回到圆心
-    } else if (arcType_ == ArcType::CHORD) {
-        p.closePath(); // 回到起点（弦）
-    }
-    return p;
-}
-
-// 包围盒：ARC / PIE 时包含圆心，CHORD / OPEN 时只考虑弧线离散点。
-BoundingBox ArcShape::bounds() const {
-    return toPath().bounds();
-}
-
-// 内部判定：使用扁平化后的路径扫描线判定。
-bool ArcShape::contains(const core::Point2D& p) const {
-    return toPath().contains(p.x, p.y);
-}
-
-std::unique_ptr<Shape> ArcShape::clone() const {
-    return std::make_unique<ArcShape>(x_, y_, w_, h_, angleStart_, angleExtent_, arcType_);
-}
-
-// 控制点：圆心 + 起点 + 终点。
-std::vector<core::Point2D> ArcShape::controlPoints() const {
-    const double cx = x_ + w_ / 2.0;
-    const double cy = y_ + h_ / 2.0;
-    const double rx = w_ / 2.0;
-    const double ry = h_ / 2.0;
-    const double startRad = angleStart_ * M_PI / 180.0;
-    const double endRad = startRad + angleExtent_ * M_PI / 180.0;
-    return {
-        {cx, cy},
-        {cx + rx * std::cos(startRad), cy - ry * std::sin(startRad)},
-        {cx + rx * std::cos(endRad), cy - ry * std::sin(endRad)},
-    };
 }
 
 // ===========================================================================
@@ -333,7 +271,14 @@ bool PolygonShape::contains(const core::Point2D& p) const {
 }
 
 std::unique_ptr<Shape> PolygonShape::clone() const {
-    return std::make_unique<PolygonShape>(points_, type_, closed_);
+    auto s = std::make_unique<PolygonShape>(points_, type_, closed_);
+    copyXformTo(*s);   // 保留非破坏性变换。
+    return s;
+}
+
+// 平移：逐个顶点偏移 (dx, dy)，保留多边形类型与顶点语义。
+void PolygonShape::translate(const double dx, const double dy) {
+    for (core::Point2D& pt : points_) { pt.x += dx; pt.y += dy; }
 }
 
 // 控制点：所有顶点。
@@ -353,8 +298,13 @@ bool PathShape::contains(const core::Point2D& p) const {
 }
 
 std::unique_ptr<Shape> PathShape::clone() const {
-    return std::make_unique<PathShape>(path_, type_);
+    auto s = std::make_unique<PathShape>(path_, type_);
+    copyXformTo(*s);   // 保留非破坏性变换。
+    return s;
 }
+
+// 平移：委托 Path::translate（逐段偏移，保留 PATH / POLYLINE 类型）。
+void PathShape::translate(const double dx, const double dy) { path_.translate(dx, dy); }
 
 // 控制点：抽取所有 MOVE_TO / LINE_TO 端点，曲线段取终点。
 std::vector<core::Point2D> PathShape::controlPoints() const {
@@ -413,8 +363,13 @@ bool TextShape::contains(const core::Point2D& p) const {
 }
 
 std::unique_ptr<Shape> TextShape::clone() const {
-    return std::make_unique<TextShape>(text_, x_, y_, fontSize_);
+    auto s = std::make_unique<TextShape>(text_, x_, y_, fontSize_);
+    copyXformTo(*s);   // 保留非破坏性变换（旋转/缩放文字时字形随之变换，不丢字）。
+    return s;
 }
+
+// 平移：文本基线锚点偏移 (dx, dy)，保留文本内容与字号（不丢字形）。
+void TextShape::translate(const double dx, const double dy) { x_ += dx; y_ += dy; }
 
 // 控制点：仅给出文本基线起点。
 std::vector<core::Point2D> TextShape::controlPoints() const {

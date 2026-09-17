@@ -1,6 +1,6 @@
-# src/processing
+# src/pixel_ops
 
-**目录作用**：`include/processing` 下头文件的实现代码。
+**目录作用**：`include/pixel_ops` 下头文件的实现代码。
 
 **分块依据**：每个 `.cpp` 只实现同名头文件里声明的算法，保持"一个功能一个文件"，
 方便未来独立替换、单元测试或并行编译。

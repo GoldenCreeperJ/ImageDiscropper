@@ -1,14 +1,14 @@
 // ============================================================================
-// 文件：src/processing/geometric_ops.cpp
+// 文件：src/pixel_ops/geometric_ops.cpp
 // 作用：实现几何变换算法：90° 系列旋转、水平 / 垂直翻转、最近邻 / 双线性缩放。
 //       对应终稿 FR-1.1 旋转、FR-1.2 翻转、FR-1.4 缩放 / 尺寸调整。
 // ============================================================================
-#include "processing/geometric_ops.h"
+#include "pixel_ops/geometric_ops.h"
 
 #include <algorithm>
 #include <cmath>
 
-namespace idc::processing {
+namespace idc::pixel_ops {
 
 // 内部工具：归一化角度到 [0, 360)。
 static int normalizeAngle(const int angle) {
@@ -149,4 +149,4 @@ core::Image scale(const core::Image& src, const double s, const ResampleMode mod
     return resize(src, nw, nh, mode);
 }
 
-} // namespace idc::processing
+} // namespace idc::pixel_ops

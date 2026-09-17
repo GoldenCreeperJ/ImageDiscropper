@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：include/processing/color_ops.h
+// 文件：include/pixel_ops/color_ops.h
 // 作用：颜色与通道级像素处理算法。
 // ============================================================================
 #pragma once
@@ -10,7 +10,7 @@
 #include "core/color.h"
 #include "core/image.h"
 
-namespace idc::processing {
+namespace idc::pixel_ops {
 
 // 灰度化：将彩色图转换为单通道 GRAY 图像，公式采用 BT.601（0.299R + 0.587G + 0.114B）。
 // 已经是灰度图时直接返回原图。返回新对象，不修改输入。
@@ -29,4 +29,4 @@ core::Image splitChannels(const core::Image& src, const std::string& mask = "111
 // 越界时返回 std::nullopt。
 std::optional<core::Color> pickColor(const core::Image& src, int x, int y);
 
-} // namespace idc::processing
+} // namespace idc::pixel_ops

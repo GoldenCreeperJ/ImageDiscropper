@@ -39,7 +39,7 @@
 - **① 核心引擎层（新项目主体）**：`engine`。承载本工具区别于常规裁剪的全部价值
   （切割线 / 诱导网格 / 选择集 / 极性 / 排布导出），对应终稿 §8 的 **MVP 与 v2**，
   是后续开发的主战场；现已落地为完整可运行的统一引擎（含 stb/libwebp 图像编码 / nlohmann JSON 配置）。
-- **② 复用支撑层（前置能力）**：`core` / `processing` / `preprocess` / `geometry` /
+- **② 复用支撑层（前置能力）**：`core` / `pixel_ops` / `preprocess` / `geometry` /
   `annotation` / `history`。由旧库重构保留，服务于终稿 **FR-1「基础图像处理」前置层**，
   按 §8 多属 **v3**（标注图层最重、最后做）。它们是引擎的输入准备与辅助，**不是**主体。
 
@@ -47,10 +47,10 @@
 |---|---|---|---|---|---|
 | `engine` | `idc::engine` | ★ 核心 | Grid-Selection-Emit 统一引擎（切割/网格/选择/合成/导出/JSON 全实现） | §2 / §10.2 全部核心概念 | MVP / v2 |
 | `core` | `idc::core` | 支撑（地基） | 基础数据类型：`Color` / `Point2D` / `Image` | §10.2 `Image` | 已就绪，被各层依赖 |
-| `processing` | `idc::processing` | 支撑 | 像素处理：颜色/通道、旋转/翻转/缩放 | FR-1.1 / FR-1.2 / FR-1.4 | v3 |
+| `pixel_ops` | `idc::pixel_ops` | 支撑 | 像素处理：颜色/通道、旋转/翻转/缩放 | FR-1.1 / FR-1.2 / FR-1.4 | v3 |
 | `preprocess` | `idc::preprocess` | 支撑 | 切割前的基础图像处理流水线：`PreprocessPipeline` | §9 `preprocess` 段 / FR-1 | v3 |
-| `geometry` | `idc::geometry` | 支撑 | 标注图形几何：`ShapeType` / `Shape` / `Path` | FR-1.3 标注几何 | v3 |
-| `annotation` | `idc::annotation` | 支撑 | 标注层：`AnnotationLayer` / `Rasterizer` / `ViewTransform` | FR-1.3 标注图层（可烧录） | v3 |
+| `geometry` | `idc::geometry` | 支撑 | 标注图形几何：`ShapeType` / `Shape` / `Path` / `AffineTransform` | FR-1.3 标注几何 | v3 |
+| `annotation` | `idc::annotation` | 支撑 | 标注层：`AnnotationLayer` / `ShapeFactory` / `Rasterizer` / `ViewTransform` | FR-1.3 标注图层（可烧录） | v3 |
 | `history` | `idc::history` | 支撑 | 泛型撤销 / 重做栈：`HistoryManager<T>`（被 `annotation::AnnotationLayer` 复用） | FR-1.5 / NFR-4 | 贯穿各期 |
 
 > `examples/`（演示程序）与 `tests/`（极简自测）分别验证库的典型用法与关键行为。
@@ -99,9 +99,9 @@ ImageDiscropperCore/
 ├── README.md                 本文件
 ├── include/                  公共头文件（对外接口）
 │   ├── core/                 基础数据类型：Color / Point / Image
-│   ├── geometry/             标注图形几何：ShapeType / Shape / Path
-│   ├── processing/           像素处理算法（颜色/通道、几何变换）
-│   ├── annotation/           标注层：AnnotationLayer / Rasterizer / ViewTransform
+│   ├── geometry/             标注图形几何：ShapeType / Shape / Path / AffineTransform
+│   ├── pixel_ops/            像素处理算法（颜色/通道、几何变换）
+│   ├── annotation/           标注层：AnnotationLayer / ShapeFactory / Rasterizer / ViewTransform
 │   ├── preprocess/           预处理流水线：PreprocessConfig / PreprocessPipeline
 │   ├── history/              撤销 / 重做栈
 │   └── engine/               ★ Grid-Selection-Emit 统一引擎接口

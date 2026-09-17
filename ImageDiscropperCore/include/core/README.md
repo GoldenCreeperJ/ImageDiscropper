@@ -1,7 +1,7 @@
 # include/core
 
 **目录作用**：定义整个库最底层、无外部依赖的基础数据类型。所有上层模块
-（`geometry` / `processing` / `annotation` / `preprocess` / `history` / `engine`）
+（`geometry` / `pixel_ops` / `annotation` / `preprocess` / `history` / `engine`）
 都直接或间接依赖这里的类型。对应终稿 §10.2 的 `Image` 概念。
 
 **分块依据**：将「数据」与「算法」解耦，把最基础的像素点、颜色、图像三种数据结构

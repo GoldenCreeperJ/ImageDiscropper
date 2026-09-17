@@ -4,7 +4,7 @@
 #       演示可执行程序与极简自测程序。
 # 架构定位：本库即终稿 §10.1 所述 Core 层（纯逻辑、无 GUI 依赖），
 #           供上层 CLI / GUI 以静态库方式引用。
-# 分块依据：源文件按功能模块分组（core / geometry / processing / annotation /
+# 分块依据：源文件按功能模块分组（core / geometry / pixel_ops / annotation /
 #           preprocess / history / engine），与 include、src 目录一一对应。
 # ============================================================================
 cmake_minimum_required(VERSION 3.28)
@@ -47,10 +47,10 @@ set(IDC_GEOMETRY_SRC
     src/geometry/path.cpp
 )
 
-# processing：像素处理算法（颜色/通道、几何变换）
-set(IDC_PROCESSING_SRC
-    src/processing/color_ops.cpp
-    src/processing/geometric_ops.cpp
+# pixel_ops：像素处理算法（颜色/通道、几何变换）
+set(IDC_PIXEL_OPS_SRC
+    src/pixel_ops/color_ops.cpp
+    src/pixel_ops/geometric_ops.cpp
 )
 
 # annotation：标注层（FR-1.3），由原 drawing 模块重命名而来
@@ -90,7 +90,7 @@ set(IDC_ENGINE_SRC
 add_library(image_discropper_core STATIC
     ${IDC_CORE_SRC}
     ${IDC_GEOMETRY_SRC}
-    ${IDC_PROCESSING_SRC}
+    ${IDC_PIXEL_OPS_SRC}
     ${IDC_ANNOTATION_SRC}
     ${IDC_PREPROCESS_SRC}
     ${IDC_HISTORY_SRC}

@@ -5,10 +5,10 @@
 
 **分块依据**：
 - `preprocess_config.cpp` 只负责数据模型的辅助函数（枚举 ↔ 字符串、默认配置构造）。
-- `preprocess_pipeline.cpp` 只负责按顺序调度各 processing 算法，是「编排层」，
+- `preprocess_pipeline.cpp` 只负责按顺序调度各 pixel_ops 算法，是「编排层」，
   不包含任何具体像素处理代码。
 
 | 文件                        | 职责                                  |
 |---------------------------|-------------------------------------|
 | `preprocess_config.cpp`   | 枚举转字符串、默认参数构造、类型标签提取                |
-| `preprocess_pipeline.cpp` | 流水线增删改查与按序执行；调用 processing 模块完成实际计算 |
+| `preprocess_pipeline.cpp` | 流水线增删改查与按序执行；调用 pixel_ops 模块完成实际计算 |

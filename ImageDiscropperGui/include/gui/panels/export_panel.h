@@ -44,9 +44,14 @@ public:
     // MainWindow 在导出前调用，非空则弹窗二次确认。
     QString rearrangeWarning() const;
 
+    // 反向同步「导出时烧录标注」复选框（由 MainWindow 依 AnnotationBridge::burnInEnabled 回灌；blockSignals 防回环）。
+    void setBurnInChecked(bool on);
+
 signals:
     // 请求导出（MainWindow 负责路径校验与调用 EngineBridge）。
     void exportRequested();
+    // 导出时是否烧录标注（写回 AnnotationBridge::setBurnIn；原属图层面板，现归入导出选项）。
+    void burnInChanged(bool on);
 
 private slots:
     void onModeChanged(int index);
@@ -97,6 +102,7 @@ private:
     QLineEdit* naming_{nullptr};      // 分离命名模板
     QLabel* namingLabel_{nullptr};
     QLabel* infoLabel_{nullptr};      // 导出前信息（替代缩略图）
+    QCheckBox* burnIn_{nullptr};      // 导出时烧录标注（把标注合成进像素随切割）
     QPushButton* exportBtn_{nullptr};
 
     // 合并重排参数控件（仅「合并重排」模式显示；FR-L3.7 / §4.6）。

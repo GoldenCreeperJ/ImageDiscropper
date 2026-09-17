@@ -14,6 +14,8 @@
 #include <QTransform>
 
 #include "canvas/z_order.h"
+#include "model/annotation_bridge.h"
+#include "geometry/shapes.h"
 
 namespace idc::gui {
 namespace {
@@ -60,6 +62,9 @@ void CanvasScene::setBaseImage(const QPixmap& preview, const double scaleX, cons
         selItem_->setVisible(false);
         // 选区框的编辑事件转发为场景信号，供 MainWindow 写回 Document（视图/场景不认识 Document）。
         connect(selItem_, &SelectionRectItem::rectChanged, this, &CanvasScene::selectionEdited);
+        // 同步图层面板的切割线 / 选取边框显隐开关（新建图元需继承当前标志）。
+        selItem_->setCutLinesVisible(cutLinesVisible_);
+        selItem_->setBorderVisible(selectionVisible_);
     }
     selItem_->setImageBounds(fullW, fullH);
 
@@ -82,6 +87,7 @@ void CanvasScene::clearAll() {
     gridLayer_.clear();
     clearCutLines();
     clearMultiRects();
+    clearAnnotations();
     if (baseItem_) { removeItem(baseItem_); delete baseItem_; baseItem_ = nullptr; }
     if (selItem_) { removeItem(selItem_); delete selItem_; selItem_ = nullptr; }
     if (pickerItem_) { removeItem(pickerItem_); delete pickerItem_; pickerItem_ = nullptr; }
@@ -124,13 +130,14 @@ void CanvasScene::clearCutLines() {
     if (selItem_) selItem_->setCutEdges(false, false, false, false);
 }
 
-// 依 Core 诱导网格刷新 L3 网格线（委托 GridLayer）；show=false 时清空。
+// 依 Core 诱导网格刷新 L3 网格线（委托 GridLayer，灰色虚线）；show=false 时清空。
 // 同时把网格下发给单元点选图元并按 show 切换其显隐。
+// 单元选择高亮属「选取边框」图层范畴：受 selectionVisible_ 门控（隐藏后不可点选，与选区框一致）。
 void CanvasScene::updateGrid(const idc::engine::Grid& grid, const bool show) {
-    gridLayer_.rebuild(*this, grid, imgW_, imgH_, show);
+    gridLayer_.rebuild(*this, grid, imgW_, imgH_, show && gridVisible_);
     if (pickerItem_) {
         pickerItem_->setGrid(grid, imgW_, imgH_);
-        pickerItem_->setVisible(show);
+        pickerItem_->setVisible(show && selectionVisible_);
     }
 }
 
@@ -143,10 +150,11 @@ void CanvasScene::clearGrid() {
     }
 }
 
-// 仅刷新网格线（委托 GridLayer），不触碰单元点选图元——供 L2 多矩形显示诱导网格。
+// 仅刷新 L2 多矩形的诱导切割线（委托 GridLayer 以橙色切割线样式重画），不触碰单元点选图元——
 // 多矩形靠画布框选追加，若显示 picker 会 grab 鼠标、阻断框选，故此处不启动 picker。
-void CanvasScene::updateGridLines(const idc::engine::Grid& grid, const bool show) {
-    gridLayer_.rebuild(*this, grid, imgW_, imgH_, show);
+// 这些诱导线本质是各矩形十字带并集的切割线，故画为橙色（asCutLines）并受 cutLinesVisible_ 门控。
+void CanvasScene::updateMultiRectCutLines(const idc::engine::Grid& grid, const bool show) {
+    gridLayer_.rebuild(*this, grid, imgW_, imgH_, show && cutLinesVisible_, /*asCutLines=*/true);
 }
 
 // 依 Document 多矩形列表刷新可交互的橙色选区框（L2 MULTI_RECT）。每个矩形一个 SelectionRectItem，
@@ -171,6 +179,8 @@ void CanvasScene::updateMultiRects(const std::vector<idc::engine::RectRegion>& r
         it->setZValue(zorder::kSelection);
         it->setImageBounds(imgW_, imgH_);
         it->setHandleSize(multiHandleSize_);
+        it->setCutLinesVisible(cutLinesVisible_);   // 继承图层面板切割线显隐开关。
+        it->setBorderVisible(selectionVisible_);    // 继承图层面板选取边框显隐开关。
         addItem(it);
         connect(it, &SelectionRectItem::rectChanged, this, [this, it](const QRectF& r) {
             const int idx = multiRectItems_.indexOf(it);
@@ -248,6 +258,132 @@ void CanvasScene::syncSelection(const idc::engine::RectRegion& rect, const bool 
     selItem_->setRect(QRectF(static_cast<qreal>(rect.left), static_cast<qreal>(rect.top),
                              static_cast<qreal>(rect.width()), static_cast<qreal>(rect.height())));
     selItem_->setVisible(true);
+}
+
+// ===========================================================================
+// 标注图层（第四阶段 G-4/G-5）
+// ===========================================================================
+
+// 依 AnnotationBridge 增量维护标注矢量图元与拖拽预览图元。
+// 【拖拽安全】按数量增删末位图元、逐个刷新几何；绝不 clear+重建（否则会在拖拽中删除
+// 正在处理鼠标事件的图元→崩溃）；且跳过对正在拖拽图元的几何回设（其位置由手势维护）。
+void CanvasScene::updateAnnotations(const AnnotationBridge& model) {
+    const std::vector<idc::annotation::Annotation>& anns = model.annotations();
+    const int n = static_cast<int>(anns.size());
+
+    // 收缩：删除多余末位图元（防御：绝不删除正在拖拽者）。
+    while (annoItems_.size() > n) {
+        AnnotationItem* it = annoItems_.last();
+        if (it->isDragging()) break;
+        annoItems_.removeLast();
+        removeItem(it);
+        delete it;
+    }
+    // 扩张：为新增标注创建图元并连接信号（发射时按指针查当前下标，避免下标漂移）。
+    while (annoItems_.size() < n) {
+        auto* it = new AnnotationItem();
+        it->setHandleSize(annoHandleSize_);
+        addItem(it);
+        connect(it, &AnnotationItem::pressed, this, &CanvasScene::annotationSelectRequested);
+        connect(it, &AnnotationItem::moveRequested, this, [this, it](double dx, double dy) {
+            const int idx = annoItems_.indexOf(it);
+            if (idx >= 0) emit annotationMoved(idx, dx, dy);
+        });
+        connect(it, &AnnotationItem::transformRequested,
+                this, [this, it](double sx, double sy, double deg) {
+            const int idx = annoItems_.indexOf(it);
+            if (idx >= 0) emit annotationTransformed(idx, sx, sy, deg);
+        });
+        connect(it, &AnnotationItem::transformPreview,
+                this, [this, it](double sx, double sy, double deg) {
+            const int idx = annoItems_.indexOf(it);
+            if (idx >= 0) emit annotationTransformPreview(idx, sx, sy, deg);
+        });
+        annoItems_.append(it);
+    }
+    // 刷新几何与选中态：跳过正在拖拽者（其位置/几何由手势维护，释放时才回灌）。
+    const std::optional<std::size_t> sel = model.selectedIndex();
+    for (int i = 0; i < annoItems_.size(); ++i) {
+        AnnotationItem* it = annoItems_[i];
+        it->setVisible(annotationsVisible_);
+        if (i < n && !it->isDragging()) it->setAnnotation(anns[static_cast<std::size_t>(i)]);
+        it->setSelectedState(sel.has_value() && *sel == static_cast<std::size_t>(i));
+    }
+
+    // 拖拽预览（橡皮筋矢量）与已提交图元解耦，走同一刷新入口。
+    updatePendingAnnotation(model);
+}
+
+// 仅刷新拖拽预览图元：以当前属性临时封装一个 Annotation 渲染，不进 Core 历史。
+// 绘制手势逐帧只调本方法，避免逐帧重建/克隆已提交标注（性能）。
+void CanvasScene::updatePendingAnnotation(const AnnotationBridge& model) {
+    const idc::geometry::Shape* ps = model.pendingShape();
+    if (ps && annotationsVisible_) {
+        if (!pendingAnnoItem_) {
+            pendingAnnoItem_ = new AnnotationItem();
+            pendingAnnoItem_->setHandleSize(annoHandleSize_);
+            pendingAnnoItem_->setAcceptedMouseButtons(Qt::NoButton);  // 预览不可交互
+            addItem(pendingAnnoItem_);
+        }
+        idc::annotation::Annotation tmp;
+        tmp.shape = ps->clone();
+        tmp.color = model.currentColor();
+        tmp.strokeWidth = model.currentStrokeWidth();
+        tmp.fillType = model.currentFill();
+        tmp.shapeType = ps->type();
+        pendingAnnoItem_->setAnnotation(tmp);
+        pendingAnnoItem_->setVisible(true);
+    } else if (pendingAnnoItem_) {
+        pendingAnnoItem_->setVisible(false);
+    }
+}
+
+// 标注图层显隐：只切图元可见性，不删除（保留 Core 标注数据）。
+void CanvasScene::setAnnotationsVisible(const bool on) {
+    annotationsVisible_ = on;
+    for (AnnotationItem* it : annoItems_) it->setVisible(on);
+    if (pendingAnnoItem_ && !on) pendingAnnoItem_->setVisible(false);
+}
+
+// 清空全部标注图元（含预览）。QGraphicsItem 析构会自动从场景移除。
+void CanvasScene::clearAnnotations() {
+    for (AnnotationItem* it : annoItems_) { removeItem(it); delete it; }
+    annoItems_.clear();
+    if (pendingAnnoItem_) { removeItem(pendingAnnoItem_); delete pendingAnnoItem_; pendingAnnoItem_ = nullptr; }
+}
+
+// 设置标注控制点手柄尺寸（同时缓存供后续新建图元使用）。
+void CanvasScene::setAnnotationHandleSize(const qreal sceneUnits) {
+    annoHandleSize_ = sceneUnits;
+    for (AnnotationItem* it : annoItems_) it->setHandleSize(sceneUnits);
+    if (pendingAnnoItem_) pendingAnnoItem_->setHandleSize(sceneUnits);
+}
+
+// 底图图层显隐：仅切换 base 图元可见性（不影响遮罩 / 标注 / 导出）。
+void CanvasScene::setBaseVisible(const bool on) {
+    if (baseItem_) baseItem_->setVisible(on);
+}
+
+// 网格线图层显隐：仅置位门控标志（不直接切 gridLayer_ 可见性）。
+// 说明：GridLayer 被 L3 灰色网格与 L2 橙色切割线共用，直接 setVisible 会与 cutLinesVisible_ 相互覆盖；
+// 故只置标志，由 MainWindow 切换后调 refreshPreview 重建落地（updateGrid/updateMultiRectCutLines 依各自门控）。
+void CanvasScene::setGridVisible(const bool on) {
+    gridVisible_ = on;
+}
+
+// 切割线图层显隐：下发到单选区框与全部多矩形框（仅影响贯穿延伸段绘制，不影响拖边交互）。
+void CanvasScene::setCutLinesVisible(const bool on) {
+    cutLinesVisible_ = on;
+    if (selItem_) selItem_->setCutLinesVisible(on);
+    for (SelectionRectItem* it : multiRectItems_) it->setCutLinesVisible(on);
+}
+
+// 选取边框图层显隐：下发到单选区框与全部多矩形框（隐藏边框同时禁用其拖拽交互，遵循「隐藏图层=不可交互」）。
+// L3 单元选择高亮（CellPickerItem）由上层 refreshPreview 依 selectionVisible_ 重建显隐。
+void CanvasScene::setSelectionVisible(const bool on) {
+    selectionVisible_ = on;
+    if (selItem_) selItem_->setBorderVisible(on);
+    for (SelectionRectItem* it : multiRectItems_) it->setBorderVisible(on);
 }
 
 } // namespace idc::gui

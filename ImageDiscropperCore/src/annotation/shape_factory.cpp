@@ -52,23 +52,6 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
                 minX, minY, std::abs(dx), std::abs(dy), ShapeType::ELLIPSE);
         }
 
-        case ShapeType::ARC:
-        case ShapeType::CHORD:
-        case ShapeType::PIE: {
-            if (distance <= 0.0) {
-                return std::make_unique<geometry::LineShape>(x1, y1, x1, y1);
-            }
-            // 屏幕坐标 y 轴向下，atan2 需按此约定计算角度
-            const double angleDeg = -std::atan2(dy, dx) * 180.0 / M_PI;
-            const geometry::ArcType arcType =
-                req.type == ShapeType::ARC ? geometry::ArcType::OPEN :
-                req.type == ShapeType::CHORD ? geometry::ArcType::CHORD :
-                                                 geometry::ArcType::PIE;
-            return std::make_unique<geometry::ArcShape>(
-                x1 - distance, y1 - distance, 2 * distance, 2 * distance,
-                0.0, angleDeg, arcType);
-        }
-
         case ShapeType::RECTANGLE: {
             const double minX = std::min(x1, x2);
             const double minY = std::min(y1, y2);

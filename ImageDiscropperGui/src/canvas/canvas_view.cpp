@@ -83,7 +83,15 @@ void CanvasView::updateHandleSize() {
     const qreal hs = 8.0 / m11;
     if (scene_->selectionItem()) scene_->selectionItem()->setHandleSize(hs); // 手柄与抓边条带同步随缩放换算。
     scene_->setMultiRectHandleSize(hs); // L2 多矩形选区框手柄同步随缩放换算。
+    scene_->setAnnotationHandleSize(hs); // 标注控制点手柄同步随缩放换算。
     if (scene_->cellPickerItem()) scene_->cellPickerItem()->setOverlayScale(hs); // L3 点选阈值/边框同步随缩放换算。
+}
+
+// 标注绘制态门控：开启时左键手势路由到标注绘制（橡皮筋选区让位）；关闭时复位绘制手势态。
+void CanvasView::setAnnotationDrawActive(const bool on) {
+    annotationDrawActive_ = on;
+    if (!on) annoDrawing_ = false;
+    viewport()->setCursor(on ? Qt::CrossCursor : Qt::ArrowCursor);
 }
 
 // 开始平移。
@@ -107,6 +115,14 @@ void CanvasView::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::MiddleButton ||
         (event->button() == Qt::LeftButton && spacePan_)) {
         beginPan(vp);
+        event->accept();
+        return;
+    }
+
+    // 标注绘制态：左键按下即路由到标注绘制（不交付图元 / 不启动橡皮筋选区）。
+    if (event->button() == Qt::LeftButton && annotationDrawActive_) {
+        annoDrawing_ = true;
+        emit annoDragStart(mapToScene(vp));
         event->accept();
         return;
     }
@@ -142,6 +158,25 @@ void CanvasView::mouseMoveEvent(QMouseEvent* event) {
         return;
     }
 
+    // 标注绘制拖拽：实时上报当前场景坐标（两点形状橡皮筋预览）。
+    if (annoDrawing_) {
+        const QPointF sp = mapToScene(vp);
+        emit annoDragMove(sp);
+        emit cursorScenePos(sp);
+        event->accept();
+        return;
+    }
+
+    // 标注绘制态但未按键（悬停）：上报悬停点，供折线实时预览「落点 + 到光标的连线」橡皮筋。
+    // 折线为点击式（左键落顶点），顶点之间靠悬停预览连线，故须在未拖拽时也持续上报。
+    if (annotationDrawActive_) {
+        const QPointF sp = mapToScene(vp);
+        emit annoHover(sp);
+        emit cursorScenePos(sp);
+        event->accept();
+        return;
+    }
+
     QGraphicsView::mouseMoveEvent(event); // 交付抓取图元（选区拖拽实时刷新遮罩）。
 
     if (rubber_ && rubberBand_) {
@@ -157,6 +192,14 @@ void CanvasView::mouseReleaseEvent(QMouseEvent* event) {
     if (panning_ && (event->button() == Qt::MiddleButton || event->button() == Qt::LeftButton)) {
         panning_ = false;
         viewport()->unsetCursor();
+        event->accept();
+        return;
+    }
+
+    // 标注绘制释放：结束拖拽手势并上报落点（两点形状提交 / 文字取文本）。
+    if (annoDrawing_ && event->button() == Qt::LeftButton) {
+        annoDrawing_ = false;
+        emit annoDragEnd(mapToScene(vp));
         event->accept();
         return;
     }
@@ -180,6 +223,11 @@ void CanvasView::mouseReleaseEvent(QMouseEvent* event) {
 
 // 键盘：空格切换平移预备态；方向键微调选区（Shift 大步）。
 void CanvasView::keyPressEvent(QKeyEvent* event) {
+    if (event->key() == Qt::Key_Escape && annotationDrawActive_) {
+        emit annoEscape();   // 绘制态 Esc：交上层收笔（折线/画笔）或取消预览
+        event->accept();
+        return;
+    }
     if (event->key() == Qt::Key_Space && !event->isAutoRepeat()) {
         spacePan_ = true;
         viewport()->setCursor(Qt::OpenHandCursor);
@@ -209,7 +257,13 @@ void CanvasView::keyReleaseEvent(QKeyEvent* event) {
 }
 
 // 右键菜单：清除切割线 / 重置视图 / 切换预览遮罩。
+// 标注绘制态下右键＝收笔 / 退出当前绘制手势（折线在此结束并提交），不弹视图菜单。
 void CanvasView::contextMenuEvent(QContextMenuEvent* event) {
+    if (annotationDrawActive_) {
+        emit annoFinish();
+        event->accept();
+        return;
+    }
     QMenu menu(viewport());
     QAction* aClear = menu.addAction(QStringLiteral("清除切割线"));
     QAction* aReset = menu.addAction(QStringLiteral("重置视图"));

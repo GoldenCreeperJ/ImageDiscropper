@@ -2,7 +2,7 @@
 // 文件：include/core/image.h
 // 作用：定义图像像素容器 Image。
 //       支持 RGB / RGBA / GRAY 三种像素模式，提供像素读写、拷贝、通道访问等
-//       基础操作。所有 processing / annotation 模块的算法都在此数据结构上进行。
+//       基础操作。所有 pixel_ops / annotation 模块的算法都在此数据结构上进行。
 // ============================================================================
 #pragma once
 
@@ -81,7 +81,7 @@ public:
     Image toGray() const;
 
     // 重新分配像素缓冲为新尺寸/格式，原像素数据被丢弃并清零。
-    // 注意：与 processing::resize（重采样缩放、保留内容）语义相反，本方法不保留原图内容。
+    // 注意：与 pixel_ops::resize（重采样缩放、保留内容）语义相反，本方法不保留原图内容。
     void reallocate(int width, int height, ImageFormat fmt);
 
     // 用指定颜色填充整个图像。

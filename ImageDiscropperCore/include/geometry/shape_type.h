@@ -17,9 +17,6 @@ enum class ShapeType {
     ROUNDSQUARE,        // 圆角正方形
     ELLIPSE,            // 椭圆（两点确定外接矩形）
     CIRCLE,             // 圆形（起点为圆心，两点距离为半径）
-    ARC,                // 圆弧（开放式）
-    PIE,                // 扇形（连回圆心）
-    CHORD,              // 弓形（弦封闭）
     POLYLINE,           // 多线段（拖动连续追加）
     PATH,               // 自由路径（每次点击追加一段）
     TEXT,               // 文字（占位实现，输出矩形边界）

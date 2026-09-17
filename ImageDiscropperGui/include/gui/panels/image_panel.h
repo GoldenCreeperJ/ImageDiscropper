@@ -2,7 +2,7 @@
 // 文件：panels/image_panel.h
 // 作用：右侧「图像处理面板」（guideline §4.5.4 / FR-1）——旋转、翻转、缩放、图像尺寸、
 //       颜色调整（黑白 / 色道反色 / 色道分离）与「重置预处理」。面板只采集用户意图并发信号，
-//       真正的像素变换由 MainWindow 经 EngineBridge 调 Core processing 完成（A-0.1：GUI 不
+//       真正的像素变换由 MainWindow 经 EngineBridge 调 Core pixel_ops 完成（A-0.1：GUI 不
 //       自实现图像处理逻辑）。
 // 分块依据：控件按 §4.5.4 的分组（旋转 / 翻转 / 缩放 / 尺寸 / 颜色 / 重置）组织；每类操作对应
 //           一个 *Requested 信号，参数即该操作所需的最小信息（角度 / 方向 / 比例 / 目标尺寸 /

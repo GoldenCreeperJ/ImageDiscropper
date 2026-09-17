@@ -44,20 +44,24 @@ endif()
 # util：core::Image 与 Qt 图像类型的适配、降采样预览（视图关注点，非引擎逻辑）。
 set(IDC_GUI_UTIL_SRC
     include/gui/util/image_qt_adapter.h
+    include/gui/util/path_qt_adapter.h
     include/gui/util/preview_scaler.h
     src/util/image_qt_adapter.cpp
+    src/util/path_qt_adapter.cpp
     src/util/preview_scaler.cpp
 )
 
 # model：会话状态单一真相源 Document 与唯一触碰 Core 的 EngineBridge。
 set(IDC_GUI_MODEL_SRC
+    include/gui/model/annotation_bridge.h
     include/gui/model/document.h
     include/gui/model/engine_bridge.h
+    src/model/annotation_bridge.cpp
     src/model/document.cpp
     src/model/engine_bridge.cpp
 )
 
-# canvas：QGraphicsView/Scene 画布，图层化渲染底图/遮罩/切割线/网格线/选区。
+# canvas：QGraphicsView/Scene 画布，图层化渲染底图/遮罩/切割线/网格线/选区/标注矢量叠加。
 set(IDC_GUI_CANVAS_SRC
     include/gui/canvas/z_order.h
     include/gui/canvas/canvas_scene.h
@@ -66,24 +70,32 @@ set(IDC_GUI_CANVAS_SRC
     include/gui/canvas/grid_layer.h
     include/gui/canvas/cell_picker_item.h
     include/gui/canvas/selection_rect_item.h
+    include/gui/canvas/annotation_item.h
     src/canvas/canvas_scene.cpp
     src/canvas/canvas_view.cpp
     src/canvas/mask_layer.cpp
     src/canvas/grid_layer.cpp
     src/canvas/cell_picker_item.cpp
     src/canvas/selection_rect_item.cpp
+    src/canvas/annotation_item.cpp
 )
 
-# panels：左侧模式/极性面板、右侧参数面板、导出面板、图像处理面板（预处理）。
+# panels：左侧模式/极性面板与标注工具/图层面板、右侧参数/导出/图像/标注属性面板。
 set(IDC_GUI_PANELS_SRC
     include/gui/panels/left_panel.h
     include/gui/panels/param_panel.h
     include/gui/panels/export_panel.h
     include/gui/panels/image_panel.h
+    include/gui/panels/tool_panel.h
+    include/gui/panels/layer_panel.h
+    include/gui/panels/annotation_prop_panel.h
     src/panels/left_panel.cpp
     src/panels/param_panel.cpp
     src/panels/export_panel.cpp
     src/panels/image_panel.cpp
+    src/panels/tool_panel.cpp
+    src/panels/layer_panel.cpp
+    src/panels/annotation_prop_panel.cpp
 )
 
 # app：主窗口装配与程序入口。

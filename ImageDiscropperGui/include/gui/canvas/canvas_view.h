@@ -34,6 +34,11 @@ public:
     void resetZoom();
     void fitToWindow();
 
+    // 标注绘制态门控（G-4）：为 true 时左键手势路由到标注绘制（橡皮筋选区让位）；
+    // 为 false 时维持既有选区 / 单元交互（标注 SELECT 工具下标注图元仍自行响应选中 / 拖动）。
+    void setAnnotationDrawActive(bool on);
+    bool annotationDrawActive() const { return annotationDrawActive_; }
+
 signals:
     // 光标在场景（原图）坐标中的位置，供状态栏显示。
     void cursorScenePos(const QPointF& scenePos);
@@ -47,6 +52,17 @@ signals:
     void clearCutRequested();
     void resetViewRequested();
     void toggleMasksRequested();
+    // 标注绘制手势（仅 setAnnotationDrawActive(true) 时发出，场景/原图坐标）。
+    // 上层（MainWindow）依当前工具决定语义：两点形状→拖拽成形；折线/画笔→逐点追加；文字→落点取文本。
+    void annoDragStart(const QPointF& scenePos);
+    void annoDragMove(const QPointF& scenePos);
+    void annoDragEnd(const QPointF& scenePos);
+    // 绘制态下鼠标悬停（未按键移动）：供折线「橡皮筋」实时预览落点与连线（左键点击才落顶点）。
+    void annoHover(const QPointF& scenePos);
+    // 绘制态下右键：收笔 / 退出当前绘制手势（折线在此结束并提交，不再弹视图右键菜单）。
+    void annoFinish();
+    // 绘制态下按 Esc：交上层收笔（折线/画笔）或取消当前预览。
+    void annoEscape();
 
 protected:
     void wheelEvent(QWheelEvent* event) override;
@@ -76,6 +92,9 @@ private:
     bool rubber_{false};      // 正在框选
     QPoint rubberStart_;      // 框选起点（视口坐标）
     QRubberBand* rubberBand_{nullptr};
+
+    bool annotationDrawActive_{false};  // 标注绘制态门控（绘制工具激活时为 true）
+    bool annoDrawing_{false};           // 正处于标注绘制拖拽手势中
 };
 
 } // namespace idc::gui

@@ -20,6 +20,7 @@
 #include <QComboBox>
 #include <QFileDialog>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
@@ -27,18 +28,24 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QProgressDialog>
+#include <QScrollArea>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QToolBar>
+#include <QVBoxLayout>
 
 #include "canvas/canvas_scene.h"
 #include "canvas/canvas_view.h"
+#include "panels/annotation_prop_panel.h"
 #include "panels/export_panel.h"
 #include "panels/image_panel.h"
+#include "panels/layer_panel.h"
 #include "panels/left_panel.h"
 #include "panels/param_panel.h"
+#include "panels/tool_panel.h"
 #include "util/image_qt_adapter.h"
+#include "util/path_qt_adapter.h"
 
 #ifndef IDC_GUI_VERSION
 #define IDC_GUI_VERSION "dev"
@@ -72,20 +79,43 @@ void MainWindow::buildCentral() {
     param_ = new ParamPanel(this);
     exportPanel_ = new ExportPanel(this);
     imagePanel_ = new ImagePanel(this);
+    toolPanel_ = new ToolPanel(this);
+    layerPanel_ = new LayerPanel(this);
+    annoPropPanel_ = new AnnotationPropPanel(this);
     left_->setDocument(&doc_);
     param_->setDocument(&doc_);
     exportPanel_->setDocument(&doc_);
     imagePanel_->setDocument(&doc_);
+    toolPanel_->setModel(&annoBridge_);
+    layerPanel_->setModel(&annoBridge_);
+    annoPropPanel_->setModel(&annoBridge_);
 
     // 右侧用 QTabWidget 分组，避免面板过长（§4.1 布局约束）。
     rightTabs_ = new QTabWidget(this);
     rightTabs_->addTab(param_, QStringLiteral("参数"));
     rightTabs_->addTab(exportPanel_, QStringLiteral("导出"));
     rightTabs_->addTab(imagePanel_, QStringLiteral("图像"));
+    rightTabs_->addTab(annoPropPanel_, QStringLiteral("标注"));
     rightTabs_->setMinimumWidth(240); // 可拖拽调宽；设下限避免控件被挤到不可用。
 
+    // 左侧容器：模式/极性(LeftPanel) + 标注工具(ToolPanel) + 图层(LayerPanel) 竖排，可滚动避免拥挤。
+    auto* leftContainer = new QWidget(this);
+    auto* leftLayout = new QVBoxLayout(leftContainer);
+    leftLayout->setContentsMargins(0, 0, 0, 0);
+    leftLayout->setSpacing(6);
+    leftLayout->addWidget(left_);
+    leftLayout->addWidget(toolPanel_);
+    leftLayout->addWidget(layerPanel_);
+    leftLayout->addStretch(1);
+    auto* leftScroll = new QScrollArea(this);
+    leftScroll->setWidgetResizable(true);
+    leftScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    leftScroll->setWidget(leftContainer);
+    // 左面板最小宽：标注工具为 3 列网格（含「等腰直角三角形」等宽标签），需足够宽才不拥挤/截断。
+    leftScroll->setMinimumWidth(340);
+
     auto* split = new QSplitter(Qt::Horizontal, this);
-    split->addWidget(left_);
+    split->addWidget(leftScroll);
     split->addWidget(view_);
     split->addWidget(rightTabs_);
     split->setStretchFactor(0, 0);   // 左面板：窗口整体缩放时不抢空间
@@ -93,7 +123,7 @@ void MainWindow::buildCentral() {
     split->setStretchFactor(2, 0);   // 右面板：窗口整体缩放时不抢空间
     split->setChildrenCollapsible(false); // 禁止把面板拖到 0 而完全折叠消失
     split->setHandleWidth(6);             // 稍宽的分隔条，拖拽手感更明显
-    split->setSizes({220, 900, 300});     // 初始宽度（此后左右面板均可自由拖拽调整）
+    split->setSizes({340, 860, 300});     // 初始宽度（左面板预留足够容纳标注工具网格；此后可自由拖拽）
     setCentralWidget(split);
 }
 
@@ -151,11 +181,26 @@ void MainWindow::buildMenus() {
         if (rightTabs_ && imagePanel_) rightTabs_->setCurrentWidget(imagePanel_);
     });
 
-    // ---- 标注（第四阶段接入）----
+    // ---- 标注（第四阶段 G-4/G-5）：撤销/重做/删除选中/清除全部/属性定位 ----
+    // 标注撤销/重做复用 Core AnnotationLayer 内建分层快照（全局跨状态撤销 G-12 本轮不做）。
     QMenu* mAnno = menuBar()->addMenu(QStringLiteral("标注(&A)"));
-    QAction* aAnno = mAnno->addAction(QStringLiteral("标注工具…"));
-    aAnno->setEnabled(false);
-    aAnno->setToolTip(QStringLiteral("标注图层将在第四阶段接入（调用 Core annotation/geometry）。"));
+    QAction* aAnnoUndo = mAnno->addAction(QStringLiteral("撤销标注(&U)"));
+    aAnnoUndo->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Z));
+    connect(aAnnoUndo, &QAction::triggered, this, &MainWindow::onAnnoUndo);
+    QAction* aAnnoRedo = mAnno->addAction(QStringLiteral("重做标注(&R)"));
+    aAnnoRedo->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Y));
+    connect(aAnnoRedo, &QAction::triggered, this, &MainWindow::onAnnoRedo);
+    mAnno->addSeparator();
+    QAction* aAnnoDel = mAnno->addAction(QStringLiteral("删除选中标注(&D)"));
+    aAnnoDel->setToolTip(QStringLiteral("删除当前选中的标注（或按 Delete 键）。"));
+    connect(aAnnoDel, &QAction::triggered, this, &MainWindow::onAnnoDeleteSelected);
+    QAction* aAnnoClear = mAnno->addAction(QStringLiteral("清除全部标注(&C)"));
+    connect(aAnnoClear, &QAction::triggered, this, &MainWindow::onAnnoClearAll);
+    mAnno->addSeparator();
+    QAction* aAnnoProp = mAnno->addAction(QStringLiteral("标注属性…"));
+    connect(aAnnoProp, &QAction::triggered, this, [this] {
+        if (rightTabs_ && annoPropPanel_) rightTabs_->setCurrentWidget(annoPropPanel_);
+    });
 
     // ---- 视图 ----
     QMenu* mView = menuBar()->addMenu(QStringLiteral("视图(&V)"));
@@ -195,7 +240,7 @@ void MainWindow::buildMenus() {
     });
 }
 
-// 装配工具栏（§4.1/§4.3）：打开/导出、缩放、模式切换、遮罩切换。
+// 装配工具栏（§4.1/§4.3）：打开/导出、缩放、模式切换（遮罩切换已迁入左侧图层面板）。
 void MainWindow::buildToolbar() {
     QToolBar* tb = addToolBar(QStringLiteral("主工具栏"));
     tb->setMovable(false);
@@ -229,11 +274,7 @@ void MainWindow::buildToolbar() {
     connect(modeActionL1_, &QAction::triggered, this, [this] { onModeAction(1); });
     connect(modeActionL2_, &QAction::triggered, this, [this] { onModeAction(2); });
     connect(modeActionL3_, &QAction::triggered, this, [this] { onModeAction(3); });
-    tb->addSeparator();
-
-    QAction* aMasks = tb->addAction(QStringLiteral("遮罩"));
-    aMasks->setToolTip(QStringLiteral("切换保留/删除预览遮罩显隐。"));
-    connect(aMasks, &QAction::triggered, this, &MainWindow::onToggleMasks);
+    // 遮罩切换已迁入左侧「图层」面板（成为正式图层项）；视图菜单与画布右键仍保留快捷切换。
 }
 
 // 装配状态栏（§4.9）：光标坐标 / 像素颜色 / 当前模式 / 选中块数 / 缩放倍数 / 提示信息。
@@ -273,7 +314,7 @@ void MainWindow::connectAll() {
     connect(exportPanel_, &ExportPanel::exportRequested, this, &MainWindow::onExport);
     connect(param_, &ParamPanel::rectSelected, this, &MainWindow::onRectSelected);
 
-    // 图像处理面板（预处理）：各意图信号→对应槽（经 EngineBridge 调 Core processing）。
+    // 图像处理面板（预处理）：各意图信号→对应槽（经 EngineBridge 调 Core pixel_ops）。
     connect(imagePanel_, &ImagePanel::rotateRequested, this, &MainWindow::onRotate);
     connect(imagePanel_, &ImagePanel::flipRequested, this, &MainWindow::onFlip);
     connect(imagePanel_, &ImagePanel::scaleRequested, this, &MainWindow::onScale);
@@ -282,6 +323,43 @@ void MainWindow::connectAll() {
     connect(imagePanel_, &ImagePanel::invertRequested, this, &MainWindow::onInvert);
     connect(imagePanel_, &ImagePanel::splitRequested, this, &MainWindow::onSplit);
     connect(imagePanel_, &ImagePanel::resetRequested, this, &MainWindow::onResetPreprocess);
+
+    // ---- 标注（G-4/G-5）：模型/画布/面板 → MainWindow 编排 ----
+    connect(&annoBridge_, &AnnotationBridge::changed, this, &MainWindow::onAnnoModelChanged);
+    // 绘制拖拽预览（橡皮筋）：begin/updateShape 仅发 pendingChanged，必须连到实时刷新预览图元，
+    // 否则拖拽过程中形状不显示、只有松手提交（changed）后才可见。
+    connect(&annoBridge_, &AnnotationBridge::pendingChanged, this, &MainWindow::onAnnoPendingChanged);
+    connect(&annoBridge_, &AnnotationBridge::selectionChanged, this, &MainWindow::onAnnoSelectionChanged);
+    connect(&annoBridge_, &AnnotationBridge::toolChanged, this, &MainWindow::onAnnoToolChanged);
+
+    connect(view_, &CanvasView::annoDragStart, this, &MainWindow::onAnnoDragStart);
+    connect(view_, &CanvasView::annoDragMove, this, &MainWindow::onAnnoDragMove);
+    connect(view_, &CanvasView::annoDragEnd, this, &MainWindow::onAnnoDragEnd);
+    connect(view_, &CanvasView::annoHover, this, &MainWindow::onAnnoHover);
+    connect(view_, &CanvasView::annoFinish, this, &MainWindow::onAnnoFinish);
+    connect(view_, &CanvasView::annoEscape, this, &MainWindow::onAnnoEscape);
+
+    connect(scene_, &CanvasScene::annotationSelectRequested, this, &MainWindow::onAnnotationSelect);
+    connect(scene_, &CanvasScene::annotationMoved, this, &MainWindow::onAnnotationMoved);
+    connect(scene_, &CanvasScene::annotationTransformed, this, &MainWindow::onAnnotationTransformed);
+    connect(scene_, &CanvasScene::annotationTransformPreview, this, &MainWindow::onAnnotationTransformPreview);
+
+    connect(toolPanel_, &ToolPanel::toolSelected, this, &MainWindow::onToolSelected);
+    connect(layerPanel_, &LayerPanel::baseVisibilityChanged, this, &MainWindow::onBaseVisibilityChanged);
+    connect(layerPanel_, &LayerPanel::maskVisibilityChanged, this, &MainWindow::onMaskVisibilityChanged);
+    connect(layerPanel_, &LayerPanel::gridVisibilityChanged, this, &MainWindow::onGridVisibilityChanged);
+    connect(layerPanel_, &LayerPanel::cutLineVisibilityChanged, this, &MainWindow::onCutLineVisibilityChanged);
+    connect(layerPanel_, &LayerPanel::selectionVisibilityChanged, this, &MainWindow::onSelectionVisibilityChanged);
+    connect(layerPanel_, &LayerPanel::annotationVisibilityChanged, this, &MainWindow::onAnnotationVisibilityChanged);
+    // 「导出时烧录标注」开关已迁至导出面板（原属图层面板）。
+    connect(exportPanel_, &ExportPanel::burnInChanged, this, &MainWindow::onBurnInChanged);
+    exportPanel_->setBurnInChecked(annoBridge_.burnInEnabled()); // 初始同步一次（两侧默认 false，对齐意图）。
+    connect(annoPropPanel_, &AnnotationPropPanel::colorPicked, this, &MainWindow::onAnnoColorPicked);
+    connect(annoPropPanel_, &AnnotationPropPanel::strokeChanged, this, &MainWindow::onAnnoStrokeChanged);
+    connect(annoPropPanel_, &AnnotationPropPanel::fillChanged, this, &MainWindow::onAnnoFillChanged);
+    connect(annoPropPanel_, &AnnotationPropPanel::textChanged, this, &MainWindow::onAnnoTextChanged);
+    connect(annoPropPanel_, &AnnotationPropPanel::fontSizeChanged, this, &MainWindow::onAnnoFontSizeChanged);
+    connect(annoPropPanel_, &AnnotationPropPanel::transformApplyRequested, this, &MainWindow::onAnnoTransformApply);
 }
 
 // 依工作图重建降采样预览底图（NFR-3）。
@@ -362,7 +440,7 @@ void MainWindow::refreshPreview() {
         scene_->syncSelection(doc_.rect(), false);  // 隐藏单选区框（改用多矩形轮廓）。
         if (doc_.rects().empty()) {
             // 尚无矩形：不跑引擎（Core 对空 rects 的 MULTI_RECT 会报错），提示框选追加。
-            scene_->updateGridLines(idc::engine::Grid{}, false);
+            scene_->updateMultiRectCutLines(idc::engine::Grid{}, false);
             scene_->updateMasks(idc::engine::EngineResult{});
             stCount_->setText(QStringLiteral("保留块: 0"));
             stHint_->setText(QStringLiteral("在画布上拖拽以追加矩形"));
@@ -371,7 +449,7 @@ void MainWindow::refreshPreview() {
         }
         const idc::engine::EngineConfig cfg = doc_.buildEngineConfig();
         const idc::engine::Grid grid = bridge_.buildGrid(cfg.cut, cfg.source);
-        scene_->updateGridLines(grid, true);
+        scene_->updateMultiRectCutLines(grid, true);
         const idc::engine::EngineResult res = bridge_.runPreview(doc_.working(), cfg);
         scene_->updateMasks(res);
 
@@ -482,6 +560,9 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
             case Qt::Key_3: onModeAction(3); event->accept(); return;
             case Qt::Key_K: onPolarityShortcut(false); event->accept(); return;
             case Qt::Key_R: onPolarityShortcut(true);  event->accept(); return;
+            // Delete 与 Backspace 均可删除选中标注（两者等价，符合常见图形编辑器习惯）。
+            case Qt::Key_Delete:
+            case Qt::Key_Backspace: onAnnoDeleteSelected(); event->accept(); return;
             default: break;
         }
     }
@@ -517,6 +598,7 @@ void MainWindow::openImageFromPath(const QString& path) {
         return;
     }
     doc_.setImage(std::move(img), path); // 触发 imageChanged。
+    annoBridge_.setBaseImage(doc_.working()); // 新图＝新标注会话（Core setImage 清空旧标注）。
     notify(QStringLiteral("已打开：%1（%2×%3）").arg(path).arg(doc_.width()).arg(doc_.height()), false);
 }
 
@@ -558,8 +640,15 @@ void MainWindow::onExport() {
         }
     }
 
+    // 导出烧录（G-4）：开关开且有标注时，以当前工作图为底逐个调 Core rasterize 合成标注，
+    // 再送引擎切割（标注随像素被切开，A-0.15/A-0.16）；否则直接送工作图。
+    idc::core::Image exportSrc = doc_.working();
+    if (annoBridge_.burnInEnabled() && annoBridge_.count() > 0) {
+        exportSrc = annoBridge_.burnIn(doc_.working());
+    }
+
     QString err;
-    if (bridge_.exportResult(doc_.working(), cfg, path, err)) {
+    if (bridge_.exportResult(exportSrc, cfg, path, err)) {
         notify(QStringLiteral("导出成功：%1").arg(path), false);
     } else {
         notify(QStringLiteral("导出失败：%1").arg(err), true);
@@ -571,6 +660,8 @@ void MainWindow::onImageChanged() {
     rebuildPreviewPixmap();
     syncPanels();
     refreshPreview();
+    // 同维度预处理不清标注（矢量叠加 + 导出注入当前 base），故重绘标注层以对齐最新底图。
+    scene_->updateAnnotations(annoBridge_);
 }
 
 // 参数变更：刷新预览并同步面板。
@@ -685,10 +776,11 @@ void MainWindow::onClearCut() {
     notify(QStringLiteral("已清除选区与切割线"), false);
 }
 
-// 切换预览遮罩显隐。
+// 切换预览遮罩显隐（视图菜单 / 画布右键）；同步图层面板的遮罩复选框。
 void MainWindow::onToggleMasks() {
     const bool v = !scene_->masksVisible();
     scene_->setMasksVisible(v);
+    layerPanel_->setMaskVisible(v);   // 反向同步面板（blockSignals 防回环）。
     refreshPreview();
     notify(v ? QStringLiteral("已显示预览遮罩") : QStringLiteral("已隐藏预览遮罩"), false);
 }
@@ -709,7 +801,7 @@ void MainWindow::onPolarityShortcut(const bool remove) {
 }
 
 // ---------------------------------------------------------------------------
-// 预处理（FR-1 / G-3）：各操作经 EngineBridge 调 Core processing 变换工作图。
+// 预处理（FR-1 / G-3）：各操作经 EngineBridge 调 Core pixel_ops 变换工作图。
 // GUI 不自实现像素运算（A-0.1）；所有变换走公共收尾 applyWorkingImage。
 // ---------------------------------------------------------------------------
 
@@ -722,6 +814,7 @@ void MainWindow::applyWorkingImage(idc::core::Image next, const QString& okMsg) 
         doc_.clearRect();    // 单选区坐标基于旧尺寸，已失效。
         doc_.clearRects();   // L2 多矩形同理。
         doc_.clearCells();   // L3 选择集序号对应旧网格，一并清空。
+        annoBridge_.clearAll(); // 维度变化使标注坐标失配，一并清空（G-4）。
     }
     doc_.setWorkingImage(std::move(next));
     notify(okMsg, false);
@@ -809,6 +902,202 @@ void MainWindow::onResetPreprocess() {
     }
     doc_.resetPreprocess();
     notify(QStringLiteral("已重置预处理，恢复原图"), false);
+}
+
+// ===========================================================================
+// 标注（第四阶段 G-4/G-5）：MainWindow 只做编排——把面板/画布意图转交 AnnotationBridge
+// （其内部调 Core annotation/geometry），再把模型变化下发画布与属性面板。不含几何/光栅化（A-0.1）。
+// ===========================================================================
+
+// 工具面板选择：先收笔未完成的折线/画笔路径，再切换工具（setTool 内部会放弃两点预览）。
+void MainWindow::onToolSelected(const AnnoTool tool) {
+    if (annoBridge_.hasPathDraft()) annoBridge_.commitPath();
+    annoBridge_.setTool(tool);
+}
+
+// 标注列表/预览变化：增量重绘画布标注层，并同步属性面板回显。
+void MainWindow::onAnnoModelChanged() {
+    scene_->updateAnnotations(annoBridge_);
+    annoPropPanel_->syncFromModel();
+}
+
+// 绘制拖拽预览（橡皮筋）变化：仅刷新预览图元（不重建已提交标注，避免逐帧开销），实现“绘制即实时成形”。
+void MainWindow::onAnnoPendingChanged() {
+    scene_->updatePendingAnnotation(annoBridge_);
+}
+
+// 选中项变化：重绘高亮（updateAnnotations 内含选中态）并同步属性面板。
+void MainWindow::onAnnoSelectionChanged() {
+    scene_->updateAnnotations(annoBridge_);
+    annoPropPanel_->syncFromModel();
+}
+
+// 工具变化：同步工具面板按钮组，并按「是否 SELECT」切换画布绘制态门控。
+void MainWindow::onAnnoToolChanged() {
+    toolPanel_->syncFromModel();
+    view_->setAnnotationDrawActive(annoBridge_.currentTool() != AnnoTool::SELECT);
+    annoPropPanel_->syncFromModel();
+}
+
+// 绘制手势起点：依当前工具分派——文字落点取文本；折线/画笔起笔；其余两点形状记起点。
+void MainWindow::onAnnoDragStart(const QPointF& scenePos) {
+    const idc::core::Point2D p(scenePos.x(), scenePos.y());
+    switch (annoBridge_.currentTool()) {
+        case AnnoTool::TEXT: {
+            bool ok = false;
+            const QString text = QInputDialog::getText(this, QStringLiteral("文字标注"),
+                QStringLiteral("请输入标注文字："), QLineEdit::Normal,
+                QString::fromStdString(annoBridge_.currentText()), &ok);
+            if (ok && !text.isEmpty()) annoBridge_.addText(p, text.toStdString());
+            break;
+        }
+        case AnnoTool::POLYLINE:
+            if (annoBridge_.hasPathDraft()) annoBridge_.appendPathPoint(p);
+            else annoBridge_.beginPath(p);
+            break;
+        case AnnoTool::BRUSH:
+            annoBridge_.beginPath(p);
+            break;
+        default:
+            annoBridge_.beginShape(p);
+            break;
+    }
+}
+
+// 绘制手势拖拽（按住左键移动）：两点形状实时更新预览；画笔追加顶点；折线仅橡皮筋预览。
+// 折线为点击式：顶点已在 onAnnoDragStart（按下）落定，故拖拽中只预览、不再追加正式顶点。
+void MainWindow::onAnnoDragMove(const QPointF& scenePos) {
+    const idc::core::Point2D p(scenePos.x(), scenePos.y());
+    switch (annoBridge_.currentTool()) {
+        case AnnoTool::BRUSH:
+            annoBridge_.appendPathPoint(p);
+            break;
+        case AnnoTool::POLYLINE:
+            annoBridge_.previewPolyline(p);   // 按住拖动时也走橡皮筋预览（与悬停一致）。
+            break;
+        case AnnoTool::TEXT:
+        case AnnoTool::SELECT:
+            break;
+        default:
+            annoBridge_.updateShape(p);
+            break;
+    }
+}
+
+// 绘制手势释放：两点形状提交；画笔收笔；折线保持草稿（待 Esc/切换工具收笔）。
+void MainWindow::onAnnoDragEnd(const QPointF& scenePos) {
+    Q_UNUSED(scenePos);
+    switch (annoBridge_.currentTool()) {
+        case AnnoTool::BRUSH:
+            annoBridge_.commitPath();
+            break;
+        case AnnoTool::POLYLINE:
+        case AnnoTool::TEXT:
+        case AnnoTool::SELECT:
+            break;
+        default:
+            annoBridge_.commitShape();
+            break;
+    }
+}
+
+// 绘制态 Esc：有折线/画笔草稿则收笔提交，否则取消当前两点预览。
+void MainWindow::onAnnoEscape() {
+    if (annoBridge_.hasPathDraft()) annoBridge_.commitPath();
+    else annoBridge_.cancelPending();
+}
+
+// 绘制态悬停（未按键移动）：折线实时预览「已落顶点 + 到光标连线」橡皮筋（不落顶点）。
+// 其余工具无悬停语义（两点形状靠拖拽预览、画笔靠按住追点），故忽略。
+void MainWindow::onAnnoHover(const QPointF& scenePos) {
+    if (annoBridge_.currentTool() != AnnoTool::POLYLINE) return;
+    annoBridge_.previewPolyline(idc::core::Point2D(scenePos.x(), scenePos.y()));
+}
+
+// 绘制态右键：退出当前绘制手势——有折线/画笔草稿则收笔提交（折线在此结束），
+// 否则取消当前预览（与 Esc 同义，满足「右键退出多线段」的交互约定）。
+void MainWindow::onAnnoFinish() {
+    if (annoBridge_.hasPathDraft()) annoBridge_.commitPath();
+    else annoBridge_.cancelPending();
+}
+
+// SELECT 工具下点中标注图元：委托 Core hitTest 选中（几何命中在 Core，A-0.1）。
+void MainWindow::onAnnotationSelect(const QPointF& scenePos) {
+    annoBridge_.selectAt(idc::core::Point2D(scenePos.x(), scenePos.y()));
+}
+
+// 拖动选中标注：委托 Core 平移其几何（下标须与当前选中项一致，防御误触）。
+void MainWindow::onAnnotationMoved(const int index, const double dx, const double dy) {
+    const std::optional<std::size_t> sel = annoBridge_.selectedIndex();
+    if (!sel || static_cast<int>(*sel) != index) return;
+    annoBridge_.moveSelectedBy(dx, dy);
+}
+
+// 拖定向包围盒手柄（释放提交）：委托 Core 对选中标注施加缩放/旋转（与属性面板变换同一入口，下标防御误触）。
+void MainWindow::onAnnotationTransformed(const int index, const double sx, const double sy,
+                                         const double rotateDeg) {
+    const std::optional<std::size_t> sel = annoBridge_.selectedIndex();
+    if (!sel || static_cast<int>(*sel) != index) return;
+    annoBridge_.transformSelected(sx, sy, rotateDeg);
+    // 提交后模型发 changed → onAnnoModelChanged → syncFromModel 依最新累积值回显面板（忠实反映底层，不回弹）。
+}
+
+// 手柄拖拽**进行中**：把逐帧**绝对**预览值实时回显到属性面板变换区（仅回显，不写模型；下标防御误触）。
+void MainWindow::onAnnotationTransformPreview(const int index, const double sx, const double sy,
+                                              const double rotateDeg) {
+    const std::optional<std::size_t> sel = annoBridge_.selectedIndex();
+    if (!sel || static_cast<int>(*sel) != index) return;
+    if (annoPropPanel_) annoPropPanel_->setTransformPreview(sx, sy, rotateDeg);
+}
+
+// 属性面板 → 模型（EDIT 作用选中项，DRAW 改当前默认；均触发 changed→重绘）。
+void MainWindow::onAnnoColorPicked(const QColor& c) { annoBridge_.setColor(toCoreColor(c)); }
+void MainWindow::onAnnoStrokeChanged(const int width) { annoBridge_.setStrokeWidth(width); }
+void MainWindow::onAnnoFillChanged(const bool fill) { annoBridge_.setFill(fill); }
+void MainWindow::onAnnoTextChanged(const QString& text) { annoBridge_.setText(text.toStdString()); }
+void MainWindow::onAnnoFontSizeChanged(const double size) { annoBridge_.setFontSize(size); }
+// 属性面板「变换」：将缩放/旋转写回模型（委托 Core Shape 的非破坏性矩阵，保留类型与字形；无选中时模型内部忽略）。
+void MainWindow::onAnnoTransformApply(const double sx, const double sy, const double rotateDeg) {
+    annoBridge_.transformSelected(sx, sy, rotateDeg);
+}
+
+// 图层面板 → 画布/模型（底图仅切画布可见；标注同时同步模型标志与画布图元）。
+void MainWindow::onBaseVisibilityChanged(const bool visible) { scene_->setBaseVisible(visible); }
+void MainWindow::onMaskVisibilityChanged(const bool visible) { scene_->setMasksVisible(visible); }
+void MainWindow::onGridVisibilityChanged(const bool visible) {
+    scene_->setGridVisible(visible);
+    refreshPreview();   // 网格线依 gridVisible_ 门控重建（L3 / L2 多矩形）。
+}
+void MainWindow::onCutLineVisibilityChanged(const bool visible) {
+    scene_->setCutLinesVisible(visible);
+    refreshPreview();   // L2 多矩形诱导线依 cutLinesVisible_ 门控重建（橙色切割线）。
+}
+void MainWindow::onSelectionVisibilityChanged(const bool visible) {
+    scene_->setSelectionVisible(visible);
+    refreshPreview();   // L3 单元选择高亮（CellPickerItem）依 selectionVisible_ 门控重建。
+}
+void MainWindow::onAnnotationVisibilityChanged(const bool visible) {
+    annoBridge_.setLayerVisible(visible);
+    scene_->setAnnotationsVisible(visible);
+}
+void MainWindow::onBurnInChanged(const bool on) { annoBridge_.setBurnIn(on); }
+
+// 标注菜单动作：撤销/重做/删除选中/清除全部（均复用 Core AnnotationLayer）。
+void MainWindow::onAnnoUndo() { annoBridge_.undo(); }
+void MainWindow::onAnnoRedo() { annoBridge_.redo(); }
+void MainWindow::onAnnoDeleteSelected() {
+    if (!annoBridge_.selectedIndex()) return;
+    annoBridge_.removeSelected();
+}
+void MainWindow::onAnnoClearAll() {
+    if (annoBridge_.count() == 0) return;
+    const QMessageBox::StandardButton ret = QMessageBox::question(
+        this, QStringLiteral("清除全部标注"),
+        QStringLiteral("确定要清除全部 %1 个标注吗？此操作可用「撤销标注」回退。")
+            .arg(static_cast<qulonglong>(annoBridge_.count())),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (ret != QMessageBox::Yes) return;
+    annoBridge_.clearAll();
 }
 
 } // namespace idc::gui

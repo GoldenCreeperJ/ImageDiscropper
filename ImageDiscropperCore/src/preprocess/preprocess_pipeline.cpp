@@ -2,15 +2,15 @@
 // 文件：src/preprocess/preprocess_pipeline.cpp
 // 作用：实现 PreprocessPipeline 的步骤管理与执行逻辑。
 //       applyOne 是核心分派函数：按 PreprocessConfig 的实际类型调用
-//       processing 模块中的对应算法，返回新图像。
+//       pixel_ops 模块中的对应算法，返回新图像。
 // ============================================================================
 #include "preprocess/preprocess_pipeline.h"
 
 #include <algorithm>
 #include <type_traits>
 
-#include "processing/color_ops.h"
-#include "processing/geometric_ops.h"
+#include "pixel_ops/color_ops.h"
+#include "pixel_ops/geometric_ops.h"
 
 namespace idc::preprocess {
 
@@ -24,19 +24,19 @@ core::Image applyOne(const core::Image& src, const PreprocessConfig& cfg) {
         using T = std::decay_t<decltype(op)>;
 
         if constexpr (std::is_same_v<T, GrayOp>) {
-            return processing::toGray(src);
+            return pixel_ops::toGray(src);
         }
         else if constexpr (std::is_same_v<T, SplitOp>) {
-            return processing::splitChannels(src, op.mask);
+            return pixel_ops::splitChannels(src, op.mask);
         }
         else if constexpr (std::is_same_v<T, InvertOp>) {
-            return processing::invertChannels(src, op.mask);
+            return pixel_ops::invertChannels(src, op.mask);
         }
         else if constexpr (std::is_same_v<T, RotateOp>) {
-            return processing::rotate(src, op.angle);
+            return pixel_ops::rotate(src, op.angle);
         }
         else if constexpr (std::is_same_v<T, FlipOp>) {
-            return processing::flip(src, op.horizontal);
+            return pixel_ops::flip(src, op.horizontal);
         }
         else {
             return src.clone();

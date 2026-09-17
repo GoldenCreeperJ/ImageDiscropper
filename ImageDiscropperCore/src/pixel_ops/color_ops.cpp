@@ -1,14 +1,14 @@
 // ============================================================================
-// 文件：src/processing/color_ops.cpp
-// 作用：实现 include/processing/color_ops.h 中的颜色与通道级处理算法。
+// 文件：src/pixel_ops/color_ops.cpp
+// 作用：实现 include/pixel_ops/color_ops.h 中的颜色与通道级处理算法。
 //       含灰度化 / 按通道反色 / 按通道分离 / 颜色选取（pickColor），
 //       对应终稿 FR-1.4「黑白、反色、色道分离、颜色选取」。
 // ============================================================================
-#include "processing/color_ops.h"
+#include "pixel_ops/color_ops.h"
 
 #include <algorithm>
 
-namespace idc::processing {
+namespace idc::pixel_ops {
 
 // 灰度化：委托 core::Image::toGray——其内部已对 GRAY 输入短路返回副本，并完成 BT.601 加权。
 core::Image toGray(const core::Image& src) {
@@ -65,4 +65,4 @@ std::optional<core::Color> pickColor(const core::Image& src, const int x, const 
     return src.getPixel(x, y);
 }
 
-} // namespace idc::processing
+} // namespace idc::pixel_ops

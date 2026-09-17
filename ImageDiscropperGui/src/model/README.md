@@ -5,7 +5,8 @@
 | 文件 | 职责 |
 | ---- | ---- |
 | `document.{h,cpp}`     | 会话状态单一真相源，组装 `EngineConfig`，变更时发信号 |
-| `engine_bridge.{h,cpp}` | GUI 中**唯一**触碰 Core API 的类 |
+| `engine_bridge.{h,cpp}` | GUI 中**唯一**触碰切割引擎 API 的类 |
+| `annotation_bridge.{h,cpp}` | 标注域桥：唯一持有并驱动 Core `annotation::AnnotationLayer` |
 
 ## Document（QObject）
 
@@ -50,3 +51,17 @@ L3 网格参数 `GridParams`（默认单元 100×100，避免 `GridParams` 默�
 
 > 其余 GUI 代码只与 `EngineBridge` 交互，不直接 include 引擎实现细节，
 > 以此保证「GUI 不含切割/几何/导出逻辑」（A-0.1/A-0.3）。
+
+## AnnotationBridge（QObject）——标注域桥
+
+类比 `EngineBridge` 之于切割引擎：`AnnotationBridge` 是 GUI 中**唯一**持有并驱动 Core
+`annotation::AnnotationLayer` 的类，把画布/面板意图翻译成对 Core 标注 API 的调用，**自身不含任何几何/光栅化**（A-0.1/A-0.3）。
+
+- `enum class AnnoTool`：SELECT + 各形状 + POLYLINE + TEXT + BRUSH；`shapeTypeForTool()` 映射到 Core `geometry::ShapeType`（**本轮无箭头**，Core 无 ARROW）。
+- **工具/属性**：`setTool`（SELECT→Core EDIT 模式、其余→DRAW）、`setColor/setStrokeWidth/setFill/setText/setFontSize`（委托 Core `change*`：EDIT 作用选中项、DRAW 改下一次绘制默认）。
+- **绘制流程**：两点形状 `beginShape/updateShape/commitShape/cancelPending`；画笔 `beginPath/appendPathPoint/commitPath`（按住连续追点）；**折线点击式** `beginPath`（首次落顶点）/`appendPathPoint`（左键再落顶点）/`previewPolyline`（悬停时以草稿+到光标临时连线构造橡皮筋预览、**不落草稿**）/`commitPath`（右键/Esc 收笔，依 `pathDraft_` 正式顶点重建、丢弃橡皮筋临时段）/`hasPathDraft`；文字 `addText`。几何均走 Core `buildShape`。
+- **选择/移动/删除**：`selectAt`（Core `hitTest`+`selectAnnotation`）、`moveSelectedBy`（委托 Core `Shape::translateWorld` 世界系平移—内部把世界位移换算到局部系再偏移参数，**保留具体类型**不退化为 PATH、且旋转/缩放后拖动方向仍跟随光标）、`removeSelected`（Core `removeAnnotation`）。
+- **变换（缩放/旋转/翻转）**：`transformSelected(sx,sy,rotateDeg)` 委托 Core `Shape::applyObbTransform`（**非破坏性仿射矩阵**：绕局部盒中心沿自身轴缩放 + 绕世界中心刚性旋转；旋转走世界系，故与既有非均匀缩放复合也不剪切），保留具体类型与文字字形不退化；sx/sy 为**增量系数**（1.0=不变、负即翻转）、rotateDeg 为增量角。Core 同时把本次增量**累积进带符号 OBB 参数**（缩放连乘、旋转累加），`displayObbScaleX/Y/RotationDeg()` 读出该**绝对累积值**供属性面板忠实回显——**不从 `xform_` 矩阵分解**（分解有二重歧义，无法区分 sx<0 与 θ+180°&sy<0，会丢掉翻转的负号）。属性面板「应用变换」与画布手柄拖拽**共用此入口**；无选中或增量恒等（1,1,0）则忽略。
+- **撤销/重做/清除**：`undo/redo/clearAll` → Core `revoke/redo/clear`（分层快照，GUI 不自建历史栈）。
+- **图层可见/导出烧录**：`setLayerVisible/setBurnIn` 为 GUI 侧标志；`burnIn(base)` 以传入的**当前工作图**为底逐个调 Core `rasterize` 合成（不复用 `AnnotationLayer::burnIn()` 内部可能陈旧的 `image_`，确保与预处理后最新底图一致）。
+- **信号**：`changed()`（标注列表/预览变化→画布重绘）、`selectionChanged()`（选中变化→高亮+属性面板）、`toolChanged()`（工具变化→面板同步）。

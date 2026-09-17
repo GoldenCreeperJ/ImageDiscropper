@@ -1,8 +1,8 @@
 // ============================================================================
 // 文件：model/engine_bridge.h
-// 作用：GUI 与 Core 之间唯一的桥接类——所有对 Core API 的调用都集中在此。
-//       其余 GUI 代码（面板/画布/主窗口）只与 EngineBridge 交互，不直接 include
-//       引擎实现细节，保证「GUI 不含切割/几何/导出逻辑」（guideline §0 A-0.1/A-0.3）。
+// 作用：GUI 访问 Core 切割引擎与预处理的统一桥接类（无状态）——切割/预处理调用集中在此。
+//       切割/预处理相关 GUI 代码只与 EngineBridge 交互、不直接 include 引擎实现细节；标注域由
+//       AnnotationBridge 驱动、坐标/图像转换由 util 适配器承担（详见 model/README.md，A-0.1/A-0.3）。
 // 分块依据：
 //   - loadImage    委托 Core engine::readImageFile（解码）。
 //   - runPreview   委托 Core engine::runEngine（仅区域数学，不搬像素，适合实时预览）。
@@ -23,7 +23,7 @@
 namespace idc::gui {
 
 // ---------------------------------------------------------------------------
-// EngineBridge：唯一触碰 Core 的类。
+// EngineBridge：切割引擎与预处理的 Core 桥接类（标注域见 AnnotationBridge）。
 // ---------------------------------------------------------------------------
 class EngineBridge {
 public:
@@ -53,7 +53,7 @@ public:
     bool exportResult(const idc::core::Image& work, const idc::engine::EngineConfig& cfg,
                       const QString& outputPath, QString& err) const;
 
-    // ---- 预处理（FR-1；委托 Core processing::*，GUI 不自实现像素运算，A-0.1/A-0.3）----
+    // ---- 预处理（FR-1；委托 Core pixel_ops::*，GUI 不自实现像素运算，A-0.1/A-0.3）----
     // 每个方法对输入图做一次变换并返回新图（不修改入参）；上层据此刷新 Document 工作图。
     // 说明：本 GUI 采用「即时累积」预处理——每次操作把工作图变换后写回，原图始终保留
     //       供「重置预处理」还原（A-0.16 流水线：原图 → 预处理 → 切割 → 导出）。

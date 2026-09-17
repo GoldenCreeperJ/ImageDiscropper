@@ -8,16 +8,19 @@
 //     真正的 Core 调用集中在 EngineBridge，状态集中在 Document。
 //   - 构建（buildCentral/buildMenus/...）与响应（on* 槽）分组，避免上帝方法。
 // 说明：本阶段覆盖 G-1/G-2/G-6/G-7(单矩形)/G-8/G-11(分离+坍缩+基础重排)/G-14/G-10，
-//       以及第三阶段的 G-3 预处理（旋转/翻转/缩放/尺寸/黑白/反色/色道分离，图像处理面板）。
-//       标注、撤销重做、配置在后续阶段接入（对应菜单/工具项先禁用占位）。
+//       第三阶段的 G-3 预处理（旋转/翻转/缩放/尺寸/黑白/反色/色道分离，图像处理面板），
+//       以及第四阶段的 G-4 标注工具 + G-5 图层管理（AnnotationBridge 驱动 Core annotation/geometry，
+//       画布矢量叠加渲染、导出可选烧录）。全局撤销重做(G-12)、配置加载/保存(G-13) 留待后续阶段。
 // ============================================================================
 #pragma once
 
+#include <QColor>
 #include <QMainWindow>
 
 #include <functional>
 
 #include "engine/engine.h"
+#include "model/annotation_bridge.h"
 #include "model/document.h"
 #include "model/engine_bridge.h"
 #include "util/preview_scaler.h"
@@ -35,6 +38,9 @@ class LeftPanel;
 class ParamPanel;
 class ExportPanel;
 class ImagePanel;
+class ToolPanel;
+class LayerPanel;
+class AnnotationPropPanel;
 
 // ---------------------------------------------------------------------------
 // MainWindow：应用主窗口与总编排。
@@ -76,7 +82,7 @@ private slots:
     void onToggleMasks();                           // 切换预览遮罩显隐。
     void onModeAction(int tierInt);                 // 工具栏/快捷键切换模式。
     void onPolarityShortcut(bool remove);           // K/R 快捷键切换极性。
-    // 预处理（FR-1 / G-3）：各操作经 EngineBridge 调 Core processing 变换工作图后写回。
+    // 预处理（FR-1 / G-3）：各操作经 EngineBridge 调 Core pixel_ops 变换工作图后写回。
     void onRotate(int angleDeg);                    // 旋转 90 的整数倍（-90/90/180）。
     void onFlip(bool horizontal);                   // 水平/垂直翻转。
     void onScale(double factor);                    // 按比例缩放。
@@ -86,6 +92,40 @@ private slots:
     void onInvert(bool invR, bool invG, bool invB);
     void onSplit(bool keepR, bool keepG, bool keepB); // 色道分离（保留勾选通道）。
     void onResetPreprocess();                       // 重置预处理（恢复原图）。
+
+    // ---- 标注（第四阶段 G-4/G-5）：面板/画布意图 → AnnotationBridge（调 Core）→ 画布重绘 ----
+    void onToolSelected(AnnoTool tool);              // 工具面板：切换标注工具（先收笔再切）。
+    void onAnnoModelChanged();                       // 标注列表/预览变化：重绘画布标注层 + 属性面板同步。
+    void onAnnoPendingChanged();                     // 绘制拖拽预览（橡皮筋）变化：仅实时刷新预览图元。
+    void onAnnoSelectionChanged();                   // 选中项变化：重绘高亮 + 属性面板同步。
+    void onAnnoToolChanged();                        // 工具变化：同步工具面板 + 画布绘制态门控。
+    void onAnnoDragStart(const QPointF& scenePos);   // 画布绘制手势起点（依工具分派两点/折线/画笔/文字）。
+    void onAnnoDragMove(const QPointF& scenePos);    // 画布绘制手势拖拽（两点形状预览/画笔追点/折线橡皮筋）。
+    void onAnnoDragEnd(const QPointF& scenePos);     // 画布绘制手势释放（提交两点形状/画笔）。
+    void onAnnoHover(const QPointF& scenePos);       // 绘制态悬停（未按键）：折线实时预览落点与连线。
+    void onAnnoFinish();                             // 绘制态右键：收笔折线（提交）或取消当前预览。
+    void onAnnoEscape();                             // 绘制态 Esc：收笔折线或取消当前预览。
+    void onAnnotationSelect(const QPointF& scenePos);// SELECT 工具下点中标注图元：Core hitTest 选中。
+    void onAnnotationMoved(int index, double dx, double dy); // 拖动选中标注：Core 平移几何。
+    void onAnnotationTransformed(int index, double sx, double sy, double rotateDeg); // 拖定向包围盒手柄：Core 缩放/旋转。
+    void onAnnotationTransformPreview(int index, double sx, double sy, double rotateDeg); // 手柄拖拽中：预览值实时回显到属性面板。
+    void onAnnoColorPicked(const QColor& c);         // 属性面板：颜色。
+    void onAnnoStrokeChanged(int width);             // 属性面板：描边粗细。
+    void onAnnoFillChanged(bool fill);               // 属性面板：填充开关。
+    void onAnnoTextChanged(const QString& text);     // 属性面板：文字内容。
+    void onAnnoFontSizeChanged(double size);         // 属性面板：字号。
+    void onAnnoTransformApply(double sx, double sy, double rotateDeg); // 属性面板：缩放/旋转选中标注（Core 非破坏性变换）。
+    void onBaseVisibilityChanged(bool visible);      // 图层面板：底图显隐（切画布 base 图元）。
+    void onMaskVisibilityChanged(bool visible);      // 图层面板：遮罩（保留/删除预览）显隐。
+    void onGridVisibilityChanged(bool visible);      // 图层面板：网格线显隐（重建落地）。
+    void onCutLineVisibilityChanged(bool visible);   // 图层面板：切割线显隐。
+    void onSelectionVisibilityChanged(bool visible); // 图层面板：选取边框显隐。
+    void onAnnotationVisibilityChanged(bool visible);// 图层面板：标注图层显隐。
+    void onBurnInChanged(bool on);                   // 图层面板：导出烧录开关。
+    void onAnnoUndo();                               // 标注菜单：撤销（Core revoke）。
+    void onAnnoRedo();                               // 标注菜单：重做（Core redo）。
+    void onAnnoDeleteSelected();                     // 标注菜单/Delete 键：删除选中标注。
+    void onAnnoClearAll();                           // 标注菜单：清除全部标注。
 
 private:
     // 构建各部分。
@@ -117,6 +157,7 @@ private:
     // 状态与桥接。
     Document doc_;
     EngineBridge bridge_;
+    AnnotationBridge annoBridge_;       // 标注域桥：唯一持有并驱动 Core AnnotationLayer（G-4/G-5）。
     PreviewImage preview_;            // 当前预览副本 + 放大系数
     // 预览最长边上限（NFR-3 降采样阈值）。取 4096：让绝大多数图片 1:1 显示，
     // 使放大后底图像素与精确整数坐标的切割线/遮罩对齐（仅超长边大图才降采样）。
@@ -131,7 +172,10 @@ private:
     ParamPanel* param_{nullptr};
     ExportPanel* exportPanel_{nullptr};
     ImagePanel* imagePanel_{nullptr};   // 右侧「图像」页：预处理（FR-1）。
-    QTabWidget* rightTabs_{nullptr};    // 右侧选项卡容器（参数/导出/图像），供菜单定位到图像页。
+    ToolPanel* toolPanel_{nullptr};             // 左侧「标注工具」组（G-4）。
+    LayerPanel* layerPanel_{nullptr};           // 左侧「图层」组（G-5）。
+    AnnotationPropPanel* annoPropPanel_{nullptr}; // 右侧「标注」属性页（G-4）。
+    QTabWidget* rightTabs_{nullptr};    // 右侧选项卡容器（参数/导出/图像/标注），供菜单定位到某页。
 
     // 状态栏标签。
     QLabel* stCoord_{nullptr};

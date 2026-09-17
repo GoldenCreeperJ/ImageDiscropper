@@ -26,12 +26,20 @@ QPen gridPen() {
     return pen;
 }
 
+// 切割线样式（L2 多矩形诱导线）：橙色实线 2px，与 SelectionRectItem 的橙色一致（cosmetic）。
+QPen cutLinePen() {
+    QPen pen(QColor(255, 140, 0));
+    pen.setWidth(2);
+    pen.setCosmetic(true);
+    return pen;
+}
+
 } // namespace
 
-// 依 Core 网格重建网格线：收集单元边界的唯一 x/y（裁剪到图像内、忽略越界的残缺单元边），
-// 在每个坐标画一条贯穿全图的竖线 / 横线。
+// 依 Core 网格重建线：收集单元边界的唯一 x/y（裁剪到图像内、忽略越界的残缺单元边），
+// 在每个坐标画一条贯穿全图的竖线 / 横线。asCutLines=true 时用橙色切割线样式，否则灰色虚线网格。
 void GridLayer::rebuild(QGraphicsScene& scene, const idc::engine::Grid& grid,
-                        const int width, const int height, const bool visible) {
+                        const int width, const int height, const bool visible, const bool asCutLines) {
     clear();
     if (!visible || width <= 0 || height <= 0 || grid.cellCount() == 0) return;
 
@@ -46,7 +54,7 @@ void GridLayer::rebuild(QGraphicsScene& scene, const idc::engine::Grid& grid,
         if (a.bottom > 0 && a.bottom < height) ys.insert(a.bottom);
     }
 
-    const QPen pen = gridPen();
+    const QPen pen = asCutLines ? cutLinePen() : gridPen();
     const qreal W = static_cast<qreal>(width);
     const qreal H = static_cast<qreal>(height);
     for (const int x : xs) {

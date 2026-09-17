@@ -92,11 +92,36 @@ void SelectionRectItem::setHighlighted(const bool on) {
     update();
 }
 
-// 包围盒：选区外扩手柄尺寸；若有边被标记为贯穿切割线，则并入整幅图像范围（线贯穿全图）。
+// 贯穿切割线显隐（图层面板开关）：仅值变化时处理。除门控绘制外，还决定标记边的「贯穿延伸段」
+// 是否可被命中拖拽（可见才可抓）。整体鼠标接收由「边框或切割线任一可见」决定：故即使选框边框隐藏，
+// 只要切割线可见仍可拖动切割线延伸段（见 hitEdge）。boundingRect 依此标志决定是否并入全图范围，
+// 故切换时须 prepareGeometryChange() 重算场景索引与重绘区。
+void SelectionRectItem::setCutLinesVisible(const bool on) {
+    if (cutLinesVisible_ == on) return;
+    cutLinesVisible_ = on;
+    // 边框或切割线任一可见 → 接收左键（可拖对应可见元素）；两者均隐藏 → 彻底不可交互。
+    setAcceptedMouseButtons((borderVisible_ || cutLinesVisible_) ? Qt::LeftButton : Qt::NoButton);
+    prepareGeometryChange();
+    update();
+}
+
+// 选区边框显隐（图层面板开关）：门控矩形描边/填充/手柄的绘制与其专有交互（四角手柄缩放、框内整体
+// 移动、选区段拖边均需边框可见）。整体鼠标接收由「边框或切割线任一可见」决定——两者都隐藏才彻底禁用
+// 交互（对齐标注「隐藏图层=不可交互」）；切割线仍可见时，即便边框隐藏也能拖动切割线延伸段。
+void SelectionRectItem::setBorderVisible(const bool on) {
+    if (borderVisible_ == on) return;
+    borderVisible_ = on;
+    // 边框或切割线任一可见 → 接收左键；两者均隐藏 → 选区不可交互。
+    setAcceptedMouseButtons((borderVisible_ || cutLinesVisible_) ? Qt::LeftButton : Qt::NoButton);
+    update();
+}
+
+// 包围盒：选区外扩手柄尺寸；若有边被标记为贯穿切割线**且切割线可见**，则并入整幅图像范围
+// （延伸段贯穿全图）；切割线隐藏时延伸段既不绘制也不可抓，故包围盒回落到选区自身。
 QRectF SelectionRectItem::boundingRect() const {
     const qreal m = handleSize_ + 2.0;
     QRectF b = rect_.normalized().adjusted(-m, -m, m, m);
-    if (hasBounds_ && (cutEdge_[EdgeLeft] || cutEdge_[EdgeRight] ||
+    if (hasBounds_ && cutLinesVisible_ && (cutEdge_[EdgeLeft] || cutEdge_[EdgeRight] ||
                        cutEdge_[EdgeTop] || cutEdge_[EdgeBottom])) {
         b = b.united(QRectF(-m, -m, imgW_ + 2.0 * m, imgH_ + 2.0 * m));
     }
@@ -124,8 +149,8 @@ void SelectionRectItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*
     pen.setCosmetic(true);
     painter->setPen(pen);
 
-    // 先画贯穿切割线：把被标记的边沿法向延伸贯穿全图（竖边贯穿全高、横边贯穿全宽）。
-    if (hasBounds_) {
+    // 先画贯穿切割线（图层面板「切割线」可关）：把被标记的边沿法向延伸贯穿全图（竖边贯穿全高、横边贯穿全宽）。
+    if (hasBounds_ && cutLinesVisible_) {
         painter->setBrush(Qt::NoBrush);
         const qreal W = static_cast<qreal>(imgW_);
         const qreal H = static_cast<qreal>(imgH_);
@@ -135,27 +160,30 @@ void SelectionRectItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*
         if (cutEdge_[EdgeBottom]) painter->drawLine(QPointF(0.0, r.bottom()), QPointF(W, r.bottom()));
     }
 
-    // 选区填充与边框（叠在切割线之上）；高亮态填充略深。
-    painter->setBrush(QColor(255, 165, 0, highlighted_ ? 60 : 30));
-    painter->setPen(pen);
-    painter->drawRect(r);
+    // 选区填充与边框 + 四角手柄（图层面板「选取边框」可关；叠在切割线之上）；高亮态填充略深。
+    if (borderVisible_) {
+        painter->setBrush(QColor(255, 165, 0, highlighted_ ? 60 : 30));
+        painter->setPen(pen);
+        painter->drawRect(r);
 
-    // 四角手柄：白底 + 橙色细框，边长 = handleSize_（场景单位，随缩放换算保持约 8 屏幕px）。
-    QPointF tl, tr, bl, br;
-    cornerPoints(tl, tr, bl, br);
-    QPen handlePen(QColor(255, 140, 0));
-    handlePen.setWidth(1);
-    handlePen.setCosmetic(true);
-    painter->setPen(handlePen);
-    painter->setBrush(Qt::white);
-    const qreal half = handleSize_ / 2.0;
-    for (const QPointF& c : {tl, tr, bl, br}) {
-        painter->drawRect(QRectF(c.x() - half, c.y() - half, handleSize_, handleSize_));
+        // 四角手柄：白底 + 橙色细框，边长 = handleSize_（场景单位，随缩放换算保持约 8 屏幕px）。
+        QPointF tl, tr, bl, br;
+        cornerPoints(tl, tr, bl, br);
+        QPen handlePen(QColor(255, 140, 0));
+        handlePen.setWidth(1);
+        handlePen.setCosmetic(true);
+        painter->setPen(handlePen);
+        painter->setBrush(Qt::white);
+        const qreal half = handleSize_ / 2.0;
+        for (const QPointF& c : {tl, tr, bl, br}) {
+            painter->drawRect(QRectF(c.x() - half, c.y() - half, handleSize_, handleSize_));
+        }
     }
 }
 
-// 命中角手柄：返回 0=TL,1=TR,2=BL,3=BR，未命中 -1。
+// 命中角手柄：返回 0=TL,1=TR,2=BL,3=BR，未命中 -1。角手柄属选区边框视觉，边框隐藏时不可缩放。
 int SelectionRectItem::hitHandle(const QPointF& scenePos) const {
+    if (!borderVisible_) return -1;   // 边框隐藏 → 无手柄可抓。
     QPointF tl, tr, bl, br;
     cornerPoints(tl, tr, bl, br);
     const std::array<QPointF, 4> cs{tl, tr, bl, br};
@@ -170,8 +198,9 @@ int SelectionRectItem::hitHandle(const QPointF& scenePos) const {
 }
 
 // 命中边：返回 EdgeLeft/EdgeRight/EdgeTop/EdgeBottom，未命中 -1。
-// 竖边比较 x、横边比较 y，落在 ±handleSize_ 抓边条带内、且沿线绘制跨度（标记边贯穿全图，
-// 否则仅选区那段）即命中；命中多条时取法向距离最近者。角手柄已在 hitHandle 优先处理。
+// 竖边比较 x、横边比较 y，落在 ±handleSize_ 抓边条带内、且沿线绘制跨度即命中；命中多条时取法向距离最近者。
+// 跨度规则：标记为切割线的边**且切割线可见**时才贯穿全图（可抓延伸段），否则仅选区那段——
+// 这保证切割线隐藏后其延伸段不可见亦不可拖（避免对着空白处拖动不可见的边）。角手柄已在 hitHandle 优先处理。
 int SelectionRectItem::hitEdge(const QPointF& p) const {
     if (!hasBounds_) return -1;
     const QRectF r = rect_.normalized();
@@ -180,28 +209,33 @@ int SelectionRectItem::hitEdge(const QPointF& p) const {
     const qreal H = static_cast<qreal>(imgH_);
     int best = -1;
     qreal bestD = th; // 仅接受法向距离 ≤ th 的命中
+    // 延伸段可抓：标记边且切割线可见（贯穿全图）；选区段可抓：边框可见（仅选区那段）。
+    const bool extOk = cutLinesVisible_;
+    const bool segOk = borderVisible_;
 
-    // 竖边（Left/Right）：沿线 y 跨度 = 标记边贯穿全高 [0,H]，否则仅选区高 [top,bottom]。
-    const struct VEdge { int edge; qreal x; bool cut; } vs[2] = {
-        {EdgeLeft, r.left(), cutEdge_[EdgeLeft]},
-        {EdgeRight, r.right(), cutEdge_[EdgeRight]},
+    // 竖边（Left/Right）：有可见延伸段时贯穿全高 [0,H]；否则仅当边框可见时取选区高 [top,bottom]。
+    const struct VEdge { int edge; qreal x; bool ext; } vs[2] = {
+        {EdgeLeft, r.left(), cutEdge_[EdgeLeft] && extOk},
+        {EdgeRight, r.right(), cutEdge_[EdgeRight] && extOk},
     };
     for (const VEdge& v : vs) {
-        const qreal y0 = v.cut ? 0.0 : r.top();
-        const qreal y1 = v.cut ? H : r.bottom();
+        if (!v.ext && !segOk) continue;   // 无可见延伸段且边框隐藏 → 整条不可抓。
+        const qreal y0 = v.ext ? 0.0 : r.top();
+        const qreal y1 = v.ext ? H : r.bottom();
         if (p.y() >= y0 - th && p.y() <= y1 + th) {
             const qreal d = std::abs(p.x() - v.x);
             if (d <= bestD) { bestD = d; best = v.edge; }
         }
     }
-    // 横边（Top/Bottom）：沿线 x 跨度 = 标记边贯穿全宽 [0,W]，否则仅选区宽 [left,right]。
-    const struct HEdge { int edge; qreal y; bool cut; } hs[2] = {
-        {EdgeTop, r.top(), cutEdge_[EdgeTop]},
-        {EdgeBottom, r.bottom(), cutEdge_[EdgeBottom]},
+    // 横边（Top/Bottom）：有可见延伸段时贯穿全宽 [0,W]；否则仅当边框可见时取选区宽 [left,right]。
+    const struct HEdge { int edge; qreal y; bool ext; } hs[2] = {
+        {EdgeTop, r.top(), cutEdge_[EdgeTop] && extOk},
+        {EdgeBottom, r.bottom(), cutEdge_[EdgeBottom] && extOk},
     };
     for (const HEdge& h : hs) {
-        const qreal x0 = h.cut ? 0.0 : r.left();
-        const qreal x1 = h.cut ? W : r.right();
+        if (!h.ext && !segOk) continue;
+        const qreal x0 = h.ext ? 0.0 : r.left();
+        const qreal x1 = h.ext ? W : r.right();
         if (p.x() >= x0 - th && p.x() <= x1 + th) {
             const qreal d = std::abs(p.y() - h.y);
             if (d <= bestD) { bestD = d; best = h.edge; }
@@ -281,8 +315,8 @@ void SelectionRectItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
         if (e >= 0) {
             mode_ = DragMode::Edge;   // 抓边（或其贯穿延伸段）：沿法向拖动该边＝移动对应切割线。
             dragEdge_ = e;
-        } else if (rect_.normalized().contains(p)) {
-            mode_ = DragMode::Move;   // 框内且未压边：整体平移选区。
+        } else if (borderVisible_ && rect_.normalized().contains(p)) {
+            mode_ = DragMode::Move;   // 框内且未压边、且边框可见：整体平移选区（边框隐藏时无填充区可拖）。
         } else {
             event->ignore();          // 点在框外且未压线：让视图处理为「框选新选区」。
             return;

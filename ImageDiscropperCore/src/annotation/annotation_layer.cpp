@@ -141,7 +141,8 @@ std::optional<std::size_t> AnnotationLayer::hitTest(const core::Point2D& p) cons
     for (std::size_t i = anns.size(); i-- > 0;) {
         const Annotation& ps = anns[i];
         if (!ps.shape) continue;
-        const geometry::Path path = ps.shape->toPath();
+        // 取世界路径（已套用非破坏性变换），故命中判定与缩放/旋转/翻转后的可见几何一致。
+        const geometry::Path path = ps.shape->worldPath();
 
         // 填充且非直线：优先按内部判定
         if (ps.fillType && ps.shapeType != geometry::ShapeType::LINE) {
@@ -189,6 +190,19 @@ void AnnotationLayer::redo() {
 void AnnotationLayer::clear() {
     history_.clearAll();
     selectedIndex_.reset();
+}
+
+// 删除指定下标的标注：从主栈（当前有效标注列表）擦除该项，作为一次新操作清空重做栈，
+// 并同步修正选中下标（指向被删项则取消选中，位于其后则前移一位）。下标越界时不做任何事。
+void AnnotationLayer::removeAnnotation(const std::size_t index) {
+    std::vector<Annotation>& anns = history_.undoStack();
+    if (index >= anns.size()) return;
+    anns.erase(anns.begin() + static_cast<std::ptrdiff_t>(index));
+    history_.clearRedo();   // 新操作切断“未来”（与 push 语义一致）
+    if (selectedIndex_) {
+        if (*selectedIndex_ == index) selectedIndex_.reset();
+        else if (*selectedIndex_ > index) --(*selectedIndex_);
+    }
 }
 
 // ------ 合成 ------

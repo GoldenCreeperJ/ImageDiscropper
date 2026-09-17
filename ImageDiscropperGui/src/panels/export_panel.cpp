@@ -159,6 +159,12 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     infoLabel_->setWordWrap(true);
     root->addWidget(infoLabel_);
 
+    // 导出时烧录标注（原属图层面板，现归入导出选项）：勾选后导出把标注合成进像素（随像素一起被切割）。
+    burnIn_ = new QCheckBox(QStringLiteral("导出时烧录标注"), this);
+    burnIn_->setChecked(false);
+    burnIn_->setToolTip(QStringLiteral("勾选后导出会把标注合成进像素（随像素一起被切割）；不勾选则导出纯底图"));
+    root->addWidget(burnIn_);
+
     // 导出按钮。
     exportBtn_ = new QPushButton(QStringLiteral("导出"), this);
     exportBtn_->setToolTip(QStringLiteral("按当前参数导出（Ctrl+S）。"));
@@ -175,6 +181,7 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     connect(dirBtn_, &QPushButton::clicked, this, &ExportPanel::onBrowseDir);
     connect(fileBtn_, &QPushButton::clicked, this, &ExportPanel::onBrowseFile);
     connect(exportBtn_, &QPushButton::clicked, this, &ExportPanel::exportRequested);
+    connect(burnIn_, &QCheckBox::toggled, this, &ExportPanel::burnInChanged);
     // 重排参数：列/行共用一个槽、单元宽/高共用一个槽（信号多出的 int 参数自动丢弃）。
     connect(mergeCols_, &QSpinBox::valueChanged, this, &ExportPanel::onMergeGridEdited);
     connect(mergeRows_, &QSpinBox::valueChanged, this, &ExportPanel::onMergeGridEdited);
@@ -267,6 +274,15 @@ void ExportPanel::setPreviewInfo(const QString& text) {
     if (infoLabel_) infoLabel_->setText(text);
 }
 
+// 反向同步「导出时烧录标注」复选框（MainWindow 依 AnnotationBridge::burnInEnabled 回灌）。
+// blockSignals 防止回灌时再触发 burnInChanged 造成回环。
+void ExportPanel::setBurnInChecked(const bool on) {
+    if (!burnIn_) return;
+    burnIn_->blockSignals(true);
+    burnIn_->setChecked(on);
+    burnIn_->blockSignals(false);
+}
+
 // 输出模式变更 → 写回 Document + 切换字段可见性。
 void ExportPanel::onModeChanged(const int index) {
     if (!doc_) return;
@@ -353,18 +369,28 @@ void ExportPanel::onMergeCellEdited() {
 }
 
 // 点击填充色按钮 → 弹带 Alpha 的取色对话框，写回 Document 并刷新色块。
-// 说明：因需 Alpha 通道，Qt 无法使用原生取色框而回退到自带对话框（固定尺寸）；
-//       若以这个很窄的右侧面板为父，Windows 下会以面板尺寸推导初始 geometry
-//       再被强制夹到固定最小尺寸，刷出大量 "QWindowsWindow::setGeometry: Unable to
-//       set geometry" 噪声告警。改以顶层窗口为父 + 显式 DontUseNativeDialog 消除。
+// 说明：因需 Alpha 通道，Qt 在 Windows 无法使用原生取色框而回退到自带的固定尺寸
+//       对话框 QColorDialogClassWindow（min==max）。若不显式设定初始 geometry，Qt 会以一个
+//       默认小尺寸（如 180x45）初始化，show 时被 Windows 强制夹到固定最小尺寸，刷出大量
+//       "QWindowsWindow::setGeometry: Unable to set geometry" 噪声告警。故：以顶层窗口为父 +
+//       DontUseNativeDialog，并在 exec 前显式给定一个 >= 对话框最小尺寸的初始 geometry（取自
+//       对话框自身 sizeHint，随 DPI 自适应、居中到父窗口），从源头规避该告警。
 void ExportPanel::onPadColorClicked() {
     if (!doc_) return;
     const idc::core::Color cur = doc_->padColor();
     const QColor init(cur.r, cur.g, cur.b, cur.a);
-    QColorDialog dlg(init, window());                 // 以顶层窗口为父，避免以窄面板推导初始尺寸。
+    QColorDialog dlg(init, window());                 // 以顶层窗口为父，便于居中且不以窄面板推导初始位置。
     dlg.setWindowTitle(QStringLiteral("选择填充色"));
     dlg.setOption(QColorDialog::ShowAlphaChannel, true);
     dlg.setOption(QColorDialog::DontUseNativeDialog, true); // Alpha 需求下本就走非原生，显式声明意图。
+    // 关键：显式设定初始 geometry（>= 固定最小尺寸、居中到父窗口），避免默认小尺寸被 Windows 夹取而刷 setGeometry 告警。
+    const QSize dlgSz = dlg.minimumSizeHint().expandedTo(dlg.sizeHint());
+    QPoint dlgPos(80, 80);
+    if (const QWidget* pw = dlg.parentWidget()) {
+        const QRect pg = pw->window()->geometry();       // 顶层窗口 geometry 为全局屏幕坐标。
+        dlgPos = pg.center() - QPoint(dlgSz.width() / 2, dlgSz.height() / 2);
+    }
+    dlg.setGeometry(dlgPos.x(), dlgPos.y(), dlgSz.width(), dlgSz.height());
     if (dlg.exec() != QDialog::Accepted) return;      // 用户取消。
     const QColor picked = dlg.currentColor();
     doc_->setPadColor(idc::core::Color(static_cast<std::uint8_t>(picked.red()),

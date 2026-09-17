@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：tests/test_main.cpp
-// 作用：极简冒烟测试入口，覆盖 core / geometry / processing / annotation / preprocess /
+// 作用：极简冒烟测试入口，覆盖 core / geometry / pixel_ops / annotation / preprocess /
 //       history / engine 七大模块的关键行为，并调用引擎验收测试段（pipeline / export /
 //       boundary，定义于独立 test_engine_*.cpp）。使用共享 CHECK 宏，不依赖第三方框架。
 // 分块依据：每个模块一个 testXxx() 函数，main 依次调用；引擎的完整流水线/导出/边界
@@ -23,8 +23,8 @@
 #include "geometry/shapes.h"
 #include "history/history_manager.h"
 #include "preprocess/preprocess_pipeline.h"
-#include "processing/color_ops.h"
-#include "processing/geometric_ops.h"
+#include "pixel_ops/color_ops.h"
+#include "pixel_ops/geometric_ops.h"
 
 // ---------------------------------------------------------------------------
 // core 模块测试：颜色运算、图像读写、格式转换
@@ -95,9 +95,9 @@ static void testGeometry() {
 }
 
 // ---------------------------------------------------------------------------
-// processing 模块测试：灰度、旋转、翻转、缩放（含纯色等价性）、通道反色 / 分离（含灰度反色）、颜色拾取
+// pixel_ops 模块测试：灰度、旋转、翻转、缩放（含纯色等价性）、通道反色 / 分离（含灰度反色）、颜色拾取
 // ---------------------------------------------------------------------------
-static void testProcessing() {
+static void testPixelOps() {
     using namespace idc;
 
     // 构造一张 8x8 的渐变彩色图
@@ -109,79 +109,79 @@ static void testProcessing() {
     }
 
     // 灰度化
-    core::Image gray = processing::toGray(img);
+    core::Image gray = pixel_ops::toGray(img);
     CHECK(gray.isGray());
     CHECK(gray.width() == 8 && gray.height() == 8);
 
     // 旋转 90°：宽高互换
-    core::Image rot = processing::rotate(img, 90);
+    core::Image rot = pixel_ops::rotate(img, 90);
     CHECK(rot.width() == 8 && rot.height() == 8);
     // 旋转 180° 后回到原尺寸
-    core::Image rot180 = processing::rotate(img, 180);
+    core::Image rot180 = pixel_ops::rotate(img, 180);
     CHECK(rot180.width() == 8 && rot180.height() == 8);
     // 旋转 360° 等价于原图
-    core::Image rot360 = processing::rotate(img, 360);
+    core::Image rot360 = pixel_ops::rotate(img, 360);
     CHECK(rot360.getPixel(0, 0) == img.getPixel(0, 0));
 
     // 水平翻转：(0,0) 与 (w-1,0) 交换
-    core::Image flipH = processing::flip(img, true);
+    core::Image flipH = pixel_ops::flip(img, true);
     CHECK(flipH.getPixel(0, 0) == img.getPixel(7, 0));
     CHECK(flipH.getPixel(7, 0) == img.getPixel(0, 0));
 
     // 缩放：放大到 16x16
-    core::Image scaled = processing::resize(img, 16, 16, processing::ResampleMode::BILINEAR);
+    core::Image scaled = pixel_ops::resize(img, 16, 16, pixel_ops::ResampleMode::BILINEAR);
     CHECK(scaled.width() == 16 && scaled.height() == 16);
 
     // 通道反色：R 通道反色后 (0,0) 处 R 应变为 255 - 0 = 255
-    core::Image invR = processing::invertChannels(img, "100");
+    core::Image invR = pixel_ops::invertChannels(img, "100");
     CHECK(invR.getPixel(0, 0).r == 255);
     CHECK(invR.getPixel(0, 0).g == 0);   // G 未反色，仍为原值 0
 
     // 通道分离：只保留 B 通道，R/G 应为 0
-    core::Image onlyB = processing::splitChannels(img, "001");
+    core::Image onlyB = pixel_ops::splitChannels(img, "001");
     CHECK(onlyB.getPixel(3, 3).r == 0);
     CHECK(onlyB.getPixel(3, 3).g == 0);
     CHECK(onlyB.getPixel(3, 3).b == 128);
 
     // 颜色拾取：合法坐标返回 optional 有值，越界返回 nullopt
-    CHECK(processing::pickColor(img, 0, 0).has_value());
-    CHECK(!processing::pickColor(img, 100, 100).has_value());
+    CHECK(pixel_ops::pickColor(img, 0, 0).has_value());
+    CHECK(!pixel_ops::pickColor(img, 100, 100).has_value());
 
     // ---- 灰度图反色（黑白后仍可反色）：对单一亮度通道取 255 - v，格式仍为 GRAY ----
     core::Image gimg(4, 4, core::ImageFormat::GRAY);
     for (int y = 0; y < 4; ++y)
         for (int x = 0; x < 4; ++x)
             gimg.setGray(x, y, static_cast<std::uint8_t>(x * 40 + y * 10)); // 值域 0..150
-    const core::Image ginv = processing::invertChannels(gimg, "111");
+    const core::Image ginv = pixel_ops::invertChannels(gimg, "111");
     CHECK(ginv.isGray());
     CHECK(ginv.width() == 4 && ginv.height() == 4);
     CHECK(ginv.getGray(0, 0) == 255);                      // 255 - 0
     CHECK(ginv.getGray(3, 3) == 255 - gimg.getGray(3, 3)); // 逐像素取反
     // 灰度反色忽略 mask：任意 mask 都整体反相
-    CHECK(processing::invertChannels(gimg, "100").getGray(2, 1) == 255 - gimg.getGray(2, 1));
+    CHECK(pixel_ops::invertChannels(gimg, "100").getGray(2, 1) == 255 - gimg.getGray(2, 1));
     // 反色为对合：两次反色回到原值
-    CHECK(processing::invertChannels(ginv, "111").getGray(1, 2) == gimg.getGray(1, 2));
+    CHECK(pixel_ops::invertChannels(ginv, "111").getGray(1, 2) == gimg.getGray(1, 2));
 
     // ---- 灰度图色道分离无意义：返回副本（像素不变、仍为 GRAY）----
-    const core::Image gsplit = processing::splitChannels(gimg, "001");
+    const core::Image gsplit = pixel_ops::splitChannels(gimg, "001");
     CHECK(gsplit.isGray());
     CHECK(gsplit.getGray(2, 2) == gimg.getGray(2, 2));
 
     // ---- 彩色反色 "111"：R/G/B 全反、alpha 保留 ----
     core::Image aimg(2, 2, core::ImageFormat::RGBA);
     aimg.fill(core::Color(10, 200, 30, 77));
-    const core::Image ainv = processing::invertChannels(aimg, "111");
+    const core::Image ainv = pixel_ops::invertChannels(aimg, "111");
     CHECK(ainv.getPixel(0, 0) == core::Color(245, 55, 225, 77)); // alpha=77 不变
 
     // ---- 彩色分离 "010"：仅留 G，R/B 置 0，alpha 保留 ----
-    const core::Image asplit = processing::splitChannels(aimg, "010");
+    const core::Image asplit = pixel_ops::splitChannels(aimg, "010");
     CHECK(asplit.getPixel(1, 1) == core::Color(0, 200, 0, 77));
 
     // ---- resize 等价性：纯色图缩放后仍为同一纯色（NEAREST / BILINEAR 均不应引入偏差；2× 放大→权重为二进制精确值）----
     core::Image solid(6, 4, core::ImageFormat::RGBA);
     solid.fill(core::Color(12, 34, 56, 78));
-    const core::Image solidNear = processing::resize(solid, 12, 8, processing::ResampleMode::NEAREST);
-    const core::Image solidBil = processing::resize(solid, 12, 8, processing::ResampleMode::BILINEAR);
+    const core::Image solidNear = pixel_ops::resize(solid, 12, 8, pixel_ops::ResampleMode::NEAREST);
+    const core::Image solidBil = pixel_ops::resize(solid, 12, 8, pixel_ops::ResampleMode::BILINEAR);
     CHECK(solidNear.width() == 12 && solidNear.height() == 8);
     CHECK(solidNear.getPixel(0, 0) == core::Color(12, 34, 56, 78));
     CHECK(solidNear.getPixel(11, 7) == core::Color(12, 34, 56, 78));
@@ -195,7 +195,7 @@ static void testProcessing() {
     quad.setPixel(1, 0, core::Color(0, 255, 0, 255));   // 右上 绿
     quad.setPixel(0, 1, core::Color(0, 0, 255, 255));   // 左下 蓝
     quad.setPixel(1, 1, core::Color(255, 255, 0, 255)); // 右下 黄
-    const core::Image quad4 = processing::resize(quad, 4, 4, processing::ResampleMode::NEAREST);
+    const core::Image quad4 = pixel_ops::resize(quad, 4, 4, pixel_ops::ResampleMode::NEAREST);
     CHECK(quad4.getPixel(0, 0) == core::Color(255, 0, 0, 255));
     CHECK(quad4.getPixel(3, 0) == core::Color(0, 255, 0, 255));
     CHECK(quad4.getPixel(0, 3) == core::Color(0, 0, 255, 255));
@@ -206,11 +206,11 @@ static void testProcessing() {
     for (int y = 0; y < 4; ++y)
         for (int x = 0; x < 4; ++x)
             gsolid.setGray(x, y, 200);
-    const core::Image gscaled = processing::resize(gsolid, 8, 8, processing::ResampleMode::BILINEAR);
+    const core::Image gscaled = pixel_ops::resize(gsolid, 8, 8, pixel_ops::ResampleMode::BILINEAR);
     CHECK(gscaled.isGray());
     CHECK(gscaled.getGray(3, 5) == 200);
 
-    std::cout << "[processing] OK\n";
+    std::cout << "[pixel_ops] OK\n";
 }
 
 // ---------------------------------------------------------------------------
@@ -272,6 +272,66 @@ static void testAnnotation() {
     panel.selectAnnotation(0);
     panel.changeColor(core::kGreen);
     CHECK(panel.annotations()[0].color == core::kGreen);
+
+    // AnnotationLayer：删除指定下标标注（removeAnnotation）——加第二个矩形后删 index 0，
+    // 应仅剩原第 2 个；且删除作为新操作会清空重做栈，选中下标同步修正。
+    annotation::ShapeRequest r3;
+    r3.p1 = {70, 70};
+    r3.p2 = {90, 90};
+    r3.type = geometry::ShapeType::RECTANGLE;
+    panel.setEditType(annotation::EditType::DRAW);
+    panel.changeColor(core::kBlue);
+    panel.addAnnotation(annotation::buildShape(r3));
+    CHECK(panel.annotations().size() == 2);
+    panel.selectAnnotation(1);            // 选中第二个
+    panel.removeAnnotation(0);            // 删除第一个
+    CHECK(panel.annotations().size() == 1);
+    CHECK(panel.annotations()[0].color == core::kBlue);      // 剩下的是原第 2 个（蓝色）
+    CHECK(panel.selectedAnnotationIndex().has_value() && *panel.selectedAnnotationIndex() == 0); // 选中下标前移
+    panel.removeAnnotation(99);           // 越界删除应被忽略
+    CHECK(panel.annotations().size() == 1);
+
+    // Shape::translate：就地平移保留具体类型（不再退化为通用 PATH）。
+    // 矩形：平移后 type() 仍为 RECTANGLE，包围盒按 (dx,dy) 偏移、宽高不变。
+    annotation::ShapeRequest r4;
+    r4.p1 = {10, 10};
+    r4.p2 = {30, 20};
+    r4.type = geometry::ShapeType::RECTANGLE;
+    auto movable = annotation::buildShape(r4);
+    const geometry::BoundingBox b0 = movable->bounds();
+    movable->translate(5, 7);
+    const geometry::BoundingBox b1 = movable->bounds();
+    CHECK(movable->type() == geometry::ShapeType::RECTANGLE);            // 类型未退化
+    CHECK(std::abs((b1.x - b0.x) - 5.0) < 1e-6);
+    CHECK(std::abs((b1.y - b0.y) - 7.0) < 1e-6);
+    CHECK(std::abs(b1.width - b0.width) < 1e-6 && std::abs(b1.height - b0.height) < 1e-6);
+
+    // 文字：平移后仍为 TEXT（保留字形渲染所需的类型身份），基线锚点随之偏移。
+    annotation::ShapeRequest r5;
+    r5.type = geometry::ShapeType::TEXT;
+    r5.p1 = {40, 40};
+    r5.p2 = {40, 40};
+    r5.text = "hi";
+    r5.fontSize = 16;
+    auto txt = annotation::buildShape(r5);
+    const geometry::BoundingBox t0 = txt->bounds();
+    txt->translate(-3, 4);
+    const geometry::BoundingBox t1 = txt->bounds();
+    CHECK(txt->type() == geometry::ShapeType::TEXT);                     // 未退化为 PATH
+    CHECK(std::abs((t1.x - t0.x) + 3.0) < 1e-6);
+    CHECK(std::abs((t1.y - t0.y) - 4.0) < 1e-6);
+
+    // 多边形（正方形）：平移后仍为 SQUARE，逐顶点偏移。
+    annotation::ShapeRequest r6;
+    r6.type = geometry::ShapeType::SQUARE;
+    r6.p1 = {0, 0};
+    r6.p2 = {10, 0};
+    auto sq = annotation::buildShape(r6);
+    const geometry::BoundingBox s0 = sq->bounds();
+    sq->translate(2, 2);
+    const geometry::BoundingBox s1 = sq->bounds();
+    CHECK(sq->type() == geometry::ShapeType::SQUARE);
+    CHECK(std::abs((s1.x - s0.x) - 2.0) < 1e-6 && std::abs((s1.y - s0.y) - 2.0) < 1e-6);
 
     // ViewTransform：屏幕 ↔ 逻辑坐标
     annotation::ViewTransform vt;
@@ -422,7 +482,7 @@ static void testEngine() {
 int main() {
     testCore();
     testGeometry();
-    testProcessing();
+    testPixelOps();
     testAnnotation();
     testPreprocess();
     testHistory();

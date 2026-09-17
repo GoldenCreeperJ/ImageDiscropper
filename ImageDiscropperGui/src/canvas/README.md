@@ -2,19 +2,20 @@
 
 > **include/src 分离**：本模块头文件在 `include/gui/canvas/`，实现（`.cpp`）与本 README 在 `src/canvas/`。
 
-按 guideline §4.2 的 **z 序图层化**组织画布：底图 → 删除遮罩 → 保留遮罩 → 网格 → 切割线 → 选区框 → 角标。
+按 guideline §4.2 的 **z 序图层化**组织画布：底图 → 标注矢量叠加 → 删除遮罩 → 保留遮罩 → 网格 → 切割线 → 选区框 → 角标。
 场景坐标统一为**原图像素坐标**；底图用降采样 pixmap 经变换铺回原图尺寸，各叠加层即可直接按原图坐标绘制。
 本目录**只渲染 Core 给出的结果**（切割线来自 `generateCutLines`、保留块来自 `EngineResult.kept`），不含几何计算（A-0.1）。
 
 | 文件 | 职责 |
 | ---- | ---- |
 | `z_order.h`                  | 各图层 z 值常量（统一层序，避免魔法数散落） |
-| `canvas_scene.{h,cpp}`       | 场景：装配并刷新底图 / 遮罩 / 网格线 / 选区（含贯穿切割线延伸）/ L2 多矩形可拖拽选区，转发选区编辑信号 |
-| `canvas_view.{h,cpp}`        | 视图：滚轮缩放、空格/中键平移、方向键微调、框选、右键菜单 |
+| `canvas_scene.{h,cpp}`       | 场景：装配并刷新底图 / 遮罩 / 网格线 / 选区（含贯穿切割线延伸）/ L2 多矩形可拖拽选区 / 标注矢量叠加（增量维护），转发选区编辑与标注选中/移动/变换信号（`annotationMoved`/`annotationTransformed` 提交、`annotationTransformPreview` 拖拽逐帧回显）；并提供各图层显隐开关 `setMasksVisible`/`setGridVisible`/`setCutLinesVisible`/`setSelectionVisible`/`setBaseVisible`/`setAnnotationsVisible`（图层面板驱动） |
+| `canvas_view.{h,cpp}`        | 视图：滚轮缩放、空格/中键平移、方向键微调、框选、右键菜单；标注绘制态门控下路由左键手势为 `annoDrag*`、悬停移动为 `annoHover`（折线橡皮筋预览）、右键为 `annoFinish`（折线收笔） |
 | `mask_layer.{h,cpp}`         | 保留(绿)/删除(红)遮罩层（见下方渲染法） |
-| `grid_layer.{h,cpp}`         | L3 网格线层：把 Core `Grid` 的单元边界画成灰色虚线（纯显示、不接收鼠标） |
+| `grid_layer.{h,cpp}`         | 网格线层：把 Core `Grid` 的单元边界画成贯穿线，两种样式（`asCutLines`）——灰色虚线（L3 网格）或橙色实线（L2 多矩形诱导切割线）；纯显示、不接收鼠标 |
 | `cell_picker_item.{h,cpp}`   | L3 单元点选交互图元：单击切换 / 拖拽框选 / CUSTOM 编号角标 + 拖拽调序（命中测试只用 Core 单元区域） |
-| `selection_rect_item.{h,cpp}`| 唯一橙色交互图元：选区框 + 标记边的贯穿切割线延伸（可整体移动 / 四角缩放 / 直接抓边拖动＝移动切割线 / 边缘中心吸附） |
+| `selection_rect_item.{h,cpp}`| 唯一橙色交互图元：选区框 + 标记边的贯穿切割线延伸（可整体移动 / 四角缩放 / 直接抓边拖动＝移动切割线 / 边缘中心吸附）；**逐元素可见即可拖**：`setCutLinesVisible` 门控贯穿延伸段的绘制与可抓性，`setBorderVisible` 门控矩形边框/手柄绘制与其专有交互（四角缩放/框内平移/选区段拖边）；图元整体仅在**两者都隐藏**时才置 `Qt::NoButton` 彻底不可交互（切割线可见、边框隐藏时仍可拖切割线延伸段） |
+| `annotation_item.{h,cpp}`    | 单个标注的矢量渲染图元：`Shape::worldPath()`（含非破坏性变换）→`QPainterPath` 叠加绘制（不改底图像素），选中时绘制**定向包围盒（OBB）+ 8 缩放手柄 + 1 旋转手柄**（拖拽缩放/拉伸/旋转/翻转、实时矢量预览）+ 可拖动平移 | 
 
 ## z 序（z_order.h）
 
@@ -46,7 +47,9 @@ GUI 无需自行计算“删除集”，完全符合 A-0.1。
 L3 模式下，`CanvasScene::updateGrid(grid, true)` 委托 `GridLayer::rebuild` 依 Core `Grid` 的单元边界（去重、裁剪到图像内）
 画**灰色虚线**贯穿线（`QColor(150,150,150)` 1px `DashLine` cosmetic，z=`kGrid`），纯显示、`setAcceptedMouseButtons(Qt::NoButton)`
 不遮挡交互。非 L3 模式或换图时 `clearGrid()` 清空。L3 **隐藏橙色选区框**（`syncSelection(rect,false)`）——网格由参数定义、
-不依赖矩形选区；单元点选/编号角标交互由 `cell_picker_item` 承担（见下）。网格的几何推导全在 Core `Grid::build`（A-0.1）。
+不依赖矩形选区；单元点选/编号角标交互由 `cell_picker_item` 承担（见下）。**单元选择高亮（picker）受 `selectionVisible_` 门控**：
+图层面板关闭「选取边框」时 `updateGrid` 令 `pickerItem_->setVisible(false)`，那层蓝色单元高亮即隐藏且不可点选（这就是
+「L3 选中后无法隐藏的网格」的真身——它是 `CellPickerItem` 的单元选择高亮层，非 `GridLayer` 的灰色网格线）。网格的几何推导全在 Core `Grid::build`（A-0.1）。
 
 ## L3 单元点选（cell_picker_item；FR-L3.3 / FR-L3.5）
 
@@ -79,6 +82,13 @@ L3 下与选区框**互斥显隐**的第二个交互图元，覆盖整幅图像�
 线与选区始终同源同位。这既提供了「直接拖动切割线」的能力，又从物理上根除了旧独立实现的「蓝/橙双线并存、手柄错位、
 右线达上限后与选区分离」等双重表示问题（NFR-6）。
 
+**可见即可拖、隐藏即不可拖（逐元素）**：图元的交互按「边框」与「切割线延伸段」两个可见性分别门控：
+- `hitEdge`：标记边的「贯穿全图可抓」仅在 `cutLinesVisible_` 为真时生效（延伸段）；选区矩形自身那段仅在 `borderVisible_` 为真时可抓；boundingRect 也仅在切割线可见时才并入全图范围。
+- `hitHandle`（四角缩放）与框内整体平移均需 `borderVisible_`（手柄/填充区属边框视觉）。
+- 图元 `acceptedMouseButtons` 由「`borderVisible_ || cutLinesVisible_`」决定：两者都隐藏才置 `Qt::NoButton`。
+
+故：切割线隐藏+边框显示 → 延伸段不可拖（仅选区段可拖）；切割线显示+边框隐藏 → 仍可拖切割线延伸段（但无手柄缩放/框内平移）；两者隐藏 → 选区完全不可交互（对齐标注）。setCutLinesVisible 因影响 boundingRect 需 `prepareGeometryChange()`。
+
 ## L2 多矩形可拖拽选区（canvas_scene；FR-L2）
 
 L2「多矩形并集剔除」下，选区来自 `Document::rects()`（多个矩形）而非单 `rect_`。`CanvasScene::updateMultiRects(rects)`
@@ -92,5 +102,23 @@ L2「多矩形并集剔除」下，选区来自 `Document::rects()`（多个矩�
 与参数面板矩形列表的选中行经 `ParamPanel::rectSelected` ↔ `MainWindow::onRectSelected` 双向联动；`setMultiRectHandleSize` 随视图缩放
 换算手柄尺寸（恒约 8 屏幕px），`isDraggingMultiRect()` 供上层在拖拽期跳过面板回同步。
 
-此模式还调用 `updateGridLines(grid, true)`：只委托 `GridLayer` 画 Core 诱导网格（各矩形十字带并集诱导）的灰色网格线，
-**不启动 `cell_picker_item`**（`updateGrid` 会显示 picker，而 picker 会 grab 鼠标、阻断框选）；单选区框隐藏（`syncSelection(rect,false)`）。
+此模式还调用 `updateMultiRectCutLines(grid, true)`：委托 `GridLayer` 以**橙色切割线样式**（`asCutLines=true`）画各矩形十字带
+并集的诱导切割线（受 `cutLinesVisible_` 门控，而非 `gridVisible_`），**不启动 `cell_picker_item`**（`updateGrid` 会显示 picker，
+而 picker 会 grab 鼠标、阻断框选）；单选区框隐藏（`syncSelection(rect,false)`）。这些诱导线本质是切割线（不是灰色网格），故橙色。
+
+## 标注矢量叠加（annotation_item / canvas_scene / canvas_view；G-4/G-5）
+
+标注层与底图**分离**：每个 Core `Annotation` 对应一个 `AnnotationItem`（`QGraphicsObject`，仿 `SelectionRectItem` 范式），
+用 `Shape::worldPath()`（= `xform_` 作用于 `toPath()` 的已变换路径）→`toQPainterPath()` 以**矢量方式叠加**渲染（pen=颜色/线宽、brush=填充?颜色:透明，z=`kAnnotation`=10），
+**不改底图像素**（A-0.15）；烧录仅在导出时发生（见 `AnnotationBridge::burnIn`）。控制点取 `controlPointsWorld()`，与变换后几何一致。
+文字标注用 `dynamic_cast<TextShape*>` 取 `text()/fontSize()`；若 `xform_` 非单位阵，则 `painter->setTransform(toQTransform(xf), true)` 在**局部坐标**画真实字形（矢量仿射，旋转/缩放不失真、不丢字，无需像素兜底）。
+
+- **增量维护**：`CanvasScene::updateAnnotations(model)` 按数量增删末位图元、逐个刷新几何与选中态，**绝不 clear+重建**；
+  拖拽中跳过对正在拖图元的几何回设（`isDragging()`），规避「emit 触发重建→删掉正在处理事件的图元→崩溃」陷阱。
+- **拖拽预览**：`model.pendingShape()` 非空时用惰性创建的 `pendingAnnoItem_`（`Qt::NoButton` 不可交互）画橡皮筋矢量，不进 Core 历史。
+- **选中/移动**：SELECT 工具下图元自行响应鼠标——press 发 `pressed(scenePos)` → `CanvasScene::annotationSelectRequested` → MainWindow 用 Core `hitTest` 选中（同步骤回灌 `setSelectedState(true)`，本次手势即可接着拖动）；拖动释放发 `moveRequested(dx,dy)` → `annotationMoved(index,dx,dy)` → MainWindow 委托 Core 平移几何。
+- **定向包围盒（OBB）手柄变换**：选中时 `paint` 依 `computeObb(xf)`（局部盒四角经世界变换映射）画虚线 OBB + 4 角/4 边中点方块手柄（可视边长 `handleSize_*1.35`，略放大便于看清与点中）+ 顶边外推的圆形旋转手柄；`shape()`/`hitHandle()` 并入手柄抓取区（半径 `handleSize_*2.0`，**大于可视手柄**，手柄较小或贴边时也易点中；手柄在包围盒上、可能远离笔画）。press 先 `hitHandle` 命中则进入手柄拖拽：**缩放**把世界光标经 Core `worldToLocal` 映回局部、沿对应轴算有符号系数（角手柄双轴、边手柄单轴，越过中心即负＝翻转，`clampScale` 限幅防行列式 0 塌缩）；**旋转**按世界角增量算 `deg`。拖拽中仅调 Core `obbPreviewTransform` 做**矢量预览**（不改状态）并逐帧 `emit transformPreview(绝对值)`——上报 `obbScaleX()*previewSx_` / `obbScaleY()*previewSy_` / `obbRotationDeg()+previewRot_`（**当前累积 ∘ 本次手势增量**的绝对值）→ `annotationTransformPreview(index,…)` → MainWindow 回显到属性面板变换区（数值实时联动、含负翻转）；释放时复位预览态、若有变化 `emit transformRequested(sx,sy,deg)`（**增量**）→ `annotationTransformed(index,…)` → MainWindow 委托 Core `applyObbTransform` 一次性提交（预览与提交同一算子，所见即所得）。**变换全走 Core**（局部缩放 + 世界旋转的复合语义、累积带符号 OBB 参数见 `include/geometry`），GUI 不自算矩阵（A-0.1）。
+- **绘制态门控**：任一绘制工具激活时 `CanvasView::setAnnotationDrawActive(true)`，左键拖拽被视图拦截并路由为 `annoDragStart/Move/End`（橡皮筋选区让位）、Esc 发 `annoEscape`；SELECT 时关闭门控，画布维持既有选区/单元交互。
+- **折线（POLYLINE）点击式绘制**：区别于画笔的「按住连续追点」，折线为**左键落顶点 + 悬停橡皮筋预览 + 右键收笔**——按下 `annoDragStart` 落一个正式顶点（首次 `beginPath`、其后 `appendPathPoint`）；未按键移动 `annoHover` 实时预览「已落顶点 + 到光标连线」（`AnnotationBridge::previewPolyline`，临时段不落草稿）；右键 `annoFinish` 收笔提交（`contextMenuEvent` 在绘制态下改发 `annoFinish`、不弹视图菜单）。`commitPath` 依 `pathDraft_` 正式顶点重建形状，丢弃 `previewPolyline` 的橡皮筋临时段。
+- **手柄尺寸**：`setAnnotationHandleSize` 随视图缩放换算（`updateHandleSize` 中下发），使控制点屏幕观感恒定（NFR-7）。
+- **图层显隐**：`setAnnotationsVisible`/`setBaseVisible` 仅切图元可见性（图层面板开关），不删数据、不影响导出。

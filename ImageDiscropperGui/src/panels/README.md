@@ -1,15 +1,18 @@
-# panels/ — 模式/极性、参数、导出与图像处理面板
+# panels/ — 模式/极性、参数、导出、图像与标注面板
 
-四个 QWidget 面板，均**只读写 `Document`**（不各自持有真相、不直接调 Core）。用户操作 → 写回 Document →
-Document 发 `changed()` → MainWindow 刷新预览。反向同步用 `blockSignals` 防回环。
-（例外：图像处理面板发的是「意图信号」，由 MainWindow 经 EngineBridge 调 Core processing 变换工作图后写回 `Document`。）
+七个 QWidget 面板，均**不直接调 Core 几何/光栅化**。模式/参数/导出面板只读写 `Document`（用户操作 → 写回 Document →
+Document 发 `changed()` → MainWindow 刷新预览；反向同步用 `blockSignals` 防回环）。
+（例外：图像处理面板发「意图信号」，由 MainWindow 经 EngineBridge 调 Core pixel_ops 变换工作图；标注工具/图层/属性面板发意图信号，由 MainWindow 写回 `AnnotationBridge`。）
 
 | 文件 | 职责 |
 | ---- | ---- |
-| `left_panel.{h,cpp}`  | 左侧：模式切换 L1/L2/L3、极性开关（保留绿 / 删除红）、工具/图层占位 |
+| `left_panel.{h,cpp}`  | 左侧：模式切换 L1/L2/L3、极性开关（保留绿 / 删除红）（工具/图层已迁出） |
 | `param_panel.{h,cpp}` | 右侧「参数」页：QStackedWidget 分 L1/L2/L3 三页 |
-| `export_panel.{h,cpp}`| 右侧「导出」页：输出模式、目录/文件、格式、质量、命名、导出按钮 |
+| `export_panel.{h,cpp}`| 右侧「导出」页：输出模式、目录/文件、格式、质量、命名、**导出时烧录标注开关**、导出按钮 |
 | `image_panel.{h,cpp}` | 右侧「图像」页：预处理（旋转/翻转/缩放/尺寸/黑白/反色/色道分离/重置） |
+| `tool_panel.{h,cpp}`  | 左侧「标注工具」组：选择/各形状/多线段/文字/画笔互斥按钮（G-4） |
+| `layer_panel.{h,cpp}` | 左侧「图层」组：底图/遮罩/网格线/切割线/选取边框/标注显示开关（G-5；标注烧录开关已迁至导出面板） |
+| `annotation_prop_panel.{h,cpp}` | 右侧「标注」属性页：颜色/粗细/填充/文字/字号（G-4）+ 变换区（缩放%/旋转° 显示选中形状的**绝对累积变换**、含负=翻转，**改动即生效无应用按钮**，作用于当前选中标注；`setTransformPreview` 与画布 OBB 手柄拖拽实时联动） |
 
 ## left_panel
 
@@ -51,12 +54,13 @@ Document 发 `changed()` → MainWindow 刷新预览。反向同步用 `blockSig
 - **双警告**：`rearrangeWarning()` 当 cols×rows < 保留块数、或单元宽/高 < 网格单元宽/高时返回警告文本；
   `updateRearrangeWarning()` 将其以**内联红字** `rearrangeWarn_` 呈现；导出前的**弹窗确认**由 MainWindow 调 `rearrangeWarning()` 完成。
 - `setPreviewInfo(text)`：以文字回显输出画布尺寸/保留块数/可行性（本阶段替代缩略图）。
+- **导出时烧录标注**（`burnIn_`，默认 false）：勾选后导出把标注合成进像素（随像素一起被切割）；`toggled`→`burnInChanged(bool)` 交 MainWindow 写回 `AnnotationBridge::setBurnIn`；`setBurnInChecked(bool)` 供反向同步（`blockSignals` 防回环）。此开关原属图层面板，因属导出行为而迁入导出面板。
 - 导出按钮 `emit exportRequested()`，实际导出由 MainWindow 经 EngineBridge 完成。
 
 ## image_panel
 
 预处理（FR-1 / G-3）面板，对应 guideline §4.5.4。面板**不碰 Core、不做像素运算**，只把控件值翻译为意图信号（A-0.1）；
-实际变换由 MainWindow 经 `EngineBridge` 调 Core `processing::*` 完成，结果写回 `Document` 工作图（原图始终保留）。
+实际变换由 MainWindow 经 `EngineBridge` 调 Core `pixel_ops::*` 完成，结果写回 `Document` 工作图（原图始终保留）。
 
 - **旋转组**：左转 90° / 右转 90° / 180° → `rotateRequested(angleDeg)`（-90/90/180）。
 - **翻转组**：水平 / 垂直 → `flipRequested(bool horizontal)`。
@@ -67,4 +71,40 @@ Document 发 `changed()` → MainWindow 刷新预览。反向同步用 `blockSig
 - **重置预处理**按钮 → `resetRequested()`：仅当 `doc_->hasPreprocess()` 时可用。
 - `syncFromDocument()`：无图时整板禁用；有图时把目标宽/高回灌为当前工作图尺寸（`blockSignals` 防联动回调）；
   **工作图为灰度（黑白后）时禁用「黑白」与「色道分离」组控件**（灰度无 R/G/B 可分、黑白幂等），反色保持可用；并按 `hasPreprocess()` 启停重置按钮。
-- §4.5.4「颜色选取（取色器）」与标注属性（描边/填充色）强相关，留待第四阶段标注面板统一提供。
+- §4.5.4「颜色选取（取色器）」与标注属性（描边/填充色）强相关，已由第四阶段的 `annotation_prop_panel` 统一提供（见下）。
+
+## tool_panel（G-4；§4.5.5）
+
+左侧「标注工具」互斥按钮组。面板只采集意图，真正切工具由 MainWindow 写回 `AnnotationBridge`（A-0.1）。
+
+- 一个 `QButtonGroup`（互斥）承载全部工具按钮，`id = static_cast<int>(AnnoTool)`，避免额外映射表；`QGridLayout` 3 列排布，工具提示齐备。
+- 按钮样式未选态为硬编码浅底，已显式指定深色文字（`color:#1b1b1b`），避免系统深色主题下白字浅底不可读。
+- 3 列网格含「等腰直角三角形」等宽标签，需较宽左栏（左栏最小宽由主窗 `leftScroll->setMinimumWidth` 控制）。
+- `onToolToggled(id, checked)` 仅 checked 时 `emit toolSelected(static_cast<AnnoTool>(id))`；默认勾选 SELECT。
+- `setModel()`/`syncFromModel()`：从模型反向同步当前工具选中态（`blockSignals` 防回环）。
+- **本轮不含箭头**（Core `ShapeType` 无 ARROW，见计划「已知限制」）。
+
+## layer_panel（G-5；§4.5.6）
+
+左侧「图层」组：集中管理画布各图层显示/隐藏（底图 / 遮罩 / 网格线 / 切割线 / 选取边框 / 标注）。遵循「隐藏图层=不可交互」原则。
+
+- 六个 `QCheckBox`：`baseVisible_`/`maskVisible_`/`gridVisible_`/`cutLineVisible_`/`selectionVisible_`/`annoVisible_`（均默认 true）；toggled 直接转发 `baseVisibilityChanged`/`maskVisibilityChanged`/`gridVisibilityChanged`/`cutLineVisibilityChanged`/`selectionVisibilityChanged`/`annotationVisibilityChanged`。（标注「导出时烧录」开关已迁至导出面板，见 export_panel。）
+- **遮罩开关已从工具栏/视图菜单迁入本面板**（成为正式图层项）；视图菜单与画布右键仍可切换，切换后由 MainWindow 调 `setMaskVisible(bool)` 反向同步复选框（`blockSignals` 防回环）。
+- 网格线/切割线/选取边框的落地：MainWindow 把信号分派到 `CanvasScene::setGridVisible`（仅置标志）/`setCutLinesVisible`/`setSelectionVisible`，三者均随后调 `refreshPreview` 重建落地（L3 网格依 `gridVisible_`、L2 诱导切割线依 `cutLinesVisible_`、L3 单元选择高亮依 `selectionVisible_`）；选取边框隐藏同时禁用选区拖拽交互（`SelectionRectItem::setBorderVisible` 切 `setAcceptedMouseButtons`）。
+- `syncFromModel()`：标注显示开关 = `layerVisible()`（`blockSignals` 防回环）。
+- **底图/遮罩/网格线/切割线/选取边框的「隐藏」仅切换画布预览可见性与交互性，不影响导出**（见计划「已知限制」）。
+
+## annotation_prop_panel（G-4；§4.5.5）
+
+右侧「标注」属性页。面板只采集属性意图并发信号，MainWindow 写回 `AnnotationBridge`（EDIT 作用选中项、DRAW 作下一次绘制默认）。
+
+- `QFormLayout` 排五行：颜色色块按钮（`QColorDialog` 取色，**开启 `ShowAlphaChannel`**；标注颜色含 alpha，Core `Color` 有 a 分量、rasterizer 已做 src-over 混合；色块以 rgba 背景 + RGBA 文案回显）/ 粗细 spin（1..200）/ 填充开关 / 文字内容 / 字号 spin（1..2000）。
+- 信号：`colorPicked(QColor)`/`strokeChanged(int)`/`fillChanged(bool)`/`textChanged(QString)`/`fontSizeChanged(double)`。
+- `syncFromModel()`：颜色/粗细/填充取 `displayXxx`（选中项属性，否则当前默认）、文字/字号取 `currentXxx`（`blockSignals` 防回环）。
+- **Core `Annotation` 只有单一 color + fill 布尔（填充复用同一颜色），故本面板不提供独立填充色**。
+- **变换区**（`transformGroup_`，非破坏性变换，方案 A；**绝对累积值语义、改动即生效**）：`scaleXSpin_`/`scaleYSpin_`（**-100000..100000 %**，默认 100；含负=翻转）+ `rotateSpin_`（**-36000..36000 °**，默认 0；容纳多次旋转的累积角），三 spin 均 `keyboardTracking(false)`（键入不逐字符触发，回车/失焦或点箭头才更新）。**无「应用变换」按钮**——改动任一 spin 即直接下发。
+  `syncFromModel` 从 `model_->displayObbScaleX/Y/RotationDeg()` 读选中形状的**绝对累积变换**回显（系数×100 为百分比、含负；`blockSignals` 防回环），并把该基准存入 `curObbSx_/Sy_/Rot_`；spin 显示的就是底层真实参数（忠实反映、**不回弹**）。
+  每个 spin 的 `valueChanged` **只按其单轴**把目标绝对值换算为相对基准的增量（缩放取比 `v/100/curObbSx_`、旋转取差 `v-curObbRot_`，其余两轴传恒等 `1.0`/`0.0`）再 `emit transformApplyRequested` → MainWindow → `AnnotationBridge::transformSelected` → Core `Shape::applyObbTransform`（累积到 `xform_` 与带符号 OBB 参数）。因 `curObb*` 即当前底层绝对值，增量恰把该轴移到目标绝对值，故**连续编辑无漂移、且单轴改动不牵连其余两轴**（规避 % 取整误差扰动）；提交后模型发 `changed` → `syncFromModel` 依最新累积值回显（**无回弹**，所见即所得）。
+  变换区仅在**有选中标注**时启用（`syncFromModel` 末尾按 `selectedIndex().has_value()` 置 `enabled`）。
+- **`setTransformPreview(sx, sy, rotateDeg)`**（阶段 B 手柄联动，收**绝对值**）：画布拖拽 OBB 手柄时，MainWindow 逐帧调本方法把预览的**绝对累积**缩放/旋转回显到变换区数值（`blockSignals` 防回环、不触发 `transformApplyRequested`）；缩放 spin 范围含负，故拖手柄越过对边翻转时数值会从正连续变小、**穿过 0 进入负值**（不再被钳在下限）。释放提交后靠模型 `changed` → `syncFromModel` 回显最终累积值（**不回弹**）。
+  **翻转无面板按钮**：由画布 OBB 手柄拖过对边（产生负缩放系数）实现（见 `src/canvas`）。
