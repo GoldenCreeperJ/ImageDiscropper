@@ -9,6 +9,8 @@
 #include "app/main_window.h"
 
 #include <algorithm>
+#include <functional>
+#include <string>
 #include <utility>
 
 #include <QAbstractSpinBox>
@@ -24,6 +26,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QProgressDialog>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTabWidget>
@@ -32,6 +35,7 @@
 #include "canvas/canvas_scene.h"
 #include "canvas/canvas_view.h"
 #include "panels/export_panel.h"
+#include "panels/image_panel.h"
 #include "panels/left_panel.h"
 #include "panels/param_panel.h"
 #include "util/image_qt_adapter.h"
@@ -67,20 +71,23 @@ void MainWindow::buildCentral() {
     left_ = new LeftPanel(this);
     param_ = new ParamPanel(this);
     exportPanel_ = new ExportPanel(this);
+    imagePanel_ = new ImagePanel(this);
     left_->setDocument(&doc_);
     param_->setDocument(&doc_);
     exportPanel_->setDocument(&doc_);
+    imagePanel_->setDocument(&doc_);
 
     // 右侧用 QTabWidget 分组，避免面板过长（§4.1 布局约束）。
-    auto* rightTabs = new QTabWidget(this);
-    rightTabs->addTab(param_, QStringLiteral("参数"));
-    rightTabs->addTab(exportPanel_, QStringLiteral("导出"));
-    rightTabs->setMinimumWidth(240); // 可拖拽调宽；设下限避免控件被挤到不可用。
+    rightTabs_ = new QTabWidget(this);
+    rightTabs_->addTab(param_, QStringLiteral("参数"));
+    rightTabs_->addTab(exportPanel_, QStringLiteral("导出"));
+    rightTabs_->addTab(imagePanel_, QStringLiteral("图像"));
+    rightTabs_->setMinimumWidth(240); // 可拖拽调宽；设下限避免控件被挤到不可用。
 
     auto* split = new QSplitter(Qt::Horizontal, this);
     split->addWidget(left_);
     split->addWidget(view_);
-    split->addWidget(rightTabs);
+    split->addWidget(rightTabs_);
     split->setStretchFactor(0, 0);   // 左面板：窗口整体缩放时不抢空间
     split->setStretchFactor(1, 1);   // 画布：占据剩余空间
     split->setStretchFactor(2, 0);   // 右面板：窗口整体缩放时不抢空间
@@ -118,11 +125,31 @@ void MainWindow::buildMenus() {
     aClear->setShortcut(QKeySequence(Qt::Key_Escape));
     connect(aClear, &QAction::triggered, this, &MainWindow::onClearCut);
 
-    // ---- 图像（预处理第三阶段接入）----
+    // ---- 图像（预处理 FR-1 / G-3：旋转/翻转/黑白/反色/重置；完整控件见右侧「图像」页）----
     QMenu* mImage = menuBar()->addMenu(QStringLiteral("图像(&I)"));
-    QAction* aPre = mImage->addAction(QStringLiteral("预处理（旋转/翻转/缩放/调整）…"));
-    aPre->setEnabled(false);
-    aPre->setToolTip(QStringLiteral("基础图像处理将在第三阶段接入（调用 Core processing/preprocess）。"));
+    QAction* aRotL = mImage->addAction(QStringLiteral("左转 90°"));
+    connect(aRotL, &QAction::triggered, this, [this] { onRotate(-90); });
+    QAction* aRotR = mImage->addAction(QStringLiteral("右转 90°"));
+    connect(aRotR, &QAction::triggered, this, [this] { onRotate(90); });
+    QAction* aRot180 = mImage->addAction(QStringLiteral("旋转 180°"));
+    connect(aRot180, &QAction::triggered, this, [this] { onRotate(180); });
+    mImage->addSeparator();
+    QAction* aFlipH = mImage->addAction(QStringLiteral("水平翻转"));
+    connect(aFlipH, &QAction::triggered, this, [this] { onFlip(true); });
+    QAction* aFlipV = mImage->addAction(QStringLiteral("垂直翻转"));
+    connect(aFlipV, &QAction::triggered, this, [this] { onFlip(false); });
+    mImage->addSeparator();
+    QAction* aGray = mImage->addAction(QStringLiteral("黑白"));
+    connect(aGray, &QAction::triggered, this, &MainWindow::onGray);
+    QAction* aInvert = mImage->addAction(QStringLiteral("反色（全通道）"));
+    connect(aInvert, &QAction::triggered, this, [this] { onInvert(true, true, true); });
+    mImage->addSeparator();
+    QAction* aResetPre = mImage->addAction(QStringLiteral("重置预处理"));
+    connect(aResetPre, &QAction::triggered, this, &MainWindow::onResetPreprocess);
+    QAction* aImagePanel = mImage->addAction(QStringLiteral("图像处理面板（缩放/尺寸/色道）…"));
+    connect(aImagePanel, &QAction::triggered, this, [this] {
+        if (rightTabs_ && imagePanel_) rightTabs_->setCurrentWidget(imagePanel_);
+    });
 
     // ---- 标注（第四阶段接入）----
     QMenu* mAnno = menuBar()->addMenu(QStringLiteral("标注(&A)"));
@@ -245,6 +272,16 @@ void MainWindow::connectAll() {
 
     connect(exportPanel_, &ExportPanel::exportRequested, this, &MainWindow::onExport);
     connect(param_, &ParamPanel::rectSelected, this, &MainWindow::onRectSelected);
+
+    // 图像处理面板（预处理）：各意图信号→对应槽（经 EngineBridge 调 Core processing）。
+    connect(imagePanel_, &ImagePanel::rotateRequested, this, &MainWindow::onRotate);
+    connect(imagePanel_, &ImagePanel::flipRequested, this, &MainWindow::onFlip);
+    connect(imagePanel_, &ImagePanel::scaleRequested, this, &MainWindow::onScale);
+    connect(imagePanel_, &ImagePanel::resizeRequested, this, &MainWindow::onResize);
+    connect(imagePanel_, &ImagePanel::grayRequested, this, &MainWindow::onGray);
+    connect(imagePanel_, &ImagePanel::invertRequested, this, &MainWindow::onInvert);
+    connect(imagePanel_, &ImagePanel::splitRequested, this, &MainWindow::onSplit);
+    connect(imagePanel_, &ImagePanel::resetRequested, this, &MainWindow::onResetPreprocess);
 }
 
 // 依工作图重建降采样预览底图（NFR-3）。
@@ -403,6 +440,7 @@ void MainWindow::syncPanels() {
     left_->syncFromDocument();
     param_->syncFromDocument();
     exportPanel_->syncFromDocument();
+    imagePanel_->syncFromDocument();
     if (modeActionL1_) modeActionL1_->setChecked(doc_.mode() == idc::engine::Tier::L1);
     if (modeActionL2_) modeActionL2_->setChecked(doc_.mode() == idc::engine::Tier::L2);
     if (modeActionL3_) modeActionL3_->setChecked(doc_.mode() == idc::engine::Tier::L3);
@@ -668,6 +706,109 @@ void MainWindow::onModeAction(const int tierInt) {
 // K/R 快捷键切换极性。
 void MainWindow::onPolarityShortcut(const bool remove) {
     doc_.setPolarity(remove ? idc::engine::Polarity::REMOVE : idc::engine::Polarity::KEEP);
+}
+
+// ---------------------------------------------------------------------------
+// 预处理（FR-1 / G-3）：各操作经 EngineBridge 调 Core processing 变换工作图。
+// GUI 不自实现像素运算（A-0.1）；所有变换走公共收尾 applyWorkingImage。
+// ---------------------------------------------------------------------------
+
+// 预处理公共收尾：维度变化（旋转 90/270、缩放）会使既有选区坐标越界/失配，
+// 故先清除失效选区（避免 Core 切割报错），再写回工作图（触发 imageChanged→重建预览底图+刷新）。
+void MainWindow::applyWorkingImage(idc::core::Image next, const QString& okMsg) {
+    if (!doc_.hasImage()) return;
+    if (next.empty()) { notify(QStringLiteral("预处理失败：结果为空图"), true); return; }
+    if (next.width() != doc_.width() || next.height() != doc_.height()) {
+        doc_.clearRect();    // 单选区坐标基于旧尺寸，已失效。
+        doc_.clearRects();   // L2 多矩形同理。
+        doc_.clearCells();   // L3 选择集序号对应旧网格，一并清空。
+    }
+    doc_.setWorkingImage(std::move(next));
+    notify(okMsg, false);
+}
+
+// 在模态忙碌对话框内同步执行 op：缩放/尺寸重采样在大图上可能耗时，为避免用户误以为卡死
+// 而在处理期间再次点击，弹出不可取消、应用级模态的进度对话框（不确定进度条）阻断其余输入。
+// 同步执行下忙碌条不会动画，但 processEvents 先保证对话框绘制出来；执行完立即关闭。
+void MainWindow::runWithBusyDialog(const QString& text, const std::function<void()>& op) {
+    QProgressDialog dlg(text, QString(), 0, 0, this);
+    dlg.setWindowTitle(QStringLiteral("正在处理图像"));
+    dlg.setWindowModality(Qt::ApplicationModal); // 模态阻断全部其他窗口的输入。
+    dlg.setCancelButton(nullptr);                // 不可取消（重采样中途无法安全回退）。
+    dlg.setMinimumDuration(0);                   // 立即显示，不等阈值。
+    dlg.setRange(0, 0);                          // 不确定进度（忙碌滚动样式）。
+    dlg.show();
+    QApplication::processEvents();               // 先让对话框绘制出来，再进入耗时处理。
+    op();
+    dlg.close();
+}
+
+// 旋转（90 的整数倍；-90=左转、90=右转、180）。
+void MainWindow::onRotate(const int angleDeg) {
+    if (!doc_.hasImage()) return;
+    applyWorkingImage(bridge_.rotateImage(doc_.working(), angleDeg),
+                      QStringLiteral("已旋转 %1°").arg(angleDeg));
+}
+
+// 翻转（水平/垂直）。
+void MainWindow::onFlip(const bool horizontal) {
+    if (!doc_.hasImage()) return;
+    applyWorkingImage(bridge_.flipImage(doc_.working(), horizontal),
+                      horizontal ? QStringLiteral("已水平翻转") : QStringLiteral("已垂直翻转"));
+}
+
+// 按比例缩放（factor 为倍数）。可能耗时，包在模态忙碌对话框内并加重入守卫。
+void MainWindow::onScale(const double factor) {
+    if (!doc_.hasImage() || busyResample_) return;
+    busyResample_ = true;
+    runWithBusyDialog(QStringLiteral("正在按比例缩放图像，请稍候…"), [this, factor] {
+        applyWorkingImage(bridge_.scaleImage(doc_.working(), factor),
+                          QStringLiteral("已缩放至 %1%").arg(qRound(factor * 100.0)));
+    });
+    busyResample_ = false;
+}
+
+// 目标尺寸缩放。可能耗时，包在模态忙碌对话框内并加重入守卫。
+void MainWindow::onResize(const int newWidth, const int newHeight) {
+    if (!doc_.hasImage() || busyResample_) return;
+    busyResample_ = true;
+    runWithBusyDialog(QStringLiteral("正在缩放到目标尺寸，请稍候…"), [this, newWidth, newHeight] {
+        applyWorkingImage(bridge_.resizeImage(doc_.working(), newWidth, newHeight),
+                          QStringLiteral("已缩放到 %1×%2").arg(newWidth).arg(newHeight));
+    });
+    busyResample_ = false;
+}
+
+// 黑白（灰度）。
+void MainWindow::onGray() {
+    if (!doc_.hasImage()) return;
+    applyWorkingImage(bridge_.toGrayImage(doc_.working()), QStringLiteral("已转为黑白"));
+}
+
+// 色道反色：依勾选的 R/G/B 拼出长度 3 的反相掩码（'1' 反相、'0' 保持）；灰度图 Core 忽略掩码、整体反相。
+void MainWindow::onInvert(const bool invR, const bool invG, const bool invB) {
+    if (!doc_.hasImage()) return;
+    const std::string mask = std::string(invR ? "1" : "0") + (invG ? "1" : "0") + (invB ? "1" : "0");
+    applyWorkingImage(bridge_.invertImage(doc_.working(), mask), QStringLiteral("已按通道反色"));
+}
+
+// 色道分离：依勾选的 R/G/B 拼出长度 3 的保留掩码（'1' 保留、'0' 置零）。
+void MainWindow::onSplit(const bool keepR, const bool keepG, const bool keepB) {
+    if (!doc_.hasImage()) return;
+    const std::string mask = std::string(keepR ? "1" : "0") + (keepG ? "1" : "0") + (keepB ? "1" : "0");
+    applyWorkingImage(bridge_.splitImage(doc_.working(), mask), QStringLiteral("已按通道分离"));
+}
+
+// 重置预处理：工作图恢复为原图。若原图与当前工作图尺寸不同（曾旋转/缩放），先清失效选区。
+void MainWindow::onResetPreprocess() {
+    if (!doc_.hasImage() || !doc_.hasPreprocess()) return;
+    if (doc_.original().width() != doc_.width() || doc_.original().height() != doc_.height()) {
+        doc_.clearRect();
+        doc_.clearRects();
+        doc_.clearCells();
+    }
+    doc_.resetPreprocess();
+    notify(QStringLiteral("已重置预处理，恢复原图"), false);
 }
 
 } // namespace idc::gui

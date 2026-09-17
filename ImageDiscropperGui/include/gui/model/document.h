@@ -55,7 +55,18 @@ public:
     bool hasImage() const { return !working_.empty(); }
     int width() const { return working_.width(); }
     int height() const { return working_.height(); }
+    // 工作图是否为灰度（GRAY）——黑白后色道分离无意义、黑白本身幂等，供 GUI 禁用相关控件（反色对灰度仍有效）。
+    bool isWorkingGray() const { return working_.isGray(); }
     const QString& imagePath() const { return imagePath_; }
+
+    // ---- 预处理工作图（FR-1）----
+    // 用一次预处理结果替换工作图；original_ 始终保留原图，供「重置预处理」还原。
+    // 由 MainWindow 经 EngineBridge 算出新图后写回（Document 不碰 Core，A-0.1）；触发 imageChanged()。
+    void setWorkingImage(idc::core::Image img);
+    // 重置预处理：工作图恢复为原图、清除「已预处理」标记；未预处理时早退。触发 imageChanged()。
+    void resetPreprocess();
+    // 当前工作图是否已被预处理（与原图不同）——供面板/菜单启用「重置预处理」。
+    bool hasPreprocess() const { return preprocessed_; }
 
     // ---- 模式与极性 ----
     idc::engine::Tier mode() const { return mode_; }
@@ -166,8 +177,9 @@ signals:
     void changed();
 
 private:
-    idc::core::Image original_;   // 原始载入图（RGBA）
-    idc::core::Image working_;    // 切割引擎实际输入图（第一阶段 = 原图）
+    idc::core::Image original_;   // 原始载入图（RGBA）——始终不变，供「重置预处理」还原
+    idc::core::Image working_;    // 切割引擎实际输入图（= 预处理累积后的工作图，无预处理时等于原图）
+    bool preprocessed_{false};    // 工作图是否已被预处理（与 original_ 不同）
     QString imagePath_;
 
     idc::engine::Tier mode_{idc::engine::Tier::L1};

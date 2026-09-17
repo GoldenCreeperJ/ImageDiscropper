@@ -81,67 +81,61 @@ core::Image flip(const core::Image& src, const bool horizontal) {
     return out;
 }
 
-// 内部工具：最近邻采样单通道值。
-static std::uint8_t nearestSample(const core::Image& src, const double sx, const double sy, const int channel) {
-    const int x = std::clamp(static_cast<int>(std::round(sx)), 0, src.width() - 1);
-    const int y = std::clamp(static_cast<int>(std::round(sy)), 0, src.height() - 1);
-    const std::uint8_t* p = src.pixelPtr(x, y);
-    if (!p) return 0;
-    if (src.isGray()) return p[0];
-    return p[channel];
-}
-
-// 内部工具：双线性插值单通道值。
-static double bilinearSample(const core::Image& src, const double sx, const double sy, const int channel) {
-    if (src.empty()) return 0.0;
-    const double fx = std::clamp(sx, 0.0, static_cast<double>(src.width() - 1));
-    const double fy = std::clamp(sy, 0.0, static_cast<double>(src.height() - 1));
-    const int x0 = static_cast<int>(std::floor(fx));
-    const int y0 = static_cast<int>(std::floor(fy));
-    const int x1 = std::min(x0 + 1, src.width() - 1);
-    const int y1 = std::min(y0 + 1, src.height() - 1);
-    const double tx = fx - x0;
-    const double ty = fy - y0;
-
-    const auto sample = [&](const int x, const int y) -> double {
-        const std::uint8_t* p = src.pixelPtr(x, y);
-        if (!p) return 0.0;
-        return src.isGray() ? p[0] : p[channel];
-    };
-    const double v00 = sample(x0, y0);
-    const double v10 = sample(x1, y0);
-    const double v01 = sample(x0, y1);
-    const double v11 = sample(x1, y1);
-    return (v00 * (1 - tx) + v10 * tx) * (1 - ty) + (v01 * (1 - tx) + v11 * tx) * ty;
-}
-
 // 尺寸调整：按目标宽高进行最近邻或双线性重采样。
+// 性能要点：直接基于行主序字节缓冲计算——四个角点指针每像素只求一次并一次性读取全部通道，
+// 避免旧实现「逐通道 × 逐角点」重复调用 pixelPtr/isGray 与逐像素 getPixel/setPixel 的边界检查、格式分支。
+// 输出与旧实现逐像素等价（双线性加权公式、夹取范围、通道处理均一致）。
 core::Image resize(const core::Image& src, const int newWidth, const int newHeight, const ResampleMode mode) {
     if (newWidth <= 0 || newHeight <= 0 || src.empty()) return core::Image();
     core::Image out(newWidth, newHeight, src.format());
-    const double sx = static_cast<double>(src.width()) / newWidth;
-    const double sy = static_cast<double>(src.height()) / newHeight;
 
-    const int channels = src.isGray() ? 1 : (src.format() == core::ImageFormat::RGBA ? 4 : 3);
+    const int sw = src.width();
+    const int sh = src.height();
+    const int ch = src.isGray() ? 1 : (src.format() == core::ImageFormat::RGBA ? 4 : 3);
+    const std::uint8_t* sd = src.data();
+    std::uint8_t* dd = out.data();
+    const double stepX = static_cast<double>(sw) / newWidth;
+    const double stepY = static_cast<double>(sh) / newHeight;
+    const double maxX = static_cast<double>(sw - 1);
+    const double maxY = static_cast<double>(sh - 1);
+
     for (int y = 0; y < newHeight; ++y) {
+        const double srcYf = (y + 0.5) * stepY - 0.5;
         for (int x = 0; x < newWidth; ++x) {
-            const double srcX = (x + 0.5) * sx - 0.5;
-            const double srcY = (y + 0.5) * sy - 0.5;
-            core::Color c;
+            const double srcXf = (x + 0.5) * stepX - 0.5;
+            std::uint8_t* o = dd + (static_cast<std::size_t>(y) * newWidth + x) * ch;
+
             if (mode == ResampleMode::NEAREST) {
-                c.r = nearestSample(src, srcX, srcY, 0);
-                c.g = channels > 1 ? nearestSample(src, srcX, srcY, 1) : c.r;
-                c.b = channels > 2 ? nearestSample(src, srcX, srcY, 2) : c.r;
-                c.a = channels > 3 ? nearestSample(src, srcX, srcY, 3) : 255;
-                if (src.isGray()) { c.g = c.b = c.r; c.a = 255; }
-            } else {
-                c.r = static_cast<std::uint8_t>(std::clamp(bilinearSample(src, srcX, srcY, 0), 0.0, 255.0));
-                c.g = channels > 1 ? static_cast<std::uint8_t>(std::clamp(bilinearSample(src, srcX, srcY, 1), 0.0, 255.0)) : c.r;
-                c.b = channels > 2 ? static_cast<std::uint8_t>(std::clamp(bilinearSample(src, srcX, srcY, 2), 0.0, 255.0)) : c.r;
-                c.a = channels > 3 ? static_cast<std::uint8_t>(std::clamp(bilinearSample(src, srcX, srcY, 3), 0.0, 255.0)) : 255;
-                if (src.isGray()) { c.g = c.b = c.r; c.a = 255; }
+                const int xi = std::clamp(static_cast<int>(std::round(srcXf)), 0, sw - 1);
+                const int yi = std::clamp(static_cast<int>(std::round(srcYf)), 0, sh - 1);
+                const std::uint8_t* p = sd + (static_cast<std::size_t>(yi) * sw + xi) * ch;
+                for (int c = 0; c < ch; ++c) o[c] = p[c];
+                continue;
             }
-            out.setPixel(x, y, c);
+
+            // 双线性：先把源坐标夹到 [0, sw-1] / [0, sh-1]，再取四邻域角点
+            const double fx = std::clamp(srcXf, 0.0, maxX);
+            const double fy = std::clamp(srcYf, 0.0, maxY);
+            const int x0 = static_cast<int>(std::floor(fx));
+            const int y0 = static_cast<int>(std::floor(fy));
+            const int x1 = std::min(x0 + 1, sw - 1);
+            const int y1 = std::min(y0 + 1, sh - 1);
+            const double tx = fx - x0;
+            const double ty = fy - y0;
+
+            const std::uint8_t* p00 = sd + (static_cast<std::size_t>(y0) * sw + x0) * ch;
+            const std::uint8_t* p10 = sd + (static_cast<std::size_t>(y0) * sw + x1) * ch;
+            const std::uint8_t* p01 = sd + (static_cast<std::size_t>(y1) * sw + x0) * ch;
+            const std::uint8_t* p11 = sd + (static_cast<std::size_t>(y1) * sw + x1) * ch;
+
+            const double wx0 = 1.0 - tx;
+            const double wy0 = 1.0 - ty;
+            for (int c = 0; c < ch; ++c) {
+                const double top = p00[c] * wx0 + p10[c] * tx;
+                const double bot = p01[c] * wx0 + p11[c] * tx;
+                const double v = top * wy0 + bot * ty;
+                o[c] = static_cast<std::uint8_t>(std::clamp(v, 0.0, 255.0));
+            }
         }
     }
     return out;

@@ -17,10 +17,28 @@ Document::Document(QObject* parent) : QObject(parent) {}
 // 载入新图像：置原图与工作图，记录路径，清空选区。
 void Document::setImage(idc::core::Image img, QString path) {
     original_ = img;             // 保留一份原始副本（供后续「重置预处理」用）。
-    working_ = std::move(img);   // 第一阶段无预处理，工作图即原图。
+    working_ = std::move(img);   // 新图初始无预处理，工作图即原图。
+    preprocessed_ = false;       // 新图重置预处理标记。
     imagePath_ = std::move(path);
     hasRect_ = false;
     rect_ = idc::engine::RectRegion{};
+    emit imageChanged();
+}
+
+// 写回一次预处理结果：替换工作图并置「已预处理」标记（original_ 不变）。
+// 空图拒绝，避免画布/引擎拿到无效工作图。触发 imageChanged()（需重建预览底图）。
+void Document::setWorkingImage(idc::core::Image img) {
+    if (img.empty()) return;
+    working_ = std::move(img);
+    preprocessed_ = true;
+    emit imageChanged();
+}
+
+// 重置预处理：工作图恢复为原图（original_ 始终保留）；未预处理时无需还原。
+void Document::resetPreprocess() {
+    if (!preprocessed_) return;
+    working_ = original_;
+    preprocessed_ = false;
     emit imageChanged();
 }
 

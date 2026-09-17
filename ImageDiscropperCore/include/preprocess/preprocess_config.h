@@ -32,10 +32,10 @@ const char* preprocessTypeName(PreprocessType t);
 // 灰度化：无参数。
 struct GrayOp {};
 
-// 通道分离：mask 为长度 3 的字符串（"1" 保留、"0" 置零）。
+// 通道分离：mask 为长度 3 的字符串（"1" 保留、"0" 置零）。灰度图无 R/G/B，返回副本不变。
 struct SplitOp { std::string mask = "111"; };
 
-// 通道反色：mask 为长度 3 的字符串（"1" 反色、"0" 保留）。
+// 通道反色：mask 为长度 3 的字符串（"1" 反色、"0" 保留）。灰度图对单一亮度通道取反（忽略 mask）。
 struct InvertOp { std::string mask = "111"; };
 
 // 旋转：angle 单位为度，仅支持 90 的整数倍。

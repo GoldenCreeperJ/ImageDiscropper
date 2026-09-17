@@ -15,6 +15,8 @@
 
 #include <QString>
 
+#include <string>
+
 #include "core/image.h"
 #include "engine/engine.h"
 
@@ -50,6 +52,18 @@ public:
     // 成功返回 true；引擎失败或写盘失败返回 false 并给出中文错误 err。
     bool exportResult(const idc::core::Image& work, const idc::engine::EngineConfig& cfg,
                       const QString& outputPath, QString& err) const;
+
+    // ---- 预处理（FR-1；委托 Core processing::*，GUI 不自实现像素运算，A-0.1/A-0.3）----
+    // 每个方法对输入图做一次变换并返回新图（不修改入参）；上层据此刷新 Document 工作图。
+    // 说明：本 GUI 采用「即时累积」预处理——每次操作把工作图变换后写回，原图始终保留
+    //       供「重置预处理」还原（A-0.16 流水线：原图 → 预处理 → 切割 → 导出）。
+    idc::core::Image rotateImage(const idc::core::Image& src, int angleDeg) const;      // 旋转 90/180/270
+    idc::core::Image flipImage(const idc::core::Image& src, bool horizontal) const;     // 水平/垂直翻转
+    idc::core::Image resizeImage(const idc::core::Image& src, int newW, int newH) const; // 目标尺寸缩放
+    idc::core::Image scaleImage(const idc::core::Image& src, double factor) const;      // 按比例缩放
+    idc::core::Image toGrayImage(const idc::core::Image& src) const;                    // 黑白（灰度）
+    idc::core::Image invertImage(const idc::core::Image& src, const std::string& mask) const; // 按通道反色
+    idc::core::Image splitImage(const idc::core::Image& src, const std::string& mask) const;  // 按通道分离
 };
 
 } // namespace idc::gui

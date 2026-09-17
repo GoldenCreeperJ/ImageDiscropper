@@ -7,12 +7,15 @@
 //   - MainWindow 只做「装配 + 编排 + 状态栏呈现」，不含切割/几何/导出实现（A-0.1）；
 //     真正的 Core 调用集中在 EngineBridge，状态集中在 Document。
 //   - 构建（buildCentral/buildMenus/...）与响应（on* 槽）分组，避免上帝方法。
-// 说明：本阶段覆盖 G-1/G-2/G-6/G-7(单矩形)/G-8/G-11(分离+坍缩+基础重排)/G-14/G-10。
-//       L3 网格、预处理、标注、撤销重做、配置在后续阶段接入（对应菜单/工具项先禁用占位）。
+// 说明：本阶段覆盖 G-1/G-2/G-6/G-7(单矩形)/G-8/G-11(分离+坍缩+基础重排)/G-14/G-10，
+//       以及第三阶段的 G-3 预处理（旋转/翻转/缩放/尺寸/黑白/反色/色道分离，图像处理面板）。
+//       标注、撤销重做、配置在后续阶段接入（对应菜单/工具项先禁用占位）。
 // ============================================================================
 #pragma once
 
 #include <QMainWindow>
+
+#include <functional>
 
 #include "engine/engine.h"
 #include "model/document.h"
@@ -22,6 +25,7 @@
 class QLabel;
 class QAction;
 class QKeyEvent;
+class QTabWidget;
 
 namespace idc::gui {
 
@@ -30,6 +34,7 @@ class CanvasView;
 class LeftPanel;
 class ParamPanel;
 class ExportPanel;
+class ImagePanel;
 
 // ---------------------------------------------------------------------------
 // MainWindow：应用主窗口与总编排。
@@ -71,6 +76,16 @@ private slots:
     void onToggleMasks();                           // 切换预览遮罩显隐。
     void onModeAction(int tierInt);                 // 工具栏/快捷键切换模式。
     void onPolarityShortcut(bool remove);           // K/R 快捷键切换极性。
+    // 预处理（FR-1 / G-3）：各操作经 EngineBridge 调 Core processing 变换工作图后写回。
+    void onRotate(int angleDeg);                    // 旋转 90 的整数倍（-90/90/180）。
+    void onFlip(bool horizontal);                   // 水平/垂直翻转。
+    void onScale(double factor);                    // 按比例缩放。
+    void onResize(int newWidth, int newHeight);     // 目标尺寸缩放。
+    void onGray();                                  // 黑白（灰度）。
+    // 色道反色：invR/invG/invB 指示反相哪些通道（未反相的通道保持不变）。
+    void onInvert(bool invR, bool invG, bool invB);
+    void onSplit(bool keepR, bool keepG, bool keepB); // 色道分离（保留勾选通道）。
+    void onResetPreprocess();                       // 重置预处理（恢复原图）。
 
 private:
     // 构建各部分。
@@ -83,6 +98,11 @@ private:
     void rebuildPreviewPixmap();
     // 跑 Core 预览并刷新画布遮罩/切割线/状态栏/面板提示。
     void refreshPreview();
+    // 预处理公共收尾：维度变化时清除失效选区（坐标基于旧尺寸），再写回工作图（触发 imageChanged）。
+    void applyWorkingImage(idc::core::Image next, const QString& okMsg);
+    // 在模态忙碌对话框（不可取消、阻断其余输入）内同步执行 op：用于缩放/尺寸等可能耗时的重采样，
+    // 给用户明确「正在处理」提示并禁止期间误触其他操作（防御性编程，NFR 卡顿兜底）。
+    void runWithBusyDialog(const QString& text, const std::function<void()>& op);
     // 同步三个面板到 Document（blockSignals 防回环）。
     void syncPanels();
     // 非模态提示（状态栏 + 提示标签），错误不打断用户（§5.2）。
@@ -101,6 +121,8 @@ private:
     // 预览最长边上限（NFR-3 降采样阈值）。取 4096：让绝大多数图片 1:1 显示，
     // 使放大后底图像素与精确整数坐标的切割线/遮罩对齐（仅超长边大图才降采样）。
     int previewMaxDim_{4096};
+    // 重采样（缩放/尺寸）进行中标志：防止模态对话框期间的重入（如快捷键再次触发）。
+    bool busyResample_{false};
 
     // 视图部件。
     CanvasScene* scene_{nullptr};
@@ -108,6 +130,8 @@ private:
     LeftPanel* left_{nullptr};
     ParamPanel* param_{nullptr};
     ExportPanel* exportPanel_{nullptr};
+    ImagePanel* imagePanel_{nullptr};   // 右侧「图像」页：预处理（FR-1）。
+    QTabWidget* rightTabs_{nullptr};    // 右侧选项卡容器（参数/导出/图像），供菜单定位到图像页。
 
     // 状态栏标签。
     QLabel* stCoord_{nullptr};

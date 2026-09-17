@@ -74,14 +74,16 @@ set(IDC_GUI_CANVAS_SRC
     src/canvas/selection_rect_item.cpp
 )
 
-# panels：左侧模式/极性面板、右侧参数面板、导出面板。
+# panels：左侧模式/极性面板、右侧参数面板、导出面板、图像处理面板（预处理）。
 set(IDC_GUI_PANELS_SRC
     include/gui/panels/left_panel.h
     include/gui/panels/param_panel.h
     include/gui/panels/export_panel.h
+    include/gui/panels/image_panel.h
     src/panels/left_panel.cpp
     src/panels/param_panel.cpp
     src/panels/export_panel.cpp
+    src/panels/image_panel.cpp
 )
 
 # app：主窗口装配与程序入口。

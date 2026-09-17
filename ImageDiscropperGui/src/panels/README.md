@@ -1,13 +1,15 @@
-# panels/ — 模式/极性、参数与导出面板
+# panels/ — 模式/极性、参数、导出与图像处理面板
 
-三个 QWidget 面板，均**只读写 `Document`**（不各自持有真相、不直接调 Core）。用户操作 → 写回 Document →
+四个 QWidget 面板，均**只读写 `Document`**（不各自持有真相、不直接调 Core）。用户操作 → 写回 Document →
 Document 发 `changed()` → MainWindow 刷新预览。反向同步用 `blockSignals` 防回环。
+（例外：图像处理面板发的是「意图信号」，由 MainWindow 经 EngineBridge 调 Core processing 变换工作图后写回 `Document`。）
 
 | 文件 | 职责 |
 | ---- | ---- |
 | `left_panel.{h,cpp}`  | 左侧：模式切换 L1/L2/L3、极性开关（保留绿 / 删除红）、工具/图层占位 |
 | `param_panel.{h,cpp}` | 右侧「参数」页：QStackedWidget 分 L1/L2/L3 三页 |
 | `export_panel.{h,cpp}`| 右侧「导出」页：输出模式、目录/文件、格式、质量、命名、导出按钮 |
+| `image_panel.{h,cpp}` | 右侧「图像」页：预处理（旋转/翻转/缩放/尺寸/黑白/反色/色道分离/重置） |
 
 ## left_panel
 
@@ -50,3 +52,19 @@ Document 发 `changed()` → MainWindow 刷新预览。反向同步用 `blockSig
   `updateRearrangeWarning()` 将其以**内联红字** `rearrangeWarn_` 呈现；导出前的**弹窗确认**由 MainWindow 调 `rearrangeWarning()` 完成。
 - `setPreviewInfo(text)`：以文字回显输出画布尺寸/保留块数/可行性（本阶段替代缩略图）。
 - 导出按钮 `emit exportRequested()`，实际导出由 MainWindow 经 EngineBridge 完成。
+
+## image_panel
+
+预处理（FR-1 / G-3）面板，对应 guideline §4.5.4。面板**不碰 Core、不做像素运算**，只把控件值翻译为意图信号（A-0.1）；
+实际变换由 MainWindow 经 `EngineBridge` 调 Core `processing::*` 完成，结果写回 `Document` 工作图（原图始终保留）。
+
+- **旋转组**：左转 90° / 右转 90° / 180° → `rotateRequested(angleDeg)`（-90/90/180）。
+- **翻转组**：水平 / 垂直 → `flipRequested(bool horizontal)`。
+- **缩放/尺寸组**：比例百分比 spin（1..1000%）+「按比例应用」→ `scaleRequested(factor)`；
+  目标宽/高 spin（1..20000）+「保持宽高比」（改宽联动算高）+「按尺寸应用」→ `resizeRequested(w,h)`。
+- **颜色组**：黑白 → `grayRequested()`；反色（全通道）→ `invertRequested()`（灰度图上对单一亮度通道取反，仍有效）；
+  色道分离 R/G/B 复选框（勾选=保留）+「色道分离」→ `splitRequested(keepR,keepG,keepB)`（MainWindow 拼成长度 3 掩码）。
+- **重置预处理**按钮 → `resetRequested()`：仅当 `doc_->hasPreprocess()` 时可用。
+- `syncFromDocument()`：无图时整板禁用；有图时把目标宽/高回灌为当前工作图尺寸（`blockSignals` 防联动回调）；
+  **工作图为灰度（黑白后）时禁用「黑白」与「色道分离」组控件**（灰度无 R/G/B 可分、黑白幂等），反色保持可用；并按 `hasPreprocess()` 启停重置按钮。
+- §4.5.4「颜色选取（取色器）」与标注属性（描边/填充色）强相关，留待第四阶段标注面板统一提供。

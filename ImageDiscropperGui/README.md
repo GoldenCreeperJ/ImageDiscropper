@@ -16,7 +16,7 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 | `util`   | `include/gui/util/`   | [src/util/](src/util/README.md)     | `core::Image` ↔ Qt 图像类型适配、降采样预览（视图关注点，非引擎逻辑） |
 | `model`  | `include/gui/model/`  | [src/model/](src/model/README.md)   | 会话状态单一真相源 `Document`、唯一触碰 Core 的 `EngineBridge`   |
 | `canvas` | `include/gui/canvas/` | [src/canvas/](src/canvas/README.md) | QGraphicsView/Scene 画布：图层化渲染底图/遮罩/切割线/选区 + 交互 |
-| `panels` | `include/gui/panels/` | [src/panels/](src/panels/README.md) | 左侧模式/极性面板、右侧参数面板、导出面板                       |
+| `panels` | `include/gui/panels/` | [src/panels/](src/panels/README.md) | 左侧模式/极性面板、右侧参数面板、导出面板、图像处理面板（预处理） |
 | `app`    | `include/gui/app/`    | [src/app/](src/app/README.md)       | 主窗口装配与编排、程序入口                                      |
 
 ## 数据流（一条主线）
@@ -99,9 +99,11 @@ L1（矩形/横带/竖带）与 L2（十字/横线/竖线）切割线与极性�
 
 后续阶段（逐步细化）：
 
-- **第二阶段 L2多矩形 + L3 网格**：网格线层、单元选择（单击/框选/全选/反选）、排序面板、自定义序拖拽、重排合并、
-  多矩形并集剔除、「转为网格模式编辑」入口。
-- **第三阶段 预处理 + 撤销重做 + 配置**：图像处理面板（旋转/翻转/缩放/黑白/反色/色道/取色）、
-  `HistoryManager` 撤销重做、配置加载/保存。
+- **第二阶段 L2多矩形 + L3 网格（已完成）**：网格线层、单元选择（单击/框选/全选/反选）、排序面板、自定义序拖拽、重排合并、
+  多矩形并集剔除、「转为网格模式编辑」入口。覆盖 G-7（多矩形）/G-9/G-15。
+- **第三阶段 预处理（已完成）+ 撤销重做 + 配置（待接入）**：图像处理面板（旋转/翻转/缩放/尺寸/黑白/反色/色道分离/重置）
+  已接入（覆盖 G-3）：面板发意图信号 → MainWindow 经 `EngineBridge` 调 Core `processing::*` 变换工作图 → 写回 `Document`
+  （原图始终保留供「重置预处理」；维度变化时自动清除失效选区）；`HistoryManager` 撤销重做（G-12）、配置加载/保存（G-13）待接入。
+  §4.5.4「颜色选取（取色器）」与标注属性强相关，并入第四阶段。
 - **第四阶段 标注图层**：全标注类型经 Core `geometry` + `annotation`，图层面板与属性面板，切割时标注随像素切开。
 - **第五阶段 文档与性能**：完整使用说明与设计说明、8000×8000 ≥30fps 性能验证、逐项对照 §10 验收。

@@ -95,7 +95,7 @@ static void testGeometry() {
 }
 
 // ---------------------------------------------------------------------------
-// processing 模块测试：灰度、旋转、翻转、缩放、通道反色 / 分离、颜色拾取
+// processing 模块测试：灰度、旋转、翻转、缩放（含纯色等价性）、通道反色 / 分离（含灰度反色）、颜色拾取
 // ---------------------------------------------------------------------------
 static void testProcessing() {
     using namespace idc;
@@ -146,6 +146,69 @@ static void testProcessing() {
     // 颜色拾取：合法坐标返回 optional 有值，越界返回 nullopt
     CHECK(processing::pickColor(img, 0, 0).has_value());
     CHECK(!processing::pickColor(img, 100, 100).has_value());
+
+    // ---- 灰度图反色（黑白后仍可反色）：对单一亮度通道取 255 - v，格式仍为 GRAY ----
+    core::Image gimg(4, 4, core::ImageFormat::GRAY);
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 4; ++x)
+            gimg.setGray(x, y, static_cast<std::uint8_t>(x * 40 + y * 10)); // 值域 0..150
+    const core::Image ginv = processing::invertChannels(gimg, "111");
+    CHECK(ginv.isGray());
+    CHECK(ginv.width() == 4 && ginv.height() == 4);
+    CHECK(ginv.getGray(0, 0) == 255);                      // 255 - 0
+    CHECK(ginv.getGray(3, 3) == 255 - gimg.getGray(3, 3)); // 逐像素取反
+    // 灰度反色忽略 mask：任意 mask 都整体反相
+    CHECK(processing::invertChannels(gimg, "100").getGray(2, 1) == 255 - gimg.getGray(2, 1));
+    // 反色为对合：两次反色回到原值
+    CHECK(processing::invertChannels(ginv, "111").getGray(1, 2) == gimg.getGray(1, 2));
+
+    // ---- 灰度图色道分离无意义：返回副本（像素不变、仍为 GRAY）----
+    const core::Image gsplit = processing::splitChannels(gimg, "001");
+    CHECK(gsplit.isGray());
+    CHECK(gsplit.getGray(2, 2) == gimg.getGray(2, 2));
+
+    // ---- 彩色反色 "111"：R/G/B 全反、alpha 保留 ----
+    core::Image aimg(2, 2, core::ImageFormat::RGBA);
+    aimg.fill(core::Color(10, 200, 30, 77));
+    const core::Image ainv = processing::invertChannels(aimg, "111");
+    CHECK(ainv.getPixel(0, 0) == core::Color(245, 55, 225, 77)); // alpha=77 不变
+
+    // ---- 彩色分离 "010"：仅留 G，R/B 置 0，alpha 保留 ----
+    const core::Image asplit = processing::splitChannels(aimg, "010");
+    CHECK(asplit.getPixel(1, 1) == core::Color(0, 200, 0, 77));
+
+    // ---- resize 等价性：纯色图缩放后仍为同一纯色（NEAREST / BILINEAR 均不应引入偏差；2× 放大→权重为二进制精确值）----
+    core::Image solid(6, 4, core::ImageFormat::RGBA);
+    solid.fill(core::Color(12, 34, 56, 78));
+    const core::Image solidNear = processing::resize(solid, 12, 8, processing::ResampleMode::NEAREST);
+    const core::Image solidBil = processing::resize(solid, 12, 8, processing::ResampleMode::BILINEAR);
+    CHECK(solidNear.width() == 12 && solidNear.height() == 8);
+    CHECK(solidNear.getPixel(0, 0) == core::Color(12, 34, 56, 78));
+    CHECK(solidNear.getPixel(11, 7) == core::Color(12, 34, 56, 78));
+    CHECK(solidBil.getPixel(0, 0) == core::Color(12, 34, 56, 78));
+    CHECK(solidBil.getPixel(5, 3) == core::Color(12, 34, 56, 78));   // 内部点双线性仍为纯色
+    CHECK(solidBil.getPixel(11, 7) == core::Color(12, 34, 56, 78));
+
+    // ---- resize 最近邻：2x2 放大到 4x4，四象限精确复制（验证采样坐标无偏移）----
+    core::Image quad(2, 2, core::ImageFormat::RGB);
+    quad.setPixel(0, 0, core::Color(255, 0, 0, 255));   // 左上 红
+    quad.setPixel(1, 0, core::Color(0, 255, 0, 255));   // 右上 绿
+    quad.setPixel(0, 1, core::Color(0, 0, 255, 255));   // 左下 蓝
+    quad.setPixel(1, 1, core::Color(255, 255, 0, 255)); // 右下 黄
+    const core::Image quad4 = processing::resize(quad, 4, 4, processing::ResampleMode::NEAREST);
+    CHECK(quad4.getPixel(0, 0) == core::Color(255, 0, 0, 255));
+    CHECK(quad4.getPixel(3, 0) == core::Color(0, 255, 0, 255));
+    CHECK(quad4.getPixel(0, 3) == core::Color(0, 0, 255, 255));
+    CHECK(quad4.getPixel(3, 3) == core::Color(255, 255, 0, 255));
+
+    // ---- resize 灰度：GRAY 输入缩放后仍为 GRAY，纯色保持（单通道路径）----
+    core::Image gsolid(4, 4, core::ImageFormat::GRAY);
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 4; ++x)
+            gsolid.setGray(x, y, 200);
+    const core::Image gscaled = processing::resize(gsolid, 8, 8, processing::ResampleMode::BILINEAR);
+    CHECK(gscaled.isGray());
+    CHECK(gscaled.getGray(3, 5) == 200);
 
     std::cout << "[processing] OK\n";
 }

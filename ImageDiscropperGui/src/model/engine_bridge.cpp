@@ -7,6 +7,8 @@
 #include "model/engine_bridge.h"
 
 #include "engine/image_io.h" // readImageFile（loadImage 委托 Core 解码）。
+#include "processing/color_ops.h"     // toGray/invertChannels/splitChannels（预处理颜色变换）。
+#include "processing/geometric_ops.h" // rotate/flip/resize/scale（预处理几何变换）。
 
 namespace idc::gui {
 
@@ -69,6 +71,45 @@ bool EngineBridge::exportResult(const idc::core::Image& work, const idc::engine:
         return false;
     }
     return true;
+}
+
+// ---- 预处理转发（FR-1）：逐个委托 Core processing::*，不做任何像素运算（A-0.1）----
+
+// 旋转：委托 processing::rotate（仅 90 的整数倍，其余角度 Core 内部退化到最近合法值）。
+idc::core::Image EngineBridge::rotateImage(const idc::core::Image& src, const int angleDeg) const {
+    return idc::processing::rotate(src, angleDeg);
+}
+
+// 翻转：委托 processing::flip（horizontal=true 左右、false 上下）。
+idc::core::Image EngineBridge::flipImage(const idc::core::Image& src, const bool horizontal) const {
+    return idc::processing::flip(src, horizontal);
+}
+
+// 目标尺寸缩放：委托 processing::resize（双线性插值）；非正尺寸时原图返回（不产生空图）。
+idc::core::Image EngineBridge::resizeImage(const idc::core::Image& src, const int newW, const int newH) const {
+    if (newW <= 0 || newH <= 0) return src;
+    return idc::processing::resize(src, newW, newH);
+}
+
+// 按比例缩放：委托 processing::scale（factor 必须 > 0，否则原图返回）。
+idc::core::Image EngineBridge::scaleImage(const idc::core::Image& src, const double factor) const {
+    if (factor <= 0.0) return src;
+    return idc::processing::scale(src, factor);
+}
+
+// 黑白（灰度）：委托 processing::toGray。
+idc::core::Image EngineBridge::toGrayImage(const idc::core::Image& src) const {
+    return idc::processing::toGray(src);
+}
+
+// 按通道反色：委托 processing::invertChannels（mask 长度 3，'1' 反色对应 R/G/B）。
+idc::core::Image EngineBridge::invertImage(const idc::core::Image& src, const std::string& mask) const {
+    return idc::processing::invertChannels(src, mask);
+}
+
+// 按通道分离：委托 processing::splitChannels（mask 长度 3，'1' 保留对应 R/G/B，'0' 置零）。
+idc::core::Image EngineBridge::splitImage(const idc::core::Image& src, const std::string& mask) const {
+    return idc::processing::splitChannels(src, mask);
 }
 
 } // namespace idc::gui
