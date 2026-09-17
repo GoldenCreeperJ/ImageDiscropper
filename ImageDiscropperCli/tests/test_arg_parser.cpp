@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-#include "cli/arg_parser.h"
+#include "arg_parser.h"
 
 // ArgParser + parseGlobalOptions 单元测试段。
 void testArgParser() {

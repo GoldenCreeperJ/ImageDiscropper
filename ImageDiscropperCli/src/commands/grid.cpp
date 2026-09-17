@@ -19,7 +19,7 @@
 //   - --pad-color：写入 emit.padColor；Core 的 compose 已把 padColor 透传进 Composition，
 //     exportMerged 以之填充合并画布空位 / 余量（并对 JPEG/BMP 作压平背景），故对合并导出生效。
 // ============================================================================
-#include "cli/commands.h"
+#include "commands.h"
 
 #include <cstddef>
 #include <string>
@@ -31,10 +31,10 @@
 #include "engine/grid.h"     // Grid / GridParams / Cell / RemainderPolicy
 #include "engine/sequence.h" // SortStrategy
 
-#include "cli/arg_parser.h"
-#include "cli/command_support.h"
-#include "cli/job.h"
-#include "cli/value_parser.h"
+#include "arg_parser.h"
+#include "command_support.h"
+#include "job.h"
+#include "value_parser.h"
 
 namespace idc::cli {
 

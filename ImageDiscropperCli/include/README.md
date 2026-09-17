@@ -1,4 +1,4 @@
-# include/cli
+# include
 
 **目录作用**：CLI 层的公共头文件集合。对下游（可执行 `idc` 与测试 `cli_tests`）暴露 CLI 的接口；
 其中部分头直接引用 Core 的概念类型（`RectRegion` / `GridParams` / `ExportFormat` / `Color`…），

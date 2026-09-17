@@ -1,7 +1,7 @@
-# include/gui/panels — 参数、导出、图像与标注面板对外声明
+# include/panels — 参数、导出、图像与标注面板对外声明
 
 **目录作用**：GUI **面板层**的公共头，声明左侧模式/极性面板、左侧标注工具/图层面板、右侧参数/导出/图像/标注属性面板共七个 `QWidget`。
-本目录只放**类声明边界**；实现与详尽控件 / 信号说明见 [src/panels/](../../../src/panels/README.md)。
+本目录只放**类声明边界**；实现与详尽控件 / 信号说明见 [src/panels/](../../src/panels/README.md)。
 
 **分块依据**：各面板均**不直接调 Core 几何/光栅化**。模式/参数/导出面板读写 `Document`（用户操作 → 写回 `Document` →
 `Document` 发 `changed()` → `MainWindow` 刷新预览；反向同步用 `blockSignals` 防回环）；图像处理面板发「意图信号」，

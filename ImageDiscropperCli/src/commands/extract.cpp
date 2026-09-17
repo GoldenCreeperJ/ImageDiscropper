@@ -9,7 +9,7 @@
 // 说明：L1 的保留区恒为「单个中心矩形」或「整条带」，其补集必为若干整行/整列，故必可坍缩为
 //       单图；explicitCollapse 恒为 false，本命令不会触发坍缩不可行（退出码 2 仅 L2/config 才可能）。
 // ============================================================================
-#include "cli/commands.h"
+#include "commands.h"
 
 #include <string>
 #include <vector>
@@ -17,10 +17,10 @@
 #include "engine/engine.h" // EngineConfig / Tier / CutGenerator / Polarity / EmitMode / MergeLayout
 #include "engine/region.h" // RectRegion / horizontalBand / verticalBand
 
-#include "cli/arg_parser.h"
-#include "cli/command_support.h"
-#include "cli/job.h"
-#include "cli/value_parser.h"
+#include "arg_parser.h"
+#include "command_support.h"
+#include "job.h"
+#include "value_parser.h"
 
 namespace idc::cli {
 

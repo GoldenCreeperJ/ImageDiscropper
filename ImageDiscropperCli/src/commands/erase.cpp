@@ -12,7 +12,7 @@
 //       参数下删除区恒为若干整行/整列（多矩形并集亦然，§4.2.2.2），故通常可坍缩；该分支主要为
 //       防御性对齐规范，真正稳定触发退出码 2 的场景见 config 命令的手写配置（IT-18）。
 // ============================================================================
-#include "cli/commands.h"
+#include "commands.h"
 
 #include <string>
 #include <vector>
@@ -20,10 +20,10 @@
 #include "engine/engine.h" // EngineConfig / Tier / CutGenerator / Polarity / EmitMode / MergeLayout
 #include "engine/region.h" // RectRegion / horizontalBand / verticalBand
 
-#include "cli/arg_parser.h"
-#include "cli/command_support.h"
-#include "cli/job.h"
-#include "cli/value_parser.h"
+#include "arg_parser.h"
+#include "command_support.h"
+#include "job.h"
+#include "value_parser.h"
 
 namespace idc::cli {
 

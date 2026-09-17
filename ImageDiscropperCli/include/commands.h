@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：include/cli/commands.h
+// 文件：include/commands.h
 // 作用：声明各子命令入口与 CLI 顶层入口 cliMain。命令与终稿 §4.2 / guideline §4.2 一一对应：
 //       extract(L1) / erase(L2) / grid(L3) / config(配置文件)。
 // 分块依据：
@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-#include "cli/arg_parser.h" // GlobalOptions
+#include "arg_parser.h" // GlobalOptions
 
 namespace idc::cli {
 

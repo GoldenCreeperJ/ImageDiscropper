@@ -4,7 +4,7 @@
 // 分块依据：只处理「语法层」token 归类，不理解值语义（值转换见 value_parser.cpp）；
 //       纯标准库实现，无第三方依赖（A-0.2/A-0.3）。
 // ============================================================================
-#include "cli/arg_parser.h"
+#include "arg_parser.h"
 
 namespace idc::cli {
 namespace {

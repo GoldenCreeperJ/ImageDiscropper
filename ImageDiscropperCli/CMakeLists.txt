@@ -48,7 +48,7 @@ set(IDC_CLI_LIB_SRC
 
 add_library(idc_cli_lib STATIC ${IDC_CLI_LIB_SRC})
 
-# CLI 公共头目录（供 idc 与 cli_tests 包含 cli/*.h）。
+# CLI 公共头目录（供 idc 与 cli_tests 包含 *.h）。
 target_include_directories(idc_cli_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # 链接 Core：PUBLIC 使 Core 的 include 目录与静态库向下游传播（CLI 头暴露 Core 类型）。

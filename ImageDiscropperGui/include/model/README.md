@@ -1,8 +1,8 @@
-# include/gui/model — 状态源与 Core 桥接对外声明
+# include/model — 状态源与 Core 桥接对外声明
 
 **目录作用**：GUI **模型层**的公共头，声明会话状态单一真相源 `Document`、唯一触碰切割引擎的 `EngineBridge`，
 以及唯一持有并驱动 Core `annotation::AnnotationLayer` 的标注域桥 `AnnotationBridge`。
-本目录只放**类声明边界**；实现与详尽字段 / 信号说明见 [src/model/](../../../src/model/README.md)。
+本目录只放**类声明边界**；实现与详尽字段 / 信号说明见 [src/model/](../../src/model/README.md)。
 
 **分块依据**：状态与 Core 调用**分离**——`Document` 只管状态（模式 / 极性 / 选区 / L2 多矩形 / L3 网格与选择集 /
 导出与重排参数）并组装 `EngineConfig`；`EngineBridge` 只管调 Core API。二者分离保证「GUI 不含切割 / 几何 / 导出逻辑」

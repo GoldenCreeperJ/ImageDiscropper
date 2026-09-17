@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：include/cli/cli_error.h
+// 文件：include_error.h
 // 作用：定义 CLI 的错误载体 CliError 与统一的错误输出 reportError（guideline §5.2 / A-0.6）。
 //       把「退出码 + 简短描述 + 详情 + 提示」打包为一处，确保所有错误以同一格式写 stderr，
 //       stdout 只留正常结果与进度（A-0.6）。
@@ -10,7 +10,7 @@
 
 #include <string>
 
-#include "cli/exit_code.h"
+#include "exit_code.h"
 
 namespace idc::cli {
 

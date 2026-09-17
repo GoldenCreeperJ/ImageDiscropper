@@ -18,7 +18,7 @@
 ```
 ImageDiscropperCli/
 ├── CMakeLists.txt          # 产出静态库 idc_cli_lib + 可执行 idc + 测试 cli_tests
-├── include/cli/            # 公共头（见 include/cli/README.md）
+├── include/            # 公共头（见 include/README.md）
 ├── src/                    # 实现（见 src/README.md）
 │   └── commands/           # 一命令一文件（见 src/commands/README.md）
 ├── tests/                  # 单元 + 集成测试（见 tests/README.md）

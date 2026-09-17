@@ -1,8 +1,8 @@
-# include/gui/canvas — 画布与图层对外声明
+# include/canvas — 画布与图层对外声明
 
 **目录作用**：GUI **画布层**的公共头，声明基于 QGraphicsView/Scene 的图层化画布：底图、遮罩、网格线、
 切割线、选区框、L3 单元点选交互图元与标注矢量叠加图元。本目录只放**类声明边界**；实现与详尽渲染 / 交互说明见
-[src/canvas/](../../../src/canvas/README.md)。
+[src/canvas/](../../src/canvas/README.md)。
 
 **分块依据**：按 guideline §4.2 的 **z 序图层化**拆分——每类图层 / 交互图元一个头，互不耦合；场景坐标统一为
 **原图像素坐标**。本目录**只渲染 Core 给出的结果**（切割线来自 `generateCutLines`、保留块来自 `EngineResult.kept`、

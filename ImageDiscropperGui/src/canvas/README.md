@@ -1,6 +1,6 @@
 # canvas/ — QGraphicsView 画布与图层
 
-> **include/src 分离**：本模块头文件在 `include/gui/canvas/`，实现（`.cpp`）与本 README 在 `src/canvas/`。
+> **include/src 分离**：本模块头文件在 `include/canvas/`，实现（`.cpp`）与本 README 在 `src/canvas/`。
 
 按 guideline §4.2 的 **z 序图层化**组织画布：底图 → 标注矢量叠加 → 删除遮罩 → 保留遮罩 → 网格 → 切割线 → 选区框 → 角标。
 场景坐标统一为**原图像素坐标**；底图用降采样 pixmap 经变换铺回原图尺寸，各叠加层即可直接按原图坐标绘制。

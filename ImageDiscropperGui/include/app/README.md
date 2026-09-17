@@ -1,7 +1,7 @@
-# include/gui/app — 应用装配层对外声明
+# include/app — 应用装配层对外声明
 
 **目录作用**：GUI **应用装配层**的公共头，声明主窗口 `MainWindow`——顶层装配与编排入口。
-本目录只放**类声明边界**；实现（`.cpp`）与详尽编排说明见 [src/app/](../../../src/app/README.md)。
+本目录只放**类声明边界**；实现（`.cpp`）与详尽编排说明见 [src/app/](../../src/app/README.md)。
 
 **分块依据**：`app` 是 GUI 的装配根，只做「装配 + 信号槽编排 + 状态栏呈现」，不含切割 / 几何 / 导出 / 标注实现
 （A-0.1）——Core 切割调用集中在 `model/EngineBridge`、标注调用集中在 `model/AnnotationBridge`、状态集中在 `model/Document`、渲染集中在 `canvas/`（场景图元）与 `util/`（离屏预览、标注矢量绘制）。

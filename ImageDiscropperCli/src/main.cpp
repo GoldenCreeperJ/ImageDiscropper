@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-#include "cli/commands.h"
+#include "commands.h"
 
 #ifdef _WIN32
 // 仅在 Windows 下需要显式切换控制台代码页；其他平台的终端通常默认 UTF-8。

@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：include/cli/command_support.h
+// 文件：include/command_support.h
 // 作用：各子命令（extract / erase / grid / config）共用的极薄样板助手——统一的「报错并
 //       返回退出码」、执行期开关装配、以及公共导出选项 --format / --naming 的解析。
 //       目的是消除四个命令文件里重复的 reportError+toInt / JobOptions 装配样板（A-0.2），
@@ -18,11 +18,11 @@
 
 #include "engine/composition.h" // CompositionParams / ExportFormat
 
-#include "cli/arg_parser.h"   // ArgParser / GlobalOptions
-#include "cli/cli_error.h"    // makeError / reportError
-#include "cli/exit_code.h"    // ExitCode / toInt
-#include "cli/job.h"          // JobOptions
-#include "cli/value_parser.h" // parseFormat / checkNaming
+#include "arg_parser.h"   // ArgParser / GlobalOptions
+#include "cli_error.h"    // makeError / reportError
+#include "exit_code.h"    // ExitCode / toInt
+#include "job.h"          // JobOptions
+#include "value_parser.h" // parseFormat / checkNaming
 
 namespace idc::cli {
 

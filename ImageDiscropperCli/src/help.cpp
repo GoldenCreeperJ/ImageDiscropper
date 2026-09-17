@@ -6,7 +6,7 @@
 //       把占位的 image-tool 替换为实际命令名）。
 // 说明：版本号来自编译期宏 IDC_CLI_VERSION / IDC_CORE_VERSION（由 CMake 注入，与构建系统一致）。
 // ============================================================================
-#include "cli/help.h"
+#include "help.h"
 
 #include <iostream>
 

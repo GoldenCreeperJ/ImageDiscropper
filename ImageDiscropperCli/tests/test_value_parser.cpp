@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-#include "cli/value_parser.h"
+#include "value_parser.h"
 #include "core/color.h"
 #include "engine/composition.h" // ExportFormat / MergeLayout
 #include "engine/grid.h"        // RemainderPolicy

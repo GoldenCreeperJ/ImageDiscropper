@@ -10,16 +10,16 @@
 //       路径）误判为命令名，故 --config 路由传入「全部 args」并前置于命令名判定，避免 --input/
 //       --output 等选项丢失（详见下方 cliMain 内注释）。
 // ============================================================================
-#include "cli/commands.h"
+#include "commands.h"
 
 #include <cstddef>
 #include <exception>
 #include <string>
 #include <vector>
 
-#include "cli/arg_parser.h"
-#include "cli/cli_error.h"
-#include "cli/help.h"
+#include "arg_parser.h"
+#include "cli_error.h"
+#include "help.h"
 
 namespace idc::cli {
 namespace {

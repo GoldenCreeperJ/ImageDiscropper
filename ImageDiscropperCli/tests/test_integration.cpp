@@ -28,7 +28,7 @@
 #include "engine/image_io.h"          // readImageFile / writeImageFile
 #include "engine/region.h"            // RectRegion
 
-#include "cli/commands.h" // cliMain
+#include "commands.h" // cliMain
 
 namespace {
 

@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：include/cli/job.h
+// 文件：include/job.h
 // 作用：定义 CLI 与 Core 引擎之间的「执行桥」——把一份装配好的 EngineConfig 跑通并落盘，
 //       并把 Core 的结果 / 失败映射为退出码。这是 CLI「调用 Core + 返回退出码」职责的落点。
 // 分块依据：
@@ -18,7 +18,7 @@
 #include "core/image.h"
 #include "engine/engine.h" // EngineConfig（聚合各阶段头）
 
-#include "cli/exit_code.h"
+#include "exit_code.h"
 
 namespace idc::cli {
 

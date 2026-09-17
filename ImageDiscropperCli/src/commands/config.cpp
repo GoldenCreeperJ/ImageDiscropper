@@ -18,7 +18,7 @@
 //     经手写配置稳定触发的路径（Core 内部会自动降级为 REARRANGE 并返回 ok=true/collapsible=false，
 //     job 据 explicitCollapse 显式报错退出码 2）。
 // ============================================================================
-#include "cli/commands.h"
+#include "commands.h"
 
 #include <filesystem>
 #include <string>
@@ -28,10 +28,10 @@
 #include "engine/engine.h"             // EngineConfig / EmitMode / MergeLayout
 #include "engine/engine_config_json.h" // loadEngineConfig（复用 Core JSON 模块，A-0.2）
 
-#include "cli/arg_parser.h"
-#include "cli/command_support.h"
-#include "cli/exit_code.h"
-#include "cli/job.h"
+#include "arg_parser.h"
+#include "command_support.h"
+#include "exit_code.h"
+#include "job.h"
 
 namespace idc::cli {
 

@@ -6,7 +6,7 @@
 // 说明：整数解析用 strtol 全量消费校验（拒绝 "12abc" / 空串 / 溢出）；颜色十六进制解析
 //       与 Core 配置约定（#RRGGBB / #AARRGGBB）一致。
 // ============================================================================
-#include "cli/value_parser.h"
+#include "value_parser.h"
 
 #include <algorithm>
 #include <cctype>

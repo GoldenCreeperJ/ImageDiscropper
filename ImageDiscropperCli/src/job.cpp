@@ -9,14 +9,14 @@
 //       返回 ok=true、collapsible=false；CLI 据 opt.explicitCollapse 判定是否应显式报错
 //       （§4.2.2.4：用户显式要 collapse → 退出码 2 并提示 rearrange）。
 // ============================================================================
-#include "cli/job.h"
+#include "job.h"
 
 #include <iostream>
 
 #include "engine/engine_config_json.h" // saveEngineConfig
 #include "engine/image_io.h"           // readImageFile
 
-#include "cli/cli_error.h"
+#include "cli_error.h"
 
 namespace idc::cli {
 
