@@ -424,8 +424,11 @@ idc::engine::EngineConfig Document::buildEngineConfig() const {
     // 切割配置（含模式/极性/几何）。
     cfg.cut = buildCutConfig();
 
-    // 显式选择集：L3 为用户点选/全选的单元序号；L1/L2 恒空 → 由 Core 依生成器自动推导。
-    cfg.selectedCells = selectedCells_;
+    // 显式选择集：仅 L3 使用用户点选/全选的单元序号；L1/L2 必须恒空 → 由 Core 依生成器
+    // 自动推导选择区（engine.cpp：「显式 selectedCells 优先，否则按生成器几何自动推导」）。
+    // 若不加模式门控，从 L3 切回 L1/L2 时残留的 L3 单元序号会被套用到形状不同的诱导网格上，
+    // 使保留集算错甚至为空、遮罩消失。故此处按模式门控，维持「L1/L2 selectedCells 恒空」不变式。
+    cfg.selectedCells = (mode_ == idc::engine::Tier::L3) ? selectedCells_ : std::vector<int>{};
 
     // 排序策略（FR-L3.5）：row-major / column-major / reverse / snake / custom。
     cfg.order = order_;

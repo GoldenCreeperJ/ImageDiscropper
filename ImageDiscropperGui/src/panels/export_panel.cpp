@@ -353,13 +353,20 @@ void ExportPanel::onMergeCellEdited() {
 }
 
 // 点击填充色按钮 → 弹带 Alpha 的取色对话框，写回 Document 并刷新色块。
+// 说明：因需 Alpha 通道，Qt 无法使用原生取色框而回退到自带对话框（固定尺寸）；
+//       若以这个很窄的右侧面板为父，Windows 下会以面板尺寸推导初始 geometry
+//       再被强制夹到固定最小尺寸，刷出大量 "QWindowsWindow::setGeometry: Unable to
+//       set geometry" 噪声告警。改以顶层窗口为父 + 显式 DontUseNativeDialog 消除。
 void ExportPanel::onPadColorClicked() {
     if (!doc_) return;
     const idc::core::Color cur = doc_->padColor();
     const QColor init(cur.r, cur.g, cur.b, cur.a);
-    const QColor picked = QColorDialog::getColor(init, this, QStringLiteral("选择填充色"),
-                                                 QColorDialog::ShowAlphaChannel);
-    if (!picked.isValid()) return; // 用户取消。
+    QColorDialog dlg(init, window());                 // 以顶层窗口为父，避免以窄面板推导初始尺寸。
+    dlg.setWindowTitle(QStringLiteral("选择填充色"));
+    dlg.setOption(QColorDialog::ShowAlphaChannel, true);
+    dlg.setOption(QColorDialog::DontUseNativeDialog, true); // Alpha 需求下本就走非原生，显式声明意图。
+    if (dlg.exec() != QDialog::Accepted) return;      // 用户取消。
+    const QColor picked = dlg.currentColor();
     doc_->setPadColor(idc::core::Color(static_cast<std::uint8_t>(picked.red()),
                                        static_cast<std::uint8_t>(picked.green()),
                                        static_cast<std::uint8_t>(picked.blue()),
