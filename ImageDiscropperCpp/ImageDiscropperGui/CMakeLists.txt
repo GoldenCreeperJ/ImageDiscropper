@@ -43,70 +43,70 @@ endif()
 # ---------------------------------------------------------------------------
 # util：core::Image 与 Qt 图像类型的适配、降采样预览、标注矢量绘制与导出输出预览渲染（视图关注点，非引擎逻辑）。
 set(IDC_GUI_UTIL_SRC
-    include/util/annotation_qt_painter.h
-    include/util/image_qt_adapter.h
-    include/util/output_preview_renderer.h
-    include/util/path_qt_adapter.h
-    include/util/preview_scaler.h
-    src/util/annotation_qt_painter.cpp
-    src/util/image_qt_adapter.cpp
-    src/util/output_preview_renderer.cpp
-    src/util/path_qt_adapter.cpp
-    src/util/preview_scaler.cpp
+        include/util/annotation_qt_painter.h
+        include/util/image_qt_adapter.h
+        include/util/output_preview_renderer.h
+        include/util/path_qt_adapter.h
+        include/util/preview_scaler.h
+        src/util/annotation_qt_painter.cpp
+        src/util/image_qt_adapter.cpp
+        src/util/output_preview_renderer.cpp
+        src/util/path_qt_adapter.cpp
+        src/util/preview_scaler.cpp
 )
 
 # model：会话状态单一真相源 Document 与唯一触碰 Core 的 EngineBridge。
 set(IDC_GUI_MODEL_SRC
-    include/model/annotation_bridge.h
-    include/model/document.h
-    include/model/engine_bridge.h
-    src/model/annotation_bridge.cpp
-    src/model/document.cpp
-    src/model/engine_bridge.cpp
+        include/model/annotation_bridge.h
+        include/model/document.h
+        include/model/engine_bridge.h
+        src/model/annotation_bridge.cpp
+        src/model/document.cpp
+        src/model/engine_bridge.cpp
 )
 
 # canvas：QGraphicsView/Scene 画布，图层化渲染底图/遮罩/切割线/网格线/选区/标注矢量叠加。
 set(IDC_GUI_CANVAS_SRC
-    include/canvas/z_order.h
-    include/canvas/canvas_scene.h
-    include/canvas/canvas_view.h
-    include/canvas/mask_layer.h
-    include/canvas/grid_layer.h
-    include/canvas/cell_picker_item.h
-    include/canvas/selection_rect_item.h
-    include/canvas/annotation_item.h
-    src/canvas/canvas_scene.cpp
-    src/canvas/canvas_view.cpp
-    src/canvas/mask_layer.cpp
-    src/canvas/grid_layer.cpp
-    src/canvas/cell_picker_item.cpp
-    src/canvas/selection_rect_item.cpp
-    src/canvas/annotation_item.cpp
+        include/canvas/z_order.h
+        include/canvas/canvas_scene.h
+        include/canvas/canvas_view.h
+        include/canvas/mask_layer.h
+        include/canvas/grid_layer.h
+        include/canvas/cell_picker_item.h
+        include/canvas/selection_rect_item.h
+        include/canvas/annotation_item.h
+        src/canvas/canvas_scene.cpp
+        src/canvas/canvas_view.cpp
+        src/canvas/mask_layer.cpp
+        src/canvas/grid_layer.cpp
+        src/canvas/cell_picker_item.cpp
+        src/canvas/selection_rect_item.cpp
+        src/canvas/annotation_item.cpp
 )
 
 # panels：左侧模式/极性面板与标注工具/图层面板、右侧参数/导出/图像/标注属性面板。
 set(IDC_GUI_PANELS_SRC
-    include/panels/left_panel.h
-    include/panels/param_panel.h
-    include/panels/export_panel.h
-    include/panels/image_panel.h
-    include/panels/tool_panel.h
-    include/panels/layer_panel.h
-    include/panels/annotation_prop_panel.h
-    src/panels/left_panel.cpp
-    src/panels/param_panel.cpp
-    src/panels/export_panel.cpp
-    src/panels/image_panel.cpp
-    src/panels/tool_panel.cpp
-    src/panels/layer_panel.cpp
-    src/panels/annotation_prop_panel.cpp
+        include/panels/left_panel.h
+        include/panels/param_panel.h
+        include/panels/export_panel.h
+        include/panels/image_panel.h
+        include/panels/tool_panel.h
+        include/panels/layer_panel.h
+        include/panels/annotation_prop_panel.h
+        src/panels/left_panel.cpp
+        src/panels/param_panel.cpp
+        src/panels/export_panel.cpp
+        src/panels/image_panel.cpp
+        src/panels/tool_panel.cpp
+        src/panels/layer_panel.cpp
+        src/panels/annotation_prop_panel.cpp
 )
 
 # app：主窗口装配与程序入口。
 set(IDC_GUI_APP_SRC
-    include/app/main_window.h
-    src/app/main_window.cpp
-    src/app/main.cpp
+        include/app/main_window.h
+        src/app/main_window.cpp
+        src/app/main.cpp
 )
 
 add_executable(idc_gui
@@ -119,7 +119,7 @@ add_executable(idc_gui
 
 # include 作为包含根，使源码以 "model/document.h"、"canvas/canvas_scene.h" 形式互相引用
 # （与 Core 的 include/、CLI 的 include/ 同一约定：包含根下直接是功能分组子目录）。
-target_include_directories(idc_gui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(idc_gui PRIVATE include)
 
 # 注入 GUI 版本号，供窗口标题与「关于」显示。
 target_compile_definitions(idc_gui PRIVATE IDC_GUI_VERSION="${PROJECT_VERSION}")

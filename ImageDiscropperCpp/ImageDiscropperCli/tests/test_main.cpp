@@ -8,7 +8,7 @@
 // ============================================================================
 #include <iostream>
 
-#include "cli_test_harness.h" // 共享 CHECK 宏 + 测试段声明
+#include "cli_test_harness.h"
 
 // main：依次执行全部测试段；任一 CHECK 失败即以非零码退出（ctest 判定失败）。
 int main() {

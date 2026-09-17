@@ -10,7 +10,7 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "test_harness.h" // 共享 CHECK 宏 + 引擎验收测试段声明
+#include "test_harness.h"
 
 #include "core/color.h"
 #include "core/image.h"

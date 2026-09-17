@@ -18,11 +18,11 @@
 
 #include "engine/composition.h" // CompositionParams / ExportFormat
 
-#include "arg_parser.h"   // ArgParser / GlobalOptions
-#include "cli_error.h"    // makeError / reportError
-#include "exit_code.h"    // ExitCode / toInt
-#include "job.h"          // JobOptions
-#include "value_parser.h" // parseFormat / checkNaming
+#include "arg_parser.h"
+#include "cli_error.h"
+#include "exit_code.h"
+#include "job.h"
+#include "value_parser.h"
 
 namespace idc::cli {
 

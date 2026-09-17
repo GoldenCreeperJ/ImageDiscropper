@@ -36,55 +36,55 @@ find_package(nlohmann_json CONFIG REQUIRED)
 # ---------------------------------------------------------------------------
 # core：基础数据类型（Color / Point / Image）
 set(IDC_CORE_SRC
-    src/core/color.cpp
-    src/core/point.cpp
-    src/core/image.cpp
+        src/core/color.cpp
+        src/core/point.cpp
+        src/core/image.cpp
 )
 
 # geometry：标注图形几何（ShapeType / Shape / Path）
 set(IDC_GEOMETRY_SRC
-    src/geometry/shapes.cpp
-    src/geometry/path.cpp
+        src/geometry/shapes.cpp
+        src/geometry/path.cpp
 )
 
 # pixel_ops：像素处理算法（颜色/通道、几何变换）
 set(IDC_PIXEL_OPS_SRC
-    src/pixel_ops/color_ops.cpp
-    src/pixel_ops/geometric_ops.cpp
+        src/pixel_ops/color_ops.cpp
+        src/pixel_ops/geometric_ops.cpp
 )
 
 # annotation：标注层（FR-1.3），由原 drawing 模块重命名而来
 set(IDC_ANNOTATION_SRC
-    src/annotation/shape_factory.cpp
-    src/annotation/rasterizer.cpp
-    src/annotation/annotation_layer.cpp
-    src/annotation/view_transform.cpp
+        src/annotation/shape_factory.cpp
+        src/annotation/rasterizer.cpp
+        src/annotation/annotation_layer.cpp
+        src/annotation/view_transform.cpp
 )
 
 # preprocess：切割前的基础图像处理流水线（FR-1），由原 operation 模块重命名而来
 set(IDC_PREPROCESS_SRC
-    src/preprocess/preprocess_config.cpp
-    src/preprocess/preprocess_pipeline.cpp
+        src/preprocess/preprocess_config.cpp
+        src/preprocess/preprocess_pipeline.cpp
 )
 
 # history：撤销 / 重做栈（FR-1.5 / NFR-4）
 set(IDC_HISTORY_SRC
-    src/history/history_manager.cpp
+        src/history/history_manager.cpp
 )
 
 # engine：Grid-Selection-Emit 统一引擎（终稿 §2 / §10.2）——切割线 / 网格 / 切分 /
 #         选择极性 / 排序 / 合成 / 导出 / 图像编码(stb+libwebp) / JSON 配置(nlohmann) / 顶层编排。
 set(IDC_ENGINE_SRC
-    src/engine/cut_line.cpp
-    src/engine/grid.cpp
-    src/engine/split.cpp
-    src/engine/selection.cpp
-    src/engine/sequence.cpp
-    src/engine/composition.cpp
-    src/engine/export.cpp
-    src/engine/image_io.cpp
-    src/engine/engine_config_json.cpp
-    src/engine/engine.cpp
+        src/engine/cut_line.cpp
+        src/engine/grid.cpp
+        src/engine/split.cpp
+        src/engine/selection.cpp
+        src/engine/sequence.cpp
+        src/engine/composition.cpp
+        src/engine/export.cpp
+        src/engine/image_io.cpp
+        src/engine/engine_config_json.cpp
+        src/engine/engine.cpp
 )
 
 add_library(image_discropper_core STATIC
@@ -115,10 +115,10 @@ add_executable(demo examples/demo_main.cpp)
 target_link_libraries(demo PRIVATE image_discropper_core)
 
 add_executable(unit_tests
-    tests/test_main.cpp
-    tests/test_engine_pipeline.cpp
-    tests/test_engine_export.cpp
-    tests/test_engine_boundary.cpp
+        tests/test_main.cpp
+        tests/test_engine_pipeline.cpp
+        tests/test_engine_export.cpp
+        tests/test_engine_boundary.cpp
 )
 target_link_libraries(unit_tests PRIVATE image_discropper_core)
 

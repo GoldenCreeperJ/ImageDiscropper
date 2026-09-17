@@ -254,7 +254,8 @@ void MainWindow::buildMenus() {
                            "3) L1/L2：在画布上拖拽出选区；橙色切割线贯穿全图（与选区同色），绿色为保留、红色为删除。\n"
                            "4) 可拖动选区/四角手柄调整，或直接拖动橙色切割线（＝选区边）移动对应边；方向键微调（Shift 大步）。\n"
                            "5) L3：在右侧「参数」页设定基准点、单元尺寸与余量策略，网格线自动铺满全图；用全选/反选/清空与排序策略控制输出。\n"
-                           "6) 右侧「导出」页选择输出模式与路径，点击导出（Ctrl+S）。"));
+                           "6) 右侧「导出」页选择输出模式与路径，点击导出（Ctrl+S）。\n\n"
+                           "完整操作手册见程序目录下的 USAGE.md（设计说明见 DESIGN.md）。"));
     });
     QAction* aAbout = mHelp->addAction(QStringLiteral("关于"));
     connect(aAbout, &QAction::triggered, this, [this] {

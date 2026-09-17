@@ -34,22 +34,22 @@ endif()
 # CLI 源文件（按职责分块，严禁上帝文件）。main.cpp 单列，其余进入可复用静态库。
 # ---------------------------------------------------------------------------
 set(IDC_CLI_LIB_SRC
-    src/cli_app.cpp              # 顶层入口 cliMain：全局选项 / help / version / 分派 / 异常兜底
-    src/arg_parser.cpp           # 轻量参数解析：token → 选项名到值列表
-    src/value_parser.cpp         # 值解析：坐标 / 带 / 网格 / r,c / 画布 / 颜色 / 枚举 / 模板
-    src/cli_error.cpp            # 错误报告：按 §5.2 格式写 stderr
-    src/help.cpp                 # 帮助与版本文本（§6）
-    src/job.cpp                  # 作业执行：读图 → runEngine → 坍缩校验 → exportImage → 退出码
-    src/commands/extract.cpp     # L1 标准提取
-    src/commands/erase.cpp       # L2 反向剔除（十字 / 横线 / 竖线 / 多矩形并集）
-    src/commands/grid.cpp        # L3 网格分割
-    src/commands/config.cpp      # 配置文件：--load 执行 / --save-config 序列化
+        src/cli_app.cpp              # 顶层入口 cliMain：全局选项 / help / version / 分派 / 异常兜底
+        src/arg_parser.cpp           # 轻量参数解析：token → 选项名到值列表
+        src/value_parser.cpp         # 值解析：坐标 / 带 / 网格 / r,c / 画布 / 颜色 / 枚举 / 模板
+        src/cli_error.cpp            # 错误报告：按 §5.2 格式写 stderr
+        src/help.cpp                 # 帮助与版本文本（§6）
+        src/job.cpp                  # 作业执行：读图 → runEngine → 坍缩校验 → exportImage → 退出码
+        src/commands/extract.cpp     # L1 标准提取
+        src/commands/erase.cpp       # L2 反向剔除（十字 / 横线 / 竖线 / 多矩形并集）
+        src/commands/grid.cpp        # L3 网格分割
+        src/commands/config.cpp      # 配置文件：--load 执行 / --save-config 序列化
 )
 
 add_library(idc_cli_lib STATIC ${IDC_CLI_LIB_SRC})
 
 # CLI 公共头目录（供 idc 与 cli_tests 包含 *.h）。
-target_include_directories(idc_cli_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(idc_cli_lib PUBLIC include)
 
 # 链接 Core：PUBLIC 使 Core 的 include 目录与静态库向下游传播（CLI 头暴露 Core 类型）。
 target_link_libraries(idc_cli_lib PUBLIC image_discropper_core)
@@ -70,10 +70,10 @@ target_link_libraries(idc PRIVATE idc_cli_lib)
 # 测试：单元（参数解析 / 值解析）+ 集成（IT-1~IT-18，进程内调用 cliMain）。
 # ---------------------------------------------------------------------------
 add_executable(cli_tests
-    tests/test_main.cpp
-    tests/test_arg_parser.cpp
-    tests/test_value_parser.cpp
-    tests/test_integration.cpp
+        tests/test_main.cpp
+        tests/test_arg_parser.cpp
+        tests/test_value_parser.cpp
+        tests/test_integration.cpp
 )
 target_link_libraries(cli_tests PRIVATE idc_cli_lib)
 

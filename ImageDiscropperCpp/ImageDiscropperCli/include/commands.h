@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-#include "arg_parser.h" // GlobalOptions
+#include "arg_parser.h"
 
 namespace idc::cli {
 
