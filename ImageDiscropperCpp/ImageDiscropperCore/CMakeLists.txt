@@ -109,21 +109,23 @@ target_include_directories(image_discropper_core PRIVATE ${Stb_INCLUDE_DIR})
 target_link_libraries(image_discropper_core PRIVATE WebP::webp nlohmann_json::nlohmann_json)
 
 # ---------------------------------------------------------------------------
-# 演示程序与自测程序
+# 演示程序与自测程序（仅在 IDC_BUILD_TESTS=ON 时构建，Release 发布可关闭）
 # ---------------------------------------------------------------------------
-add_executable(demo examples/demo_main.cpp)
-target_link_libraries(demo PRIVATE image_discropper_core)
+if(IDC_BUILD_TESTS)
+    add_executable(demo examples/demo_main.cpp)
+    target_link_libraries(demo PRIVATE image_discropper_core)
 
-add_executable(unit_tests
-        tests/test_main.cpp
-        tests/test_engine_pipeline.cpp
-        tests/test_engine_export.cpp
-        tests/test_engine_boundary.cpp
-)
-target_link_libraries(unit_tests PRIVATE image_discropper_core)
+    add_executable(unit_tests
+            tests/test_main.cpp
+            tests/test_engine_pipeline.cpp
+            tests/test_engine_export.cpp
+            tests/test_engine_boundary.cpp
+    )
+    target_link_libraries(unit_tests PRIVATE image_discropper_core)
 
-enable_testing()
-add_test(NAME unit_tests COMMAND unit_tests)
+    enable_testing()
+    add_test(NAME unit_tests COMMAND unit_tests)
+endif()
 
 # ---------------------------------------------------------------------------
 # 作为子工程被根 CMakeLists 引入时，向父作用域回传 Core 版本号，供 CLI 的

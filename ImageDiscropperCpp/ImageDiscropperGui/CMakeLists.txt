@@ -109,7 +109,9 @@ set(IDC_GUI_APP_SRC
         src/app/main.cpp
 )
 
-add_executable(idc_gui
+# WIN32：按 GUI 子系统链接（MSVC /SUBSYSTEM:WINDOWS），双击启动时不弹出控制台窗口；
+# 入口点 WinMain 由下方 qt_finalize_target 链接 Qt6::EntryPointImplementation 提供。
+add_executable(idc_gui WIN32
     ${IDC_GUI_UTIL_SRC}
     ${IDC_GUI_MODEL_SRC}
     ${IDC_GUI_CANVAS_SRC}
@@ -133,15 +135,13 @@ target_link_libraries(idc_gui PRIVATE
 )
 
 # ---------------------------------------------------------------------------
-# Qt 运行时插件部署：vcpkg 的 VCPKG_APPLOCAL_DEPS 只把 Qt 的 DLL 复制到 exe 旁，
+# Qt 运行时插件部署（仅动态链接时需要）：vcpkg 的 VCPKG_APPLOCAL_DEPS 只把 Qt 的 DLL 复制到 exe 旁，
 # 不复制 Qt 插件目录。缺 platforms 插件时应用启动即报
-# "no Qt platform plugin could be initialized"，故构建后把插件复制到 exe 旁。
-# vcpkg Qt 布局（非常规）：release 在 <installed>/<triplet>/Qt6/plugins，
-#                         debug  在 <installed>/<triplet>/debug/Qt6/plugins。
-# 仅复制 platforms（启动必需）与 styles（窗口样式）；GUI 的图像解码走 Core
-# （stb），不依赖 Qt imageformats。非 vcpkg 环境跳过（由使用者自行部署）。
+# “no Qt platform plugin could be initialized”，故构建后把插件复制到 exe 旁。
+# 静态链接时（VCPKG_TARGET_TRIPLET 含 "static"）插件已编译进 exe，无需复制。
 # ---------------------------------------------------------------------------
-if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET
+   AND NOT VCPKG_TARGET_TRIPLET MATCHES "static")
     add_custom_command(TARGET idc_gui POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "$<$<CONFIG:Debug>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/platforms>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/platforms>"

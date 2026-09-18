@@ -68,13 +68,16 @@ target_link_libraries(idc PRIVATE idc_cli_lib)
 
 # ---------------------------------------------------------------------------
 # 测试：单元（参数解析 / 值解析）+ 集成（IT-1~IT-18，进程内调用 cliMain）。
+# 仅在 IDC_BUILD_TESTS=ON 时构建，Release 发布可关闭。
 # ---------------------------------------------------------------------------
-add_executable(cli_tests
-        tests/test_main.cpp
-        tests/test_arg_parser.cpp
-        tests/test_value_parser.cpp
-        tests/test_integration.cpp
-)
-target_link_libraries(cli_tests PRIVATE idc_cli_lib)
+if(IDC_BUILD_TESTS)
+    add_executable(cli_tests
+            tests/test_main.cpp
+            tests/test_arg_parser.cpp
+            tests/test_value_parser.cpp
+            tests/test_integration.cpp
+    )
+    target_link_libraries(cli_tests PRIVATE idc_cli_lib)
 
-add_test(NAME cli_tests COMMAND cli_tests)
+    add_test(NAME cli_tests COMMAND cli_tests)
+endif()

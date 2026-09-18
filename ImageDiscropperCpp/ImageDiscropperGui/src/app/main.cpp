@@ -12,6 +12,18 @@
 #include <QApplication>
 #include <QCommandLineParser>
 
+// 静态链接 Qt 时，平台插件不再以 DLL/dylib/so 形式加载，需显式导入。
+#ifdef QT_STATIC
+#include <QtPlugin>
+#if defined(Q_OS_WIN)
+Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin)
+#elif defined(Q_OS_MACOS)
+Q_IMPORT_PLUGIN(QCocoaIntegrationPlugin)
+#elif defined(Q_OS_LINUX)
+Q_IMPORT_PLUGIN(QXcbIntegrationPlugin)
+#endif
+#endif
+
 #include "app/main_window.h"
 
 int main(int argc, char* argv[]) {
