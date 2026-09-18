@@ -14,9 +14,9 @@
    `burnIn()` 把底图与全部标注合成为一张图像（即「烧录」）。
 4. `view_transform.h` —— 屏幕坐标 ↔ 逻辑坐标换算、以指定点缩放、图像适配视口；Core 提供的 Qt 无关视口工具，当前由 examples/tests 使用（GUI 改用 QGraphicsView 自带变换，未直接用本类）。
 
-| 文件 | 职责 |
-|---|---|
-| `shape_factory.h` | 依据 `ShapeType` 与锚点构造 `Shape`（`buildShape`） |
-| `rasterizer.h` | 光栅化：填充、描边、Alpha 混合（`rasterize` / `PaintStyle`） |
-| `annotation_layer.h` | 标注会话状态机 `AnnotationLayer` 与标注记录 `Annotation` |
-| `view_transform.h` | 视图坐标变换 `ViewTransform` |
+| 文件                   | 职责                                             |
+|----------------------|------------------------------------------------|
+| `shape_factory.h`    | 依据 `ShapeType` 与锚点构造 `Shape`（`buildShape`）     |
+| `rasterizer.h`       | 光栅化：填充、描边、Alpha 混合（`rasterize` / `PaintStyle`） |
+| `annotation_layer.h` | 标注会话状态机 `AnnotationLayer` 与标注记录 `Annotation`   |
+| `view_transform.h`   | 视图坐标变换 `ViewTransform`                         |

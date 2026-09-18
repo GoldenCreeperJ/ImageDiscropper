@@ -18,9 +18,9 @@
 
 **累积 OBB 参数（供面板忠实回显）**：`applyObbTransform` 同时累积带符号参数 `obbScaleX_ *= sx`、`obbScaleY_ *= sy`、`obbRotationDeg_ += deg`（与 `xform_` 线性部分 `R(Σdeg)·diag(Πsx,Πsy)` 一致），由 `obbScaleX()`/`obbScaleY()`/`obbRotationDeg()` 读出。之所以显式存储而不从 `xform_` 分解：矩阵分解无法区分 `(sx<0)` 与 `(θ+180, sy<0)`（二重歧义），无法忠实展示翻转的负缩放。`clone()` 经 `copyXformTo` 一并复制这组参数（连同 `xform_`），避免深拷贝/撤销重做丢失回显基准。
 
-| 文件 | 职责 |
-|---|---|
-| `shape_type.h` | 形状类型枚举 `ShapeType` 及其到字符串的映射 |
-| `path.h` | 路径 `Path` / 路径段 `PathSegment` / 轴对齐包围盒 `BoundingBox` |
-| `shapes.h` | `Shape` 抽象接口与各类具体形状（含非破坏性变换：worldPath/worldBounds/controlPointsWorld/translateWorld/transform()；及 OBB 交互变换：localToWorld/worldToLocal/obbPreviewTransform/applyObbTransform） |
-| `affine_transform.h` | 2×3 仿射矩阵 `AffineTransform`（header-only）：平移/缩放/旋转、乘法、作用于点/路径、行列式/逆/isIdentity |
+| 文件                   | 职责                                                                                                                                                                          |
+|----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `shape_type.h`       | 形状类型枚举 `ShapeType` 及其到字符串的映射                                                                                                                                                |
+| `path.h`             | 路径 `Path` / 路径段 `PathSegment` / 轴对齐包围盒 `BoundingBox`                                                                                                                        |
+| `shapes.h`           | `Shape` 抽象接口与各类具体形状（含非破坏性变换：worldPath/worldBounds/controlPointsWorld/translateWorld/transform()；及 OBB 交互变换：localToWorld/worldToLocal/obbPreviewTransform/applyObbTransform） |
+| `affine_transform.h` | 2×3 仿射矩阵 `AffineTransform`（header-only）：平移/缩放/旋转、乘法、作用于点/路径、行列式/逆/isIdentity                                                                                                |

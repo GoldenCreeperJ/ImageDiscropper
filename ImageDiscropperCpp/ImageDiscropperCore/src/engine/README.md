@@ -10,18 +10,18 @@
 `engine.cpp` 仅保留顶层编排 `runEngine`。`generateCutLines` / `induceGrid` 因桥接聚合配置
 （`CutConfig` / `SourceInfo`）声明留在 `engine.h`，故 `cut_line.cpp` / `grid.cpp` 仍 include 之。避免上帝文件（guideline：严禁 God File）。
 
-| 文件 | 职责 | 阶段 |
-|---|---|---|
-| `cut_line.cpp` | `normalizeCutLines`（去重/升序/裁到边界，E-2）+ `generateCutLines`（RECT/横线/竖线/多矩形/网格 5 生成器，E-1/E-3） | ① |
-| `grid.cpp` | `Grid::build`（基准点为相位锚周期铺满全图，行列数自动推导；余量策略 DISCARD/KEEP_PARTIAL/PAD，E-5）+ `buildFromLines` + `induceGrid` | ② |
-| `split.cpp` | `split`：遍历网格单元切分，跳过空块（E-4），产出带单元序号的 `RegionSet` | split |
-| `selection.cpp` | `Selection::resolve`（keep→选中 / remove→补集）+ `applyPolarity`（过滤得保留集 R） | ③④ |
-| `sequence.cpp` | `Sequence::build`：row-major / column-major + reverse + snake（CUSTOM 由 `setCustom` 提供） | 排序 |
-| `composition.cpp` | `isCollapsible`（§5.4 定理）+ `compose`（SEPARATE / COLLAPSE / REARRANGE 三布局；REARRANGE 依 `MergeOrder` 行/列优先 + 蛇形 + 倒序生成输出槽序，与选择排序正交） | ⑤ |
-| `export.cpp` | `exportImage`：分离→crop + 编码 + 命名模板写入文件夹（自动创建）；合并→画布 blit + 写单图（E-7/E-8） | export |
-| `image_io.cpp` | stb_image 解码（→ RGBA）+ stb 图像编码（PNG/JPEG/BMP）+ libwebp（WebP）；**全工程唯一定义 `STB_IMAGE_IMPLEMENTATION` / `STB_IMAGE_WRITE_IMPLEMENTATION`** | I/O |
-| `engine_config_json.cpp` | `EngineConfig ↔ JSON`（§9 schema）+ 文件存取（内部用 nlohmann/json） | 配置 |
-| `engine.cpp` | 顶层编排 `runEngine`：串起 ①→②→split→③④→排序→⑤，含 E-1/E-6/E-7 校验；**合并重排仅 L3 可用**（非 L3 的 REARRANGE 直接报错），L1/L2 不可坍缩时亦报错（不自动降级） | 编排 |
+| 文件                       | 职责                                                                                                                                    | 阶段     |
+|--------------------------|---------------------------------------------------------------------------------------------------------------------------------------|--------|
+| `cut_line.cpp`           | `normalizeCutLines`（去重/升序/裁到边界，E-2）+ `generateCutLines`（RECT/横线/竖线/多矩形/网格 5 生成器，E-1/E-3）                                              | ①      |
+| `grid.cpp`               | `Grid::build`（基准点为相位锚周期铺满全图，行列数自动推导；余量策略 DISCARD/KEEP_PARTIAL/PAD，E-5）+ `buildFromLines` + `induceGrid`                               | ②      |
+| `split.cpp`              | `split`：遍历网格单元切分，跳过空块（E-4），产出带单元序号的 `RegionSet`                                                                                       | split  |
+| `selection.cpp`          | `Selection::resolve`（keep→选中 / remove→补集）+ `applyPolarity`（过滤得保留集 R）                                                                  | ③④     |
+| `sequence.cpp`           | `Sequence::build`：row-major / column-major + reverse + snake（CUSTOM 由 `setCustom` 提供）                                                 | 排序     |
+| `composition.cpp`        | `isCollapsible`（§5.4 定理）+ `compose`（SEPARATE / COLLAPSE / REARRANGE 三布局；REARRANGE 依 `MergeOrder` 行/列优先 + 蛇形 + 倒序生成输出槽序，与选择排序正交）       | ⑤      |
+| `export.cpp`             | `exportImage`：分离→crop + 编码 + 命名模板写入文件夹（自动创建）；合并→画布 blit + 写单图（E-7/E-8）                                                                | export |
+| `image_io.cpp`           | stb_image 解码（→ RGBA）+ stb 图像编码（PNG/JPEG/BMP）+ libwebp（WebP）；**全工程唯一定义 `STB_IMAGE_IMPLEMENTATION` / `STB_IMAGE_WRITE_IMPLEMENTATION`** | I/O    |
+| `engine_config_json.cpp` | `EngineConfig ↔ JSON`（§9 schema）+ 文件存取（内部用 nlohmann/json）                                                                             | 配置     |
+| `engine.cpp`             | 顶层编排 `runEngine`：串起 ①→②→split→③④→排序→⑤，含 E-1/E-6/E-7 校验；**合并重排仅 L3 可用**（非 L3 的 REARRANGE 直接报错），L1/L2 不可坍缩时亦报错（不自动降级）                   | 编排     |
 
 > **依赖顺序**：cut_line → grid → split → selection → sequence → composition → export；
 > image_io 为 export 的底层支撑；engine_config_json 独立于流水线，仅负责配置持久化。

@@ -13,13 +13,13 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 采用与 Core / CLI 一致的 **include/src 分离**：头文件与其**声明边界 `README.md`** 在 `include/<模块>/`，
 实现与其**实现说明 `README.md`** 在 `src/<模块>/`（与 Core 的 include/src 双侧 README 约定一致）。构建包含根为 `include`，故源码内以 `"canvas/…"`、`"model/…"` 形式互相引用。
 
-| 模块     | 头文件                | 实现 + README                  | 职责                                                          |
-| -------- | --------------------- | ------------------------------ | ------------------------------------------------------------- |
+| 模块       | 头文件               | 实现 + README                         | 职责                                                                              |
+|----------|-------------------|-------------------------------------|---------------------------------------------------------------------------------|
 | `util`   | `include/util/`   | [src/util/](src/util/README.md)     | `core::Image` ↔ Qt 图像适配、`geometry::Path`/`core::Color` ↔ Qt 绘图类型适配、降采样预览（视图关注点） |
-| `model`  | `include/model/`  | [src/model/](src/model/README.md)   | 会话状态单一真相源 `Document`、唯一触碰切割引擎的 `EngineBridge`、唯一驱动 Core 标注的 `AnnotationBridge`   |
-| `canvas` | `include/canvas/` | [src/canvas/](src/canvas/README.md) | QGraphicsView/Scene 画布：图层化渲染底图/遮罩/切割线/选区/标注矢量叠加 + 交互 |
-| `panels` | `include/panels/` | [src/panels/](src/panels/README.md) | 左侧模式/极性面板与标注工具/图层面板、右侧参数/导出/图像/标注属性面板 |
-| `app`    | `include/app/`    | [src/app/](src/app/README.md)       | 主窗口装配与编排、程序入口                                      |
+| `model`  | `include/model/`  | [src/model/](src/model/README.md)   | 会话状态单一真相源 `Document`、唯一触碰切割引擎的 `EngineBridge`、唯一驱动 Core 标注的 `AnnotationBridge`  |
+| `canvas` | `include/canvas/` | [src/canvas/](src/canvas/README.md) | QGraphicsView/Scene 画布：图层化渲染底图/遮罩/切割线/选区/标注矢量叠加 + 交互                            |
+| `panels` | `include/panels/` | [src/panels/](src/panels/README.md) | 左侧模式/极性面板与标注工具/图层面板、右侧参数/导出/图像/标注属性面板                                           |
+| `app`    | `include/app/`    | [src/app/](src/app/README.md)       | 主窗口装配与编排、程序入口                                                                   |
 
 ## 数据流（一条主线）
 

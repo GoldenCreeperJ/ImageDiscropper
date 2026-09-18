@@ -200,7 +200,7 @@ int SelectionRectItem::hitHandle(const QPointF& scenePos) const {
 // 竖边比较 x、横边比较 y，落在 ±handleSize_ 抓边条带内、且沿线绘制跨度即命中；命中多条时取法向距离最近者。
 // 跨度规则：标记为切割线的边**且切割线可见**时才贯穿全图（可抓延伸段），否则仅选区那段——
 // 这保证切割线隐藏后其延伸段不可见亦不可拖（避免对着空白处拖动不可见的边）。角手柄已在 hitHandle 优先处理。
-int SelectionRectItem::hitEdge(const QPointF& p) const {
+int SelectionRectItem::hitEdge(const QPointF& scenePos) const {
     if (!hasBounds_) return -1;
     const QRectF r = rect_.normalized();
     const qreal th = handleSize_;
@@ -220,8 +220,8 @@ int SelectionRectItem::hitEdge(const QPointF& p) const {
     for (const auto&[edge, x, ext] : vs) {
         if (!ext && !segOk) continue;   // 无可见延伸段且边框隐藏 → 整条不可抓。
         const qreal y0 = ext ? 0.0 : r.top();
-        if (const qreal y1 = ext ? H : r.bottom(); p.y() >= y0 - th && p.y() <= y1 + th) {
-            if (const qreal d = std::abs(p.x() - x); d <= bestD) { bestD = d; best = edge; }
+        if (const qreal y1 = ext ? H : r.bottom(); scenePos.y() >= y0 - th && scenePos.y() <= y1 + th) {
+            if (const qreal d = std::abs(scenePos.x() - x); d <= bestD) { bestD = d; best = edge; }
         }
     }
     // 横边（Top/Bottom）：有可见延伸段时贯穿全宽 [0,W]；否则仅当边框可见时取选区宽 [left,right]。
@@ -232,8 +232,8 @@ int SelectionRectItem::hitEdge(const QPointF& p) const {
     for (const auto&[edge, y, ext] : hs) {
         if (!ext && !segOk) continue;
         const qreal x0 = ext ? 0.0 : r.left();
-        if (const qreal x1 = ext ? W : r.right(); p.x() >= x0 - th && p.x() <= x1 + th) {
-            if (const qreal d = std::abs(p.y() - y); d <= bestD) { bestD = d; best = edge; }
+        if (const qreal x1 = ext ? W : r.right(); scenePos.x() >= x0 - th && scenePos.x() <= x1 + th) {
+            if (const qreal d = std::abs(scenePos.y() - y); d <= bestD) { bestD = d; best = edge; }
         }
     }
     return best;
@@ -291,18 +291,13 @@ void SelectionRectItem::applySnap(const bool preserveSize) {
 void SelectionRectItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     if (!hasBounds_) { event->ignore(); return; }
     const QPointF p = event->scenePos();
-    const int h = hitHandle(p);
-    if (h >= 0) {
-        // 四角缩放：固定对角不动。TL<->BR、TR<->BL。
+    if (const int h = hitHandle(p); h >= 0) {
+        // 四角缩放：固定对角不动。TL<->BR、TR<->BL。手柄 0..3 为 TL/TR/BL/BR，对角序号 = 3 - h。
         QPointF tl, tr, bl, br;
         cornerPoints(tl, tr, bl, br);
+        const QPointF corners[4]{tl, tr, bl, br};
         mode_ = DragMode::Resize;
-        switch (h) {
-            case 0: fixedPoint_ = br; break;
-            case 1: fixedPoint_ = bl; break;
-            case 2: fixedPoint_ = tr; break;
-            default: fixedPoint_ = tl; break;
-        }
+        fixedPoint_ = corners[3 - h];
     } else {
         if (const int e = hitEdge(p); e >= 0) {
             mode_ = DragMode::Edge;   // 抓边（或其贯穿延伸段）：沿法向拖动该边＝移动对应切割线。

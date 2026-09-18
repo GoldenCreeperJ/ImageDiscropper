@@ -33,8 +33,9 @@ constexpr QColor kDropBorder(241, 196, 15);
 
 // 单元区域 → QRectF（原图像素坐标；RectRegion 左闭右开，width/height 即跨度）。
 QRectF cellRect(const engine::Cell& c) {
-    return QRectF(c.area.left, c.area.top,
-                  c.area.width(), c.area.height());
+    // static_cast：int→qreal 的隐式转换在花括号初始化列表中是 narrowing，须显式转换。
+    return {static_cast<qreal>(c.area.left), static_cast<qreal>(c.area.top),
+            static_cast<qreal>(c.area.width()), static_cast<qreal>(c.area.height())};
 }
 
 // 单元区域与场景矩形是否相交（严格重叠，左闭右开语义下的开区间判定）。
@@ -88,7 +89,9 @@ void CellPickerItem::setOverlayScale(const qreal sceneUnits) {
 
 // 场景矩形 = 整幅原图。
 QRectF CellPickerItem::boundingRect() const {
-    return QRectF(0.0, 0.0, imgW_, imgH_);
+    // 显式转换：int→qreal 的隐式转换在花括号初始化列表中是 narrowing（成员非常量表达式），
+    // clangd 按标准会报错，故逐个 static_cast（与 applySnap 的写法一致）。
+    return {0.0, 0.0, static_cast<qreal>(imgW_), static_cast<qreal>(imgH_)};
 }
 
 // 依 selected_ 重建按序号索引的选中标记与自定义序位（O(1) 查询，避免 paint 里 O(n²) 扫描）。
@@ -188,8 +191,7 @@ void CellPickerItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
         marquee_ = false;
         pressing_ = false;
         update();
-        const std::vector<int> idx = cellsIntersecting(band);
-        if (!idx.empty()) emit cellsMarqueeSelected(idx);
+        if (const std::vector<int> idx = cellsIntersecting(band); !idx.empty()) emit cellsMarqueeSelected(idx);
     } else {
         pressing_ = false;
         if (const int idx = cellIndexAt(pressPos_); idx >= 0) emit cellToggled(idx);

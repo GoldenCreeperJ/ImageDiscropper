@@ -265,8 +265,7 @@ void CanvasView::contextMenuEvent(QContextMenuEvent* event) {
     const bool masksOn = scene_ && scene_->masksVisible();
     const QAction* aToggle = menu.addAction(masksOn ? QStringLiteral("隐藏预览遮罩")
                                               : QStringLiteral("显示预览遮罩"));
-    const QAction* chosen = menu.exec(event->globalPos());
-    if (chosen == aClear) emit clearCutRequested();
+    if (const QAction* chosen = menu.exec(event->globalPos()); chosen == aClear) emit clearCutRequested();
     else if (chosen == aReset) emit resetViewRequested();
     else if (chosen == aToggle) emit toggleMasksRequested();
 }

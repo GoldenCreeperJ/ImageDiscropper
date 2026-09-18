@@ -6,16 +6,16 @@
 场景坐标统一为**原图像素坐标**；底图用降采样 pixmap 经变换铺回原图尺寸，各叠加层即可直接按原图坐标绘制。
 本目录**只渲染 Core 给出的结果**（切割线来自 `generateCutLines`、保留块来自 `EngineResult.kept`），不含几何计算（A-0.1）。
 
-| 文件 | 职责 |
-| ---- | ---- |
-| `z_order.h`                  | 各图层 z 值常量（统一层序，避免魔法数散落） |
-| `canvas_scene.{h,cpp}`       | 场景：装配并刷新底图 / 遮罩 / 网格线 / 选区（含贯穿切割线延伸）/ L2 多矩形可拖拽选区 / 标注矢量叠加（增量维护），转发选区编辑与标注选中/移动/变换信号（`annotationMoved`/`annotationTransformed` 提交、`annotationTransformPreview` 拖拽逐帧回显）；并提供各图层显隐开关 `setMasksVisible`/`setGridVisible`/`setCutLinesVisible`/`setSelectionVisible`/`setBaseVisible`/`setAnnotationsVisible`（图层面板驱动） |
-| `canvas_view.{h,cpp}`        | 视图：滚轮缩放、空格/中键平移、方向键微调、框选、右键菜单；标注绘制态门控下路由左键手势为 `annoDrag*`、悬停移动为 `annoHover`（折线橡皮筋预览）、右键为 `annoFinish`（折线收笔） |
-| `mask_layer.{h,cpp}`         | 保留(绿)/删除(红)遮罩层（见下方渲染法） |
-| `grid_layer.{h,cpp}`         | 网格线层：把 Core `Grid` 的单元边界画成贯穿线，两种样式（`asCutLines`）——灰色虚线（L3 网格）或橙色实线（L2 多矩形诱导切割线）；纯显示、不接收鼠标 |
-| `cell_picker_item.{h,cpp}`   | L3 单元点选交互图元：单击切换 / 拖拽框选 / CUSTOM 编号角标 + 拖拽调序（命中测试只用 Core 单元区域） |
-| `selection_rect_item.{h,cpp}`| 唯一橙色交互图元：选区框 + 标记边的贯穿切割线延伸（可整体移动 / 四角缩放 / 直接抓边拖动＝移动切割线 / 边缘中心吸附）；**逐元素可见即可拖**：`setCutLinesVisible` 门控贯穿延伸段的绘制与可抓性，`setBorderVisible` 门控矩形边框/手柄绘制与其专有交互（四角缩放/框内平移/选区段拖边）；图元整体仅在**两者都隐藏**时才置 `Qt::NoButton` 彻底不可交互（切割线可见、边框隐藏时仍可拖切割线延伸段） |
-| `annotation_item.{h,cpp}`    | 单个标注的矢量渲染图元：`Shape::worldPath()`（含非破坏性变换）→`QPainterPath` 叠加绘制（不改底图像素），选中时绘制**定向包围盒（OBB）+ 8 缩放手柄 + 1 旋转手柄**（拖拽缩放/拉伸/旋转/翻转、实时矢量预览）+ 可拖动平移 | 
+| 文件                            | 职责                                                                                                                                                                                                                                                                                                               |
+|-------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `z_order.h`                   | 各图层 z 值常量（统一层序，避免魔法数散落）                                                                                                                                                                                                                                                                                          |
+| `canvas_scene.{h,cpp}`        | 场景：装配并刷新底图 / 遮罩 / 网格线 / 选区（含贯穿切割线延伸）/ L2 多矩形可拖拽选区 / 标注矢量叠加（增量维护），转发选区编辑与标注选中/移动/变换信号（`annotationMoved`/`annotationTransformed` 提交、`annotationTransformPreview` 拖拽逐帧回显）；并提供各图层显隐开关 `setMasksVisible`/`setGridVisible`/`setCutLinesVisible`/`setSelectionVisible`/`setBaseVisible`/`setAnnotationsVisible`（图层面板驱动） |
+| `canvas_view.{h,cpp}`         | 视图：滚轮缩放、空格/中键平移、方向键微调、框选、右键菜单；标注绘制态门控下路由左键手势为 `annoDrag*`、悬停移动为 `annoHover`（折线橡皮筋预览）、右键为 `annoFinish`（折线收笔）                                                                                                                                                                                                      |
+| `mask_layer.{h,cpp}`          | 保留(绿)/删除(红)遮罩层（见下方渲染法）                                                                                                                                                                                                                                                                                           |
+| `grid_layer.{h,cpp}`          | 网格线层：把 Core `Grid` 的单元边界画成贯穿线，两种样式（`asCutLines`）——灰色虚线（L3 网格）或橙色实线（L2 多矩形诱导切割线）；纯显示、不接收鼠标                                                                                                                                                                                                                        |
+| `cell_picker_item.{h,cpp}`    | L3 单元点选交互图元：单击切换 / 拖拽框选 / CUSTOM 编号角标 + 拖拽调序（命中测试只用 Core 单元区域）                                                                                                                                                                                                                                                   |
+| `selection_rect_item.{h,cpp}` | 唯一橙色交互图元：选区框 + 标记边的贯穿切割线延伸（可整体移动 / 四角缩放 / 直接抓边拖动＝移动切割线 / 边缘中心吸附）；**逐元素可见即可拖**：`setCutLinesVisible` 门控贯穿延伸段的绘制与可抓性，`setBorderVisible` 门控矩形边框/手柄绘制与其专有交互（四角缩放/框内平移/选区段拖边）；图元整体仅在**两者都隐藏**时才置 `Qt::NoButton` 彻底不可交互（切割线可见、边框隐藏时仍可拖切割线延伸段）                                                                           |
+| `annotation_item.{h,cpp}`     | 单个标注的矢量渲染图元：`Shape::worldPath()`（含非破坏性变换）→`QPainterPath` 叠加绘制（不改底图像素），选中时绘制**定向包围盒（OBB）+ 8 缩放手柄 + 1 旋转手柄**（拖拽缩放/拉伸/旋转/翻转、实时矢量预览）+ 可拖动平移                                                                                                                                                                          | 
 
 ## z 序（z_order.h）
 

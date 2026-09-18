@@ -2,10 +2,10 @@
 
 会话状态与 Core 调用的中枢。二者分离：`Document` 只管状态，`EngineBridge` 只管调 Core。
 
-| 文件 | 职责 |
-| ---- | ---- |
-| `document.{h,cpp}`     | 会话状态单一真相源，组装 `EngineConfig`，变更时发信号 |
-| `engine_bridge.{h,cpp}` | GUI 中**唯一**触碰切割引擎 API 的类 |
+| 文件                          | 职责                                              |
+|-----------------------------|-------------------------------------------------|
+| `document.{h,cpp}`          | 会话状态单一真相源，组装 `EngineConfig`，变更时发信号              |
+| `engine_bridge.{h,cpp}`     | GUI 中**唯一**触碰切割引擎 API 的类                        |
 | `annotation_bridge.{h,cpp}` | 标注域桥：唯一持有并驱动 Core `annotation::AnnotationLayer` |
 
 ## Document（QObject）
@@ -42,15 +42,15 @@ L3 网格参数 `GridParams`（默认单元 100×100，避免 `GridParams` 默�
 
 ## EngineBridge（无状态、可拷贝）
 
-| 方法 | 委托的 Core API |
-| ---- | --------------- |
-| `loadImage(path, out, err)`        | `engine::readImageFile`（统一解码为 RGBA） |
-| `runPreview(work, cfg)`            | `engine::runEngine`（仅区域数学，适合实时预览） |
-| `cutLines(cut, src)`               | `engine::generateCutLines`（取贯穿切割线供渲染） |
-| `buildGrid(cut, src)`              | GRID→`Grid::build`、其余→`generateCutLines`+`induceGrid`（镜像 `runEngine` 网格产出，供 L3 网格线渲染） |
-| `exportResult(work, cfg, out, err)`| `engine::runEngine` + `engine::exportImage`（全分辨率落盘，无损） |
-| `saveConfig(path, cfg, err)`       | `engine::saveEngineConfig`（§9 schema JSON 落盘，G-13） |
-| `loadConfig(path, out, err)`       | `engine::loadEngineConfig`（从 JSON 还原配置，G-13；nlohmann 在 Core 侧 PRIVATE，GUI 不感知） |
+| 方法                                  | 委托的 Core API                                                                          |
+|-------------------------------------|---------------------------------------------------------------------------------------|
+| `loadImage(path, out, err)`         | `engine::readImageFile`（统一解码为 RGBA）                                                   |
+| `runPreview(work, cfg)`             | `engine::runEngine`（仅区域数学，适合实时预览）                                                     |
+| `cutLines(cut, src)`                | `engine::generateCutLines`（取贯穿切割线供渲染）                                                 |
+| `buildGrid(cut, src)`               | GRID→`Grid::build`、其余→`generateCutLines`+`induceGrid`（镜像 `runEngine` 网格产出，供 L3 网格线渲染） |
+| `exportResult(work, cfg, out, err)` | `engine::runEngine` + `engine::exportImage`（全分辨率落盘，无损）                                |
+| `saveConfig(path, cfg, err)`        | `engine::saveEngineConfig`（§9 schema JSON 落盘，G-13）                                    |
+| `loadConfig(path, out, err)`        | `engine::loadEngineConfig`（从 JSON 还原配置，G-13；nlohmann 在 Core 侧 PRIVATE，GUI 不感知）        |
 
 > 其余 GUI 代码只与 `EngineBridge` 交互，不直接 include 引擎实现细节，
 > 以此保证「GUI 不含切割/几何/导出逻辑」（A-0.1/A-0.3）。

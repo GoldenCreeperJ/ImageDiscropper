@@ -2,12 +2,12 @@
 
 GUI 侧的**视图关注点**工具：Core 类型↔Qt 类型适配、大图降采样、以及从 app/canvas 下沉的无状态渲染（标注矢量绘制、导出离屏预览）；不含任何切割 / 几何 / 引擎逻辑（A-0.1）。
 
-| 文件 | 职责 |
-| ---- | ---- |
-| `image_qt_adapter.{h,cpp}` | `core::Image` ↔ `QImage` / `QPixmap` 适配 |
-| `path_qt_adapter.{h,cpp}`   | `geometry::Path` → `QPainterPath`、`core::Color` ↔ `QColor` 适配（标注矢量渲染/取色） |
-| `preview_scaler.{h,cpp}`   | 大图降采样预览（复用 Core `pixel_ops::resize`） |
-| `annotation_qt_painter.{h,cpp}` | `paintAnnotation`：把单条标注矢量绘到 `QPainter` 的**公共渲染函数**（画布图元与输出预览烘焙共用） |
+| 文件                                | 职责                                                                                         |
+|-----------------------------------|--------------------------------------------------------------------------------------------|
+| `image_qt_adapter.{h,cpp}`        | `core::Image` ↔ `QImage` / `QPixmap` 适配                                                    |
+| `path_qt_adapter.{h,cpp}`         | `geometry::Path` → `QPainterPath`、`core::Color` ↔ `QColor` 适配（标注矢量渲染/取色）                   |
+| `preview_scaler.{h,cpp}`          | 大图降采样预览（复用 Core `pixel_ops::resize`）                                                       |
+| `annotation_qt_painter.{h,cpp}`   | `paintAnnotation`：把单条标注矢量绘到 `QPainter` 的**公共渲染函数**（画布图元与输出预览烘焙共用）                          |
 | `output_preview_renderer.{h,cpp}` | 导出输出预览的**离屏渲染**：`bakeAnnotationsInto`（标注烘焙）+ `composeOutputThumbnail`（按 `Composition` 缩略图） |
 
 ## image_qt_adapter

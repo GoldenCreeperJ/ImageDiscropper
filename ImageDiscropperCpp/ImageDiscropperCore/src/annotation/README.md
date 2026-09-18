@@ -9,9 +9,9 @@
 - `annotation_layer.cpp` 只关心会话状态（标注列表、当前工具、编辑模式）、命中选中、删除指定项（`removeAnnotation`）、撤销重做（复用 `history::HistoryManager`）与烧录合成。
 - `view_transform.cpp` 只关心屏幕 / 逻辑坐标换算与视图适配。
 
-| 文件                     | 职责                                        |
-|------------------------|-------------------------------------------|
-| `shape_factory.cpp`    | 依据 `ShapeType` 与锚点构造 `Shape`              |
-| `rasterizer.cpp`       | 光栅化：填充、描边、Alpha 混合                        |
-| `annotation_layer.cpp` | 标注会话状态机：提交、命中、选中、删除指定项（`removeAnnotation`）、撤销重做、烧录（`burnIn`）        |
-| `view_transform.cpp`   | 屏幕 / 逻辑坐标换算，以指定点缩放，图像适配视口                 |
+| 文件                     | 职责                                                           |
+|------------------------|--------------------------------------------------------------|
+| `shape_factory.cpp`    | 依据 `ShapeType` 与锚点构造 `Shape`                                 |
+| `rasterizer.cpp`       | 光栅化：填充、描边、Alpha 混合                                           |
+| `annotation_layer.cpp` | 标注会话状态机：提交、命中、选中、删除指定项（`removeAnnotation`）、撤销重做、烧录（`burnIn`） |
+| `view_transform.cpp`   | 屏幕 / 逻辑坐标换算，以指定点缩放，图像适配视口                                    |

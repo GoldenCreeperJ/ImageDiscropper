@@ -69,8 +69,8 @@ private slots:
     void onBrowseFile();
     // 合并重排参数（FR-L3.7）：列/行、单元尺寸、填充色。
     void onMergeGridEdited();   // 列数或行数变更。
-    void onMergeCellEdited();   // 单元宽或高变更。
-    void onPadColorClicked();   // 点击填充色按钮 → 弹色对话框。
+    void onMergeCellEdited() const;   // 单元宽或高变更。
+    void onPadColorClicked() const;   // 点击填充色按钮 → 弹色对话框。
     // 重排填充顺序（MergeOrder）：行/列优先、蛇形、倒序——与 L3 选择排序正交。
     void onMergeSortChanged(int index) const;
     void onMergeSnakeToggled(bool on) const;

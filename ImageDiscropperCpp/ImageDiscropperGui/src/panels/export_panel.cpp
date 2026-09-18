@@ -392,7 +392,7 @@ void ExportPanel::onMergeGridEdited() {
 }
 
 // 重排单元宽/高变更 → 写回 Document（0=用保留块原尺寸）+ 重算警告。
-void ExportPanel::onMergeCellEdited() {
+void ExportPanel::onMergeCellEdited() const {
     if (doc_) doc_->setMergeCellSize(mergeCellW_->value(), mergeCellH_->value());
     updateRearrangeWarning();
 }
@@ -404,7 +404,7 @@ void ExportPanel::onMergeCellEdited() {
 //       "QWindowsWindow::setGeometry: Unable to set geometry" 噪声告警。故：以顶层窗口为父 +
 //       DontUseNativeDialog，并在 exec 前显式给定一个 >= 对话框最小尺寸的初始 geometry（取自
 //       对话框自身 sizeHint，随 DPI 自适应、居中到父窗口），从源头规避该告警。
-void ExportPanel::onPadColorClicked() {
+void ExportPanel::onPadColorClicked() const {
     if (!doc_) return;
     const core::Color cur = doc_->padColor();
     const QColor init(cur.r, cur.g, cur.b, cur.a);

@@ -5,12 +5,12 @@
 
 ## 脚本清单
 
-| 脚本 | 覆盖场景 | 关键命令 |
-|---|---|---|
-| `l1_extract.sh` | L1 矩形 / 横带 / 竖带保留 | `extract --rect / --hband / --vband` |
-| `l2_erase_collapse.sh` | L2 十字切割 + 坍缩合并（含横带 / 竖带 / 多矩形并集） | `erase --merge collapse` |
-| `l2_erase_separate.sh` | L2 十字切割 + 分离导出到文件夹 | `erase --output-dir` |
-| `l3_grid_compose.sh` | L3 网格选择 + 排序 + 重排合并 / 分离 | `grid --keep/--remove --compose` |
+| 脚本                     | 覆盖场景                             | 关键命令                                 |
+|------------------------|----------------------------------|--------------------------------------|
+| `l1_extract.sh`        | L1 矩形 / 横带 / 竖带保留                | `extract --rect / --hband / --vband` |
+| `l2_erase_collapse.sh` | L2 十字切割 + 坍缩合并（含横带 / 竖带 / 多矩形并集） | `erase --merge collapse`             |
+| `l2_erase_separate.sh` | L2 十字切割 + 分离导出到文件夹               | `erase --output-dir`                 |
+| `l3_grid_compose.sh`   | L3 网格选择 + 排序 + 重排合并 / 分离         | `grid --keep/--remove --compose`     |
 
 ## 前置条件
 

@@ -45,7 +45,7 @@ QPixmap bakeAnnotationsInto(const QPixmap& src, const double invX, const double 
 
 QPixmap composeOutputThumbnail(const engine::Composition& comp, const QPixmap& src,
                                const double invX, const double invY, const int maxDim) {
-    if (comp.placements.empty() || src.isNull() || maxDim <= 0) return QPixmap();
+    if (comp.placements.empty() || src.isNull() || maxDim <= 0) return {};
     const core::Color pad = comp.padColor;
     const QColor padQ(pad.r, pad.g, pad.b, pad.a);
 
@@ -79,7 +79,7 @@ QPixmap composeOutputThumbnail(const engine::Composition& comp, const QPixmap& s
     constexpr int gap = 2;
     const int cellW = maxDim / cols;
     const int cellH = maxDim / rows;
-    if (cellW <= 2 * gap || cellH <= 2 * gap) return QPixmap();  // 块太多、格子过小 → 不出图（避免糊成一团）。
+    if (cellW <= 2 * gap || cellH <= 2 * gap) return {};  // 块太多、格子过小 → 不出图（避免糊成一团）。
     QPixmap out(cols * cellW, rows * cellH);
     out.fill(padQ);
     QPainter p(&out);

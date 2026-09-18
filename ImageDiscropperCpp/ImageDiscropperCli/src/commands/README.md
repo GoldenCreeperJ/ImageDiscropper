@@ -7,12 +7,12 @@
 **分块依据**：命令的差异只体现在「装配哪些 EngineConfig 字段」，执行与退出码映射统一走 `job`（同一执行通道），
 值解析复用 `value_parser`，报错样板复用 `command_support`——均不在命令文件内重实现（A-0.2）。
 
-| 文件 | 命令 / 层级 | 极性 | 装配要点 |
-|---|---|---|---|
-| `extract.cpp` | `extract` / L1 | 恒 KEEP | `--rect/--hband/--vband` 三选一；输出恒 MERGED+COLLAPSE 单图；带需读图后按 W/H 构造贯穿全图矩形 |
-| `erase.cpp` | `erase` / L2 | 恒 REMOVE | 单 `--rect` = 十字切割；多 `--rect` = MULTI_RECT 并集；`--hband/--vband` = 删整条带；缺省 SEPARATE，`--merge collapse` 时 MERGED（**拒绝 `--merge rearrange`：重排为 L3 专属**） |
-| `grid.cpp` | `grid` / L3 | KEEP 或 REMOVE | `--grid x0,y0,cw,ch` + `--keep/--remove`（可重复）或 `--sort custom --order`；用 Core `Grid::build`+`cellAt` 把 `r,c` 映射为线性 `index` 填 `selectedCells`；`--compose` 恒 MERGED+REARRANGE（**`--canvas` 的 cols/rows 必填且须为正**），`--merge-sort`/`--merge-decorate` 写 `MergeOrder` |
-| `config.cpp` | `config` | 由 JSON 决定 | `--load` 读配置；JSON 不含图像 / 输出路径，故执行时仍需 `--input` 与 `--output`/`--output-dir`；`--save-config` 为加载后再序列化的 dry-run |
+| 文件            | 命令 / 层级        | 极性            | 装配要点                                                                                                                                                                                                                                                            |
+|---------------|----------------|---------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `extract.cpp` | `extract` / L1 | 恒 KEEP        | `--rect/--hband/--vband` 三选一；输出恒 MERGED+COLLAPSE 单图；带需读图后按 W/H 构造贯穿全图矩形                                                                                                                                                                                         |
+| `erase.cpp`   | `erase` / L2   | 恒 REMOVE      | 单 `--rect` = 十字切割；多 `--rect` = MULTI_RECT 并集；`--hband/--vband` = 删整条带；缺省 SEPARATE，`--merge collapse` 时 MERGED（**拒绝 `--merge rearrange`：重排为 L3 专属**）                                                                                                             |
+| `grid.cpp`    | `grid` / L3    | KEEP 或 REMOVE | `--grid x0,y0,cw,ch` + `--keep/--remove`（可重复）或 `--sort custom --order`；用 Core `Grid::build`+`cellAt` 把 `r,c` 映射为线性 `index` 填 `selectedCells`；`--compose` 恒 MERGED+REARRANGE（**`--canvas` 的 cols/rows 必填且须为正**），`--merge-sort`/`--merge-decorate` 写 `MergeOrder` |
+| `config.cpp`  | `config`       | 由 JSON 决定     | `--load` 读配置；JSON 不含图像 / 输出路径，故执行时仍需 `--input` 与 `--output`/`--output-dir`；`--save-config` 为加载后再序列化的 dry-run                                                                                                                                                    |
 
 **关键约定**：
 - `grid` 的三种选择来源互斥：`--sort custom` 时用 `--order`（禁 `--keep/--remove/--decorate`，极性 KEEP）；

@@ -197,8 +197,8 @@ bool Path::contains(const double px, const double py, const double flatness) con
     for (const auto& poly : polys) {
         for (std::size_t i = 0; i + 1 < poly.size(); ++i) {
             const double x1 = poly[i].x, y1 = poly[i].y;
-            const double x2 = poly[i + 1].x, y2 = poly[i + 1].y;
-            if (y1 > py != y2 > py) {
+            const double x2 = poly[i + 1].x;
+            if (const double y2 = poly[i + 1].y; y1 > py != y2 > py) {
                 if (const double xIntersect = x1 + (py - y1) * (x2 - x1) / (y2 - y1); px < xIntersect) ++crossings;
             }
         }

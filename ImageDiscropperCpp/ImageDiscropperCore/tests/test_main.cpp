@@ -297,13 +297,13 @@ static void testAnnotation() {
     r4.p2 = {30, 20};
     r4.type = geometry::ShapeType::RECTANGLE;
     auto movable = annotation::buildShape(r4);
-    const geometry::BoundingBox b0 = movable->bounds();
+    const auto [x0, y0, width0, height0] = movable->bounds();
     movable->translate(5, 7);
-    const geometry::BoundingBox b1 = movable->bounds();
+    const auto [x1, y1, width1, height1] = movable->bounds();
     CHECK(movable->type() == geometry::ShapeType::RECTANGLE);            // 类型未退化
-    CHECK(std::abs(b1.x - b0.x - 5.0) < 1e-6);
-    CHECK(std::abs(b1.y - b0.y - 7.0) < 1e-6);
-    CHECK(std::abs(b1.width - b0.width) < 1e-6 && std::abs(b1.height - b0.height) < 1e-6);
+    CHECK(std::abs(x1 - x0 - 5.0) < 1e-6);
+    CHECK(std::abs(y1 - y0 - 7.0) < 1e-6);
+    CHECK(std::abs(width1 - width0) < 1e-6 && std::abs(height1 - height0) < 1e-6);
 
     // 文字：平移后仍为 TEXT（保留字形渲染所需的类型身份），基线锚点随之偏移。
     annotation::ShapeRequest r5;

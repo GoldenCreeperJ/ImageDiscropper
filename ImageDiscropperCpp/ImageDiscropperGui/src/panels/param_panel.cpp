@@ -397,7 +397,9 @@ void ParamPanel::applyCoordsToDocument() const {
     if (r.width() <= 0 || r.height() <= 0) return;
     // L2 多矩形：坐标框编辑的是列表中当前选中的矩形（updateRect），而非单选区 rect_。
     if (!l1 && doc_->l2Sub() == L2Sub::MULTI_RECT) {
-        if (const int row = l2RectList_ ? l2RectList_->currentRow() : -1; row >= 0) doc_->updateRect(static_cast<std::size_t>(row), r);
+        if (l2RectList_) {
+            if (const int row = l2RectList_->currentRow(); row >= 0) doc_->updateRect(static_cast<std::size_t>(row), r);
+        }
         return;
     }
     doc_->setRect(r); // 触发预览刷新。

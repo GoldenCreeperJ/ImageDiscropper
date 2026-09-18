@@ -67,15 +67,16 @@ public:
     // 对路径所有段坐标（含二次 / 三次贝塞尔控制点）应用变换，返回新路径（不改原路径）。
     Path applyToPath(const Path& path) const {
         Path out;
-        for (const PathSegment& seg : path.segments()) {
-            std::vector<double> coords = seg.coords;
-            for (std::size_t i = 0; i + 1 < coords.size(); i += 2) {
-                const double x = coords[i];
-                const double y = coords[i + 1];
-                coords[i]     = a * x + c * y + tx;
-                coords[i + 1] = b * x + d * y + ty;
+        for (const auto&[type, coords] : path.segments()) {
+            // 结构化解绑的 coords 为 const 引用，需复制一份方可原地写入；副本改名避免遮蔽。
+            std::vector<double> mapped = coords;
+            for (std::size_t i = 0; i + 1 < mapped.size(); i += 2) {
+                const double x = mapped[i];
+                const double y = mapped[i + 1];
+                mapped[i]     = a * x + c * y + tx;
+                mapped[i + 1] = b * x + d * y + ty;
             }
-            out.segments().push_back(PathSegment{seg.type, std::move(coords)});
+            out.segments().push_back(PathSegment{type, std::move(mapped)});
         }
         return out;
     }

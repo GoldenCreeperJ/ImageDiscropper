@@ -207,8 +207,8 @@ int main() {
         // 9.4 把该 L2 作业配置序列化为 JSON 并回读（FR-L3.8 / NFR-4）。
         if (const fs::path jf = outDir / "l2_config.json"; engine::saveEngineConfig(jf.string(), cfg)) {
             engine::EngineConfig loaded;
-            const bool ok = engine::loadEngineConfig(jf.string(), loaded);
-            std::cout << "[config json] saved -> " << jf.string() << " reload=" << ok
+            const bool ok1 = engine::loadEngineConfig(jf.string(), loaded);
+            std::cout << "[config json] saved -> " << jf.string() << " reload=" << ok1
                       << " polarity="
                       << (loaded.cut.polarity == engine::Polarity::REMOVE ? "remove" : "keep") << "\n";
         }

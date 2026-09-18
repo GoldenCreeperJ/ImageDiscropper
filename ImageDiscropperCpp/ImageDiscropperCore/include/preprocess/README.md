@@ -11,7 +11,7 @@
    `RotateOp` / `FlipOp`），用 `std::variant` 组合为 `PreprocessConfig`。
 2. `preprocess_pipeline.h` —— `PreprocessPipeline` 负责步骤的增删改序与按序执行（`apply`）。
 
-| 文件 | 职责 |
-|---|---|
-| `preprocess_config.h` | 预处理类型枚举 `PreprocessType`、各步骤参数与 `PreprocessConfig` 变体 |
-| `preprocess_pipeline.h` | 预处理流水线 `PreprocessPipeline` 与单步执行 `applyOne` |
+| 文件                      | 职责                                                    |
+|-------------------------|-------------------------------------------------------|
+| `preprocess_config.h`   | 预处理类型枚举 `PreprocessType`、各步骤参数与 `PreprocessConfig` 变体 |
+| `preprocess_pipeline.h` | 预处理流水线 `PreprocessPipeline` 与单步执行 `applyOne`          |

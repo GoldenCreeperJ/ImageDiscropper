@@ -43,15 +43,15 @@
   `annotation` / `history`。由旧库重构保留，服务于终稿 **FR-1「基础图像处理」前置层**，
   按 §8 多属 **v3**（标注图层最重、最后做）。它们是引擎的输入准备与辅助，**不是**主体。
 
-| 模块 | 命名空间 | 层 | 职责 | 对应终稿 | 实现分期（§8） |
-|---|---|---|---|---|---|
-| `engine` | `idc::engine` | ★ 核心 | Grid-Selection-Emit 统一引擎（切割/网格/选择/合成/导出/JSON 全实现） | §2 / §10.2 全部核心概念 | MVP / v2 |
-| `core` | `idc::core` | 支撑（地基） | 基础数据类型：`Color` / `Point2D` / `Image` | §10.2 `Image` | 已就绪，被各层依赖 |
-| `pixel_ops` | `idc::pixel_ops` | 支撑 | 像素处理：颜色/通道、旋转/翻转/缩放 | FR-1.1 / FR-1.2 / FR-1.4 | v3 |
-| `preprocess` | `idc::preprocess` | 支撑 | 切割前的基础图像处理流水线：`PreprocessPipeline` | §9 `preprocess` 段 / FR-1 | v3 |
-| `geometry` | `idc::geometry` | 支撑 | 标注图形几何：`ShapeType` / `Shape` / `Path` / `AffineTransform` | FR-1.3 标注几何 | v3 |
-| `annotation` | `idc::annotation` | 支撑 | 标注层：`AnnotationLayer` / `ShapeFactory` / `Rasterizer` / `ViewTransform` | FR-1.3 标注图层（可烧录） | v3 |
-| `history` | `idc::history` | 支撑 | 泛型撤销 / 重做栈：`HistoryManager<T>`（被 `annotation::AnnotationLayer` 复用） | FR-1.5 / NFR-4 | 贯穿各期 |
+| 模块           | 命名空间              | 层      | 职责                                                                      | 对应终稿                     | 实现分期（§8）  |
+|--------------|-------------------|--------|-------------------------------------------------------------------------|--------------------------|-----------|
+| `engine`     | `idc::engine`     | ★ 核心   | Grid-Selection-Emit 统一引擎（切割/网格/选择/合成/导出/JSON 全实现）                       | §2 / §10.2 全部核心概念        | MVP / v2  |
+| `core`       | `idc::core`       | 支撑（地基） | 基础数据类型：`Color` / `Point2D` / `Image`                                    | §10.2 `Image`            | 已就绪，被各层依赖 |
+| `pixel_ops`  | `idc::pixel_ops`  | 支撑     | 像素处理：颜色/通道、旋转/翻转/缩放                                                     | FR-1.1 / FR-1.2 / FR-1.4 | v3        |
+| `preprocess` | `idc::preprocess` | 支撑     | 切割前的基础图像处理流水线：`PreprocessPipeline`                                      | §9 `preprocess` 段 / FR-1 | v3        |
+| `geometry`   | `idc::geometry`   | 支撑     | 标注图形几何：`ShapeType` / `Shape` / `Path` / `AffineTransform`               | FR-1.3 标注几何              | v3        |
+| `annotation` | `idc::annotation` | 支撑     | 标注层：`AnnotationLayer` / `ShapeFactory` / `Rasterizer` / `ViewTransform` | FR-1.3 标注图层（可烧录）         | v3        |
+| `history`    | `idc::history`    | 支撑     | 泛型撤销 / 重做栈：`HistoryManager<T>`（被 `annotation::AnnotationLayer` 复用）      | FR-1.5 / NFR-4           | 贯穿各期      |
 
 > `examples/`（演示程序）与 `tests/`（极简自测）分别验证库的典型用法与关键行为。
 > 注：表中「层」表达**主次**（`engine` 为主体）；§4 的目录顺序仅为**物理布局**，二者不必一致。
@@ -62,20 +62,20 @@
 
 终稿 §10.2 建议的 Core 概念，在本库中的落点如下：
 
-| 终稿概念 | 本库类型 / 接口 | 头文件 | 状态 |
-|---|---|---|---|
-| `Image` | `idc::core::Image` | `core/image.h` | ✅ 已实现 |
-| `Region` | `idc::engine::RectRegion` / `RegionKind` | `engine/region.h` | ✅ 数据结构 |
-| `RegionSet` | `idc::engine::RegionSet` / `Fragment` | `engine/region_set.h` | ✅ 数据结构 |
-| 切割线（cut line） | `idc::engine::CutLine` / `CutLineSet` | `engine/cut_line.h` | ✅ 数据结构 |
-| `Grid` | `idc::engine::Grid` / `Cell` / `GridParams` | `engine/grid.h` | ✅ 已实现（`build()` / `induceGrid()`） |
-| `Selection` | `idc::engine::Selection` / `Polarity` | `engine/selection.h` | ✅ 已实现（`resolve()` / `applyPolarity()`） |
-| `Sequence` | `idc::engine::Sequence` / `SortStrategy` | `engine/sequence.h` | ✅ 已实现（`build()`） |
-| `Composition` | `idc::engine::Composition` / `MergeLayout` / `MergeOrder` | `engine/composition.h` | ✅ 已实现（`isCollapsible()` / `compose()`） |
-| 流水线 `split/compose/export` | `generateCutLines` / `induceGrid` / `split` / `applyPolarity` / `compose` / `exportImage` / `runEngine` | `engine/engine.h` | ✅ 已实现（顶层编排 `runEngine`） |
-| 图像编码 I/O | `writeImageFile` / `encodeImageToMemory` | `engine/image_io.h` | ✅ 已实现（stb：PNG/JPEG/BMP；libwebp：WebP） |
-| 配置 JSON | `saveEngineConfig` / `loadEngineConfig` | `engine/engine_config_json.h` | ✅ 已实现（nlohmann/json） |
-| 标注图层（burn-in） | `idc::annotation::AnnotationLayer::burnIn()` | `annotation/annotation_layer.h` | ✅ 已实现 |
+| 终稿概念                       | 本库类型 / 接口                                                                                               | 头文件                             | 状态                                     |
+|----------------------------|---------------------------------------------------------------------------------------------------------|---------------------------------|----------------------------------------|
+| `Image`                    | `idc::core::Image`                                                                                      | `core/image.h`                  | ✅ 已实现                                  |
+| `Region`                   | `idc::engine::RectRegion` / `RegionKind`                                                                | `engine/region.h`               | ✅ 数据结构                                 |
+| `RegionSet`                | `idc::engine::RegionSet` / `Fragment`                                                                   | `engine/region_set.h`           | ✅ 数据结构                                 |
+| 切割线（cut line）              | `idc::engine::CutLine` / `CutLineSet`                                                                   | `engine/cut_line.h`             | ✅ 数据结构                                 |
+| `Grid`                     | `idc::engine::Grid` / `Cell` / `GridParams`                                                             | `engine/grid.h`                 | ✅ 已实现（`build()` / `induceGrid()`）      |
+| `Selection`                | `idc::engine::Selection` / `Polarity`                                                                   | `engine/selection.h`            | ✅ 已实现（`resolve()` / `applyPolarity()`） |
+| `Sequence`                 | `idc::engine::Sequence` / `SortStrategy`                                                                | `engine/sequence.h`             | ✅ 已实现（`build()`）                       |
+| `Composition`              | `idc::engine::Composition` / `MergeLayout` / `MergeOrder`                                               | `engine/composition.h`          | ✅ 已实现（`isCollapsible()` / `compose()`） |
+| 流水线 `split/compose/export` | `generateCutLines` / `induceGrid` / `split` / `applyPolarity` / `compose` / `exportImage` / `runEngine` | `engine/engine.h`               | ✅ 已实现（顶层编排 `runEngine`）                |
+| 图像编码 I/O                   | `writeImageFile` / `encodeImageToMemory`                                                                | `engine/image_io.h`             | ✅ 已实现（stb：PNG/JPEG/BMP；libwebp：WebP）   |
+| 配置 JSON                    | `saveEngineConfig` / `loadEngineConfig`                                                                 | `engine/engine_config_json.h`   | ✅ 已实现（nlohmann/json）                   |
+| 标注图层（burn-in）              | `idc::annotation::AnnotationLayer::burnIn()`                                                            | `annotation/annotation_layer.h` | ✅ 已实现                                  |
 
 > 图例：✅ 可直接使用（数据结构与算法均已落地）。
 

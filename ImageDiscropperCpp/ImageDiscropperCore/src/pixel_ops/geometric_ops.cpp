@@ -142,10 +142,10 @@ core::Image resize(const core::Image& src, const int newWidth, const int newHeig
 }
 
 // 按比例缩放：先计算目标宽高再委托给 resize。
-core::Image scale(const core::Image& src, const double s, const ResampleMode mode) {
-    if (s <= 0.0 || src.empty()) return {};
-    const int nw = std::max(1, static_cast<int>(std::round(src.width() * s)));
-    const int nh = std::max(1, static_cast<int>(std::round(src.height() * s)));
+core::Image scale(const core::Image& src, const double scale, const ResampleMode mode) {
+    if (scale <= 0.0 || src.empty()) return {};
+    const int nw = std::max(1, static_cast<int>(std::round(src.width() * scale)));
+    const int nh = std::max(1, static_cast<int>(std::round(src.height() * scale)));
     return resize(src, nw, nh, mode);
 }
 
