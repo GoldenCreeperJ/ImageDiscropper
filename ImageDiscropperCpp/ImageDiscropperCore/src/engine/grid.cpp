@@ -39,7 +39,7 @@ std::vector<AxisCell> layoutAxis(const int origin, const int cell, const int lim
     std::vector<AxisCell> out;
     for (int lo = virtualStart(origin, cell); lo < limit; lo += cell) {
         const int hi = lo + cell;
-        const bool partial = (lo < 0) || (hi > limit); // 跨越左/上或右/下边界。
+        const bool partial = lo < 0 || hi > limit; // 跨越左/上或右/下边界。
         if (partial && remainder == RemainderPolicy::DISCARD) continue; // 丢弃跨界残缺单元。
         int keepLo = lo, keepHi = hi;
         if (partial && remainder == RemainderPolicy::KEEP_PARTIAL) {    // 裁剪到图像内。

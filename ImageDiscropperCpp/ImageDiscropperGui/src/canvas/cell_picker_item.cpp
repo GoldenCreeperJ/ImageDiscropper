@@ -7,10 +7,6 @@
 // ============================================================================
 #include "canvas/cell_picker_item.h"
 
-#include <algorithm>
-
-#include <QFont>
-#include <QGraphicsSceneHoverEvent>
 #include <QGraphicsSceneMouseEvent>
 #include <QPainter>
 #include <QPen>
@@ -23,32 +19,32 @@ namespace idc::gui {
 namespace {
 
 // 视觉：选择高亮用半透明蓝（独立于极性的绿/红遮罩，清晰标示「已选单元」）。
-const QColor kSelFill(0, 150, 255, 48);
-const QColor kSelBorder(0, 150, 255, 210);
-const QColor kHoverBorder(255, 255, 255, 190);
-const QColor kMarqueeFill(0, 150, 255, 32);
-const QColor kMarqueeBorder(0, 150, 255, 230);
+constexpr QColor kSelFill(0, 150, 255, 48);
+constexpr QColor kSelBorder(0, 150, 255, 210);
+constexpr QColor kHoverBorder(255, 255, 255, 190);
+constexpr QColor kMarqueeFill(0, 150, 255, 32);
+constexpr QColor kMarqueeBorder(0, 150, 255, 230);
 // CUSTOM 角标：深色底 + 白字（保证在任意底图/遮罩上可读）。
-const QColor kBadgeBg(0, 0, 0, 175);
-const QColor kBadgeFg(255, 255, 255);
+constexpr QColor kBadgeBg(0, 0, 0, 175);
+constexpr QColor kBadgeFg(255, 255, 255);
 // 调序反馈：被拖单元橙色粗边框、目标单元黄色虚线边框。
-const QColor kDragBorder(230, 126, 34);
-const QColor kDropBorder(241, 196, 15);
+constexpr QColor kDragBorder(230, 126, 34);
+constexpr QColor kDropBorder(241, 196, 15);
 
 // 单元区域 → QRectF（原图像素坐标；RectRegion 左闭右开，width/height 即跨度）。
-QRectF cellRect(const idc::engine::Cell& c) {
-    return QRectF(static_cast<qreal>(c.area.left), static_cast<qreal>(c.area.top),
-                  static_cast<qreal>(c.area.width()), static_cast<qreal>(c.area.height()));
+QRectF cellRect(const engine::Cell& c) {
+    return QRectF(c.area.left, c.area.top,
+                  c.area.width(), c.area.height());
 }
 
 // 单元区域与场景矩形是否相交（严格重叠，左闭右开语义下的开区间判定）。
-bool overlaps(const idc::engine::RectRegion& a, const QRectF& b) {
+bool overlaps(const engine::RectRegion& a, const QRectF& b) {
     return static_cast<qreal>(a.left) < b.right() && static_cast<qreal>(a.right) > b.left() &&
            static_cast<qreal>(a.top) < b.bottom() && static_cast<qreal>(a.bottom) > b.top();
 }
 
 // 1px cosmetic 画笔（线宽不随缩放变化）。
-QPen cosmeticPen(const QColor& c, Qt::PenStyle style = Qt::SolidLine) {
+QPen cosmeticPen(const QColor& c, const Qt::PenStyle style = Qt::SolidLine) {
     QPen p(c);
     p.setWidth(1);
     p.setCosmetic(true);
@@ -66,7 +62,7 @@ CellPickerItem::CellPickerItem(QGraphicsItem* parent) : QGraphicsObject(parent) 
 }
 
 // 依 Core 网格更新单元几何（并重置悬停、重建选中查表）。
-void CellPickerItem::setGrid(const idc::engine::Grid& grid, const int width, const int height) {
+void CellPickerItem::setGrid(const engine::Grid& grid, const int width, const int height) {
     prepareGeometryChange();
     cells_ = grid.cells();
     imgW_ = width;
@@ -78,7 +74,7 @@ void CellPickerItem::setGrid(const idc::engine::Grid& grid, const int width, con
 
 // 依 Document 更新选择集与排序策略。
 void CellPickerItem::setSelection(const std::vector<int>& selected,
-                                  const idc::engine::SortStrategy strategy) {
+                                  const engine::SortStrategy strategy) {
     selected_ = selected;
     strategy_ = strategy;
     rebuildSelectionLookup();
@@ -92,7 +88,7 @@ void CellPickerItem::setOverlayScale(const qreal sceneUnits) {
 
 // 场景矩形 = 整幅原图。
 QRectF CellPickerItem::boundingRect() const {
-    return QRectF(0.0, 0.0, static_cast<qreal>(imgW_), static_cast<qreal>(imgH_));
+    return QRectF(0.0, 0.0, imgW_, imgH_);
 }
 
 // 依 selected_ 重建按序号索引的选中标记与自定义序位（O(1) 查询，避免 paint 里 O(n²) 扫描）。
@@ -100,8 +96,7 @@ void CellPickerItem::rebuildSelectionLookup() {
     selFlag_.assign(cells_.size(), 0);
     selPos_.assign(cells_.size(), 0);
     for (std::size_t k = 0; k < selected_.size(); ++k) {
-        const int idx = selected_[k];
-        if (idx >= 0 && static_cast<std::size_t>(idx) < selFlag_.size()) {
+        if (const int idx = selected_[k]; idx >= 0 && static_cast<std::size_t>(idx) < selFlag_.size()) {
             selFlag_[static_cast<std::size_t>(idx)] = 1;
             selPos_[static_cast<std::size_t>(idx)] = static_cast<int>(k) + 1; // 1-based 自定义序位。
         }
@@ -112,7 +107,7 @@ void CellPickerItem::rebuildSelectionLookup() {
 int CellPickerItem::cellIndexAt(const QPointF& scenePos) const {
     const int x = static_cast<int>(scenePos.x());
     const int y = static_cast<int>(scenePos.y());
-    for (const idc::engine::Cell& c : cells_) {
+    for (const engine::Cell& c : cells_) {
         if (c.area.contains(x, y)) return c.index;
     }
     return -1;
@@ -121,7 +116,7 @@ int CellPickerItem::cellIndexAt(const QPointF& scenePos) const {
 // 框选：与场景矩形相交的全部单元序号。
 std::vector<int> CellPickerItem::cellsIntersecting(const QRectF& sceneRect) const {
     std::vector<int> out;
-    for (const idc::engine::Cell& c : cells_) {
+    for (const engine::Cell& c : cells_) {
         if (overlaps(c.area, sceneRect)) out.push_back(c.index);
     }
     return out;
@@ -158,7 +153,7 @@ void CellPickerItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     const bool pressSelected =
         pressIndex_ >= 0 && static_cast<std::size_t>(pressIndex_) < selFlag_.size() &&
         selFlag_[static_cast<std::size_t>(pressIndex_)];
-    if (strategy_ == idc::engine::SortStrategy::CUSTOM && pressSelected && moved) {
+    if (strategy_ == engine::SortStrategy::CUSTOM && pressSelected && moved) {
         reorderDrag_ = true;
         reorderTarget_ = cellIndexAt(curPos_);
         update();
@@ -197,16 +192,14 @@ void CellPickerItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
         if (!idx.empty()) emit cellsMarqueeSelected(idx);
     } else {
         pressing_ = false;
-        const int idx = cellIndexAt(pressPos_);
-        if (idx >= 0) emit cellToggled(idx);
+        if (const int idx = cellIndexAt(pressPos_); idx >= 0) emit cellToggled(idx);
     }
     event->accept();
 }
 
 // 悬停移动：更新悬停单元并局部重绘旧/新单元（大选集下避免整层重绘）。
 void CellPickerItem::hoverMoveEvent(QGraphicsSceneHoverEvent* event) {
-    const int idx = cellIndexAt(event->scenePos());
-    if (idx != hoverIndex_) {
+    if (const int idx = cellIndexAt(event->scenePos()); idx != hoverIndex_) {
         const int old = hoverIndex_;
         hoverIndex_ = idx;
         updateCell(old);
@@ -234,19 +227,17 @@ void CellPickerItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* op
     const QPen selPen = cosmeticPen(kSelBorder);
     painter->setPen(selPen);
     painter->setBrush(kSelFill);
-    for (const idc::engine::Cell& c : cells_) {
+    for (const engine::Cell& c : cells_) {
         if (!selFlag_.empty() && static_cast<std::size_t>(c.index) < selFlag_.size() &&
             selFlag_[static_cast<std::size_t>(c.index)]) {
-            const QRectF r = cellRect(c);
-            if (exposed.intersects(r)) painter->drawRect(r);
+            if (const QRectF r = cellRect(c); exposed.intersects(r)) painter->drawRect(r);
         }
     }
 
     // 悬停单元：白色边框反馈（未框选时）。
     if (hoverIndex_ >= 0 && !marquee_ &&
         static_cast<std::size_t>(hoverIndex_) < cells_.size()) {
-        const QRectF r = cellRect(cells_[static_cast<std::size_t>(hoverIndex_)]);
-        if (exposed.intersects(r)) {
+        if (const QRectF r = cellRect(cells_[static_cast<std::size_t>(hoverIndex_)]); exposed.intersects(r)) {
             painter->setPen(cosmeticPen(kHoverBorder));
             painter->setBrush(Qt::NoBrush);
             painter->drawRect(r);
@@ -263,7 +254,7 @@ void CellPickerItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* op
 
     // CUSTOM 角标：在每个已选单元左上角绘制其自定义序号（1-based）。
     // 以设备像素绘制（字号恒定屏幕大小），避免高倍缩放下场景单位字号取整为 0。
-    if (strategy_ == idc::engine::SortStrategy::CUSTOM && !selPos_.empty()) {
+    if (strategy_ == engine::SortStrategy::CUSTOM && !selPos_.empty()) {
         painter->save();
         const QTransform wt = painter->worldTransform();
         painter->resetTransform();
@@ -271,16 +262,15 @@ void CellPickerItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* op
         f.setPixelSize(13);
         f.setBold(true);
         painter->setFont(f);
-        for (const idc::engine::Cell& c : cells_) {
+        for (const engine::Cell& c : cells_) {
             if (static_cast<std::size_t>(c.index) >= selPos_.size()) continue;
             const int num = selPos_[static_cast<std::size_t>(c.index)];
             if (num <= 0) continue;
             const QRectF r = cellRect(c);
             if (!exposed.intersects(r)) continue;
             const QPointF dev = wt.map(r.topLeft());
-            const QPointF devBR = wt.map(r.bottomRight());
             // 单元在屏幕上过小则跳过角标，避免缩小时糊成一片。
-            if (devBR.x() - dev.x() < 14.0 || devBR.y() - dev.y() < 14.0) continue;
+            if (const QPointF devBR = wt.map(r.bottomRight()); devBR.x() - dev.x() < 14.0 || devBR.y() - dev.y() < 14.0) continue;
             const QString text = QString::number(num);
             const qreal w = 8.0 * static_cast<qreal>(text.length()) + 6.0;
             const QRectF badge(dev.x(), dev.y(), w, 16.0);

@@ -103,9 +103,9 @@ void testArgParser() {
     {
         const GlobalOptions a = parseGlobalOptions({"extract", "--input", "a.png", "--verbose"});
         CHECK(a.verbose && a.config.empty());
-        const GlobalOptions none = parseGlobalOptions({});
-        CHECK(!none.help && !none.version && !none.verbose && !none.quiet);
-        CHECK(none.config.empty() && none.saveConfig.empty());
+        const auto [help, version, verbose, quiet, config, saveConfig] = parseGlobalOptions({});
+        CHECK(!help && !version && !verbose && !quiet);
+        CHECK(config.empty() && saveConfig.empty());
     }
 
     std::cout << "[cli-arg-parser] OK\n";

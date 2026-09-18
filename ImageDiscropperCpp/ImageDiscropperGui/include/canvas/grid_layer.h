@@ -28,11 +28,11 @@ public:
     // 依 Core 网格重建线；visible=false 或网格为空时清空（不画）。
     // width/height 为原图尺寸（线贯穿全图，越界的残缺单元边被裁剪忽略）。
     // asCutLines=true 时画为橙色实线（L2 多矩形诱导切割线），否则灰色虚线（L3 网格）。
-    void rebuild(QGraphicsScene& scene, const idc::engine::Grid& grid,
+    void rebuild(QGraphicsScene& scene, const engine::Grid& grid,
                  int width, int height, bool visible, bool asCutLines = false);
 
     // 显隐切换（不重建，仅设可见性）。
-    void setVisible(bool visible);
+    void setVisible(bool visible) const;
 
     // 清空全部网格线图元（从场景移除并释放）。
     void clear();

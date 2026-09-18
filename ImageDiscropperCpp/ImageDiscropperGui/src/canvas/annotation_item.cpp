@@ -11,9 +11,6 @@
 // ============================================================================
 #include "canvas/annotation_item.h"
 
-#include <cmath>
-
-#include <QFont>
 #include <QGraphicsSceneMouseEvent>
 #include <QPainter>
 #include <QPainterPathStroker>
@@ -31,7 +28,7 @@ namespace {
 double clampScale(double f) {
     if (f > 50.0) f = 50.0;
     else if (f < -50.0) f = -50.0;
-    if (f > -0.02 && f < 0.02) f = (f < 0.0) ? -0.02 : 0.02;
+    if (f > -0.02 && f < 0.02) f = f < 0.0 ? -0.02 : 0.02;
     return f;
 }
 } // namespace
@@ -43,7 +40,7 @@ AnnotationItem::AnnotationItem(QGraphicsItem* parent) : QGraphicsObject(parent) 
 }
 
 // 载入标注拷贝并重建渲染路径。
-void AnnotationItem::setAnnotation(const idc::annotation::Annotation& ann) {
+void AnnotationItem::setAnnotation(const annotation::Annotation& ann) {
     prepareGeometryChange();
     ann_ = ann;   // Annotation 拷贝构造会深拷贝 shape
     rebuildPath();
@@ -81,7 +78,7 @@ QRectF AnnotationItem::boundingRect() const { return bounds_; }
 QPainterPath AnnotationItem::shape() const {
     QPainterPath s;
     if (!path_.isEmpty()) {
-        if (ann_.fillType && ann_.shapeType != idc::geometry::ShapeType::LINE) {
+        if (ann_.fillType && ann_.shapeType != geometry::ShapeType::LINE) {
             s = path_;
         } else {
             QPainterPathStroker stroker;
@@ -100,14 +97,14 @@ QPainterPath AnnotationItem::shape() const {
 }
 
 void AnnotationItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) {
-    const bool isText = (ann_.shapeType == idc::geometry::ShapeType::TEXT);
+    const bool isText = ann_.shapeType == geometry::ShapeType::TEXT;
     if (path_.isEmpty() && !isText) return;
     painter->setRenderHint(QPainter::Antialiasing, true);
 
-    const bool previewing = (activeHandle_ != Handle::None) && ann_.shape;
+    const bool previewing = activeHandle_ != Handle::None && ann_.shape;
 
     // 有效世界变换：拖拽手柄时用预览变换（起点变换 ∘ 局部缩放旋转），否则用形状当前变换。
-    idc::geometry::AffineTransform xf;
+    geometry::AffineTransform xf;
     if (ann_.shape) {
         xf = previewing ? ann_.shape->obbPreviewTransform(previewSx_, previewSy_, previewRot_)
                         : ann_.shape->transform();
@@ -149,15 +146,15 @@ void AnnotationItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, Q
 
 // 依世界变换 xf 计算 OBB 的9 个手柄世界坐标：将局部包围盒四角经 xf 映射，再取边中点与中心；
 // 旋转手柄置于顶边中点沿「中心→顶边」方向外推固定场景距离处。
-AnnotationItem::ObbFrame AnnotationItem::computeObb(const idc::geometry::AffineTransform& xf) const {
+AnnotationItem::ObbFrame AnnotationItem::computeObb(const geometry::AffineTransform& xf) const {
     ObbFrame f;
-    const idc::geometry::BoundingBox b = ann_.shape->bounds();   // 局部（未变换）轴对齐盒
-    const idc::core::Point2D ltl{b.x, b.y};
-    const idc::core::Point2D ltr{b.x + b.width, b.y};
-    const idc::core::Point2D lbr{b.x + b.width, b.y + b.height};
-    const idc::core::Point2D lbl{b.x, b.y + b.height};
-    auto W = [&xf](const idc::core::Point2D& p) {
-        const idc::core::Point2D q = xf.applyToPoint(p);
+    const auto [x, y, width, height] = ann_.shape->bounds();   // 局部（未变换）轴对齐盒
+    const core::Point2D ltl{x, y};
+    const core::Point2D ltr{x + width, y};
+    const core::Point2D lbr{x + width, y + height};
+    const core::Point2D lbl{x, y + height};
+    auto W = [&xf](const core::Point2D& p) {
+        const core::Point2D q = xf.applyToPoint(p);
         return QPointF(q.x, q.y);
     };
     f.corner[0] = W(ltl); f.corner[1] = W(ltr); f.corner[2] = W(lbr); f.corner[3] = W(lbl);
@@ -165,10 +162,9 @@ AnnotationItem::ObbFrame AnnotationItem::computeObb(const idc::geometry::AffineT
     f.edge[1] = (f.corner[1] + f.corner[2]) / 2.0;   // R
     f.edge[2] = (f.corner[2] + f.corner[3]) / 2.0;   // B
     f.edge[3] = (f.corner[3] + f.corner[0]) / 2.0;   // L
-    f.center = W(idc::core::Point2D{b.x + b.width / 2.0, b.y + b.height / 2.0});
+    f.center = W(core::Point2D{x + width / 2.0, y + height / 2.0});
     QPointF up = f.edge[0] - f.center;               // 中心→顶边中点（OBB 的「上」方向）
-    const qreal len = std::hypot(up.x(), up.y());
-    if (len > 1e-6) up /= len; else up = QPointF(0, -1);
+    if (const qreal len = std::hypot(up.x(), up.y()); len > 1e-6) up /= len; else up = QPointF(0, -1);
     f.rotate = f.edge[0] + up * (handleSize_ * 3.0);
     return f;
 }
@@ -195,8 +191,7 @@ void AnnotationItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     if (event->button() != Qt::LeftButton) { event->ignore(); return; }
     if (selected_ && ann_.shape) {
         const ObbFrame f = computeObb(ann_.shape->transform());
-        const Handle h = hitHandle(event->scenePos(), f);
-        if (h != Handle::None) { beginHandleDrag(h, event->scenePos()); event->accept(); return; }
+        if (const Handle h = hitHandle(event->scenePos(), f); h != Handle::None) { beginHandleDrag(h, event->scenePos()); event->accept(); return; }
     }
     emit pressed(event->scenePos());   // 同步链路：上层 selectAt → updateAnnotations → setSelectedState
     dragging_ = true;
@@ -248,9 +243,9 @@ void AnnotationItem::beginHandleDrag(const Handle h, const QPointF& scenePos) {
     accumDelta_ = QPointF();
     setPos(0.0, 0.0);
     previewSx_ = 1.0; previewSy_ = 1.0; previewRot_ = 0.0;
-    const idc::geometry::BoundingBox b = ann_.shape->bounds();
-    const idc::core::Point2D cw =
-        ann_.shape->localToWorld(idc::core::Point2D{b.x + b.width / 2.0, b.y + b.height / 2.0});
+    const auto [x, y, width, height] = ann_.shape->bounds();
+    const core::Point2D cw =
+        ann_.shape->localToWorld(core::Point2D{x + width / 2.0, y + height / 2.0});
     dragCenterWorld_ = QPointF(cw.x, cw.y);
     if (h == Handle::Rotate) {
         const ObbFrame f = computeObb(ann_.shape->transform());
@@ -271,25 +266,25 @@ void AnnotationItem::updateHandleDrag(const QPointF& scenePos) {
         while (deg <= -180.0) deg += 360.0;
         previewRot_ = deg;
     } else {
-        const idc::geometry::BoundingBox b = ann_.shape->bounds();
-        const double halfW = b.width / 2.0, halfH = b.height / 2.0;
-        const idc::core::Point2D cl{b.x + halfW, b.y + halfH};
-        const idc::core::Point2D lc =
-            ann_.shape->worldToLocal(idc::core::Point2D{scenePos.x(), scenePos.y()});
+        const auto [x, y, width, height] = ann_.shape->bounds();
+        const double halfW = width / 2.0, halfH = height / 2.0;
+        const core::Point2D cl{x + halfW, y + halfH};
+        const core::Point2D lc =
+            ann_.shape->worldToLocal(core::Point2D{scenePos.x(), scenePos.y()});
         // 角手柄同时缩放两轴；边中点手柄只缩放垂直于该边的一轴。
-        const bool corner = (activeHandle_ == Handle::TL || activeHandle_ == Handle::TR ||
-                             activeHandle_ == Handle::BR || activeHandle_ == Handle::BL);
+        const bool corner = activeHandle_ == Handle::TL || activeHandle_ == Handle::TR ||
+                            activeHandle_ == Handle::BR || activeHandle_ == Handle::BL;
         const bool useX = corner || activeHandle_ == Handle::L || activeHandle_ == Handle::R;
         const bool useY = corner || activeHandle_ == Handle::T || activeHandle_ == Handle::B;
         double sx = 1.0, sy = 1.0;
         if (useX && halfW > 1e-6) {
-            const bool rightSide = (activeHandle_ == Handle::TR || activeHandle_ == Handle::R ||
-                                    activeHandle_ == Handle::BR);
+            const bool rightSide = activeHandle_ == Handle::TR || activeHandle_ == Handle::R ||
+                                   activeHandle_ == Handle::BR;
             sx = rightSide ? (lc.x - cl.x) / halfW : (cl.x - lc.x) / halfW;
         }
         if (useY && halfH > 1e-6) {
-            const bool bottomSide = (activeHandle_ == Handle::BR || activeHandle_ == Handle::B ||
-                                     activeHandle_ == Handle::BL);
+            const bool bottomSide = activeHandle_ == Handle::BR || activeHandle_ == Handle::B ||
+                                    activeHandle_ == Handle::BL;
             sy = bottomSide ? (lc.y - cl.y) / halfH : (cl.y - lc.y) / halfH;
         }
         previewSx_ = clampScale(sx);
@@ -306,7 +301,7 @@ void AnnotationItem::updateHandleDrag(const QPointF& scenePos) {
 // 按预览形状（可能已放大/旋转）扩展 bounds_，避免拖拽中手柄与形状被旧包围盒裁剪。
 void AnnotationItem::updatePreviewBounds() {
     if (!ann_.shape) return;
-    const idc::geometry::AffineTransform xf =
+    const geometry::AffineTransform xf =
         ann_.shape->obbPreviewTransform(previewSx_, previewSy_, previewRot_);
     const QPainterPath pp = toQPainterPath(xf.applyToPath(ann_.shape->toPath()));
     const qreal margin = static_cast<qreal>(ann_.strokeWidth) + handleSize_ * 5.0 + 4.0;

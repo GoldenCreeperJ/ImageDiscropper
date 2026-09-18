@@ -11,7 +11,6 @@
 // ============================================================================
 #pragma once
 
-#include <cstddef>
 #include <utility>
 #include <vector>
 
@@ -42,8 +41,8 @@ class Sequence {
 public:
     // 依据网格规模与排序参数生成序列（FR-L3.5）。
     // 实现见 src/engine/sequence.cpp（row-major / column-major，可叠加 reverse / snake）。
-    void build(const std::size_t cellCount, const std::size_t cols,
-               const std::size_t rows, const SequenceParams& params);
+    void build(std::size_t cellCount, std::size_t cols,
+               std::size_t rows, const SequenceParams& params);
 
     // 直接设置自定义序列（CUSTOM 策略 / 拖拽调序结果）。
     void setCustom(std::vector<int> order) { order_ = std::move(order); }

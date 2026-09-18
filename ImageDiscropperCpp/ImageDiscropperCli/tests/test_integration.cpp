@@ -45,8 +45,8 @@ struct Captured {
 
 // 进程内调用 cliMain，重定向 std::cout / std::cerr 捕获输出，调用后恢复原缓冲。
 Captured runCli(const std::vector<std::string>& args) {
-    std::ostringstream outBuf;
-    std::ostringstream errBuf;
+    const std::ostringstream outBuf;
+    const std::ostringstream errBuf;
     std::streambuf* oldOut = std::cout.rdbuf(outBuf.rdbuf());
     std::streambuf* oldErr = std::cerr.rdbuf(errBuf.rdbuf());
     const int code = idc::cli::cliMain(args);
@@ -58,7 +58,7 @@ Captured runCli(const std::vector<std::string>& args) {
 // 生成测试图：200×150，四象限纯色（左上红 / 右上绿 / 左下蓝 / 右下黄），每象限 100×75。
 Image makeTestImage() {
     Image img(200, 150, idc::core::ImageFormat::RGBA);
-    const Color yellow(255, 255, 0, 255);
+    constexpr Color yellow(255, 255, 0, 255);
     for (int y = 0; y < 150; ++y) {
         for (int x = 0; x < 200; ++x) {
             Color c;
@@ -146,8 +146,7 @@ void testIntegration() {
         for (const auto& e : fs::directory_iterator(dir)) {
             if (!e.is_regular_file()) continue;
             ++count;
-            Image sub;
-            if (idc::engine::readImageFile(e.path().string(), sub)) {
+            if (Image sub; idc::engine::readImageFile(e.path().string(), sub)) {
                 if (sub.width() == 50 && sub.height() == 40) ++n5040;
                 else if (sub.width() == 50 && sub.height() == 30) ++n5030;
             }

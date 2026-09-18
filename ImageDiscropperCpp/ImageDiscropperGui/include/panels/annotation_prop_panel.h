@@ -37,7 +37,7 @@ public:
 
     // 手柄拖拽进行中：把当前预览的**绝对**缩放系数(1.0=100%、负即翻转)/旋转角(度)实时回显到变换区数值
     // （blockSignals 防回环，不触发 transformApplyRequested）。数值超出 spin 范围时由 QSpinBox 自动钳制。
-    void setTransformPreview(double sx, double sy, double rotateDeg);
+    void setTransformPreview(double sx, double sy, double rotateDeg) const;
 
 signals:
     void colorPicked(const QColor& c);   // 颜色（描边 + 填充共用）
@@ -53,7 +53,7 @@ private slots:
     void onPickColor();   // 打开取色器
 
 private:
-    void updateSwatch();  // 依当前颜色刷新色块按钮背景
+    void updateSwatch() const;  // 依当前颜色刷新色块按钮背景
 
     AnnotationBridge* model_{nullptr};
     QColor color_{Qt::black};        // 当前编辑中的颜色（色块显示用）

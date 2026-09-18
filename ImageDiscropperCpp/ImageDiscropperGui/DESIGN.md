@@ -15,13 +15,13 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 实现与其「实现说明 README」在 `src/<模块>/`。构建**包含根为 `include`**，故源码内以 `"canvas/…"`、
 `"model/…"` 形式互相引用（无 `gui/` 前缀）。
 
-| 模块 | 头文件 | 实现 | 职责 |
-| ---- | ------ | ---- | ---- |
-| `app` | `include/app/` | `src/app/` | 主窗口装配与编排（`MainWindow`）、程序入口（`main.cpp`） |
-| `model` | `include/model/` | `src/model/` | 会话状态单一真相源 `Document`；唯一切割引擎入口 `EngineBridge`；唯一标注驱动 `AnnotationBridge` |
-| `canvas` | `include/canvas/` | `src/canvas/` | `QGraphicsView`/`Scene` 画布：图层化渲染 + 交互 |
-| `panels` | `include/panels/` | `src/panels/` | 左侧模式/极性/工具/图层面板；右侧参数/导出/图像/标注属性面板 |
-| `util` | `include/util/` | `src/util/` | 无状态适配与渲染工具：Core↔Qt 类型适配、降采样预览、输出缩略图合成/标注烘焙 |
+| 模块       | 头文件               | 实现            | 职责                                                                     |
+|----------|-------------------|---------------|------------------------------------------------------------------------|
+| `app`    | `include/app/`    | `src/app/`    | 主窗口装配与编排（`MainWindow`）、程序入口（`main.cpp`）                                |
+| `model`  | `include/model/`  | `src/model/`  | 会话状态单一真相源 `Document`；唯一切割引擎入口 `EngineBridge`；唯一标注驱动 `AnnotationBridge` |
+| `canvas` | `include/canvas/` | `src/canvas/` | `QGraphicsView`/`Scene` 画布：图层化渲染 + 交互                                  |
+| `panels` | `include/panels/` | `src/panels/` | 左侧模式/极性/工具/图层面板；右侧参数/导出/图像/标注属性面板                                      |
+| `util`   | `include/util/`   | `src/util/`   | 无状态适配与渲染工具：Core↔Qt 类型适配、降采样预览、输出缩略图合成/标注烘焙                             |
 
 **依赖方向**：`app → panels/canvas/model → util → Core`。`model` 是唯一触碰 Core 引擎/标注的层，
 面板与画布只读写 `Document`/桥，不各自持有真相（降低耦合）。
@@ -42,16 +42,16 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 
 ### 3.1 图层 z 序（`include/canvas/z_order.h`，单一定义点）
 
-| z 值 | 常量 | 图层 |
-| ---- | ---- | ---- |
-| 0 | `kBase` | 底图（预处理后） |
-| 10 | `kAnnotation` | 标注图层（矢量叠加） |
-| 20 | `kDelete` | 删除块遮罩（红，铺满全图作底） |
-| 30 | `kKeep` | 保留块遮罩（绿，叠加于红之上） |
-| 40 | `kGrid` | 网格线（L3 / L2 多矩形诱导） |
-| 50 | `kCutLine` | 切割线层（保留值；切割线已并入选区图元） |
-| 60 | `kSelection` | 选区边框（橙）+ 手柄 + 贯穿切割线延伸（同一图元） |
-| 70 | `kCellNumber` | 单元格编号角标（L3 自定义序） |
+| z 值 | 常量            | 图层                          |
+|-----|---------------|-----------------------------|
+| 0   | `kBase`       | 底图（预处理后）                    |
+| 10  | `kAnnotation` | 标注图层（矢量叠加）                  |
+| 20  | `kDelete`     | 删除块遮罩（红，铺满全图作底）             |
+| 30  | `kKeep`       | 保留块遮罩（绿，叠加于红之上）             |
+| 40  | `kGrid`       | 网格线（L3 / L2 多矩形诱导）          |
+| 50  | `kCutLine`    | 切割线层（保留值；切割线已并入选区图元）        |
+| 60  | `kSelection`  | 选区边框（橙）+ 手柄 + 贯穿切割线延伸（同一图元） |
+| 70  | `kCellNumber` | 单元格编号角标（L3 自定义序）            |
 
 > **遮罩渲染法（不做几何布尔）**：`EngineResult.kept` 只给出保留块。画布先铺一层覆盖全图的红色「删除底」，
 > 再按 `kept` 各片段叠加绿色「保留块」；绿覆盖处即保留、透红处即删除。GUI 无需自算「删除集」（A-0.1）。
@@ -102,19 +102,19 @@ scheduleHistoryCapture（500ms 防抖）──► docHistory_ 压入 EngineConfi
 
 ## 4. 视觉规范
 
-| 项 | 规范 |
-| -- | ---- |
-| 画布背景 | 深灰 `rgb(45,45,45)` |
-| 保留遮罩 | 绿 `rgba(0,200,0,60)`（`mask_layer.cpp` `kKeepColor`） |
-| 删除遮罩 | 红 `rgba(200,0,0,60)`（`kDeleteColor`） |
-| 网格线 | 灰 `rgb(150,150,150)`，1px 虚线（L3）；橙 `rgb(255,140,0)` 实线（L2 多矩形诱导切割线） |
-| 选区/切割线 | 橙 `rgb(255,140,0)`，高亮 `rgb(255,90,0)`；填充 `rgba(255,165,0,30~60)` |
-| 标注高亮/手柄 | 蓝 `rgb(0,160,230)`；旋转手柄白底蓝边圆形（与缩放手柄区分） |
-| 单元编号角标 | 黑底 `rgba(0,0,0,175)` + 白字，13px bold，圆角 3px |
-| 工具按钮 | 中性底 `#f2f2f2` + 深色字 `#1b1b1b`；选中态蓝 `#3b7ddd` + 白字（深色模式下显式指定文字色，避免白字浅底不可读） |
-| 线宽 | 选区/切割线/标注手柄用 cosmetic pen（屏幕线宽恒定，不随缩放变粗） |
-| 字体/文案 | 界面文字全中文；`QStringLiteral` 包裹字面量 |
-| 反馈 | 错误经 `notify()` 写状态栏、限时显示（非模态，§5.2）；所有交互 100ms 内视觉反馈 |
+| 项       | 规范                                                                        |
+|---------|---------------------------------------------------------------------------|
+| 画布背景    | 深灰 `rgb(45,45,45)`                                                        |
+| 保留遮罩    | 绿 `rgba(0,200,0,60)`（`mask_layer.cpp` `kKeepColor`）                       |
+| 删除遮罩    | 红 `rgba(200,0,0,60)`（`kDeleteColor`）                                      |
+| 网格线     | 灰 `rgb(150,150,150)`，1px 虚线（L3）；橙 `rgb(255,140,0)` 实线（L2 多矩形诱导切割线）        |
+| 选区/切割线  | 橙 `rgb(255,140,0)`，高亮 `rgb(255,90,0)`；填充 `rgba(255,165,0,30~60)`          |
+| 标注高亮/手柄 | 蓝 `rgb(0,160,230)`；旋转手柄白底蓝边圆形（与缩放手柄区分）                                    |
+| 单元编号角标  | 黑底 `rgba(0,0,0,175)` + 白字，13px bold，圆角 3px                                |
+| 工具按钮    | 中性底 `#f2f2f2` + 深色字 `#1b1b1b`；选中态蓝 `#3b7ddd` + 白字（深色模式下显式指定文字色，避免白字浅底不可读） |
+| 线宽      | 选区/切割线/标注手柄用 cosmetic pen（屏幕线宽恒定，不随缩放变粗）                                  |
+| 字体/文案   | 界面文字全中文；`QStringLiteral` 包裹字面量                                            |
+| 反馈      | 错误经 `notify()` 写状态栏、限时显示（非模态，§5.2）；所有交互 100ms 内视觉反馈                       |
 
 ---
 
@@ -250,14 +250,14 @@ CanvasScene.annotationSelectRequested/Moved/Transformed → annoBridge_.selectAt
 
 ## 10. 已知限制
 
-| 项 | 现状 | 根因 |
-| -- | ---- | ---- |
-| 箭头标注 | 未实现 | Core `ShapeType` 无 `ARROW`（`annotation_bridge.h`/`tool_panel.h` 已注明），需先扩展 Core（A-0.2） |
-| 扇形标注 | 未实现 | Core `ShapeType` 无 `SECTOR/PIE`，同上 |
-| 预处理全局撤销 | 不纳入 `Ctrl+Z` | `docHistory_` 仅快照 `EngineConfig` 参数态、不含像素；靠「重置预处理」回退（产品取舍，README 决策 #10） |
-| 网格线吸附 | 未接入 | `selection_rect_item` 吸附目标仅图像边缘 + 中心（NFR-7 要求三选，尚缺网格线） |
-| 插值方式下拉 | 未提供 | `engine_bridge` resize 固定双线性；Core 支持 `ResampleMode{NEAREST,BILINEAR}`，图像面板未暴露选择 |
-| 8000×8000 ≥30fps | 未正式验证 | 预览已用降采样副本满足设计目标，但性能验收（§10.2）尚未落地实测 |
+| 项                | 现状           | 根因                                                                                    |
+|------------------|--------------|---------------------------------------------------------------------------------------|
+| 箭头标注             | 未实现          | Core `ShapeType` 无 `ARROW`（`annotation_bridge.h`/`tool_panel.h` 已注明），需先扩展 Core（A-0.2） |
+| 扇形标注             | 未实现          | Core `ShapeType` 无 `SECTOR/PIE`，同上                                                    |
+| 预处理全局撤销          | 不纳入 `Ctrl+Z` | `docHistory_` 仅快照 `EngineConfig` 参数态、不含像素；靠「重置预处理」回退（产品取舍，README 决策 #10）              |
+| 网格线吸附            | 未接入          | `selection_rect_item` 吸附目标仅图像边缘 + 中心（NFR-7 要求三选，尚缺网格线）                                |
+| 插值方式下拉           | 未提供          | `engine_bridge` resize 固定双线性；Core 支持 `ResampleMode{NEAREST,BILINEAR}`，图像面板未暴露选择       |
+| 8000×8000 ≥30fps | 未正式验证        | 预览已用降采样副本满足设计目标，但性能验收（§10.2）尚未落地实测                                                    |
 
 ---
 

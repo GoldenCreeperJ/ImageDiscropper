@@ -101,7 +101,7 @@ static void fillPolygon(core::Image& img,
         for (const auto& poly : polys) {
             for (std::size_t i = 0; i + 1 < poly.size(); ++i) {
                 const double y1 = poly[i].y, y2 = poly[i + 1].y;
-                if ((y1 > py) == (y2 > py)) continue; // 不与扫描线相交
+                if (y1 > py == y2 > py) continue; // 不与扫描线相交
                 const double x1 = poly[i].x, x2 = poly[i + 1].x;
                 const double t = (py - y1) / (y2 - y1);
                 xs.push_back(x1 + t * (x2 - x1));

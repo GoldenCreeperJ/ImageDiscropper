@@ -18,10 +18,8 @@
 #include "engine/engine.h"
 #include "engine/engine_config_json.h"
 #include "annotation/annotation_layer.h"
-#include "annotation/rasterizer.h"
 #include "annotation/shape_factory.h"
 #include "annotation/view_transform.h"
-#include "geometry/shapes.h"
 #include "preprocess/preprocess_pipeline.h"
 #include "pixel_ops/color_ops.h"
 #include "pixel_ops/geometric_ops.h"
@@ -31,7 +29,7 @@ static void printInfo(const char* label, const idc::core::Image& img) {
     std::cout << "[" << label << "] "
               << img.width() << " x " << img.height()
               << "  format=" << (img.isGray() ? "GRAY"
-                                              : (img.format() == idc::core::ImageFormat::RGBA ? "RGBA" : "RGB"))
+                                              : img.format() == idc::core::ImageFormat::RGBA ? "RGBA" : "RGB")
               << "\n";
 }
 
@@ -183,24 +181,23 @@ int main() {
         cfg.emitParams.mode = engine::EmitMode::MERGED;
         cfg.emitParams.layout = engine::MergeLayout::COLLAPSE; // 坍缩式合并（§5.2）
 
-        const engine::EngineResult r = engine::runEngine(composed, cfg);
-        std::cout << "[L2 collapse] ok=" << r.ok
-                  << " collapsible=" << r.collapsible
-                  << " kept=" << r.kept.size()
-                  << " canvas=" << r.composition.canvasWidth << "x" << r.composition.canvasHeight
+        const auto [ok, error, kept, composition, collapsible] = engine::runEngine(composed, cfg);
+        std::cout << "[L2 collapse] ok=" << ok
+                  << " collapsible=" << collapsible
+                  << " kept=" << kept.size()
+                  << " canvas=" << composition.canvasWidth << "x" << composition.canvasHeight
                   << "\n";
-        if (r.ok) {
+        if (ok) {
             const fs::path out = outDir / "l2_collapsed.png";
-            const bool w = engine::exportImage(r.composition, composed, out.string());
+            const bool w = engine::exportImage(composition, composed, out.string());
             std::cout << "  exported -> " << out.string() << " (" << (w ? "OK" : "FAIL") << ")\n";
         } else {
-            std::cout << "  error: " << r.error << "\n";
+            std::cout << "  error: " << error << "\n";
         }
 
         // 9.2 同一作业改为分离导出 → 文件夹（四角 4 张 PNG，直接写入，不压缩）。
         cfg.emitParams.mode = engine::EmitMode::SEPARATE;
-        const engine::EngineResult rs = engine::runEngine(composed, cfg);
-        if (rs.ok) {
+        if (const engine::EngineResult rs = engine::runEngine(composed, cfg); rs.ok) {
             const fs::path folder = outDir / "l2_corners"; // 目标文件夹（不存在会自动创建）
             const bool w = engine::exportImage(rs.composition, composed, folder.string());
             std::cout << "[L2 separate] kept=" << rs.kept.size()
@@ -208,8 +205,7 @@ int main() {
         }
 
         // 9.4 把该 L2 作业配置序列化为 JSON 并回读（FR-L3.8 / NFR-4）。
-        const fs::path jf = outDir / "l2_config.json";
-        if (engine::saveEngineConfig(jf.string(), cfg)) {
+        if (const fs::path jf = outDir / "l2_config.json"; engine::saveEngineConfig(jf.string(), cfg)) {
             engine::EngineConfig loaded;
             const bool ok = engine::loadEngineConfig(jf.string(), loaded);
             std::cout << "[config json] saved -> " << jf.string() << " reload=" << ok

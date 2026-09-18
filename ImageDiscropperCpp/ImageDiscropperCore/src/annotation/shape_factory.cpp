@@ -6,7 +6,6 @@
 #include "annotation/shape_factory.h"
 
 #include <algorithm>
-#include <cmath>
 #include <vector>
 
 // MSVC 默认不定义 M_PI，这里统一给出常量。
@@ -113,7 +112,7 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
             if (halfBase < 1e-3 && height < 1e-3) {
                 return std::make_unique<geometry::LineShape>(x1, y1, x1, y1);
             }
-            const double signY = (y2 >= y1) ? -1.0 : 1.0;
+            const double signY = y2 >= y1 ? -1.0 : 1.0;
             std::vector<core::Point2D> pts = {
                 {x1 - halfBase, y1},
                 {x1 + halfBase, y1},
@@ -128,7 +127,7 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
             if (distance < 1.0) {
                 return std::make_unique<geometry::LineShape>(x1, y1, x1, y1);
             }
-            const double half = (2.0 / std::sqrt(3.0)) * distance / 2.0;
+            const double half = 2.0 / std::sqrt(3.0) * distance / 2.0;
             const double perpX = -dy / distance;
             const double perpY = dx / distance;
             std::vector<core::Point2D> pts = {

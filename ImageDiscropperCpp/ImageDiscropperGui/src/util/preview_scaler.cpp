@@ -13,7 +13,7 @@
 namespace idc::gui {
 
 // 生成用于画布显示的降采样副本（详见头文件说明）。
-PreviewImage makePreview(const idc::core::Image& src, const int maxDimension) {
+PreviewImage makePreview(const core::Image& src, const int maxDimension) {
     PreviewImage out;
     if (src.empty()) {
         return out; // 空图：系数保持 1.0，image 为空。
@@ -35,7 +35,7 @@ PreviewImage makePreview(const idc::core::Image& src, const int maxDimension) {
     const double s = static_cast<double>(maxDimension) / static_cast<double>(longest);
     const int nw = std::max(1, static_cast<int>(std::llround(w * s)));
     const int nh = std::max(1, static_cast<int>(std::llround(h * s)));
-    out.image = idc::pixel_ops::resize(src, nw, nh, idc::pixel_ops::ResampleMode::NEAREST);
+    out.image = idc::pixel_ops::resize(src, nw, nh, pixel_ops::ResampleMode::NEAREST);
 
     // 放大系数以「实际预览尺寸」为准（round 可能与理论值有 1px 级偏差）。
     out.scaleX = static_cast<double>(w) / static_cast<double>(out.image.width());

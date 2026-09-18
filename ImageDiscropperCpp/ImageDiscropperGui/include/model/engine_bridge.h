@@ -29,49 +29,49 @@ class EngineBridge {
 public:
     // 从文件解码图像（委托 Core readImageFile，统一加载为 RGBA）。
     // 成功返回 true 并填充 out；失败返回 false 并给出中文错误 err。
-    bool loadImage(const QString& path, idc::core::Image& out, QString& err) const;
+    static bool loadImage(const QString& path, core::Image& out, QString& err);
 
     // 跑一次预览计算（委托 Core runEngine）。返回 EngineResult（含 kept / composition /
     // collapsible / ok / error）。runEngine 只做区域数学，不对大图搬像素，适合实时刷新。
-    idc::engine::EngineResult runPreview(const idc::core::Image& work,
-                                         const idc::engine::EngineConfig& cfg) const;
+    static engine::EngineResult runPreview(const core::Image& work,
+                                           const engine::EngineConfig& cfg);
 
     // 由切割配置生成贯穿全图的切割线集合（委托 Core generateCutLines），供画布渲染。
     // GUI 不自算切割线几何——只把 Core 给出的 xs/ys 交给选区图元画成橙色贯穿线（A-0.1）。
-    idc::engine::CutLineSet cutLines(const idc::engine::CutConfig& cut,
-                                     const idc::engine::SourceInfo& src) const;
+    static engine::CutLineSet cutLines(const engine::CutConfig& cut,
+                                       const engine::SourceInfo& src);
 
     // 依切割配置产出诱导网格（供 L3 画网格线与单元选择）。与 runEngine 内部一致：
     // GRID 生成器走 Grid::build（处理余量策略），其余生成器走切割线诱导 induceGrid。
     // GUI 不自算网格几何——只把 Core 产出的 Grid 交给画布渲染（A-0.1）。
-    idc::engine::Grid buildGrid(const idc::engine::CutConfig& cut,
-                                const idc::engine::SourceInfo& src) const;
+    static engine::Grid buildGrid(const engine::CutConfig& cut,
+                                  const engine::SourceInfo& src);
 
     // 导出（委托 Core runEngine + exportImage，对全分辨率工作图操作，无损）。
     // outputPath：分离模式为目标目录，合并模式为单图文件路径。
     // 成功返回 true；引擎失败或写盘失败返回 false 并给出中文错误 err。
-    bool exportResult(const idc::core::Image& work, const idc::engine::EngineConfig& cfg,
-                      const QString& outputPath, QString& err) const;
+    static bool exportResult(const core::Image& work, const engine::EngineConfig& cfg,
+                             const QString& outputPath, QString& err);
 
     // ---- 配置文件存取（G-13 / FR-L3.8 / NFR-4；委托 Core，GUI 不自实现 JSON，A-0.1/A-0.3）----
     // 保存：把一次作业配置序列化为终稿 §9 schema 的 JSON 文件（缩进美化）。
     // path 为空或写盘失败（Core E-8）返回 false 并给出中文错误 err。
-    bool saveConfig(const QString& path, const idc::engine::EngineConfig& cfg, QString& err) const;
+    static bool saveConfig(const QString& path, const engine::EngineConfig& cfg, QString& err);
     // 加载：从 JSON 文件还原配置（§9 schema）。path 为空、读盘失败或 JSON 解析失败返回 false
     // 并给出中文错误 err；成功返回 true 并填充 out（由上层 Document::applyEngineConfig 反向映射）。
-    bool loadConfig(const QString& path, idc::engine::EngineConfig& out, QString& err) const;
+    static bool loadConfig(const QString& path, engine::EngineConfig& out, QString& err);
 
     // ---- 预处理（FR-1；委托 Core pixel_ops::*，GUI 不自实现像素运算，A-0.1/A-0.3）----
     // 每个方法对输入图做一次变换并返回新图（不修改入参）；上层据此刷新 Document 工作图。
     // 说明：本 GUI 采用「即时累积」预处理——每次操作把工作图变换后写回，原图始终保留
     //       供「重置预处理」还原（A-0.16 流水线：原图 → 预处理 → 切割 → 导出）。
-    idc::core::Image rotateImage(const idc::core::Image& src, int angleDeg) const;      // 旋转 90/180/270
-    idc::core::Image flipImage(const idc::core::Image& src, bool horizontal) const;     // 水平/垂直翻转
-    idc::core::Image resizeImage(const idc::core::Image& src, int newW, int newH) const; // 目标尺寸缩放
-    idc::core::Image scaleImage(const idc::core::Image& src, double factor) const;      // 按比例缩放
-    idc::core::Image toGrayImage(const idc::core::Image& src) const;                    // 黑白（灰度）
-    idc::core::Image invertImage(const idc::core::Image& src, const std::string& mask) const; // 按通道反色
-    idc::core::Image splitImage(const idc::core::Image& src, const std::string& mask) const;  // 按通道分离
+    static core::Image rotateImage(const core::Image& src, int angleDeg);      // 旋转 90/180/270
+    static core::Image flipImage(const core::Image& src, bool horizontal);     // 水平/垂直翻转
+    static core::Image resizeImage(const core::Image& src, int newW, int newH); // 目标尺寸缩放
+    static core::Image scaleImage(const core::Image& src, double factor);      // 按比例缩放
+    static core::Image toGrayImage(const core::Image& src);                    // 黑白（灰度）
+    static core::Image invertImage(const core::Image& src, const std::string& mask); // 按通道反色
+    static core::Image splitImage(const core::Image& src, const std::string& mask);  // 按通道分离
 };
 
 } // namespace idc::gui

@@ -29,7 +29,7 @@ namespace idc::cli {
 
 // 解析矩形 "x1,y1,x2,y2"（左闭右开）；成功写 out。仅校验「四个整数」，
 // x1<x2 / y1<y2 的退化校验由命令层按 §6 处理（以便给出更贴切的提示）。
-bool parseRect(const std::string& s, idc::engine::RectRegion& out, std::string& err);
+bool parseRect(const std::string& s, engine::RectRegion& out, std::string& err);
 
 // 解析带 "a,b"（起始, 结束）；成功写 a、b。
 bool parseBand(const std::string& s, int& a, int& b, std::string& err);
@@ -48,19 +48,19 @@ bool parseOrderCells(const std::string& s, std::vector<std::pair<int, int>>& out
 
 // 解析颜色 "#RGB" / "#RRGGBB" / "#AARRGGBB"（与 Core 配置的十六进制约定一致）；
 // 不带 alpha 时视为不透明（a=255）。成功写 out。
-bool parseColor(const std::string& s, idc::core::Color& out, std::string& err);
+bool parseColor(const std::string& s, core::Color& out, std::string& err);
 
 // 解析导出格式 "png" / "jpeg"("jpg") / "webp" / "bmp"；成功写 out。
-bool parseFormat(const std::string& s, idc::engine::ExportFormat& out, std::string& err);
+bool parseFormat(const std::string& s, engine::ExportFormat& out, std::string& err);
 
 // 解析排序策略 "row-major" / "column-major" / "custom"；成功写 out。
-bool parseSort(const std::string& s, idc::engine::SortStrategy& out, std::string& err);
+bool parseSort(const std::string& s, engine::SortStrategy& out, std::string& err);
 
 // 解析余量策略 "discard" / "keep-partial" / "pad"；成功写 out。
-bool parseMargin(const std::string& s, idc::engine::RemainderPolicy& out, std::string& err);
+bool parseMargin(const std::string& s, engine::RemainderPolicy& out, std::string& err);
 
 // 解析合并布局 "collapse" / "rearrange"；成功写 out。
-bool parseMerge(const std::string& s, idc::engine::MergeLayout& out, std::string& err);
+bool parseMerge(const std::string& s, engine::MergeLayout& out, std::string& err);
 
 // 解析排序修饰 "none" / "reverse" / "snake" / "reverse-snake" / "snake-reverse"；
 // 映射为 Core SequenceParams 的两个布尔（reverse / snake）。

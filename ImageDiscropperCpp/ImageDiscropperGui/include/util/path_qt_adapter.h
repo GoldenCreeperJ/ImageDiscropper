@@ -21,16 +21,16 @@ namespace idc::gui {
 
 // 将 Core 的 geometry::Path 逐段翻译为 QPainterPath：
 // MOVE_TO→moveTo、LINE_TO→lineTo、QUAD_TO→quadTo、CUBIC_TO→cubicTo、CLOSE→closeSubpath。
-QPainterPath toQPainterPath(const idc::geometry::Path& path);
+QPainterPath toQPainterPath(const geometry::Path& path);
 
 // core::Color（RGBA 8 位）→ QColor。
-QColor toQColor(const idc::core::Color& c);
+QColor toQColor(const core::Color& c);
 
 // QColor → core::Color（取 RGBA 分量，越界分量由 QColor 自身钳制）。
-idc::core::Color toCoreColor(const QColor& c);
+core::Color toCoreColor(const QColor& c);
 
 // Core 仿射变换 → QTransform（供文字标注在画布上以矢量方式旋转/缩放/翻转字形）。
 // 两者布局一致：Core x'=a*x+c*y+tx, y'=b*x+d*y+ty ↔ QTransform(a,b,c,d,tx,ty)。
-QTransform toQTransform(const idc::geometry::AffineTransform& t);
+QTransform toQTransform(const geometry::AffineTransform& t);
 
 } // namespace idc::gui

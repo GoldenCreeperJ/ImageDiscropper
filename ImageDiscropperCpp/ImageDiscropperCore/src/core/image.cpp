@@ -6,7 +6,6 @@
 #include "core/image.h"
 
 #include <algorithm>
-#include <cstring>
 
 namespace idc::core {
 namespace {
@@ -17,7 +16,7 @@ constexpr double kLumaG = 0.587;
 constexpr double kLumaB = 0.114;
 
 // 按 BT.601 将 RGB 分量压缩为单通道灰度值（结果夹紧到 [0, 255]）。
-inline std::uint8_t rgbToGray(const int r, const int g, const int b) {
+std::uint8_t rgbToGray(const int r, const int g, const int b) {
     const int v = static_cast<int>(kLumaR * r + kLumaG * g + kLumaB * b);
     return static_cast<std::uint8_t>(std::clamp(v, 0, 255));
 }
@@ -227,8 +226,7 @@ void Image::blit(const Image& src, const int destX, const int destY) {
         for (int sy = 0; sy < src.height_; ++sy) {
             for (int sx = 0; sx < src.width_; ++sx) {
                 const int dx = destX + sx;
-                const int dy = destY + sy;
-                if (inBounds(dx, dy)) setPixel(dx, dy, src.getPixel(sx, sy));
+                if (const int dy = destY + sy; inBounds(dx, dy)) setPixel(dx, dy, src.getPixel(sx, sy));
             }
         }
     }

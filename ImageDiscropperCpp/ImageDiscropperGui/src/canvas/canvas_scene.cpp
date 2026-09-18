@@ -9,8 +9,6 @@
 #include <cstdlib>
 #include <vector>
 
-#include <QColor>
-#include <QPen>
 #include <QTransform>
 
 #include "canvas/z_order.h"
@@ -26,8 +24,7 @@ int nearest(const std::vector<int>& vals, const int target) {
     int best = -1;
     int bestD = -1;
     for (const int v : vals) {
-        const int d = std::abs(v - target);
-        if (bestD < 0 || d < bestD) { bestD = d; best = v; }
+        if (const int d = std::abs(v - target); bestD < 0 || d < bestD) { bestD = d; best = v; }
     }
     return best;
 }
@@ -42,7 +39,7 @@ void CanvasScene::setBaseImage(const QPixmap& preview, const double scaleX, cons
                                const int fullW, const int fullH) {
     imgW_ = fullW;
     imgH_ = fullH;
-    setSceneRect(0.0, 0.0, static_cast<qreal>(fullW), static_cast<qreal>(fullH));
+    setSceneRect(0.0, 0.0, fullW, fullH);
 
     // 底图：预览 pixmap 经放大变换铺满原图尺寸（快速变换，预览足够）。
     if (!baseItem_) {
@@ -96,7 +93,7 @@ void CanvasScene::clearAll() {
 }
 
 // 刷新保留/删除遮罩（委托 MaskLayer）。
-void CanvasScene::updateMasks(const idc::engine::EngineResult& result) {
+void CanvasScene::updateMasks(const engine::EngineResult& result) {
     maskLayer_.rebuild(*this, result, imgW_, imgH_, masksVisible_);
 }
 
@@ -110,7 +107,7 @@ void CanvasScene::setMasksVisible(const bool visible) {
 // 选区框据此把这些边延伸绘制为橙色贯穿线，并允许直接抓取拖动（拖动该边＝移动切割线）。
 // 单矩形/十字(RECT)四边皆有；横带(HLINE)仅上/下；竖带(VLINE)仅左/右；落在图像边界(0/W/H)
 // 的线不算「内部切割线」（此时选区边即图像边，内部无切割可言），对应边不延伸。
-void CanvasScene::updateCutLines(const idc::engine::CutLineSet& lines, const idc::engine::RectRegion& rect) {
+void CanvasScene::updateCutLines(const engine::CutLineSet& lines, const engine::RectRegion& rect) const {
     if (!selItem_ || imgW_ <= 0 || imgH_ <= 0) { clearCutLines(); return; }
 
     // 每条边取 Core 线集中最接近该边者，落在图像内部才视为有效贯穿切割线。
@@ -118,22 +115,22 @@ void CanvasScene::updateCutLines(const idc::engine::CutLineSet& lines, const idc
     const int rx = nearest(lines.xs, rect.right);
     const int ty = nearest(lines.ys, rect.top);
     const int by = nearest(lines.ys, rect.bottom);
-    const bool left   = (lx > 0 && lx < imgW_);
-    const bool right  = (rx > 0 && rx < imgW_);
-    const bool top    = (ty > 0 && ty < imgH_);
-    const bool bottom = (by > 0 && by < imgH_);
+    const bool left   = lx > 0 && lx < imgW_;
+    const bool right  = rx > 0 && rx < imgW_;
+    const bool top    = ty > 0 && ty < imgH_;
+    const bool bottom = by > 0 && by < imgH_;
     selItem_->setCutEdges(left, right, top, bottom);
 }
 
 // 清空切割线（换图/关闭图像/无选区时）：取消选区框的边延伸标记。
-void CanvasScene::clearCutLines() {
+void CanvasScene::clearCutLines() const {
     if (selItem_) selItem_->setCutEdges(false, false, false, false);
 }
 
 // 依 Core 诱导网格刷新 L3 网格线（委托 GridLayer，灰色虚线）；show=false 时清空。
 // 同时把网格下发给单元点选图元并按 show 切换其显隐。
 // 单元选择高亮属「选取边框」图层范畴：受 selectionVisible_ 门控（隐藏后不可点选，与选区框一致）。
-void CanvasScene::updateGrid(const idc::engine::Grid& grid, const bool show) {
+void CanvasScene::updateGrid(const engine::Grid& grid, const bool show) {
     gridLayer_.rebuild(*this, grid, imgW_, imgH_, show && gridVisible_);
     if (pickerItem_) {
         pickerItem_->setGrid(grid, imgW_, imgH_);
@@ -146,14 +143,14 @@ void CanvasScene::clearGrid() {
     gridLayer_.clear();
     if (pickerItem_) {
         pickerItem_->setVisible(false);
-        pickerItem_->setGrid(idc::engine::Grid{}, imgW_, imgH_);
+        pickerItem_->setGrid(engine::Grid{}, imgW_, imgH_);
     }
 }
 
 // 仅刷新 L2 多矩形的诱导切割线（委托 GridLayer 以橙色切割线样式重画），不触碰单元点选图元——
 // 多矩形靠画布框选追加，若显示 picker 会 grab 鼠标、阻断框选，故此处不启动 picker。
 // 这些诱导线本质是各矩形十字带并集的切割线，故画为橙色（asCutLines）并受 cutLinesVisible_ 门控。
-void CanvasScene::updateMultiRectCutLines(const idc::engine::Grid& grid, const bool show) {
+void CanvasScene::updateMultiRectCutLines(const engine::Grid& grid, const bool show) {
     gridLayer_.rebuild(*this, grid, imgW_, imgH_, show && cutLinesVisible_, /*asCutLines=*/true);
 }
 
@@ -163,7 +160,7 @@ void CanvasScene::updateMultiRectCutLines(const idc::engine::Grid& grid, const b
 // 删除正在处理鼠标事件的图元→崩溃）；且跳过对正在拖拽图元的回设（避免逐帧量化抖动）。
 // 多矩形不画贯穿切割线（各矩形十字带的并集由遮罩呈现），故 cutEdges 全 false，boundingRect
 // 仅覆盖各自矩形，不阻断在空白处框选追加新矩形。
-void CanvasScene::updateMultiRects(const std::vector<idc::engine::RectRegion>& rects) {
+void CanvasScene::updateMultiRects(const std::vector<engine::RectRegion>& rects) {
     const int n = static_cast<int>(rects.size());
     // 收缩：删除多余末位图元（拖拽期间不会发生删减，防御性跳过正在拖拽者）。
     while (multiRectItems_.size() > n) {
@@ -183,23 +180,22 @@ void CanvasScene::updateMultiRects(const std::vector<idc::engine::RectRegion>& r
         it->setBorderVisible(selectionVisible_);    // 继承图层面板选取边框显隐开关。
         addItem(it);
         connect(it, &SelectionRectItem::rectChanged, this, [this, it](const QRectF& r) {
-            const int idx = multiRectItems_.indexOf(it);
-            if (idx >= 0) emit multiRectEdited(idx, r);
+            if (const int idx = multiRectItems_.indexOf(it); idx >= 0) emit multiRectEdited(idx, r);
         });
         multiRectItems_.append(it);
     }
     // 刷新几何：跳过正在拖拽者（其位置/边界由手势维护，释放时才回设，避免逐帧 prepareGeometryChange 抖动）。
     // 非拖拽者也只在边界变化/矩形变化时才重推，避免拖拽期间对其余矩形的无谓重绘。
-    const bool boundsChanged = (multiBoundsW_ != imgW_ || multiBoundsH_ != imgH_);
+    const bool boundsChanged = multiBoundsW_ != imgW_ || multiBoundsH_ != imgH_;
     for (int i = 0; i < multiRectItems_.size(); ++i) {
         SelectionRectItem* it = multiRectItems_[i];
         it->setVisible(true);
         it->setHighlighted(i == activeMultiRect_);   // 高亮当前选中项（仅变化时重绘）。
         if (i < n && !it->isDragging()) {
             if (boundsChanged) it->setImageBounds(imgW_, imgH_);
-            const idc::engine::RectRegion& r = rects[static_cast<std::size_t>(i)];
-            const QRectF nr(static_cast<qreal>(r.left), static_cast<qreal>(r.top),
-                            static_cast<qreal>(r.width()), static_cast<qreal>(r.height()));
+            const engine::RectRegion& r = rects[static_cast<std::size_t>(i)];
+            const QRectF nr(r.left, r.top,
+                            (r.width()), (r.height()));
             if (it->rect() != nr) it->setRect(nr);
         }
     }
@@ -238,7 +234,7 @@ void CanvasScene::setActiveMultiRect(const int index) {
 
 // 依 Document 的选择集与排序策略刷新单元点选图元的高亮。
 void CanvasScene::updateCellSelection(const std::vector<int>& selected,
-                                      const idc::engine::SortStrategy strategy) {
+                                      const engine::SortStrategy strategy) const {
     if (pickerItem_) pickerItem_->setSelection(selected, strategy);
 }
 
@@ -249,14 +245,14 @@ std::vector<int> CanvasScene::cellsIntersecting(const QRectF& sceneRect) const {
 }
 
 // 依 Document 的选区同步选区框显示。
-void CanvasScene::syncSelection(const idc::engine::RectRegion& rect, const bool hasRect) {
+void CanvasScene::syncSelection(const engine::RectRegion& rect, const bool hasRect) const {
     if (!selItem_) return; // 尚无图像。
     if (!hasRect) {
         selItem_->setVisible(false);
         return;
     }
-    selItem_->setRect(QRectF(static_cast<qreal>(rect.left), static_cast<qreal>(rect.top),
-                             static_cast<qreal>(rect.width()), static_cast<qreal>(rect.height())));
+    selItem_->setRect(QRectF(rect.left, rect.top,
+                             rect.width(), rect.height()));
     selItem_->setVisible(true);
 }
 
@@ -268,7 +264,7 @@ void CanvasScene::syncSelection(const idc::engine::RectRegion& rect, const bool 
 // 【拖拽安全】按数量增删末位图元、逐个刷新几何；绝不 clear+重建（否则会在拖拽中删除
 // 正在处理鼠标事件的图元→崩溃）；且跳过对正在拖拽图元的几何回设（其位置由手势维护）。
 void CanvasScene::updateAnnotations(const AnnotationBridge& model) {
-    const std::vector<idc::annotation::Annotation>& anns = model.annotations();
+    const std::vector<annotation::Annotation>& anns = model.annotations();
     const int n = static_cast<int>(anns.size());
 
     // 收缩：删除多余末位图元（防御：绝不删除正在拖拽者）。
@@ -285,19 +281,16 @@ void CanvasScene::updateAnnotations(const AnnotationBridge& model) {
         it->setHandleSize(annoHandleSize_);
         addItem(it);
         connect(it, &AnnotationItem::pressed, this, &CanvasScene::annotationSelectRequested);
-        connect(it, &AnnotationItem::moveRequested, this, [this, it](double dx, double dy) {
-            const int idx = annoItems_.indexOf(it);
-            if (idx >= 0) emit annotationMoved(idx, dx, dy);
+        connect(it, &AnnotationItem::moveRequested, this, [this, it](const double dx, const double dy) {
+            if (const int idx = annoItems_.indexOf(it); idx >= 0) emit annotationMoved(idx, dx, dy);
         });
         connect(it, &AnnotationItem::transformRequested,
-                this, [this, it](double sx, double sy, double deg) {
-            const int idx = annoItems_.indexOf(it);
-            if (idx >= 0) emit annotationTransformed(idx, sx, sy, deg);
+                this, [this, it](const double sx, const double sy, const double deg) {
+                    if (const int idx = annoItems_.indexOf(it); idx >= 0) emit annotationTransformed(idx, sx, sy, deg);
         });
         connect(it, &AnnotationItem::transformPreview,
-                this, [this, it](double sx, double sy, double deg) {
-            const int idx = annoItems_.indexOf(it);
-            if (idx >= 0) emit annotationTransformPreview(idx, sx, sy, deg);
+                this, [this, it](const double sx, const double sy, const double deg) {
+                    if (const int idx = annoItems_.indexOf(it); idx >= 0) emit annotationTransformPreview(idx, sx, sy, deg);
         });
         annoItems_.append(it);
     }
@@ -317,15 +310,14 @@ void CanvasScene::updateAnnotations(const AnnotationBridge& model) {
 // 仅刷新拖拽预览图元：以当前属性临时封装一个 Annotation 渲染，不进 Core 历史。
 // 绘制手势逐帧只调本方法，避免逐帧重建/克隆已提交标注（性能）。
 void CanvasScene::updatePendingAnnotation(const AnnotationBridge& model) {
-    const idc::geometry::Shape* ps = model.pendingShape();
-    if (ps && annotationsVisible_) {
+    if (const geometry::Shape* ps = model.pendingShape(); ps && annotationsVisible_) {
         if (!pendingAnnoItem_) {
             pendingAnnoItem_ = new AnnotationItem();
             pendingAnnoItem_->setHandleSize(annoHandleSize_);
             pendingAnnoItem_->setAcceptedMouseButtons(Qt::NoButton);  // 预览不可交互
             addItem(pendingAnnoItem_);
         }
-        idc::annotation::Annotation tmp;
+        annotation::Annotation tmp;
         tmp.shape = ps->clone();
         tmp.color = model.currentColor();
         tmp.strokeWidth = model.currentStrokeWidth();
@@ -360,7 +352,7 @@ void CanvasScene::setAnnotationHandleSize(const qreal sceneUnits) {
 }
 
 // 底图图层显隐：仅切换 base 图元可见性（不影响遮罩 / 标注 / 导出）。
-void CanvasScene::setBaseVisible(const bool on) {
+void CanvasScene::setBaseVisible(const bool on) const {
     if (baseItem_) baseItem_->setVisible(on);
 }
 

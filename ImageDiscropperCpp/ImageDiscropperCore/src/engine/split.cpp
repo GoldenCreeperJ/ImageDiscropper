@@ -22,8 +22,7 @@ RegionSet split(const core::Image& image, const Grid& grid) {
         const int l = std::max(cell.area.left, 0);
         const int t = std::max(cell.area.top, 0);
         const int r = std::min(cell.area.right, image.width());
-        const int b = std::min(cell.area.bottom, image.height());
-        if (r <= l || b <= t) continue; // 实际像素为空 → 跳过空块（E-4）。
+        if (const int b = std::min(cell.area.bottom, image.height()); r <= l || b <= t) continue; // 实际像素为空 → 跳过空块（E-4）。
 
         // 保留原始 cell.area：PAD 余量策略下 area 可能超出图像边界，
         // 导出时 Image::crop 会自动裁剪、画布以 padColor 补白，从而天然实现“补白至完整单元”。

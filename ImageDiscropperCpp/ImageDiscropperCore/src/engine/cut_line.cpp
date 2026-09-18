@@ -44,8 +44,7 @@ CutLineSet generateCutLines(const CutConfig& cut, const SourceInfo& source) {
         }
         case CutGenerator::HORIZONTAL_LINE: {
             // 仅两条横线（横带保留/剔除）：Y={0,y1,y2,H}，X 保持 {0,W}（§4.2 横线）。
-            const RectRegion& r = cut.rect;
-            if (r.top < r.bottom) { lines.ys.push_back(r.top); lines.ys.push_back(r.bottom); }
+            if (const RectRegion& r = cut.rect; r.top < r.bottom) { lines.ys.push_back(r.top); lines.ys.push_back(r.bottom); }
             break;
         }
         case CutGenerator::VERTICAL_LINE: {

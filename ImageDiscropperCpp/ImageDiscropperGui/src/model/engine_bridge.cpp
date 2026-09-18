@@ -14,13 +14,13 @@
 namespace idc::gui {
 
 // 从文件解码图像（委托 Core readImageFile）。
-bool EngineBridge::loadImage(const QString& path, idc::core::Image& out, QString& err) const {
+bool EngineBridge::loadImage(const QString& path, core::Image& out, QString& err) {
     if (path.isEmpty()) {
         err = QStringLiteral("路径为空，无法打开图像");
         return false;
     }
     // Core 统一把常见格式解码为 RGBA；失败（不存在/不可读/格式不支持）返回 false。
-    if (!idc::engine::readImageFile(path.toStdString(), out)) {
+    if (!engine::readImageFile(path.toStdString(), out)) {
         err = QStringLiteral("无法读取图像：%1").arg(path);
         return false;
     }
@@ -28,24 +28,24 @@ bool EngineBridge::loadImage(const QString& path, idc::core::Image& out, QString
 }
 
 // 跑一次预览计算（委托 Core runEngine）。
-idc::engine::EngineResult EngineBridge::runPreview(const idc::core::Image& work,
-                                                   const idc::engine::EngineConfig& cfg) const {
+engine::EngineResult EngineBridge::runPreview(const core::Image& work,
+                                                   const engine::EngineConfig& cfg) {
     // runEngine 内部：预处理(空) → 切割线 → 网格 → 选择集 → 极性 → split → 合成，
     // 只做区域数学，不搬像素，故可对全分辨率工作图实时调用。
     return idc::engine::runEngine(work, cfg);
 }
 
 // 由切割配置生成贯穿全图的切割线集合（委托 Core generateCutLines）。
-idc::engine::CutLineSet EngineBridge::cutLines(const idc::engine::CutConfig& cut,
-                                               const idc::engine::SourceInfo& src) const {
+engine::CutLineSet EngineBridge::cutLines(const engine::CutConfig& cut,
+                                               const engine::SourceInfo& src) {
     return idc::engine::generateCutLines(cut, src);
 }
 
 // 依切割配置产出诱导网格（镜像 runEngine 的网格产出：GRID 走 Grid::build、其余走线诱导）。
-idc::engine::Grid EngineBridge::buildGrid(const idc::engine::CutConfig& cut,
-                                          const idc::engine::SourceInfo& src) const {
-    idc::engine::Grid grid;
-    if (cut.generator == idc::engine::CutGenerator::GRID) {
+engine::Grid EngineBridge::buildGrid(const engine::CutConfig& cut,
+                                          const engine::SourceInfo& src) {
+    engine::Grid grid;
+    if (cut.generator == engine::CutGenerator::GRID) {
         grid.build(cut.grid, src.width, src.height);  // 参数化网格，含余量策略。
     } else {
         grid = idc::engine::induceGrid(idc::engine::generateCutLines(cut, src), src);
@@ -54,14 +54,14 @@ idc::engine::Grid EngineBridge::buildGrid(const idc::engine::CutConfig& cut,
 }
 
 // 导出（委托 Core runEngine + exportImage，对全分辨率工作图操作）。
-bool EngineBridge::exportResult(const idc::core::Image& work, const idc::engine::EngineConfig& cfg,
-                                const QString& outputPath, QString& err) const {
+bool EngineBridge::exportResult(const core::Image& work, const engine::EngineConfig& cfg,
+                                const QString& outputPath, QString& err) {
     if (outputPath.isEmpty()) {
         err = QStringLiteral("未指定输出路径");
         return false;
     }
     // 先算（全分辨率），失败则把 Core 的中文原因透传给上层展示。
-    const idc::engine::EngineResult res = idc::engine::runEngine(work, cfg);
+    const engine::EngineResult res = idc::engine::runEngine(work, cfg);
     if (!res.ok) {
         err = QString::fromStdString(res.error);
         return false;
@@ -77,7 +77,7 @@ bool EngineBridge::exportResult(const idc::core::Image& work, const idc::engine:
 // ---- 配置文件存取（G-13）：逐个委托 Core saveEngineConfig/loadEngineConfig，不自实现 JSON（A-0.1）----
 
 // 保存配置：委托 Core saveEngineConfig（§9 schema、缩进美化）；path 空或写盘失败透传中文错误。
-bool EngineBridge::saveConfig(const QString& path, const idc::engine::EngineConfig& cfg, QString& err) const {
+bool EngineBridge::saveConfig(const QString& path, const engine::EngineConfig& cfg, QString& err) {
     if (path.isEmpty()) {
         err = QStringLiteral("未指定配置文件路径");
         return false;
@@ -90,7 +90,7 @@ bool EngineBridge::saveConfig(const QString& path, const idc::engine::EngineConf
 }
 
 // 加载配置：委托 Core loadEngineConfig；path 空、读盘或解析失败透传中文错误，成功填充 out。
-bool EngineBridge::loadConfig(const QString& path, idc::engine::EngineConfig& out, QString& err) const {
+bool EngineBridge::loadConfig(const QString& path, engine::EngineConfig& out, QString& err) {
     if (path.isEmpty()) {
         err = QStringLiteral("未指定配置文件路径");
         return false;
@@ -105,40 +105,40 @@ bool EngineBridge::loadConfig(const QString& path, idc::engine::EngineConfig& ou
 // ---- 预处理转发（FR-1）：逐个委托 Core pixel_ops::*，不做任何像素运算（A-0.1）----
 
 // 旋转：委托 pixel_ops::rotate（仅 90 的整数倍，其余角度 Core 内部退化到最近合法值）。
-idc::core::Image EngineBridge::rotateImage(const idc::core::Image& src, const int angleDeg) const {
-    return idc::pixel_ops::rotate(src, angleDeg);
+core::Image EngineBridge::rotateImage(const core::Image& src, const int angleDeg) {
+    return pixel_ops::rotate(src, angleDeg);
 }
 
 // 翻转：委托 pixel_ops::flip（horizontal=true 左右、false 上下）。
-idc::core::Image EngineBridge::flipImage(const idc::core::Image& src, const bool horizontal) const {
-    return idc::pixel_ops::flip(src, horizontal);
+core::Image EngineBridge::flipImage(const core::Image& src, const bool horizontal) {
+    return pixel_ops::flip(src, horizontal);
 }
 
 // 目标尺寸缩放：委托 pixel_ops::resize（双线性插值）；非正尺寸时原图返回（不产生空图）。
-idc::core::Image EngineBridge::resizeImage(const idc::core::Image& src, const int newW, const int newH) const {
+core::Image EngineBridge::resizeImage(const core::Image& src, const int newW, const int newH) {
     if (newW <= 0 || newH <= 0) return src;
-    return idc::pixel_ops::resize(src, newW, newH);
+    return pixel_ops::resize(src, newW, newH);
 }
 
 // 按比例缩放：委托 pixel_ops::scale（factor 必须 > 0，否则原图返回）。
-idc::core::Image EngineBridge::scaleImage(const idc::core::Image& src, const double factor) const {
+core::Image EngineBridge::scaleImage(const core::Image& src, const double factor) {
     if (factor <= 0.0) return src;
-    return idc::pixel_ops::scale(src, factor);
+    return pixel_ops::scale(src, factor);
 }
 
 // 黑白（灰度）：委托 pixel_ops::toGray。
-idc::core::Image EngineBridge::toGrayImage(const idc::core::Image& src) const {
-    return idc::pixel_ops::toGray(src);
+core::Image EngineBridge::toGrayImage(const core::Image& src) {
+    return pixel_ops::toGray(src);
 }
 
 // 按通道反色：委托 pixel_ops::invertChannels（mask 长度 3，'1' 反色对应 R/G/B）。
-idc::core::Image EngineBridge::invertImage(const idc::core::Image& src, const std::string& mask) const {
-    return idc::pixel_ops::invertChannels(src, mask);
+core::Image EngineBridge::invertImage(const core::Image& src, const std::string& mask) {
+    return pixel_ops::invertChannels(src, mask);
 }
 
 // 按通道分离：委托 pixel_ops::splitChannels（mask 长度 3，'1' 保留对应 R/G/B，'0' 置零）。
-idc::core::Image EngineBridge::splitImage(const idc::core::Image& src, const std::string& mask) const {
-    return idc::pixel_ops::splitChannels(src, mask);
+core::Image EngineBridge::splitImage(const core::Image& src, const std::string& mask) {
+    return pixel_ops::splitChannels(src, mask);
 }
 
 } // namespace idc::gui

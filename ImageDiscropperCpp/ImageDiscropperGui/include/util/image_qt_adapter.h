@@ -10,7 +10,6 @@
 // ============================================================================
 #pragma once
 
-#include <QImage>
 #include <QPixmap>
 
 #include "core/image.h"
@@ -20,9 +19,9 @@ namespace idc::gui {
 // 将 core::Image 转换为 QImage（深拷贝像素，脱离 Core 缓冲生命周期）。
 // 按 Image::format() 选择 QImage 格式：RGBA→Format_RGBA8888、RGB→Format_RGB888、
 // GRAY→Format_Grayscale8。空图返回默认构造的 null QImage。
-QImage toQImage(const idc::core::Image& img);
+QImage toQImage(const core::Image& img);
 
 // 将 core::Image 转换为 QPixmap（经 toQImage）。用于 QGraphicsPixmapItem 显示。
-QPixmap toPixmap(const idc::core::Image& img);
+QPixmap toPixmap(const core::Image& img);
 
 } // namespace idc::gui

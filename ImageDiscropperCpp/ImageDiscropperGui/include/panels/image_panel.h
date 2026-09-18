@@ -57,7 +57,7 @@ signals:
 private slots:
     void onScaleApply();     // 「按比例缩放」应用按钮。
     void onResizeApply();    // 「目标尺寸」应用按钮。
-    void onWidthEdited(int value);  // 保持宽高比时，改宽联动算高。
+    void onWidthEdited(int value) const;  // 保持宽高比时，改宽联动算高。
 
 private:
     // 构建各分组控件（每组返回一个 QGroupBox，由构造函数统一排版，避免上帝构造函数）。

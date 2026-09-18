@@ -28,21 +28,19 @@ void Sequence::build(const std::size_t cellCount, const std::size_t cols,
     if (params.strategy == SortStrategy::ROW_MAJOR) {
         // 横优先：逐行输出；snake 时奇数行行内反向。
         for (std::size_t r = 0; r < rows; ++r) {
-            const bool reverseRow = params.snake && (r % 2 == 1);
+            const bool reverseRow = params.snake && r % 2 == 1;
             for (std::size_t c = 0; c < cols; ++c) {
-                const std::size_t col = reverseRow ? (cols - 1 - c) : c;
-                const std::size_t index = r * cols + col;
-                if (index < cellCount) order_.push_back(static_cast<int>(index));
+                const std::size_t col = reverseRow ? cols - 1 - c : c;
+                if (const std::size_t index = r * cols + col; index < cellCount) order_.push_back(static_cast<int>(index));
             }
         }
     } else {
         // 竖优先（COLUMN_MAJOR）：逐列输出；snake 时奇数列列内反向。
         for (std::size_t c = 0; c < cols; ++c) {
-            const bool reverseCol = params.snake && (c % 2 == 1);
+            const bool reverseCol = params.snake && c % 2 == 1;
             for (std::size_t r = 0; r < rows; ++r) {
-                const std::size_t row = reverseCol ? (rows - 1 - r) : r;
-                const std::size_t index = row * cols + c;
-                if (index < cellCount) order_.push_back(static_cast<int>(index));
+                const std::size_t row = reverseCol ? rows - 1 - r : r;
+                if (const std::size_t index = row * cols + c; index < cellCount) order_.push_back(static_cast<int>(index));
             }
         }
     }

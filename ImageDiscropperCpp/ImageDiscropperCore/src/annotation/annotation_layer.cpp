@@ -201,7 +201,7 @@ void AnnotationLayer::removeAnnotation(const std::size_t index) {
     history_.clearRedo();   // 新操作切断“未来”（与 push 语义一致）
     if (selectedIndex_) {
         if (*selectedIndex_ == index) selectedIndex_.reset();
-        else if (*selectedIndex_ > index) --(*selectedIndex_);
+        else if (*selectedIndex_ > index) --*selectedIndex_;
     }
 }
 

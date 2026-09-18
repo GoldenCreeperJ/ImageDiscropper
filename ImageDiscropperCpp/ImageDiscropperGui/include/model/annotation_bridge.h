@@ -18,7 +18,6 @@
 
 #include <QObject>
 
-#include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
@@ -58,7 +57,7 @@ enum class AnnoTool {
 };
 
 // 将 GUI 工具映射为 Core 形状类型；SELECT 无对应形状，返回 LINE 作占位（不会被使用）。
-idc::geometry::ShapeType shapeTypeForTool(AnnoTool tool);
+geometry::ShapeType shapeTypeForTool(AnnoTool tool);
 
 // ---------------------------------------------------------------------------
 // AnnotationBridge：标注域桥（QObject，信号驱动画布 / 面板刷新）。
@@ -71,46 +70,46 @@ public:
     // ---- 底图与会话 ----
     // 设置底图：委托 Core setImage（内部会清空旧标注＝开启新标注会话）。
     // 载入新图 / 维度变化的预处理后调用；同维度预处理不清标注（矢量叠加 + 导出注入当前 base）。
-    void setBaseImage(const idc::core::Image& base);
+    void setBaseImage(const core::Image& base);
 
     // ---- 工具与属性 ----
     AnnoTool currentTool() const { return tool_; }
     // 切换工具：SELECT→Core EDIT 模式（属性作用选中项），其余→DRAW 模式（属性作为下一次绘制默认）。
     void setTool(AnnoTool tool);
 
-    idc::core::Color currentColor() const { return layer_.currentColor(); }
+    core::Color currentColor() const { return layer_.currentColor(); }
     int currentStrokeWidth() const { return layer_.currentStrokeWidth(); }
     bool currentFill() const { return layer_.currentFill(); }
     std::string currentText() const { return layer_.currentText(); }
     double currentFontSize() const { return layer_.currentFontSize(); }
 
     // 写回属性：委托 Core change*（EDIT 模式作用选中项，DRAW 模式改当前默认），随后发 changed()。
-    void setColor(const idc::core::Color& c);
+    void setColor(const core::Color& c);
     void setStrokeWidth(int w);
     void setFill(bool fill);
     void setText(const std::string& text);
     void setFontSize(double size);
 
     // ---- 两点形状绘制流程（矩形 / 圆 / 直线 / 三角 …）----
-    void beginShape(idc::core::Point2D p);   // 按下：记起点，切 DRAW，准备预览
-    void updateShape(idc::core::Point2D p);  // 拖拽：以当前点重建 pending 预览，发 changed()
+    void beginShape(core::Point2D p);   // 按下：记起点，切 DRAW，准备预览
+    void updateShape(core::Point2D p);  // 拖拽：以当前点重建 pending 预览，发 changed()
     void commitShape();                      // 释放：把 pending 提交为一个标注，发 changed()
     void cancelPending();                    // 取消当前预览（Esc / 切换工具）
 
     // ---- 折线 / 画笔绘制流程（连续追加顶点）----
-    void beginPath(idc::core::Point2D p);    // 起笔：新建路径草稿并 moveTo
-    void appendPathPoint(idc::core::Point2D p); // 追加一个正式顶点（lineTo），刷新预览
+    void beginPath(core::Point2D p);    // 起笔：新建路径草稿并 moveTo
+    void appendPathPoint(core::Point2D p); // 追加一个正式顶点（lineTo），刷新预览
     // 折线橡皮筋预览：以路径草稿 + 到光标 cursor 的临时连线构造 pending（**不改 pathDraft_**），
     // 供「移动时实时预览落点与连线」；左键再次点击才由 appendPathPoint 落为正式顶点。
-    void previewPolyline(idc::core::Point2D cursor);
+    void previewPolyline(core::Point2D cursor);
     void commitPath();                       // 收笔：把路径草稿提交为一个标注
     bool hasPathDraft() const { return !pathDraft_.empty(); }
 
     // ---- 文字 ----
-    void addText(idc::core::Point2D p, const std::string& text); // 在 p 处添加文字标注
+    void addText(core::Point2D p, const std::string& text); // 在 p 处添加文字标注
 
     // ---- 选择 / 移动 / 删除（复用 Core，不在 GUI 算几何）----
-    void selectAt(idc::core::Point2D p);     // 命中检测并选中（委托 Core hitTest/selectAnnotation）
+    void selectAt(core::Point2D p);     // 命中检测并选中（委托 Core hitTest/selectAnnotation）
     void clearSelection();                   // 取消选中
     std::optional<std::size_t> selectedIndex() const { return layer_.selectedAnnotationIndex(); }
     // 平移选中标注：委托 Core Shape::translate 就地偏移形状自身参数，**保留具体类型**
@@ -138,17 +137,17 @@ public:
     // ---- 导出合成 ----
     // 以传入的 base（当前工作图）为底，逐个调 Core rasterize 合成所有标注，返回新 RGBA 图。
     // 不复用 AnnotationLayer::burnIn()（其内部 image_ 可能预处理后陈旧），确保与最新底图一致。
-    idc::core::Image burnIn(const idc::core::Image& base) const;
+    core::Image burnIn(const core::Image& base) const;
 
     // ---- 只读访问（供画布渲染）----
-    const std::vector<idc::annotation::Annotation>& annotations() const { return layer_.annotations(); }
+    const std::vector<annotation::Annotation>& annotations() const { return layer_.annotations(); }
     std::size_t count() const { return layer_.annotations().size(); }
     // 当前拖拽预览形状（未提交）；无预览时返回 nullptr。画布据此画橡皮筋矢量。
-    const idc::geometry::Shape* pendingShape() const { return pending_.get(); }
+    const geometry::Shape* pendingShape() const { return pending_.get(); }
 
     // ---- 属性回显（供右侧标注属性页）----
     // 有选中项则返回其属性，否则返回当前工具默认属性。
-    idc::core::Color displayColor() const;
+    core::Color displayColor() const;
     int displayStrokeWidth() const;
     bool displayFill() const;
     // 选中标注的累积 OBB 变换参数（绝对值、带符号；缩放为负即翻转）——供属性面板忠实回显底层真实变换。
@@ -165,15 +164,15 @@ signals:
 
 private:
     // 依当前工具与预览锚点重建 pending_（两点形状用 p1/p2，折线 / 画笔用 pathDraft_）。
-    void rebuildPending(idc::core::Point2D current);
+    void rebuildPending(core::Point2D current);
 
-    idc::annotation::AnnotationLayer layer_;  // Core 标注会话（唯一真相源）
+    annotation::AnnotationLayer layer_;  // Core 标注会话（唯一真相源）
     AnnoTool tool_{AnnoTool::SELECT};
 
     // 绘制预览状态（仅 GUI 侧临时，不进 Core 历史）
-    idc::core::Point2D anchor_{};                       // 两点形状起点
-    std::unique_ptr<idc::geometry::Shape> pending_;     // 当前预览形状
-    idc::geometry::Path pathDraft_;                     // 折线 / 画笔路径草稿
+    core::Point2D anchor_{};                       // 两点形状起点
+    std::unique_ptr<geometry::Shape> pending_;     // 当前预览形状
+    geometry::Path pathDraft_;                     // 折线 / 画笔路径草稿
 
     bool layerVisible_{true};    // 标注图层可见性（图层面板开关）
     bool burnInEnabled_{false};  // 导出时是否烧录标注（图层面板开关）

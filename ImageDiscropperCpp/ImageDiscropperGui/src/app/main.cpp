@@ -27,7 +27,7 @@ Q_IMPORT_PLUGIN(QXcbIntegrationPlugin)
 #include "app/main_window.h"
 
 int main(int argc, char* argv[]) {
-    QApplication app(argc, argv);
+    const QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("ImageDiscropperGui"));
     QApplication::setApplicationDisplayName(QStringLiteral("ImageDiscropper"));
     QApplication::setApplicationVersion(QStringLiteral(IDC_GUI_VERSION));
@@ -47,8 +47,7 @@ int main(int argc, char* argv[]) {
     window.show();
 
     // 若命令行带图像路径，窗口显示后自动打开（复用菜单/工具栏同一入口逻辑）。
-    const QStringList args = parser.positionalArguments();
-    if (!args.isEmpty()) {
+    if (const QStringList args = parser.positionalArguments(); !args.isEmpty()) {
         window.openImageFromPath(args.first());
     }
 

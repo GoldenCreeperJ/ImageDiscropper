@@ -38,7 +38,7 @@ QPen cutLinePen() {
 
 // 依 Core 网格重建线：收集单元边界的唯一 x/y（裁剪到图像内、忽略越界的残缺单元边），
 // 在每个坐标画一条贯穿全图的竖线 / 横线。asCutLines=true 时用橙色切割线样式，否则灰色虚线网格。
-void GridLayer::rebuild(QGraphicsScene& scene, const idc::engine::Grid& grid,
+void GridLayer::rebuild(QGraphicsScene& scene, const engine::Grid& grid,
                         const int width, const int height, const bool visible, const bool asCutLines) {
     clear();
     if (!visible || width <= 0 || height <= 0 || grid.cellCount() == 0) return;
@@ -46,8 +46,8 @@ void GridLayer::rebuild(QGraphicsScene& scene, const idc::engine::Grid& grid,
     // 单元边界坐标去重升序；仅保留严格落在图像内部 (0,W)/(0,H) 的边（图像外轮廓不画）。
     std::set<int> xs;
     std::set<int> ys;
-    for (const idc::engine::Cell& c : grid.cells()) {
-        const idc::engine::RectRegion& a = c.area;
+    for (const engine::Cell& c : grid.cells()) {
+        const engine::RectRegion& a = c.area;
         if (a.left > 0 && a.left < width) xs.insert(a.left);
         if (a.right > 0 && a.right < width) xs.insert(a.right);
         if (a.top > 0 && a.top < height) ys.insert(a.top);
@@ -55,17 +55,17 @@ void GridLayer::rebuild(QGraphicsScene& scene, const idc::engine::Grid& grid,
     }
 
     const QPen pen = asCutLines ? cutLinePen() : gridPen();
-    const qreal W = static_cast<qreal>(width);
-    const qreal H = static_cast<qreal>(height);
+    const qreal W = width;
+    const qreal H = height;
     for (const int x : xs) {
-        const qreal fx = static_cast<qreal>(x);
+        const qreal fx = x;
         QGraphicsLineItem* it = scene.addLine(fx, 0.0, fx, H, pen);
         it->setZValue(zorder::kGrid);
         it->setAcceptedMouseButtons(Qt::NoButton); // 纯显示，不遮挡单元点选/选区交互。
         lineItems_.push_back(it);
     }
     for (const int y : ys) {
-        const qreal fy = static_cast<qreal>(y);
+        const qreal fy = y;
         QGraphicsLineItem* it = scene.addLine(0.0, fy, W, fy, pen);
         it->setZValue(zorder::kGrid);
         it->setAcceptedMouseButtons(Qt::NoButton);
@@ -74,7 +74,7 @@ void GridLayer::rebuild(QGraphicsScene& scene, const idc::engine::Grid& grid,
 }
 
 // 显隐切换（不重建）。
-void GridLayer::setVisible(const bool visible) {
+void GridLayer::setVisible(const bool visible) const {
     for (QGraphicsLineItem* it : lineItems_) {
         if (it) it->setVisible(visible);
     }
@@ -82,7 +82,7 @@ void GridLayer::setVisible(const bool visible) {
 
 // 清空全部网格线图元。QGraphicsItem 析构会自动从所属场景移除。
 void GridLayer::clear() {
-    for (QGraphicsLineItem* it : lineItems_) delete it;
+    for (const QGraphicsLineItem* it : lineItems_) delete it;
     lineItems_.clear();
 }
 

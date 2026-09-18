@@ -30,7 +30,7 @@ core::Image invertChannels(const core::Image& src, const std::string& mask) {
         return out;
     }
 
-    const std::string m = (mask.size() == 3) ? mask : std::string("111");
+    const std::string m = mask.size() == 3 ? mask : std::string("111");
     const std::size_t bpp = core::bytesPerPixel(out.format());   // RGB=3 / RGBA=4
     for (std::size_t i = 0; i + bpp <= n; i += bpp) {
         if (m[0] == '1') d[i + 0] = static_cast<std::uint8_t>(255 - d[i + 0]);
@@ -49,7 +49,7 @@ core::Image splitChannels(const core::Image& src, const std::string& mask) {
     std::uint8_t* d = out.data();
     const std::size_t n = out.sizeInBytes();
 
-    const std::string m = (mask.size() == 3) ? mask : std::string("111");
+    const std::string m = mask.size() == 3 ? mask : std::string("111");
     const std::size_t bpp = core::bytesPerPixel(out.format());
     for (std::size_t i = 0; i + bpp <= n; i += bpp) {
         if (m[0] != '1') d[i + 0] = 0;

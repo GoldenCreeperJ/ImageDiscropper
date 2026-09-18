@@ -77,7 +77,7 @@ void LayerPanel::setModel(AnnotationBridge* model) {
 }
 
 // 从模型反向同步标注显示态（底图/遮罩/网格线/切割线/选取边框可见性非模型状态，保持控件当前值）。
-void LayerPanel::syncFromModel() {
+void LayerPanel::syncFromModel() const {
     if (!model_) return;
     annoVisible_->blockSignals(true);
     annoVisible_->setChecked(model_->layerVisible());
@@ -85,7 +85,7 @@ void LayerPanel::syncFromModel() {
 }
 
 // 外部（视图菜单 / 右键）切换遮罩后反向同步复选框（blockSignals 防回环）。
-void LayerPanel::setMaskVisible(const bool visible) {
+void LayerPanel::setMaskVisible(const bool visible) const {
     if (!maskVisible_) return;
     maskVisible_->blockSignals(true);
     maskVisible_->setChecked(visible);

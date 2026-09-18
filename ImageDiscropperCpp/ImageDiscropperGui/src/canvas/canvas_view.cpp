@@ -12,14 +12,11 @@
 #include <algorithm>
 
 #include <QColor>
-#include <QContextMenuEvent>
 #include <QKeyEvent>
 #include <QMenu>
-#include <QMouseEvent>
 #include <QPainter>
 #include <QRubberBand>
 #include <QScrollBar>
-#include <QWheelEvent>
 
 #include "canvas/canvas_scene.h"
 #include "canvas/selection_rect_item.h"
@@ -36,9 +33,9 @@ constexpr qreal kMaxZoom = 40.0;
 CanvasView::CanvasView(CanvasScene* scene, QWidget* parent)
     : QGraphicsView(scene, parent), scene_(scene) {
     setRenderHint(QPainter::Antialiasing, true);
-    setTransformationAnchor(QGraphicsView::AnchorUnderMouse); // 缩放锚定光标下
-    setResizeAnchor(QGraphicsView::AnchorViewCenter);
-    setDragMode(QGraphicsView::NoDrag);                     // 拖拽逻辑自管
+    setTransformationAnchor(AnchorUnderMouse); // 缩放锚定光标下
+    setResizeAnchor(AnchorViewCenter);
+    setDragMode(NoDrag);                     // 拖拽逻辑自管
     setMouseTracking(true);                                 // 无按键也回报光标位置
     setBackgroundBrush(QColor(45, 45, 45));                 // 画布深灰（§5.1）
 }
@@ -62,8 +59,7 @@ void CanvasView::fitToWindow() {
 void CanvasView::zoomBy(const qreal factor) {
     const qreal cur = transform().m11();
     if (cur <= 0.0) return;
-    const qreal next = std::clamp(cur * factor, kMinZoom, kMaxZoom);
-    if (!qFuzzyCompare(next, cur)) scale(next / cur, next / cur); // 已达边界则不再缩放。
+    if (const qreal next = std::clamp(cur * factor, kMinZoom, kMaxZoom); !qFuzzyCompare(next, cur)) scale(next / cur, next / cur); // 已达边界则不再缩放。
     updateHandleSize();
 }
 
@@ -71,8 +67,7 @@ void CanvasView::zoomBy(const qreal factor) {
 void CanvasView::clampZoom() {
     const qreal cur = transform().m11();
     if (cur <= 0.0) return;
-    const qreal c = std::clamp(cur, kMinZoom, kMaxZoom);
-    if (!qFuzzyCompare(c, cur)) scale(c / cur, c / cur);
+    if (const qreal c = std::clamp(cur, kMinZoom, kMaxZoom); !qFuzzyCompare(c, cur)) scale(c / cur, c / cur);
 }
 
 // 依当前缩放换算选区手柄的场景尺寸（约 8 屏幕px），保证手柄屏幕观感恒定。
@@ -103,7 +98,7 @@ void CanvasView::beginPan(const QPoint& viewportPos) {
 
 // 滚轮缩放（锚定光标下，倍率钳制在允许区间内）。
 void CanvasView::wheelEvent(QWheelEvent* event) {
-    const double factor = 1.15;
+    constexpr double factor = 1.15;
     zoomBy(event->angleDelta().y() > 0 ? factor : 1.0 / factor);
     event->accept();
 }
@@ -234,7 +229,7 @@ void CanvasView::keyPressEvent(QKeyEvent* event) {
         event->accept();
         return;
     }
-    const int step = (event->modifiers() & Qt::ShiftModifier) ? 10 : 1;
+    const int step = event->modifiers() & Qt::ShiftModifier ? 10 : 1;
     switch (event->key()) {
         case Qt::Key_Left:  emit nudgeSelection(-step, 0); event->accept(); return;
         case Qt::Key_Right: emit nudgeSelection(step, 0);  event->accept(); return;
@@ -265,12 +260,12 @@ void CanvasView::contextMenuEvent(QContextMenuEvent* event) {
         return;
     }
     QMenu menu(viewport());
-    QAction* aClear = menu.addAction(QStringLiteral("清除切割线"));
-    QAction* aReset = menu.addAction(QStringLiteral("重置视图"));
+    const QAction* aClear = menu.addAction(QStringLiteral("清除切割线"));
+    const QAction* aReset = menu.addAction(QStringLiteral("重置视图"));
     const bool masksOn = scene_ && scene_->masksVisible();
-    QAction* aToggle = menu.addAction(masksOn ? QStringLiteral("隐藏预览遮罩")
+    const QAction* aToggle = menu.addAction(masksOn ? QStringLiteral("隐藏预览遮罩")
                                               : QStringLiteral("显示预览遮罩"));
-    QAction* chosen = menu.exec(event->globalPos());
+    const QAction* chosen = menu.exec(event->globalPos());
     if (chosen == aClear) emit clearCutRequested();
     else if (chosen == aReset) emit resetViewRequested();
     else if (chosen == aToggle) emit toggleMasksRequested();

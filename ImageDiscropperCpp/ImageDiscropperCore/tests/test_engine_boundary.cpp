@@ -22,8 +22,8 @@ idc::core::Image makeImage(const int w, const int h) {
     idc::core::Image img(w, h, idc::core::ImageFormat::RGBA);
     for (int y = 0; y < h; ++y)
         for (int x = 0; x < w; ++x)
-            img.setPixel(x, y, idc::core::Color(static_cast<std::uint8_t>((x * 13) % 256),
-                                                static_cast<std::uint8_t>((y * 17) % 256),
+            img.setPixel(x, y, idc::core::Color(static_cast<std::uint8_t>(x * 13 % 256),
+                                                static_cast<std::uint8_t>(y * 17 % 256),
                                                 90, 255));
     return img;
 }
@@ -53,11 +53,11 @@ void testEngineBoundary() {
         CutConfig cc;
         cc.generator = CutGenerator::RECT;
         cc.rect = RectRegion(-50, 10, 150, 60); // x1<0, x2>W
-        const SourceInfo si{100, 80};
-        const CutLineSet lines = generateCutLines(cc, si);
-        CHECK(lines.xs.front() == 0 && lines.xs.back() == 100);
-        CHECK(lines.xs.size() == 2); // -50→0、150→100 与边界去重，仅剩 {0,100}
-        CHECK(lines.ys.front() == 0 && lines.ys.back() == 80);
+        constexpr SourceInfo si{100, 80};
+        const auto [xs, ys] = generateCutLines(cc, si);
+        CHECK(xs.front() == 0 && xs.back() == 100);
+        CHECK(xs.size() == 2); // -50→0、150→100 与边界去重，仅剩 {0,100}
+        CHECK(ys.front() == 0 && ys.back() == 80);
     }
 
     // ---- E-3：x1==x2 退化 → 不产竖切割线，降级为横线切割。----
@@ -65,10 +65,10 @@ void testEngineBoundary() {
         CutConfig cc;
         cc.generator = CutGenerator::RECT;
         cc.rect = RectRegion(50, 20, 50, 60); // x1==x2
-        const SourceInfo si{100, 80};
-        const CutLineSet lines = generateCutLines(cc, si);
-        CHECK(lines.xs.size() == 2); // 仅边界 {0,100}，无竖切割
-        CHECK(lines.ys.size() == 4); // 横线保留 {0,20,60,80}
+        constexpr SourceInfo si{100, 80};
+        const auto [xs, ys] = generateCutLines(cc, si);
+        CHECK(xs.size() == 2); // 仅边界 {0,100}，无竖切割
+        CHECK(ys.size() == 4); // 横线保留 {0,20,60,80}
     }
 
     // ---- E-4：贴边选框 x1=0 → 左侧块宽度为 0 被跳过（仅剩右侧两块）。----
@@ -168,7 +168,7 @@ void testEngineBoundary() {
         CutConfig cc;
         cc.generator = CutGenerator::RECT;
         cc.rect = RectRegion(30, 20, 70, 60);
-        const SourceInfo si{100, 80};
+        constexpr SourceInfo si{100, 80};
         const Grid g = induceGrid(generateCutLines(cc, si), si);
         const RegionSet all = split(img, g);
         CHECK(all.size() == 9);                        // 3×3 全 9 格

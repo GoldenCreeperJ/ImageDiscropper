@@ -43,21 +43,21 @@ struct JobOptions {
 
 // 读取输入图像（Core readImageFile）。成功返回 Ok 并填充 out；
 // 失败（不存在 / 不可读 / 非图像）返回 InputError(3) 并已按 §5.2 打印错误。
-ExitCode loadInputImage(const std::string& path, idc::core::Image& out, const JobOptions& opt);
+ExitCode loadInputImage(const std::string& path, core::Image& out, const JobOptions& opt);
 
 // 执行作业：以 image 的实际尺寸校正 config.source → runEngine → 坍缩校验 → exportImage。
 // 返回退出码；失败时已按 §5.2 打印错误。config 以引用传入（内部会写入 source 尺寸）。
-ExitCode executeJob(idc::engine::EngineConfig& config, const idc::core::Image& image,
+ExitCode executeJob(engine::EngineConfig& config, const core::Image& image,
                     const JobOutput& out, const JobOptions& opt);
 
 // 把一份 EngineConfig 序列化到 JSON 文件（Core saveEngineConfig），用于 --save-config dry-run。
 // 成功返回 Ok 并（非 quiet 时）提示；失败（路径空 / 写盘失败）返回 OutputError(4)。
-ExitCode saveConfigToFile(const idc::engine::EngineConfig& config, const std::string& path,
+ExitCode saveConfigToFile(const engine::EngineConfig& config, const std::string& path,
                           const JobOptions& opt);
 
 // 作业收尾（三层命令 + config 共用）：若 saveConfigPath 非空则序列化配置并返回（dry-run，
 // 不执行切割）；否则执行 executeJob。使命令层收尾逻辑单点化（A-0.2 不重复）。
-ExitCode finishJob(idc::engine::EngineConfig& config, const idc::core::Image& image,
+ExitCode finishJob(engine::EngineConfig& config, const core::Image& image,
                    const JobOutput& out, const std::string& saveConfigPath, const JobOptions& opt);
 
 } // namespace idc::cli

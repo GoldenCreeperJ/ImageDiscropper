@@ -50,15 +50,15 @@ public:
 
     // 高亮态（多矩形场景）：标记本选区框为「当前选中」，绘制时颜色/线宽略微加强以示区分。
     // 单矩形选区不使用（恒 false），外观不变。仅在值变化时重绘（避免拖拽期逐帧无谓 update）。
-    void setHighlighted(const bool on);
+    void setHighlighted(bool on);
 
     // ---- 图层显隐（图层面板开关）----
     // 贯穿切割线（标记边向全图延伸的那段橙色线）是否绘制；关闭后延伸段不绘制且**不可抓拖**
     // （命中跨度回落到选区自身那段），但仍可拖动选区边框本身。
-    void setCutLinesVisible(const bool on);
+    void setCutLinesVisible(bool on);
     // 选区边框（橙色矩形描边 + 半透明填充 + 四角手柄）是否绘制；关闭后**选区不可交互**
     // （同时置 Qt::NoButton，无法移动/缩放/拖边，遵循「隐藏图层=不可交互」，与标注一致）。
-    void setBorderVisible(const bool on);
+    void setBorderVisible(bool on);
 
     // QGraphicsItem 接口。
     QRectF boundingRect() const override;

@@ -20,17 +20,17 @@ namespace {
 // 模式按钮的强调样式：L2（核心特色）用橙色强调，其余中性；选中态高亮（§4.3）。
 // 【深色模式】未选态背景为硬编码浅色（#f2f2f2/#fdeede），若不显式指定文字色，
 // 跟随系统深色主题时会继承调色板的白字→白字浅底不可读；故显式给未选态深色文字。
-const char* kModeStyle =
+auto kModeStyle =
     "QPushButton{padding:6px;border:1px solid #bbb;border-radius:4px;background:#f2f2f2;color:#1b1b1b;}"
     "QPushButton:checked{background:#3b7ddd;color:#fff;border-color:#3b7ddd;}";
-const char* kL2Style =
+auto kL2Style =
     "QPushButton{padding:6px;border:1px solid #d9a05b;border-radius:4px;background:#fdeede;color:#1b1b1b;}"
     "QPushButton:checked{background:#e67e22;color:#fff;border-color:#e67e22;}";
 // 极性按钮：keep 绿、remove 红，选中态填充对应色（§4.4）。
-const char* kKeepStyle =
+auto kKeepStyle =
     "QPushButton{padding:6px;border:1px solid #bbb;border-radius:4px;}"
     "QPushButton:checked{background:#2ecc71;color:#fff;border-color:#2ecc71;}";
-const char* kRemoveStyle =
+auto kRemoveStyle =
     "QPushButton{padding:6px;border:1px solid #bbb;border-radius:4px;}"
     "QPushButton:checked{background:#e74c3c;color:#fff;border-color:#e74c3c;}";
 
@@ -112,43 +112,43 @@ void LeftPanel::setDocument(Document* doc) {
 }
 
 // 从 Document 反向同步按钮选中态。
-void LeftPanel::syncFromDocument() {
+void LeftPanel::syncFromDocument() const {
     if (!doc_) return;
 
     // 模式：Tier → 按钮 id（L1=1, L2=2, L3=3）。
     int modeId = 1;
     switch (doc_->mode()) {
-        case idc::engine::Tier::L1: modeId = 1; break;
-        case idc::engine::Tier::L2: modeId = 2; break;
-        case idc::engine::Tier::L3: modeId = 3; break;
+        case engine::Tier::L1: modeId = 1; break;
+        case engine::Tier::L2: modeId = 2; break;
+        case engine::Tier::L3: modeId = 3; break;
     }
     modeGroup_->blockSignals(true);
     if (auto* b = modeGroup_->button(modeId)) b->setChecked(true);
     modeGroup_->blockSignals(false);
 
     // 极性：KEEP=0, REMOVE=1。
-    const int polId = (doc_->polarity() == idc::engine::Polarity::REMOVE) ? 1 : 0;
+    const int polId = doc_->polarity() == engine::Polarity::REMOVE ? 1 : 0;
     polarityGroup_->blockSignals(true);
     if (auto* b = polarityGroup_->button(polId)) b->setChecked(true);
     polarityGroup_->blockSignals(false);
 }
 
 // 模式按钮切换 → 写回 Document（Document 会发 changed 触发刷新与面板再同步）。
-void LeftPanel::onModeToggled(const int id, const bool checked) {
+void LeftPanel::onModeToggled(const int id, const bool checked) const {
     if (!checked || !doc_) return;
     switch (id) {
-        case 1: doc_->setMode(idc::engine::Tier::L1); break;
-        case 2: doc_->setMode(idc::engine::Tier::L2); break;
-        case 3: doc_->setMode(idc::engine::Tier::L3); break;
+        case 1: doc_->setMode(engine::Tier::L1); break;
+        case 2: doc_->setMode(engine::Tier::L2); break;
+        case 3: doc_->setMode(engine::Tier::L3); break;
         default: break;
     }
 }
 
 // 极性按钮切换 → 写回 Document，实时刷新遮罩（NFR-6）。
-void LeftPanel::onPolarityToggled(const int id, const bool checked) {
+void LeftPanel::onPolarityToggled(const int id, const bool checked) const {
     if (!checked || !doc_) return;
-    if (id == 1) doc_->setPolarity(idc::engine::Polarity::REMOVE);
-    else if (id == 0) doc_->setPolarity(idc::engine::Polarity::KEEP);
+    if (id == 1) doc_->setPolarity(engine::Polarity::REMOVE);
+    else if (id == 0) doc_->setPolarity(engine::Polarity::KEEP);
 }
 
 } // namespace idc::gui

@@ -33,7 +33,7 @@ void mergeIntervals(std::vector<std::pair<int, int>>& iv) {
 // 辅助：区间集总跨度（各段宽度/高度之和）。
 int totalSpan(const std::vector<std::pair<int, int>>& iv) {
     int sum = 0;
-    for (const auto& s : iv) sum += s.second - s.first;
+    for (const auto&[fst, snd] : iv) sum += snd - fst;
     return sum;
 }
 
@@ -41,10 +41,10 @@ int totalSpan(const std::vector<std::pair<int, int>>& iv) {
 // 即 destCoord = start - （start 左侧被删除的总宽），等价于左侧保留总宽。
 int collapsedOffset(const std::vector<std::pair<int, int>>& iv, const int start) {
     int acc = 0;
-    for (const auto& seg : iv) {
-        if (seg.first >= start) break;                              // 已达/超过 start，停止
-        if (seg.second <= start) acc += seg.second - seg.first;     // 完整保留段在左侧
-        else acc += start - seg.first;                              // 跨越 start，计左侧部分
+    for (const auto&[fst, snd] : iv) {
+        if (fst >= start) break;                              // 已达/超过 start，停止
+        if (snd <= start) acc += snd - fst;     // 完整保留段在左侧
+        else acc += start - fst;                              // 跨越 start，计左侧部分
     }
     return acc;
 }
@@ -71,8 +71,7 @@ std::vector<const Fragment*> orderBySequence(const std::vector<Fragment>& frags,
         if (f->index >= 0 && f->index <= maxIdx) used[f->index] = 1;
     }
     for (const Fragment& f : frags) {
-        const bool isUsed = (f.index >= 0 && f.index <= maxIdx) ? used[f.index] != 0 : false;
-        if (!isUsed) ordered.push_back(&f);
+        if (const bool isUsed = f.index >= 0 && f.index <= maxIdx ? used[f.index] != 0 : false; !isUsed) ordered.push_back(&f);
     }
     return ordered;
 }
@@ -108,15 +107,14 @@ bool isCollapsible(const Selection& selection, const Grid& grid) {
 
     // 整行/整列全删标记。
     std::vector<char> fullRow(rows, 0), fullCol(cols, 0);
-    for (int r = 0; r < rows; ++r) fullRow[r] = (removedInRow[r] == cols) ? 1 : 0;
-    for (int c = 0; c < cols; ++c) fullCol[c] = (removedInCol[c] == rows) ? 1 : 0;
+    for (int r = 0; r < rows; ++r) fullRow[r] = removedInRow[r] == cols ? 1 : 0;
+    for (int c = 0; c < cols; ++c) fullCol[c] = removedInCol[c] == rows ? 1 : 0;
 
     // 校验：每个被剔除单元必须落在某全删行或某全删列；否则出现“孤立”剔除，不可坍缩。
     for (const Cell& cell : grid.cells()) {
         if (!isRemoved(cell)) continue;
-        const bool inFullRow = (cell.row >= 0 && cell.row < rows && fullRow[cell.row]);
-        const bool inFullCol = (cell.col >= 0 && cell.col < cols && fullCol[cell.col]);
-        if (!inFullRow && !inFullCol) return false;
+        const bool inFullRow = cell.row >= 0 && cell.row < rows && fullRow[cell.row];
+        if (const bool inFullCol = cell.col >= 0 && cell.col < cols && fullCol[cell.col]; !inFullRow && !inFullCol) return false;
     }
     return true;
 }
@@ -159,8 +157,8 @@ Composition compose(const RegionSet& kept, const Sequence& sequence,
         xs.reserve(frags.size());
         ys.reserve(frags.size());
         for (const Fragment& f : frags) {
-            xs.push_back({f.region.left, f.region.right});
-            ys.push_back({f.region.top, f.region.bottom});
+            xs.emplace_back(f.region.left, f.region.right);
+            ys.emplace_back(f.region.top, f.region.bottom);
         }
         mergeIntervals(xs);
         mergeIntervals(ys);
@@ -212,7 +210,7 @@ Composition compose(const RegionSet& kept, const Sequence& sequence,
     // 复用 Sequence::build 的同一套 row/column-major + snake + reverse 逻辑（CUSTOM 无意义，按 ROW_MAJOR）。
     // slots[k] = 第 k 个被访问的输出槽线性序号（r*cols+c）；第 k 个块落入 slots[k]。
     const SortStrategy fillStrategy =
-        (params.mergeOrder.strategy == SortStrategy::CUSTOM) ? SortStrategy::ROW_MAJOR
+        params.mergeOrder.strategy == SortStrategy::CUSTOM ? SortStrategy::ROW_MAJOR
                                                              : params.mergeOrder.strategy;
     Sequence fill;
     fill.build(static_cast<std::size_t>(cols) * static_cast<std::size_t>(rows),

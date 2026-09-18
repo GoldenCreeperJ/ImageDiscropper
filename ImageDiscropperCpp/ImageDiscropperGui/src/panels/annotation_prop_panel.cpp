@@ -15,8 +15,6 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 
-#include <cmath>
-
 #include "util/path_qt_adapter.h"
 
 namespace idc::gui {
@@ -100,22 +98,22 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     connect(strokeSpin_, &QSpinBox::valueChanged, this, &AnnotationPropPanel::strokeChanged);
     connect(fillCheck_, &QCheckBox::toggled, this, &AnnotationPropPanel::fillChanged);
     connect(textEdit_, &QLineEdit::editingFinished,
-            this, [this]() { emit textChanged(textEdit_->text()); });
+            this, [this] { emit textChanged(textEdit_->text()); });
     connect(fontSpin_, &QSpinBox::valueChanged,
-            this, [this](int v) { emit fontSizeChanged(static_cast<double>(v)); });
+            this, [this](const int v) { emit fontSizeChanged(v); });
     // 变换区改动即生效（无「应用」按钮）：面板显示**绝对累积值**，故每个 spin 按其单轴把目标绝对值
     // 换算为相对基准 curObb* 的增量（缩放取比、旋转取差，其余两轴传恒等 1.0/0.0）再下发——只动本轴、
     // 不牵连其余两轴（避免 % 取整误差扰动）。因 curObb* 即当前底层绝对值，增量恰把该轴移到 spin 指定的
     // 目标绝对值，故连续编辑无漂移；提交后模型发 changed → syncFromModel 依最新累积值回显（不回弹）。
-    connect(scaleXSpin_, &QSpinBox::valueChanged, this, [this](int v) {
+    connect(scaleXSpin_, &QSpinBox::valueChanged, this, [this](const int v) {
         const double tx = v / 100.0;   // 目标绝对缩放
-        emit transformApplyRequested((std::fabs(curObbSx_) > 1e-9) ? (tx / curObbSx_) : 1.0, 1.0, 0.0);
+        emit transformApplyRequested(std::fabs(curObbSx_) > 1e-9 ? tx / curObbSx_ : 1.0, 1.0, 0.0);
     });
-    connect(scaleYSpin_, &QSpinBox::valueChanged, this, [this](int v) {
+    connect(scaleYSpin_, &QSpinBox::valueChanged, this, [this](const int v) {
         const double ty = v / 100.0;
-        emit transformApplyRequested(1.0, (std::fabs(curObbSy_) > 1e-9) ? (ty / curObbSy_) : 1.0, 0.0);
+        emit transformApplyRequested(1.0, std::fabs(curObbSy_) > 1e-9 ? ty / curObbSy_ : 1.0, 0.0);
     });
-    connect(rotateSpin_, &QSpinBox::valueChanged, this, [this](int v) {
+    connect(rotateSpin_, &QSpinBox::valueChanged, this, [this](const int v) {
         emit transformApplyRequested(1.0, 1.0, static_cast<double>(v) - curObbRot_);
     });
 
@@ -169,7 +167,7 @@ void AnnotationPropPanel::syncFromModel() {
 
 // 手柄拖拽进行中：把预览的**绝对**缩放系数/旋转角实时回显到变换区数值（blockSignals 防回环，绝不触发应用）。
 // 缩放 spin 范围已含负，故拖手柄越过对边翻转时数值会从正连续变小、穿过 0 进入负值（忠实反映底层）。
-void AnnotationPropPanel::setTransformPreview(const double sx, const double sy, const double rotateDeg) {
+void AnnotationPropPanel::setTransformPreview(const double sx, const double sy, const double rotateDeg) const {
     scaleXSpin_->blockSignals(true);
     scaleYSpin_->blockSignals(true);
     rotateSpin_->blockSignals(true);
@@ -212,8 +210,8 @@ void AnnotationPropPanel::onPickColor() {
 }
 
 // 依当前颜色刷新色块按钮背景（含 Alpha：rgba 背景 + 文案标注不透明度；浅色用深字、深色用浅字，保证可读）。
-void AnnotationPropPanel::updateSwatch() {
-    const QString fg = (color_.lightness() < 128) ? QStringLiteral("#fff") : QStringLiteral("#000");
+void AnnotationPropPanel::updateSwatch() const {
+    const QString fg = color_.lightness() < 128 ? QStringLiteral("#fff") : QStringLiteral("#000");
     // 用 rgba() 而非 name()（后者丢弃 alpha），使色块能预览半透明；文案回显 RGBA 分量。
     const QString bg = QStringLiteral("rgba(%1,%2,%3,%4)")
                            .arg(color_.red()).arg(color_.green()).arg(color_.blue()).arg(color_.alpha());

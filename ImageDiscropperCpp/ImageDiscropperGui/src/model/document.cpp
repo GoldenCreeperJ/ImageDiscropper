@@ -15,19 +15,19 @@ namespace idc::gui {
 Document::Document(QObject* parent) : QObject(parent) {}
 
 // 载入新图像：置原图与工作图，记录路径，清空选区。
-void Document::setImage(idc::core::Image img, QString path) {
+void Document::setImage(core::Image img, QString path) {
     original_ = img;             // 保留一份原始副本（供后续「重置预处理」用）。
     working_ = std::move(img);   // 新图初始无预处理，工作图即原图。
     preprocessed_ = false;       // 新图重置预处理标记。
     imagePath_ = std::move(path);
     hasRect_ = false;
-    rect_ = idc::engine::RectRegion{};
+    rect_ = engine::RectRegion{};
     emit imageChanged();
 }
 
 // 写回一次预处理结果：替换工作图并置「已预处理」标记（original_ 不变）。
 // 空图拒绝，避免画布/引擎拿到无效工作图。触发 imageChanged()（需重建预览底图）。
-void Document::setWorkingImage(idc::core::Image img) {
+void Document::setWorkingImage(core::Image img) {
     if (img.empty()) return;
     working_ = std::move(img);
     preprocessed_ = true;
@@ -44,19 +44,19 @@ void Document::resetPreprocess() {
 
 // 切换模式：L1/L2 由极性定义（L1≡keep、L2≡remove），切到二者时套用对应极性；
 // L3（网格）极性独立于模式，切入 L3 时**保留当前极性不变**（从 L2 进 L3 应沿用 remove）。发变更信号。
-void Document::setMode(const idc::engine::Tier t) {
+void Document::setMode(const engine::Tier t) {
     if (mode_ == t) return;
     mode_ = t;
     // L1≡保留框内(keep)、L2≡删除框内(remove)：切到 L1/L2 时套用其定义极性；
     // 切到 L3 不动极性——L3 极性独立，用户从 L2(remove) 进 L3 时期望极性保持 remove。
-    if (t == idc::engine::Tier::L1)
-        polarity_ = idc::engine::Polarity::KEEP;
-    else if (t == idc::engine::Tier::L2)
-        polarity_ = idc::engine::Polarity::REMOVE;
+    if (t == engine::Tier::L1)
+        polarity_ = engine::Polarity::KEEP;
+    else if (t == engine::Tier::L2)
+        polarity_ = engine::Polarity::REMOVE;
     // 合并重排为 L3 专属（Core runEngine 硬约束）：离开 L3 时若仍是重排，复位为坍缩，
     // 在模型层维持不变式，避免导出面板/引擎拿到非法的「非 L3 + 重排」组合。
-    if (t != idc::engine::Tier::L3 && layout_ == idc::engine::MergeLayout::REARRANGE)
-        layout_ = idc::engine::MergeLayout::COLLAPSE;
+    if (t != engine::Tier::L3 && layout_ == engine::MergeLayout::REARRANGE)
+        layout_ = engine::MergeLayout::COLLAPSE;
     emit changed();
 }
 
@@ -64,13 +64,13 @@ void Document::setMode(const idc::engine::Tier t) {
 // 语义耦合：L1（标准提取）＝保留框内(keep)、L2（反向剔除）＝删除框内(remove)，二者本质是
 // 同一交互的两种极性表述，故在 L1/L2 下切换极性会同步切换模式（keep→L1、remove→L2）；
 // L3（网格）的极性独立于模式，切换极性不改变 L3。
-void Document::setPolarity(const idc::engine::Polarity p) {
+void Document::setPolarity(const engine::Polarity p) {
     if (polarity_ == p) return;
     polarity_ = p;
     // L1/L2 与极性一一对应：切换极性即切换模式；L3 极性独立，模式保持不变。
-    if (mode_ == idc::engine::Tier::L1 || mode_ == idc::engine::Tier::L2) {
-        mode_ = (p == idc::engine::Polarity::REMOVE) ? idc::engine::Tier::L2
-                                                     : idc::engine::Tier::L1;
+    if (mode_ == engine::Tier::L1 || mode_ == engine::Tier::L2) {
+        mode_ = p == engine::Polarity::REMOVE ? engine::Tier::L2
+                                                     : engine::Tier::L1;
     }
     emit changed();
 }
@@ -92,7 +92,7 @@ void Document::setL2Sub(const L2Sub s) {
 // 设置选区矩形（原图像素坐标），标记已有选区。
 // 校验：拒绝退化矩形（宽或高 ≤ 0）——非法几何会让 Core 的切割/网格计算异常甚至崩溃，
 // 故在此统一兜底（所有写回路径共用），退化输入时保持上一次有效选区不变（A-0.1 输入校验）。
-void Document::setRect(const idc::engine::RectRegion& r) {
+void Document::setRect(const engine::RectRegion& r) {
     if (r.width() <= 0 || r.height() <= 0) return;
     rect_ = r;
     hasRect_ = true;
@@ -103,19 +103,19 @@ void Document::setRect(const idc::engine::RectRegion& r) {
 void Document::clearRect() {
     if (!hasRect_) return;
     hasRect_ = false;
-    rect_ = idc::engine::RectRegion{};
+    rect_ = engine::RectRegion{};
     emit changed();
 }
 
 // 追加一个多矩形（L2 MULTI_RECT）。校验同 setRect：拒绝退化矩形，避免 Core 切割/诱导网格异常。
-void Document::addRect(const idc::engine::RectRegion& r) {
+void Document::addRect(const engine::RectRegion& r) {
     if (r.width() <= 0 || r.height() <= 0) return;
     rects_.push_back(r);
     emit changed();
 }
 
 // 修改指定下标的多矩形；越界或退化输入均忽略（保持原列表不变）。
-void Document::updateRect(const std::size_t index, const idc::engine::RectRegion& r) {
+void Document::updateRect(const std::size_t index, const engine::RectRegion& r) {
     if (index >= rects_.size()) return;
     if (r.width() <= 0 || r.height() <= 0) return;
     if (rects_[index] == r) return;
@@ -158,7 +158,7 @@ void Document::setCellSize(const int w, const int h) {
 }
 
 // 设置 L3 余量策略（discard / keep-partial / pad）。
-void Document::setRemainder(const idc::engine::RemainderPolicy p) {
+void Document::setRemainder(const engine::RemainderPolicy p) {
     if (grid_.remainder == p) return;
     grid_.remainder = p;
     selectedCells_.clear(); // 余量策略变→边缘单元增删，选择集序号失效。
@@ -179,7 +179,7 @@ void Document::setDerivedGridSize(const int rows, const int cols) {
 void Document::convertRectToGrid() {
     // 源矩形：优先用单选区 rect_；若无有效单选区但多矩形列表非空（MULTI_RECT），
     // 则取全部矩形的包围盒（min 左上 / max 右下）作为网格单元基准（纯字段派生，非切割几何）。
-    idc::engine::RectRegion src = rect_;
+    engine::RectRegion src = rect_;
     if ((!hasRect_ || src.width() <= 0 || src.height() <= 0) && !rects_.empty()) {
         int l = rects_.front().left, t = rects_.front().top;
         int r = rects_.front().right, b = rects_.front().bottom;
@@ -187,7 +187,7 @@ void Document::convertRectToGrid() {
             l = std::min(l, rr.left);  t = std::min(t, rr.top);
             r = std::max(r, rr.right); b = std::max(b, rr.bottom);
         }
-        src = idc::engine::RectRegion(l, t, r, b);
+        src = engine::RectRegion(l, t, r, b);
     }
     // 无有效矩形（或退化）时不转换，避免产生非法单元尺寸（Core Grid::build 要求正尺寸）。
     if (src.width() <= 0 || src.height() <= 0) return;
@@ -196,9 +196,9 @@ void Document::convertRectToGrid() {
     grid_.cellWidth = src.width();
     grid_.cellHeight = src.height();
     selectedCells_.clear();                        // 进入 L3 后由用户重新点选。
-    mode_ = idc::engine::Tier::L3;
+    mode_ = engine::Tier::L3;
     // L3 默认保留选中；空选择集在 Core 会推导为全选，故 keep 下保留全图（避免 remove+全选→剔除全部报 E-7）。
-    polarity_ = idc::engine::Polarity::KEEP;
+    polarity_ = engine::Polarity::KEEP;
     emit changed();
 }
 
@@ -245,8 +245,7 @@ void Document::clearCells() {
 // 单击切换某单元：已选则移除、未选则追加到末尾（CUSTOM 下追加顺序即自定义序，FR-L3.5）。
 void Document::toggleCell(const int index) {
     if (index < 0) return;
-    const auto it = std::find(selectedCells_.begin(), selectedCells_.end(), index);
-    if (it != selectedCells_.end()) {
+    if (const auto it = std::find(selectedCells_.begin(), selectedCells_.end(), index); it != selectedCells_.end()) {
         selectedCells_.erase(it);
     } else {
         selectedCells_.push_back(index);
@@ -288,7 +287,7 @@ void Document::moveCellOrder(const int from, const int to) {
 }
 
 // 设置排序策略（row-major / column-major / custom）。
-void Document::setSortStrategy(const idc::engine::SortStrategy s) {
+void Document::setSortStrategy(const engine::SortStrategy s) {
     if (order_.strategy == s) return;
     order_.strategy = s;
     emit changed();
@@ -309,7 +308,7 @@ void Document::setSortSnake(const bool on) {
 }
 
 // 设置导出模式与布局（分离 / 坍缩 / 重排）。
-void Document::setEmit(const idc::engine::EmitMode mode, const idc::engine::MergeLayout layout) {
+void Document::setEmit(const engine::EmitMode mode, const engine::MergeLayout layout) {
     if (emitMode_ == mode && layout_ == layout) return;
     emitMode_ = mode;
     layout_ = layout;
@@ -317,7 +316,7 @@ void Document::setEmit(const idc::engine::EmitMode mode, const idc::engine::Merg
 }
 
 // 设置导出格式。
-void Document::setFormat(const idc::engine::ExportFormat f) {
+void Document::setFormat(const engine::ExportFormat f) {
     if (format_ == f) return;
     format_ = f;
     emit changed();
@@ -368,14 +367,14 @@ void Document::setMergeCellSize(const int w, const int h) {
 }
 
 // 设置重排空位/余量填充色（默认透明）。
-void Document::setPadColor(const idc::core::Color c) {
+void Document::setPadColor(const core::Color c) {
     if (padColor_ == c) return;
     padColor_ = c;
     emit changed();
 }
 
 // 设置重排填充策略（仅行/列优先；CUSTOM 无意义，Core compose 按行优先处理）。
-void Document::setMergeOrderStrategy(const idc::engine::SortStrategy s) {
+void Document::setMergeOrderStrategy(const engine::SortStrategy s) {
     if (mergeOrder_.strategy == s) return;
     mergeOrder_.strategy = s;
     emit changed();
@@ -396,35 +395,35 @@ void Document::setMergeOrderSnake(const bool on) {
 }
 
 // 依当前模式/子选项构建切割配置（枚举映射，无几何计算）。
-idc::engine::CutConfig Document::buildCutConfig() const {
-    idc::engine::CutConfig c;
+engine::CutConfig Document::buildCutConfig() const {
+    engine::CutConfig c;
     c.tier = mode_;
     c.polarity = polarity_;
     c.rect = rect_;
 
     // 生成器映射：L1 形状 / L2 子功能 → Core CutGenerator；L3 → GRID（第二阶段细化）。
     switch (mode_) {
-        case idc::engine::Tier::L1:
+        case engine::Tier::L1:
             switch (l1Shape_) {
-                case L1Shape::RECT:  c.generator = idc::engine::CutGenerator::RECT; break;
-                case L1Shape::HBAND: c.generator = idc::engine::CutGenerator::HORIZONTAL_LINE; break;
-                case L1Shape::VBAND: c.generator = idc::engine::CutGenerator::VERTICAL_LINE; break;
+                case L1Shape::RECT:  c.generator = engine::CutGenerator::RECT; break;
+                case L1Shape::HBAND: c.generator = engine::CutGenerator::HORIZONTAL_LINE; break;
+                case L1Shape::VBAND: c.generator = engine::CutGenerator::VERTICAL_LINE; break;
             }
             break;
-        case idc::engine::Tier::L2:
+        case engine::Tier::L2:
             switch (l2Sub_) {
-                case L2Sub::CROSS: c.generator = idc::engine::CutGenerator::RECT; break;
-                case L2Sub::HLINE: c.generator = idc::engine::CutGenerator::HORIZONTAL_LINE; break;
-                case L2Sub::VLINE: c.generator = idc::engine::CutGenerator::VERTICAL_LINE; break;
+                case L2Sub::CROSS: c.generator = engine::CutGenerator::RECT; break;
+                case L2Sub::HLINE: c.generator = engine::CutGenerator::HORIZONTAL_LINE; break;
+                case L2Sub::VLINE: c.generator = engine::CutGenerator::VERTICAL_LINE; break;
                 case L2Sub::MULTI_RECT:
                     // 多矩形并集：搬运矩形列表，Core 对每个矩形诱导十字带后取并集（方案 A）。
-                    c.generator = idc::engine::CutGenerator::MULTI_RECT;
+                    c.generator = engine::CutGenerator::MULTI_RECT;
                     c.rects = rects_;
                     break;
             }
             break;
-        case idc::engine::Tier::L3:
-            c.generator = idc::engine::CutGenerator::GRID;
+        case engine::Tier::L3:
+            c.generator = engine::CutGenerator::GRID;
             c.grid = grid_;   // 网格参数（基准点 + 单元尺寸 + 余量策略）。
             break;
     }
@@ -432,8 +431,8 @@ idc::engine::CutConfig Document::buildCutConfig() const {
 }
 
 // 构建一次完整作业的配置（供 runEngine / exportImage 使用）。
-idc::engine::EngineConfig Document::buildEngineConfig() const {
-    idc::engine::EngineConfig cfg;
+engine::EngineConfig Document::buildEngineConfig() const {
+    engine::EngineConfig cfg;
 
     // 源尺寸：以工作图实际尺寸为准（第一阶段无预处理，等于原图尺寸）。
     cfg.source.width = width();
@@ -446,7 +445,7 @@ idc::engine::EngineConfig Document::buildEngineConfig() const {
     // 自动推导选择区（engine.cpp：「显式 selectedCells 优先，否则按生成器几何自动推导」）。
     // 若不加模式门控，从 L3 切回 L1/L2 时残留的 L3 单元序号会被套用到形状不同的诱导网格上，
     // 使保留集算错甚至为空、遮罩消失。故此处按模式门控，维持「L1/L2 selectedCells 恒空」不变式。
-    cfg.selectedCells = (mode_ == idc::engine::Tier::L3) ? selectedCells_ : std::vector<int>{};
+    cfg.selectedCells = mode_ == engine::Tier::L3 ? selectedCells_ : std::vector<int>{};
 
     // 排序策略（FR-L3.5）：row-major / column-major / reverse / snake / custom。
     cfg.order = order_;
@@ -473,7 +472,7 @@ idc::engine::EngineConfig Document::buildEngineConfig() const {
 
 // 反向映射（G-13 配置加载 / G-12 撤销重做共用）：把 EngineConfig 搬回 Document 状态，与 buildEngineConfig 互逆。
 // 直接改私有字段（不走各 setter）后只发一次 changed()，避免逐字段多次触发刷新；图像/source 尺寸不还原。
-void Document::applyEngineConfig(const idc::engine::EngineConfig& cfg) {
+void Document::applyEngineConfig(const engine::EngineConfig& cfg) {
     // ---- 模式与极性 ----
     mode_ = cfg.cut.tier;
     polarity_ = cfg.cut.polarity;
@@ -481,22 +480,22 @@ void Document::applyEngineConfig(const idc::engine::EngineConfig& cfg) {
     // ---- 生成器 + tier → L1 形状 / L2 子功能（逆向 buildCutConfig 的映射）----
     // L3 恒为 GRID、无子选项；未知生成器回退到各模式默认值，保证枚举有效。
     switch (cfg.cut.tier) {
-        case idc::engine::Tier::L1:
+        case engine::Tier::L1:
             switch (cfg.cut.generator) {
-                case idc::engine::CutGenerator::HORIZONTAL_LINE: l1Shape_ = L1Shape::HBAND; break;
-                case idc::engine::CutGenerator::VERTICAL_LINE:   l1Shape_ = L1Shape::VBAND; break;
+                case engine::CutGenerator::HORIZONTAL_LINE: l1Shape_ = L1Shape::HBAND; break;
+                case engine::CutGenerator::VERTICAL_LINE:   l1Shape_ = L1Shape::VBAND; break;
                 default:                                         l1Shape_ = L1Shape::RECT;  break;
             }
             break;
-        case idc::engine::Tier::L2:
+        case engine::Tier::L2:
             switch (cfg.cut.generator) {
-                case idc::engine::CutGenerator::HORIZONTAL_LINE: l2Sub_ = L2Sub::HLINE;      break;
-                case idc::engine::CutGenerator::VERTICAL_LINE:   l2Sub_ = L2Sub::VLINE;      break;
-                case idc::engine::CutGenerator::MULTI_RECT:      l2Sub_ = L2Sub::MULTI_RECT; break;
+                case engine::CutGenerator::HORIZONTAL_LINE: l2Sub_ = L2Sub::HLINE;      break;
+                case engine::CutGenerator::VERTICAL_LINE:   l2Sub_ = L2Sub::VLINE;      break;
+                case engine::CutGenerator::MULTI_RECT:      l2Sub_ = L2Sub::MULTI_RECT; break;
                 default:                                         l2Sub_ = L2Sub::CROSS;      break;
             }
             break;
-        case idc::engine::Tier::L3:
+        case engine::Tier::L3:
             break; // 网格模式无 L1/L2 子选项。
     }
 
@@ -529,8 +528,8 @@ void Document::applyEngineConfig(const idc::engine::EngineConfig& cfg) {
 
     // ---- 维持模型不变式：合并重排为 L3 专属（Core runEngine 硬约束）----
     // 载入/还原出「非 L3 + 重排」的非法组合时复位为坍缩，与 setMode 的守卫一致，避免引擎拿到非法配置。
-    if (mode_ != idc::engine::Tier::L3 && layout_ == idc::engine::MergeLayout::REARRANGE)
-        layout_ = idc::engine::MergeLayout::COLLAPSE;
+    if (mode_ != engine::Tier::L3 && layout_ == engine::MergeLayout::REARRANGE)
+        layout_ = engine::MergeLayout::COLLAPSE;
 
     emit changed();
 }

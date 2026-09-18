@@ -91,8 +91,8 @@ public:
     // 形状在旋转时彻底变形。obbPreviewTransform 只算不改状态供拖拽预览；applyObbTransform 写入与之完全
     // 一致的结果，保证「所见即所得」（预览帧与释放后 Core 提交帧逐像素一致）。
     AffineTransform obbPreviewTransform(const double sx, const double sy, const double degrees) const {
-        const BoundingBox b = bounds();   // 局部（未变换）轴对齐包围盒
-        const core::Point2D cl{b.x + b.width / 2.0, b.y + b.height / 2.0};
+        const auto [x, y, width, height] = bounds();   // 局部（未变换）轴对齐包围盒
+        const core::Point2D cl{x + width / 2.0, y + height / 2.0};
         // 1) 局部缩放：绕局部盒中心沿形状自身轴缩放，右乘叠加到现有变换（不产生世界轴剪切）。
         AffineTransform out = xform_ * (AffineTransform::translation(cl.x, cl.y) *
                                         AffineTransform::scaling(sx, sy) *

@@ -11,7 +11,6 @@
 // ============================================================================
 #pragma once
 
-#include <QGraphicsPixmapItem>
 #include <QGraphicsRectItem>
 #include <QGraphicsScene>
 #include <QPixmap>
@@ -44,30 +43,30 @@ public:
     void clearAll();
 
     // 依 Core 结果刷新保留(绿)/删除(红)遮罩。
-    void updateMasks(const idc::engine::EngineResult& result);
+    void updateMasks(const engine::EngineResult& result);
     // 遮罩显隐（右键菜单「切换预览遮罩」）。
     void setMasksVisible(bool visible);
     bool masksVisible() const { return masksVisible_; }
 
     // 依 Core 切割线集合，判定选区哪几条边有内部贯穿切割线，下发给选区框绘制并允许直接拖动。
     // rect 为当前选区（原图像素）；切割线即选区边的贯穿延伸，与选区同为一个橙色图元（不双重表示）。
-    void updateCutLines(const idc::engine::CutLineSet& lines, const idc::engine::RectRegion& rect);
-    void clearCutLines();
+    void updateCutLines(const engine::CutLineSet& lines, const engine::RectRegion& rect) const;
+    void clearCutLines() const;
 
     // 依 Core 诱导网格刷新 L3 网格线（show=false 或非 L3 模式时清空）。
     // 网格线纯显示，与遮罩/选区解耦；单元区域均来自 Core Grid（A-0.1）。
     // 同时把网格下发给单元点选图元（L3 交互）并按 show 切换其显隐。
-    void updateGrid(const idc::engine::Grid& grid, bool show);
+    void updateGrid(const engine::Grid& grid, bool show);
     void clearGrid();
 
     // 仅刷新 L2 多矩形的诱导切割线（不动单元点选图元）：以橙色切割线样式画各矩形十字带
     // 并集的诱导线，受 cutLinesVisible_ 门控；不显示 picker（picker 会 grab 鼠标、阻断画布框选追加矩形）。
-    void updateMultiRectCutLines(const idc::engine::Grid& grid, bool show);
+    void updateMultiRectCutLines(const engine::Grid& grid, bool show);
 
     // 依 Document 的多矩形列表刷新可交互的橙色选区框（L2 MULTI_RECT）：每个矩形一个
     // SelectionRectItem（可整体移动 / 四角缩放 / 拖边微调），与单矩形选区体验一致。
     // 增量维护（按数量增删末位图元、逐个刷新几何），拖拽中跳过对正在拖图元的回设。
-    void updateMultiRects(const std::vector<idc::engine::RectRegion>& rects);
+    void updateMultiRects(const std::vector<engine::RectRegion>& rects);
     void clearMultiRects();
     // 多矩形选区框的手柄尺寸（随视图缩放换算，使手柄恒约 8 屏幕px）。
     void setMultiRectHandleSize(qreal sceneUnits);
@@ -77,7 +76,7 @@ public:
     void setActiveMultiRect(int index);
 
     // 依 Document 的选择集与排序策略刷新单元点选图元的高亮（L3）。
-    void updateCellSelection(const std::vector<int>& selected, idc::engine::SortStrategy strategy);
+    void updateCellSelection(const std::vector<int>& selected, engine::SortStrategy strategy) const;
     CellPickerItem* cellPickerItem() const { return pickerItem_; }
 
     // L3 框选命中查询：委托单元点选图元返回与场景矩形相交的单元序号（无图元时返回空）。
@@ -85,7 +84,7 @@ public:
     std::vector<int> cellsIntersecting(const QRectF& sceneRect) const;
 
     // 选区框：依 Document 的矩形显示；无选区时隐藏。
-    void syncSelection(const idc::engine::RectRegion& rect, bool hasRect);
+    void syncSelection(const engine::RectRegion& rect, bool hasRect) const;
     SelectionRectItem* selectionItem() const { return selItem_; }
     // 选区框是否正被用户拖拽（供上层在拖拽期间跳过回设/面板回同步）。
     bool isDraggingSelection() const { return selItem_ && selItem_->isDragging(); }
@@ -103,7 +102,7 @@ public:
     // 标注控制点手柄尺寸（随视图缩放换算，使其屏幕观感恒定）。
     void setAnnotationHandleSize(qreal sceneUnits);
     // 底图图层显隐（图层面板开关）：仅切换 base 图元可见性，不影响导出。
-    void setBaseVisible(bool on);
+    void setBaseVisible(bool on) const;
 
     // ---- 其余图层显隐（图层面板开关；遵循「隐藏图层=不可交互」）----
     // 网格线图层：门控 updateGrid 的 L3 灰色网格可见性（仅置标志，切换后由上层 refreshPreview 重建落地）。

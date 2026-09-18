@@ -12,7 +12,6 @@
 // ============================================================================
 #include "commands.h"
 
-#include <cstddef>
 #include <exception>
 #include <string>
 #include <vector>
@@ -32,8 +31,7 @@ std::string splitCommand(const std::vector<std::string>& args, std::vector<std::
         const std::string& t = args[i];
         if (!t.empty() && t.front() == '-') {
             // 全局取值选项（无 '=' 内联值时）会消费下一个 token，一并跳过。
-            const bool takesValue = (t == "--config" || t == "--save-config");
-            if (takesValue && t.find('=') == std::string::npos) ++i;
+            if (const bool takesValue = t == "--config" || t == "--save-config"; takesValue && t.find('=') == std::string::npos) ++i;
             continue;
         }
         tokens.assign(args.begin() + static_cast<std::ptrdiff_t>(i + 1), args.end());

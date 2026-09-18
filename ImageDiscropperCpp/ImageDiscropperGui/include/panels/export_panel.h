@@ -38,10 +38,10 @@ public:
     // 依 Core isCollapsible 结果启用/禁用「合并坍缩」项（不可行时切到重排）。
     void setCollapsible(bool collapsible);
     // 更新导出前信息文字（画布尺寸、保留块数等；由 MainWindow 回灌）。
-    void setPreviewInfo(const QString& text);
+    void setPreviewInfo(const QString& text) const;
     // 显示输出图像预览缩略图（G-11 / §4.6；由 MainWindow 按 Core Composition 渲染后回灌）。
     // 传入空 pixmap 表示当前无有效输出，标签回退到占位文案。
-    void setPreviewPixmap(const QPixmap& pm);
+    void setPreviewPixmap(const QPixmap& pm) const;
     // 回灌重排上下文（由 MainWindow 依 Core 引擎结果调用）：保留块数 + 网格单元尺寸。
     // 用于「自动 cols/rows（依格数开方）」与画布/单元尺寸不足的内联警告。
     void setRearrangeContext(int keptCount, int cellW, int cellH);
@@ -50,7 +50,7 @@ public:
     QString rearrangeWarning() const;
 
     // 反向同步「导出时烧录标注」复选框（由 MainWindow 依 AnnotationBridge::burnInEnabled 回灌；blockSignals 防回环）。
-    void setBurnInChecked(bool on);
+    void setBurnInChecked(bool on) const;
 
 signals:
     // 请求导出（MainWindow 负责路径校验与调用 EngineBridge）。
@@ -60,11 +60,11 @@ signals:
 
 private slots:
     void onModeChanged(int index);
-    void onFormatChanged(int index);
-    void onQualityChanged(int value);
-    void onNamingEdited();
-    void onDirEdited();   // 目录手动键入提交 → 写回 Document。
-    void onFileEdited();  // 文件手动键入提交 → 写回 Document。
+    void onFormatChanged(int index) const;
+    void onQualityChanged(int value) const;
+    void onNamingEdited() const;
+    void onDirEdited() const;   // 目录手动键入提交 → 写回 Document。
+    void onFileEdited() const;  // 文件手动键入提交 → 写回 Document。
     void onBrowseDir();
     void onBrowseFile();
     // 合并重排参数（FR-L3.7）：列/行、单元尺寸、填充色。
@@ -72,24 +72,24 @@ private slots:
     void onMergeCellEdited();   // 单元宽或高变更。
     void onPadColorClicked();   // 点击填充色按钮 → 弹色对话框。
     // 重排填充顺序（MergeOrder）：行/列优先、蛇形、倒序——与 L3 选择排序正交。
-    void onMergeSortChanged(int index);
-    void onMergeSnakeToggled(bool on);
-    void onMergeReverseToggled(bool on);
+    void onMergeSortChanged(int index) const;
+    void onMergeSnakeToggled(bool on) const;
+    void onMergeReverseToggled(bool on) const;
     void onAutoGridClicked();     // 「按格数自动」：依保留块数开方重算 cols/rows 并填入。
 
 private:
     // 依当前输出模式切换目录/文件字段的可用性与可见性。
-    void updateFieldVisibility();
+    void updateFieldVisibility() const;
     // 依当前格式返回保存对话框的过滤器字符串。
     QString saveFilter() const;
     // 依 Document 的 padColor 更新填充色按钮的背景色块。
-    void updatePadColorSwatch();
+    void updatePadColorSwatch() const;
     // 依 Core 坍缩可行性与 Document 模式刷新各输出模式项可用性（坍缩依可行性、重排仅 L3）。
-    void refreshModeItemStates();
+    void refreshModeItemStates() const;
     // 依保留块数开方计算 cols/rows 并填入 spinbox（未手动改过时）。
     void applyAutoGrid();
     // 重算并显示重排内联警告（红字）。
-    void updateRearrangeWarning();
+    void updateRearrangeWarning() const;
 
     Document* doc_{nullptr};
 

@@ -7,8 +7,6 @@
 // ============================================================================
 #include "util/annotation_qt_painter.h"
 
-#include <QBrush>
-#include <QFont>
 #include <QPainter>
 #include <QPen>
 
@@ -19,16 +17,16 @@
 namespace idc::gui {
 
 void paintAnnotation(QPainter& painter,
-                     const idc::annotation::Annotation& ann,
+                     const annotation::Annotation& ann,
                      const QPainterPath& worldDrawPath,
-                     const idc::geometry::AffineTransform& textXf) {
+                     const geometry::AffineTransform& textXf) {
     if (!ann.shape) return;
     painter.setRenderHint(QPainter::Antialiasing, true);
     const QColor color = toQColor(ann.color);
 
     // 文字：Core TextShape 的 toPath 仅给矩形边界，这里直接绘真实字形（渲染关注点）。
-    if (ann.shapeType == idc::geometry::ShapeType::TEXT) {
-        const auto* ts = dynamic_cast<const idc::geometry::TextShape*>(ann.shape.get());
+    if (ann.shapeType == geometry::ShapeType::TEXT) {
+        const auto* ts = dynamic_cast<const geometry::TextShape*>(ann.shape.get());
         if (!ts) return;
         painter.save();
         // 字形在**局部坐标**绘制，套用有效世界变换（含拖拽预览）——旋转/缩放/翻转由 QPainter 矢量完成，
@@ -47,7 +45,7 @@ void paintAnnotation(QPainter& painter,
     // 非文字：描边（+ 可选填充）调用方给出的世界坐标路径。
     if (worldDrawPath.isEmpty()) return;
     QPen pen(color);
-    pen.setWidthF(static_cast<qreal>(ann.strokeWidth));   // 世界单位线宽，随 painter 变换缩放到设备
+    pen.setWidthF(ann.strokeWidth);   // 世界单位线宽，随 painter 变换缩放到设备
     pen.setJoinStyle(Qt::RoundJoin);
     pen.setCapStyle(Qt::RoundCap);
     painter.setPen(pen);

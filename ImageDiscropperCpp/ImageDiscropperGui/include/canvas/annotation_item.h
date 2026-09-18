@@ -32,7 +32,7 @@ public:
     explicit AnnotationItem(QGraphicsItem* parent = nullptr);
 
     // 载入一份标注拷贝并重建渲染路径（几何来自 Core Shape::toPath）。
-    void setAnnotation(const idc::annotation::Annotation& ann);
+    void setAnnotation(const annotation::Annotation& ann);
 
     // 选中态：绘制虚线高亮框 + 控制点，且允许被拖动平移。
     void setSelectedState(bool on);
@@ -79,13 +79,13 @@ private:
         QPointF rotate;      // 旋转手柄（顶边中点外推）
         QPointF center;      // OBB 中心
     };
-    ObbFrame computeObb(const idc::geometry::AffineTransform& xf) const;
+    ObbFrame computeObb(const geometry::AffineTransform& xf) const;
     Handle hitHandle(const QPointF& scenePos, const ObbFrame& f) const;   // 命中哪个手柄（半径 handleSize_）
     void beginHandleDrag(Handle h, const QPointF& scenePos);            // 进入手柄拖拽：捕获起点参考
     void updateHandleDrag(const QPointF& scenePos);                      // 拖拽：算 sx/sy/rot 预览参数
     void updatePreviewBounds();                                          // 按预览形状扩展 bounds_（避免裁剪）
 
-    idc::annotation::Annotation ann_;   // 标注拷贝（几何 + 样式）
+    annotation::Annotation ann_;   // 标注拷贝（几何 + 样式）
     QPainterPath path_;                 // 缓存的矢量路径（Shape::worldPath 翻译而来）
     QRectF bounds_{};                   // path_ 包围盒 + 线宽/手柄余量
 

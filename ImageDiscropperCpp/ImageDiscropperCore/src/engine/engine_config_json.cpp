@@ -136,9 +136,9 @@ int hex2(const std::string& s, const std::size_t pos, const int fallback) {
     for (int i = 0; i < 2; ++i) {
         const char c = s[pos + static_cast<std::size_t>(i)];
         v <<= 4;
-        if (c >= '0' && c <= '9') v |= (c - '0');
-        else if (c >= 'a' && c <= 'f') v |= (c - 'a' + 10);
-        else if (c >= 'A' && c <= 'F') v |= (c - 'A' + 10);
+        if (c >= '0' && c <= '9') v |= c - '0';
+        else if (c >= 'a' && c <= 'f') v |= c - 'a' + 10;
+        else if (c >= 'A' && c <= 'F') v |= c - 'A' + 10;
         else return fallback;
     }
     return v;
@@ -171,7 +171,7 @@ const json& at(const json& obj, const char* key) {
     static const json kNull = nullptr;
     if (!obj.is_object()) return kNull;
     const auto it = obj.find(key);
-    return (it == obj.end()) ? kNull : *it;
+    return it == obj.end() ? kNull : *it;
 }
 
 int jInt(const json& v, const int def) {
@@ -253,7 +253,7 @@ bool preprocessFromJson(const json& v, preprocess::PreprocessConfig& out) {
     if (op == "split") { SplitOp s; s.mask = jStr(at(v, "mask"), "111"); out = s; return true; }
     if (op == "invert") { InvertOp s; s.mask = jStr(at(v, "mask"), "111"); out = s; return true; }
     if (op == "rotate") { RotateOp s; s.angle = jInt(at(v, "deg"), 0); out = s; return true; }
-    if (op == "flip") { FlipOp s; s.horizontal = (jStr(at(v, "axis"), "horizontal") == "horizontal"); out = s; return true; }
+    if (op == "flip") { FlipOp s; s.horizontal = jStr(at(v, "axis"), "horizontal") == "horizontal"; out = s; return true; }
     return false;
 }
 
@@ -338,11 +338,9 @@ bool engineConfigFromJson(const json& value, EngineConfig& out) {
 
     // preprocess。
     out.preprocess.clear();
-    const json& pre = at(value, "preprocess");
-    if (pre.is_array()) {
+    if (const json& pre = at(value, "preprocess"); pre.is_array()) {
         for (const json& step : pre) {
-            preprocess::PreprocessConfig cfg;
-            if (preprocessFromJson(step, cfg)) out.preprocess.add(cfg);
+            if (preprocess::PreprocessConfig cfg; preprocessFromJson(step, cfg)) out.preprocess.add(cfg);
         }
     }
 
@@ -354,8 +352,7 @@ bool engineConfigFromJson(const json& value, EngineConfig& out) {
     const json& params = at(cut, "params");
     if (out.cut.generator == CutGenerator::MULTI_RECT) {
         out.cut.rects.clear();
-        const json& rs = at(params, "rects");
-        if (rs.is_array())
+        if (const json& rs = at(params, "rects"); rs.is_array())
             for (const json& r : rs) out.cut.rects.push_back(rectFromJson(r));
     } else if (out.cut.generator == CutGenerator::GRID) {
         out.cut.grid = gridFromJson(params);
@@ -365,8 +362,7 @@ bool engineConfigFromJson(const json& value, EngineConfig& out) {
 
     // select。
     out.selectedCells.clear();
-    const json& sel = at(value, "select");
-    if (sel.is_array())
+    if (const json& sel = at(value, "select"); sel.is_array())
         for (const json& s : sel) out.selectedCells.push_back(jInt(s, 0));
 
     // order。
@@ -390,8 +386,7 @@ bool engineConfigFromJson(const json& value, EngineConfig& out) {
     out.emitParams.cellHeight = jsonToOptInt(at(merge, "cellHeight"));
     // 兼容 §9 示例的 "cellSize"：{width,height} / {w,h} / [w,h] 三种写法。
     if (!out.emitParams.cellWidth && !out.emitParams.cellHeight) {
-        const json& cs = at(merge, "cellSize");
-        if (cs.is_array() && cs.size() >= 2) {
+        if (const json& cs = at(merge, "cellSize"); cs.is_array() && cs.size() >= 2) {
             out.emitParams.cellWidth = jInt(cs[0], 0);
             out.emitParams.cellHeight = jInt(cs[1], 0);
         } else if (cs.is_object()) {

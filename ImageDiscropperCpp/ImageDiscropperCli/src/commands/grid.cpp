@@ -1,3 +1,5 @@
+
+
 // ============================================================================
 // 文件：src/commands/grid.cpp
 // 作用：实现 cmdGrid——L3 网格分割模式（终稿 §4.4 / guideline §4.2.3）的命令行薄壳。
@@ -21,7 +23,6 @@
 // ============================================================================
 #include "commands.h"
 
-#include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
@@ -57,10 +58,10 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     std::string err;
 
     // --- §5.3 第 5 步（提前解析 --sort：第 4 步的选择来源互斥判定依赖它）。---
-    engine::SortStrategy strategy = engine::SortStrategy::ROW_MAJOR;
+    auto strategy = engine::SortStrategy::ROW_MAJOR;
     if (args.has("--sort") && !parseSort(args.get("--sort"), strategy, err)) return argError(err);
     config.order.strategy = strategy;
-    const bool custom = (strategy == engine::SortStrategy::CUSTOM);
+    const bool custom = strategy == engine::SortStrategy::CUSTOM;
 
     // --- §5.3 第 4 步：选择来源互斥（--keep / --remove / --order 三者的合法组合）。---
     const bool hasKeep = args.has("--keep");
@@ -126,7 +127,7 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
         config.emitParams.rows = rows; // 画布行数（单元数，非像素）
         // 重排填充顺序（与选择排序 --sort 正交）：--merge-sort 行/列优先，--merge-decorate 蛇形/倒序。
         // --sort 决定「块的先后列表」，--merge-sort/--merge-decorate 决定「该列表如何铺进输出画布」。
-        engine::SortStrategy msort = engine::SortStrategy::ROW_MAJOR;
+        auto msort = engine::SortStrategy::ROW_MAJOR;
         if (args.has("--merge-sort")) {
             if (!parseSort(args.get("--merge-sort"), msort, err)) return argError(err);
             if (msort == engine::SortStrategy::CUSTOM)
@@ -186,10 +187,10 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     if (grid.cellCount() == 0)
         return argError("网格未产生任何单元",
                         "请减小 --grid 的单元尺寸，或用 --margin keep-partial/pad 保留跨界的残缺单元");
-    for (const auto& rc : chosen) {
-        const engine::Cell* cell = grid.cellAt(rc.first, rc.second);
+    for (const auto&[fst, snd] : chosen) {
+        const engine::Cell* cell = grid.cellAt(fst, snd);
         if (cell == nullptr)
-            return argError("单元格 (" + std::to_string(rc.first) + "," + std::to_string(rc.second) +
+            return argError("单元格 (" + std::to_string(fst) + "," + std::to_string(snd) +
                                 ") 越界",
                             "当前网格为 " + std::to_string(grid.rowCount()) + " 行 × " +
                                 std::to_string(grid.colCount()) + " 列（行列号从 0 起）");

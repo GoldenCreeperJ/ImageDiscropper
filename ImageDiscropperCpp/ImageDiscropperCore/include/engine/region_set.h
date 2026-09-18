@@ -12,7 +12,6 @@
 #pragma once
 
 #include <algorithm>
-#include <cstddef>
 #include <vector>
 
 #include "engine/region.h"

@@ -10,7 +10,6 @@
 // ============================================================================
 #include "engine/engine.h"
 
-#include <cstddef>
 #include <vector>
 
 namespace idc::engine {
@@ -25,7 +24,7 @@ namespace {
 //   GRID           → 无显式选择时默认全选（配合极性；L3 通常由 selectedCells 覆盖）。
 std::vector<int> deriveSelection(const CutConfig& cut, const Grid& grid) {
     std::vector<int> S;
-    const bool remove = (cut.polarity == Polarity::REMOVE);
+    const bool remove = cut.polarity == Polarity::REMOVE;
 
     // 单元 x 跨度是否落在 [x1,x2) 内（列带判定）；y 跨度是否落在 [y1,y2) 内（行带判定）。
     const auto inColBand = [](const Cell& c, const RectRegion& r) {
@@ -180,8 +179,8 @@ EngineResult runEngine(const core::Image& image, const EngineConfig& config) {
 
     // 布局决策 +「仅 L3 可重排」限制（重排是 L3 网格的专属合成方式，§5.3）。
     CompositionParams emitParams = config.emitParams;
-    const bool isL3 = (config.cut.tier == Tier::L3);
-    const bool merged = (emitParams.mode == EmitMode::MERGED);
+    const bool isL3 = config.cut.tier == Tier::L3;
+    const bool merged = emitParams.mode == EmitMode::MERGED;
     // 显式选择重排但非 L3 → 直接报错（不静默改布局）。
     if (merged && emitParams.layout == MergeLayout::REARRANGE && !isL3) {
         result.error = "合并重排仅 L3 网格模式支持：请改用合并坍缩或分离导出";

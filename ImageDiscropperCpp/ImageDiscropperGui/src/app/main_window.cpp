@@ -13,22 +13,18 @@
 #include <string>
 #include <utility>
 
-#include <QAbstractSpinBox>
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
 #include <QComboBox>
 #include <QFileDialog>
-#include <QHBoxLayout>
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
-#include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QProgressDialog>
-#include <QScrollArea>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTabWidget>
@@ -163,7 +159,7 @@ void MainWindow::buildMenus() {
     aSaveCfg->setToolTip(QStringLiteral("把当前切割/排序/导出参数存为 JSON 配置文件，可复用于同尺寸图像。"));
     connect(aSaveCfg, &QAction::triggered, this, &MainWindow::onSaveConfig);
     mFile->addSeparator();
-    QAction* aExit = mFile->addAction(QStringLiteral("退出(&X)"));
+    const QAction* aExit = mFile->addAction(QStringLiteral("退出(&X)"));
     connect(aExit, &QAction::triggered, this, &QWidget::close);
 
     // ---- 编辑（全局撤销/重做 G-12：上下文路由，复用 Core HistoryManager）----
@@ -183,26 +179,26 @@ void MainWindow::buildMenus() {
 
     // ---- 图像（预处理 FR-1 / G-3：旋转/翻转/黑白/反色/重置；完整控件见右侧「图像」页）----
     QMenu* mImage = menuBar()->addMenu(QStringLiteral("图像(&I)"));
-    QAction* aRotL = mImage->addAction(QStringLiteral("左转 90°"));
+    const QAction* aRotL = mImage->addAction(QStringLiteral("左转 90°"));
     connect(aRotL, &QAction::triggered, this, [this] { onRotate(-90); });
-    QAction* aRotR = mImage->addAction(QStringLiteral("右转 90°"));
+    const QAction* aRotR = mImage->addAction(QStringLiteral("右转 90°"));
     connect(aRotR, &QAction::triggered, this, [this] { onRotate(90); });
-    QAction* aRot180 = mImage->addAction(QStringLiteral("旋转 180°"));
+    const QAction* aRot180 = mImage->addAction(QStringLiteral("旋转 180°"));
     connect(aRot180, &QAction::triggered, this, [this] { onRotate(180); });
     mImage->addSeparator();
-    QAction* aFlipH = mImage->addAction(QStringLiteral("水平翻转"));
+    const QAction* aFlipH = mImage->addAction(QStringLiteral("水平翻转"));
     connect(aFlipH, &QAction::triggered, this, [this] { onFlip(true); });
-    QAction* aFlipV = mImage->addAction(QStringLiteral("垂直翻转"));
+    const QAction* aFlipV = mImage->addAction(QStringLiteral("垂直翻转"));
     connect(aFlipV, &QAction::triggered, this, [this] { onFlip(false); });
     mImage->addSeparator();
-    QAction* aGray = mImage->addAction(QStringLiteral("黑白"));
+    const QAction* aGray = mImage->addAction(QStringLiteral("黑白"));
     connect(aGray, &QAction::triggered, this, &MainWindow::onGray);
-    QAction* aInvert = mImage->addAction(QStringLiteral("反色（全通道）"));
+    const QAction* aInvert = mImage->addAction(QStringLiteral("反色（全通道）"));
     connect(aInvert, &QAction::triggered, this, [this] { onInvert(true, true, true); });
     mImage->addSeparator();
-    QAction* aResetPre = mImage->addAction(QStringLiteral("重置预处理"));
+    const QAction* aResetPre = mImage->addAction(QStringLiteral("重置预处理"));
     connect(aResetPre, &QAction::triggered, this, &MainWindow::onResetPreprocess);
-    QAction* aImagePanel = mImage->addAction(QStringLiteral("图像处理面板（缩放/尺寸/色道）…"));
+    const QAction* aImagePanel = mImage->addAction(QStringLiteral("图像处理面板（缩放/尺寸/色道）…"));
     connect(aImagePanel, &QAction::triggered, this, [this] {
         if (rightTabs_ && imagePanel_) rightTabs_->setCurrentWidget(imagePanel_);
     });
@@ -211,18 +207,18 @@ void MainWindow::buildMenus() {
     // 标注撤销/重做复用 Core AnnotationLayer 内建分层快照；快捷键 Ctrl+Z/Y 已统一交给编辑菜单
     // （上下文路由：标注上下文时自动转发到此处），故本菜单项不再绑定快捷键，避免冲突。
     QMenu* mAnno = menuBar()->addMenu(QStringLiteral("标注(&A)"));
-    QAction* aAnnoUndo = mAnno->addAction(QStringLiteral("撤销标注(&U)"));
+    const QAction* aAnnoUndo = mAnno->addAction(QStringLiteral("撤销标注(&U)"));
     connect(aAnnoUndo, &QAction::triggered, this, &MainWindow::onAnnoUndo);
-    QAction* aAnnoRedo = mAnno->addAction(QStringLiteral("重做标注(&R)"));
+    const QAction* aAnnoRedo = mAnno->addAction(QStringLiteral("重做标注(&R)"));
     connect(aAnnoRedo, &QAction::triggered, this, &MainWindow::onAnnoRedo);
     mAnno->addSeparator();
     QAction* aAnnoDel = mAnno->addAction(QStringLiteral("删除选中标注(&D)"));
     aAnnoDel->setToolTip(QStringLiteral("删除当前选中的标注（或按 Delete 键）。"));
     connect(aAnnoDel, &QAction::triggered, this, &MainWindow::onAnnoDeleteSelected);
-    QAction* aAnnoClear = mAnno->addAction(QStringLiteral("清除全部标注(&C)"));
+    const QAction* aAnnoClear = mAnno->addAction(QStringLiteral("清除全部标注(&C)"));
     connect(aAnnoClear, &QAction::triggered, this, &MainWindow::onAnnoClearAll);
     mAnno->addSeparator();
-    QAction* aAnnoProp = mAnno->addAction(QStringLiteral("标注属性…"));
+    const QAction* aAnnoProp = mAnno->addAction(QStringLiteral("标注属性…"));
     connect(aAnnoProp, &QAction::triggered, this, [this] {
         if (rightTabs_ && annoPropPanel_) rightTabs_->setCurrentWidget(annoPropPanel_);
     });
@@ -238,15 +234,15 @@ void MainWindow::buildMenus() {
     QAction* aFit = mView->addAction(QStringLiteral("适应窗口"));
     aFit->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
     connect(aFit, &QAction::triggered, this, [this] { view_->fitToWindow(); });
-    QAction* aReset = mView->addAction(QStringLiteral("重置视图 (1:1)"));
+    const QAction* aReset = mView->addAction(QStringLiteral("重置视图 (1:1)"));
     connect(aReset, &QAction::triggered, this, [this] { view_->resetZoom(); });
     mView->addSeparator();
-    QAction* aMasks = mView->addAction(QStringLiteral("切换预览遮罩"));
+    const QAction* aMasks = mView->addAction(QStringLiteral("切换预览遮罩"));
     connect(aMasks, &QAction::triggered, this, &MainWindow::onToggleMasks);
 
     // ---- 帮助 ----
     QMenu* mHelp = menuBar()->addMenu(QStringLiteral("帮助(&H)"));
-    QAction* aUsage = mHelp->addAction(QStringLiteral("使用说明"));
+    const QAction* aUsage = mHelp->addAction(QStringLiteral("使用说明"));
     connect(aUsage, &QAction::triggered, this, [this] {
         QMessageBox::information(this, QStringLiteral("使用说明"),
             QStringLiteral("1) 文件→打开图像。\n"
@@ -257,7 +253,7 @@ void MainWindow::buildMenus() {
                            "6) 右侧「导出」页选择输出模式与路径，点击导出（Ctrl+S）。\n\n"
                            "完整操作手册见程序目录下的 USAGE.md（设计说明见 DESIGN.md）。"));
     });
-    QAction* aAbout = mHelp->addAction(QStringLiteral("关于"));
+    const QAction* aAbout = mHelp->addAction(QStringLiteral("关于"));
     connect(aAbout, &QAction::triggered, this, [this] {
         QMessageBox::about(this, QStringLiteral("关于"),
             QStringLiteral("ImageDiscropper GUI %1\n基于统一 Grid-Selection-Emit 引擎（Core %2）。\n"
@@ -271,9 +267,9 @@ void MainWindow::buildToolbar() {
     QToolBar* tb = addToolBar(QStringLiteral("主工具栏"));
     tb->setMovable(false);
 
-    QAction* aOpen = tb->addAction(QStringLiteral("打开"));
+    const QAction* aOpen = tb->addAction(QStringLiteral("打开"));
     connect(aOpen, &QAction::triggered, this, &MainWindow::onOpen);
-    QAction* aExport = tb->addAction(QStringLiteral("导出"));
+    const QAction* aExport = tb->addAction(QStringLiteral("导出"));
     connect(aExport, &QAction::triggered, this, &MainWindow::onExport);
     tb->addSeparator();
     // 撤销/重做（G-12 / §4.7 工具栏按钮）：复用编辑菜单同一 QAction，共享 Ctrl+Z/Y 快捷键与动态启用态。
@@ -281,11 +277,11 @@ void MainWindow::buildToolbar() {
     if (aRedo_) tb->addAction(aRedo_);
     tb->addSeparator();
 
-    QAction* aZoomIn = tb->addAction(QStringLiteral("放大"));
+    const QAction* aZoomIn = tb->addAction(QStringLiteral("放大"));
     connect(aZoomIn, &QAction::triggered, this, [this] { view_->zoomIn(); });
-    QAction* aZoomOut = tb->addAction(QStringLiteral("缩小"));
+    const QAction* aZoomOut = tb->addAction(QStringLiteral("缩小"));
     connect(aZoomOut, &QAction::triggered, this, [this] { view_->zoomOut(); });
-    QAction* aFit = tb->addAction(QStringLiteral("适应"));
+    const QAction* aFit = tb->addAction(QStringLiteral("适应"));
     connect(aFit, &QAction::triggered, this, [this] { view_->fitToWindow(); });
     tb->addSeparator();
 
@@ -409,7 +405,7 @@ void MainWindow::rebuildPreviewPixmap() {
     scene_->setBaseImage(pm, preview_.scaleX, preview_.scaleY, doc_.width(), doc_.height());
     // 输出预览（G-11）专用小源图：把底图再降到最长边 ≤ kExportSrcMaxDim，使缩略图只在小图上 blit。
     const int longest = std::max(pm.width(), pm.height());
-    exportSrcPixmap_ = (longest > kExportSrcMaxDim)
+    exportSrcPixmap_ = longest > kExportSrcMaxDim
         ? pm.scaled(kExportSrcMaxDim, kExportSrcMaxDim, Qt::KeepAspectRatio, Qt::SmoothTransformation)
         : pm;
     // working（原图）→ 小源图 的放大系数（供 util::composeOutputThumbnail 把 Composition 源区域映射到小图坐标）。
@@ -429,8 +425,8 @@ void MainWindow::refreshPreview() {
         scene_->clearCutLines();
         scene_->clearGrid();
         scene_->clearMultiRects();
-        scene_->updateMasks(idc::engine::EngineResult{});
-        updateExportPreview(idc::engine::EngineResult{});
+        scene_->updateMasks(engine::EngineResult{});
+        updateExportPreview(engine::EngineResult{});
         stCount_->setText(QStringLiteral("保留块: 0"));
         stHint_->setText(QStringLiteral("请打开图像"));
         exportPanel_->setPreviewInfo(QStringLiteral("尚未加载图像。"));
@@ -440,10 +436,10 @@ void MainWindow::refreshPreview() {
     // L3 网格分割：网格由「基准点 + 单元尺寸 + 余量策略」定义，不依赖选区矩形，
     // 故在选区判定之前单独处理。网格线交给 GridLayer 画灰色虚线；橙色选区框在 L3 隐藏
     // （单元点选交互由后续增量接入）。遮罩仍复用 runEngine 的 kept 结果（红底 + 绿块）。
-    if (doc_.mode() == idc::engine::Tier::L3) {
-        const idc::engine::EngineConfig cfg = doc_.buildEngineConfig();
+    if (doc_.mode() == engine::Tier::L3) {
+        const engine::EngineConfig cfg = doc_.buildEngineConfig();
         // 依 Core 网格产出刷新网格线，并回灌派生行列数（供参数面板只读显示）。
-        const idc::engine::Grid grid = bridge_.buildGrid(cfg.cut, cfg.source);
+        const engine::Grid grid = EngineBridge::buildGrid(cfg.cut, cfg.source);
         doc_.setDerivedGridSize(grid.rowCount(), grid.colCount());
         scene_->updateGrid(grid, true);
         scene_->clearCutLines();                   // L3 不画 L1/L2 的橙色贯穿切割线。
@@ -452,7 +448,7 @@ void MainWindow::refreshPreview() {
         // 把当前选择集与排序策略下发给点选图元（高亮已选单元）。
         scene_->updateCellSelection(doc_.selectedCells(), doc_.order().strategy);
 
-        const idc::engine::EngineResult res = bridge_.runPreview(doc_.working(), cfg);
+        const engine::EngineResult res = EngineBridge::runPreview(doc_.working(), cfg);
         scene_->updateMasks(res);
         updateExportPreview(res);
 
@@ -479,24 +475,24 @@ void MainWindow::refreshPreview() {
     // 用 Core 诱导网格画灰色网格线（各矩形十字带并集诱导），但不启动单元点选图元——
     // picker 会 grab 鼠标、阻断画布框选（多矩形靠框选逐个追加）。橙色轮廓标出各矩形，
     // 单选区框隐藏。遮罩复用 runPreview 的 kept 结果（A-0.1：GUI 不算并集）。
-    if (doc_.mode() == idc::engine::Tier::L2 && doc_.l2Sub() == L2Sub::MULTI_RECT) {
+    if (doc_.mode() == engine::Tier::L2 && doc_.l2Sub() == L2Sub::MULTI_RECT) {
         scene_->updateMultiRects(doc_.rects());     // 增量刷新可拖拽选区框（拖拽中不回设正在拖者）。
         scene_->clearCutLines();
         scene_->syncSelection(doc_.rect(), false);  // 隐藏单选区框（改用多矩形轮廓）。
         if (doc_.rects().empty()) {
             // 尚无矩形：不跑引擎（Core 对空 rects 的 MULTI_RECT 会报错），提示框选追加。
-            scene_->updateMultiRectCutLines(idc::engine::Grid{}, false);
-            scene_->updateMasks(idc::engine::EngineResult{});
-            updateExportPreview(idc::engine::EngineResult{});
+            scene_->updateMultiRectCutLines(engine::Grid{}, false);
+            scene_->updateMasks(engine::EngineResult{});
+            updateExportPreview(engine::EngineResult{});
             stCount_->setText(QStringLiteral("保留块: 0"));
             stHint_->setText(QStringLiteral("在画布上拖拽以追加矩形"));
             exportPanel_->setPreviewInfo(QStringLiteral("等待矩形…"));
             return;
         }
-        const idc::engine::EngineConfig cfg = doc_.buildEngineConfig();
-        const idc::engine::Grid grid = bridge_.buildGrid(cfg.cut, cfg.source);
+        const engine::EngineConfig cfg = doc_.buildEngineConfig();
+        const engine::Grid grid = EngineBridge::buildGrid(cfg.cut, cfg.source);
         scene_->updateMultiRectCutLines(grid, true);
-        const idc::engine::EngineResult res = bridge_.runPreview(doc_.working(), cfg);
+        const engine::EngineResult res = EngineBridge::runPreview(doc_.working(), cfg);
         scene_->updateMasks(res);
         updateExportPreview(res);
 
@@ -521,8 +517,8 @@ void MainWindow::refreshPreview() {
     // 有图但无选区：提示用户拖拽创建选区（不跑引擎，避免 E-1 噪声）。
     if (!doc_.hasRect()) {
         scene_->clearCutLines();
-        scene_->updateMasks(idc::engine::EngineResult{});
-        updateExportPreview(idc::engine::EngineResult{});
+        scene_->updateMasks(engine::EngineResult{});
+        updateExportPreview(engine::EngineResult{});
         scene_->syncSelection(doc_.rect(), false);
         stCount_->setText(QStringLiteral("保留块: 0"));
         stHint_->setText(QStringLiteral("在画布上拖拽以创建选区"));
@@ -531,12 +527,12 @@ void MainWindow::refreshPreview() {
     }
 
     // 组装配置 → 调 Core 预览（仅区域数学，实时）。
-    const idc::engine::EngineConfig cfg = doc_.buildEngineConfig();
-    const idc::engine::EngineResult res = bridge_.runPreview(doc_.working(), cfg);
+    const engine::EngineConfig cfg = doc_.buildEngineConfig();
+    const engine::EngineResult res = EngineBridge::runPreview(doc_.working(), cfg);
 
     // 切割线来自 Core generateCutLines（GUI 不自算几何）；场景据此判定选区哪几条边有贯穿切割线，
     // 下发给选区框绘制为橙色贯穿线——切割线即选区边的延伸，拖动选区边＝移动切割线（同一图元）。
-    scene_->updateCutLines(bridge_.cutLines(cfg.cut, cfg.source), doc_.rect());
+    scene_->updateCutLines(EngineBridge::cutLines(cfg.cut, cfg.source), doc_.rect());
     scene_->updateMasks(res);
     updateExportPreview(res);
     // 拖拽进行中不用 Document 的取整矩形回设选区框：它已被手势精确定位（qreal 亚像素），
@@ -564,7 +560,7 @@ void MainWindow::refreshPreview() {
 
 // 依引擎结果刷新导出面板的输出预览缩略图（G-11 / §4.6）：先缓存 res.ok/composition，再转 renderExportPreviewFromCache。
 // 缓存让后续「不影响切割几何」的事件（烧录开关/标注变更）只需重渲染缩略图、无需重跑 Core。
-void MainWindow::updateExportPreview(const idc::engine::EngineResult& res) {
+void MainWindow::updateExportPreview(const engine::EngineResult& res) {
     lastExportResOk_ = res.ok;
     lastComposition_ = res.composition;   // 拷贝 placements（相对 Core 区域计算是小头），供轻量重渲染复用。
     renderExportPreviewFromCache();
@@ -597,18 +593,18 @@ QPixmap MainWindow::exportPreviewSource() const {
 }
 
 // 同步三个面板 + 工具栏模式动作到 Document。
-void MainWindow::syncPanels() {
+void MainWindow::syncPanels() const {
     left_->syncFromDocument();
     param_->syncFromDocument();
     exportPanel_->syncFromDocument();
     imagePanel_->syncFromDocument();
-    if (modeActionL1_) modeActionL1_->setChecked(doc_.mode() == idc::engine::Tier::L1);
-    if (modeActionL2_) modeActionL2_->setChecked(doc_.mode() == idc::engine::Tier::L2);
-    if (modeActionL3_) modeActionL3_->setChecked(doc_.mode() == idc::engine::Tier::L3);
+    if (modeActionL1_) modeActionL1_->setChecked(doc_.mode() == engine::Tier::L1);
+    if (modeActionL2_) modeActionL2_->setChecked(doc_.mode() == engine::Tier::L2);
+    if (modeActionL3_) modeActionL3_->setChecked(doc_.mode() == engine::Tier::L3);
 }
 
 // 非模态提示：写状态栏提示标签 + 限时消息（错误不打断用户，§5.2）。
-void MainWindow::notify(const QString& msg, const bool isError) {
+void MainWindow::notify(const QString& msg, const bool isError) const {
     stHint_->setText(msg);
     statusBar()->showMessage(msg, isError ? 8000 : 4000);
 }
@@ -624,7 +620,7 @@ void MainWindow::showFirstRunGuide() {
 }
 
 // 判断焦点是否在数值/文本输入控件上（用于放行单键快捷键）。
-bool MainWindow::focusInTextInput() const {
+bool MainWindow::focusInTextInput() {
     QWidget* fw = QApplication::focusWidget();
     return qobject_cast<QLineEdit*>(fw) ||
            qobject_cast<QAbstractSpinBox*>(fw) ||
@@ -653,11 +649,11 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
 }
 
 // 模式中文名。
-QString MainWindow::modeName(const idc::engine::Tier tier) {
+QString MainWindow::modeName(const engine::Tier tier) {
     switch (tier) {
-        case idc::engine::Tier::L1: return QStringLiteral("模式: L1 标准提取");
-        case idc::engine::Tier::L2: return QStringLiteral("模式: L2 反向剔除");
-        case idc::engine::Tier::L3: return QStringLiteral("模式: L3 网格分割");
+        case engine::Tier::L1: return QStringLiteral("模式: L1 标准提取");
+        case engine::Tier::L2: return QStringLiteral("模式: L2 反向剔除");
+        case engine::Tier::L3: return QStringLiteral("模式: L3 网格分割");
     }
     return QStringLiteral("模式: -");
 }
@@ -674,9 +670,8 @@ void MainWindow::onOpen() {
 void MainWindow::openImageFromPath(const QString& path) {
     if (path.isEmpty()) return;
 
-    idc::core::Image img;
-    QString err;
-    if (!bridge_.loadImage(path, img, err)) {
+    core::Image img;
+    if (QString err; !EngineBridge::loadImage(path, img, err)) {
         notify(QStringLiteral("打开失败：%1").arg(err), true); // 非模态。
         return;
     }
@@ -692,12 +687,11 @@ void MainWindow::onExport() {
     if (!doc_.hasImage()) { notify(QStringLiteral("无图像可导出"), true); return; }
     if (!doc_.hasRect()) { notify(QStringLiteral("请先在画布创建选区"), true); return; }
 
-    const idc::engine::EngineConfig cfg = doc_.buildEngineConfig();
+    const engine::EngineConfig cfg = doc_.buildEngineConfig();
 
     // 合并重排参数警告（cols*rows < 保留块数，或 cw/ch < 网格单元尺寸）：导出前弹窗二次确认。
     // 内联红字已在导出面板实时显示，此处按需求再加一道模态确认。
-    const QString rearrangeWarn = exportPanel_->rearrangeWarning();
-    if (!rearrangeWarn.isEmpty()) {
+    if (const QString rearrangeWarn = exportPanel_->rearrangeWarning(); !rearrangeWarn.isEmpty()) {
         const QMessageBox::StandardButton ret = QMessageBox::warning(
             this, QStringLiteral("重排参数警告"),
             rearrangeWarn + QStringLiteral("\n\n仍要继续导出吗？"),
@@ -706,7 +700,7 @@ void MainWindow::onExport() {
     }
 
     QString path;
-    if (cfg.emitParams.mode == idc::engine::EmitMode::SEPARATE) {
+    if (cfg.emitParams.mode == engine::EmitMode::SEPARATE) {
         path = doc_.outputDir();
         if (path.isEmpty()) {
             path = QFileDialog::getExistingDirectory(this, QStringLiteral("选择输出目录"));
@@ -727,13 +721,12 @@ void MainWindow::onExport() {
 
     // 导出烧录（G-4）：开关开且有标注时，以当前工作图为底逐个调 Core rasterize 合成标注，
     // 再送引擎切割（标注随像素被切开，A-0.15/A-0.16）；否则直接送工作图。
-    idc::core::Image exportSrc = doc_.working();
+    core::Image exportSrc = doc_.working();
     if (annoBridge_.burnInEnabled() && annoBridge_.count() > 0) {
         exportSrc = annoBridge_.burnIn(doc_.working());
     }
 
-    QString err;
-    if (bridge_.exportResult(exportSrc, cfg, path, err)) {
+    if (QString err; EngineBridge::exportResult(exportSrc, cfg, path, err)) {
         notify(QStringLiteral("导出成功：%1").arg(path), false);
     } else {
         notify(QStringLiteral("导出失败：%1").arg(err), true);
@@ -762,9 +755,8 @@ void MainWindow::onRubberSelect(const QRectF& sceneRect) {
     if (!doc_.hasImage()) return;
     // L3 网格分割不用矩形选区：框选（含从图像外起拖、未被 CellPickerItem grab 而落到视图橡皮筋的情形）
     // → 把命中的单元并入选择集（与 picker 自身框选发出的 cellsMarqueeSelected 走同一 addCells 路径）。
-    if (doc_.mode() == idc::engine::Tier::L3) {
-        const std::vector<int> idx = scene_->cellsIntersecting(sceneRect);
-        if (!idx.empty()) doc_.addCells(idx);
+    if (doc_.mode() == engine::Tier::L3) {
+        if (const std::vector<int> idx = scene_->cellsIntersecting(sceneRect); !idx.empty()) doc_.addCells(idx);
         return;
     }
     const qreal W = doc_.width(), H = doc_.height();
@@ -772,10 +764,10 @@ void MainWindow::onRubberSelect(const QRectF& sceneRect) {
     const qreal t = std::clamp(sceneRect.top(), 0.0, H);
     const qreal r = std::clamp(sceneRect.right(), 0.0, W);
     const qreal b = std::clamp(sceneRect.bottom(), 0.0, H);
-    idc::engine::RectRegion rr(qRound(l), qRound(t), qRound(r), qRound(b));
+    const engine::RectRegion rr(qRound(l), qRound(t), qRound(r), qRound(b));
     if (rr.width() <= 0 || rr.height() <= 0) return; // 忽略退化选区。
     // L2 多矩形并集：框选逐个追加矩形（而非替换单选区）。
-    if (doc_.mode() == idc::engine::Tier::L2 && doc_.l2Sub() == L2Sub::MULTI_RECT) {
+    if (doc_.mode() == engine::Tier::L2 && doc_.l2Sub() == L2Sub::MULTI_RECT) {
         doc_.addRect(rr);
         return;
     }
@@ -790,8 +782,8 @@ void MainWindow::onSelectionEdited(const QRectF& sceneRect) {
 // L2 多矩形：拖动/缩放第 index 个选区框 → 写回 Document 对应矩形（选区框已钳制到图像内）。
 void MainWindow::onMultiRectEdited(const int index, const QRectF& sceneRect) {
     if (index < 0 || !doc_.hasImage()) return;
-    if (doc_.mode() != idc::engine::Tier::L2 || doc_.l2Sub() != L2Sub::MULTI_RECT) return;
-    const idc::engine::RectRegion rr(qRound(sceneRect.left()), qRound(sceneRect.top()),
+    if (doc_.mode() != engine::Tier::L2 || doc_.l2Sub() != L2Sub::MULTI_RECT) return;
+    const engine::RectRegion rr(qRound(sceneRect.left()), qRound(sceneRect.top()),
                                      qRound(sceneRect.right()), qRound(sceneRect.bottom()));
     doc_.updateRect(static_cast<std::size_t>(index), rr);
     // 拖拽期间 syncPanels 被跳过（避免逐帧重建），故在此定向刷新：
@@ -801,47 +793,47 @@ void MainWindow::onMultiRectEdited(const int index, const QRectF& sceneRect) {
 }
 
 // L2 多矩形：面板列表选中行变化 → 高亮画布上对应选区框（-1 清除高亮）。
-void MainWindow::onRectSelected(const int index) {
+void MainWindow::onRectSelected(const int index) const {
     if (scene_) scene_->setActiveMultiRect(index);
 }
 
 // L3 单击切换某单元：写回 Document（触发刷新与点选图元高亮更新）。
 void MainWindow::onCellToggled(const int index) {
-    if (!doc_.hasImage() || doc_.mode() != idc::engine::Tier::L3) return;
+    if (!doc_.hasImage() || doc_.mode() != engine::Tier::L3) return;
     doc_.toggleCell(index);
 }
 
 // L3 拖拽框选：把命中的单元并入选择集（去重）。
 void MainWindow::onCellsMarquee(const std::vector<int>& indices) {
-    if (!doc_.hasImage() || doc_.mode() != idc::engine::Tier::L3) return;
+    if (!doc_.hasImage() || doc_.mode() != engine::Tier::L3) return;
     doc_.addCells(indices);
 }
 
 // L3 CUSTOM 拖拽调序：把 from 单元移到 to 单元原序位（重排选择集顺序即自定义输出序）。
-void MainWindow::onCellReordered(const int from, const int to) {
-    if (!doc_.hasImage() || doc_.mode() != idc::engine::Tier::L3) return;
-    doc_.moveCellOrder(from, to);
+void MainWindow::onCellReordered(const int fromIndex, const int toIndex) {
+    if (!doc_.hasImage() || doc_.mode() != engine::Tier::L3) return;
+    doc_.moveCellOrder(fromIndex, toIndex);
 }
 
 // 方向键微调选区（保持尺寸，钳制到图像内）。
 void MainWindow::onNudge(const int dx, const int dy) {
     if (!doc_.hasImage() || !doc_.hasRect()) return;
-    const idc::engine::RectRegion r = doc_.rect();
+    const engine::RectRegion r = doc_.rect();
     const int w = r.width(), h = r.height();
     const int W = doc_.width(), H = doc_.height();
     if (w >= W || h >= H) return; // 选区已达整幅，无需微调。
     const int nl = std::clamp(r.left + dx, 0, W - w);
     const int nt = std::clamp(r.top + dy, 0, H - h);
-    doc_.setRect(idc::engine::RectRegion(nl, nt, nl + w, nt + h));
+    doc_.setRect(engine::RectRegion(nl, nt, nl + w, nt + h));
 }
 
 // 光标移动：更新状态栏坐标与像素颜色。
-void MainWindow::onCursor(const QPointF& scenePos) {
+void MainWindow::onCursor(const QPointF& scenePos) const {
     const int x = static_cast<int>(scenePos.x());
     const int y = static_cast<int>(scenePos.y());
     stCoord_->setText(QStringLiteral("坐标: (%1, %2)").arg(x).arg(y));
     if (doc_.hasImage() && doc_.working().inBounds(x, y)) {
-        const idc::core::Color c = doc_.working().getPixel(x, y);
+        const core::Color c = doc_.working().getPixel(x, y);
         stColor_->setText(QStringLiteral("RGB(%1,%2,%3)").arg(c.r).arg(c.g).arg(c.b));
     } else {
         stColor_->setText(QStringLiteral("RGB(-,-,-)"));
@@ -849,7 +841,7 @@ void MainWindow::onCursor(const QPointF& scenePos) {
 }
 
 // 视图缩放倍数变化：更新状态栏放大倍数显示（100% = 1:1）。
-void MainWindow::onZoomChanged(const qreal factor) {
+void MainWindow::onZoomChanged(const qreal factor) const {
     if (!stZoom_) return;
     stZoom_->setText(QStringLiteral("缩放: %1%").arg(qRound(factor * 100.0)));
 }
@@ -873,16 +865,16 @@ void MainWindow::onToggleMasks() {
 // 工具栏/快捷键切换模式（L1/L2/L3）。
 void MainWindow::onModeAction(const int tierInt) {
     switch (tierInt) {
-        case 1: doc_.setMode(idc::engine::Tier::L1); break;
-        case 2: doc_.setMode(idc::engine::Tier::L2); break;
-        case 3: doc_.setMode(idc::engine::Tier::L3); break;
+        case 1: doc_.setMode(engine::Tier::L1); break;
+        case 2: doc_.setMode(engine::Tier::L2); break;
+        case 3: doc_.setMode(engine::Tier::L3); break;
         default: break;
     }
 }
 
 // K/R 快捷键切换极性。
 void MainWindow::onPolarityShortcut(const bool remove) {
-    doc_.setPolarity(remove ? idc::engine::Polarity::REMOVE : idc::engine::Polarity::KEEP);
+    doc_.setPolarity(remove ? engine::Polarity::REMOVE : engine::Polarity::KEEP);
 }
 
 // ---------------------------------------------------------------------------
@@ -892,7 +884,7 @@ void MainWindow::onPolarityShortcut(const bool remove) {
 
 // 预处理公共收尾：维度变化（旋转 90/270、缩放）会使既有选区坐标越界/失配，
 // 故先清除失效选区（避免 Core 切割报错），再写回工作图（触发 imageChanged→重建预览底图+刷新）。
-void MainWindow::applyWorkingImage(idc::core::Image next, const QString& okMsg) {
+void MainWindow::applyWorkingImage(core::Image next, const QString& okMsg) {
     if (!doc_.hasImage()) return;
     if (next.empty()) { notify(QStringLiteral("预处理失败：结果为空图"), true); return; }
     if (next.width() != doc_.width() || next.height() != doc_.height()) {
@@ -924,14 +916,14 @@ void MainWindow::runWithBusyDialog(const QString& text, const std::function<void
 // 旋转（90 的整数倍；-90=左转、90=右转、180）。
 void MainWindow::onRotate(const int angleDeg) {
     if (!doc_.hasImage()) return;
-    applyWorkingImage(bridge_.rotateImage(doc_.working(), angleDeg),
+    applyWorkingImage(EngineBridge::rotateImage(doc_.working(), angleDeg),
                       QStringLiteral("已旋转 %1°").arg(angleDeg));
 }
 
 // 翻转（水平/垂直）。
 void MainWindow::onFlip(const bool horizontal) {
     if (!doc_.hasImage()) return;
-    applyWorkingImage(bridge_.flipImage(doc_.working(), horizontal),
+    applyWorkingImage(EngineBridge::flipImage(doc_.working(), horizontal),
                       horizontal ? QStringLiteral("已水平翻转") : QStringLiteral("已垂直翻转"));
 }
 
@@ -940,7 +932,7 @@ void MainWindow::onScale(const double factor) {
     if (!doc_.hasImage() || busyResample_) return;
     busyResample_ = true;
     runWithBusyDialog(QStringLiteral("正在按比例缩放图像，请稍候…"), [this, factor] {
-        applyWorkingImage(bridge_.scaleImage(doc_.working(), factor),
+        applyWorkingImage(EngineBridge::scaleImage(doc_.working(), factor),
                           QStringLiteral("已缩放至 %1%").arg(qRound(factor * 100.0)));
     });
     busyResample_ = false;
@@ -951,7 +943,7 @@ void MainWindow::onResize(const int newWidth, const int newHeight) {
     if (!doc_.hasImage() || busyResample_) return;
     busyResample_ = true;
     runWithBusyDialog(QStringLiteral("正在缩放到目标尺寸，请稍候…"), [this, newWidth, newHeight] {
-        applyWorkingImage(bridge_.resizeImage(doc_.working(), newWidth, newHeight),
+        applyWorkingImage(EngineBridge::resizeImage(doc_.working(), newWidth, newHeight),
                           QStringLiteral("已缩放到 %1×%2").arg(newWidth).arg(newHeight));
     });
     busyResample_ = false;
@@ -960,21 +952,21 @@ void MainWindow::onResize(const int newWidth, const int newHeight) {
 // 黑白（灰度）。
 void MainWindow::onGray() {
     if (!doc_.hasImage()) return;
-    applyWorkingImage(bridge_.toGrayImage(doc_.working()), QStringLiteral("已转为黑白"));
+    applyWorkingImage(EngineBridge::toGrayImage(doc_.working()), QStringLiteral("已转为黑白"));
 }
 
 // 色道反色：依勾选的 R/G/B 拼出长度 3 的反相掩码（'1' 反相、'0' 保持）；灰度图 Core 忽略掩码、整体反相。
 void MainWindow::onInvert(const bool invR, const bool invG, const bool invB) {
     if (!doc_.hasImage()) return;
     const std::string mask = std::string(invR ? "1" : "0") + (invG ? "1" : "0") + (invB ? "1" : "0");
-    applyWorkingImage(bridge_.invertImage(doc_.working(), mask), QStringLiteral("已按通道反色"));
+    applyWorkingImage(EngineBridge::invertImage(doc_.working(), mask), QStringLiteral("已按通道反色"));
 }
 
 // 色道分离：依勾选的 R/G/B 拼出长度 3 的保留掩码（'1' 保留、'0' 置零）。
 void MainWindow::onSplit(const bool keepR, const bool keepG, const bool keepB) {
     if (!doc_.hasImage()) return;
     const std::string mask = std::string(keepR ? "1" : "0") + (keepG ? "1" : "0") + (keepB ? "1" : "0");
-    applyWorkingImage(bridge_.splitImage(doc_.working(), mask), QStringLiteral("已按通道分离"));
+    applyWorkingImage(EngineBridge::splitImage(doc_.working(), mask), QStringLiteral("已按通道分离"));
 }
 
 // 重置预处理：工作图恢复为原图。若原图与当前工作图尺寸不同（曾旋转/缩放），先清失效选区。
@@ -1010,19 +1002,19 @@ void MainWindow::onAnnoBridgeChanged() {
 }
 
 // 绘制拖拽预览（橡皮筋）变化：仅刷新预览图元（不重建已提交标注，避免逐帧开销），实现“绘制即实时成形”。
-void MainWindow::onAnnoPendingChanged() {
+void MainWindow::onAnnoPendingChanged() const {
     scene_->updatePendingAnnotation(annoBridge_);
 }
 
 // 选中项变化：重绘高亮（updateAnnotations 内含选中态）并同步属性面板。
-void MainWindow::onAnnoSelectionChanged() {
+void MainWindow::onAnnoSelectionChanged() const {
     scene_->updateAnnotations(annoBridge_);
     annoPropPanel_->syncFromModel();
     updateUndoRedoEnabled(); // 选中标注会使 Ctrl+Z/Y 路由到标注撤销，刷新启用态。
 }
 
 // 工具变化：同步工具面板按钮组，并按「是否 SELECT」切换画布绘制态门控。
-void MainWindow::onAnnoToolChanged() {
+void MainWindow::onAnnoToolChanged() const {
     toolPanel_->syncFromModel();
     view_->setAnnotationDrawActive(annoBridge_.currentTool() != AnnoTool::SELECT);
     annoPropPanel_->syncFromModel();
@@ -1031,7 +1023,7 @@ void MainWindow::onAnnoToolChanged() {
 
 // 绘制手势起点：依当前工具分派——文字落点取文本；折线/画笔起笔；其余两点形状记起点。
 void MainWindow::onAnnoDragStart(const QPointF& scenePos) {
-    const idc::core::Point2D p(scenePos.x(), scenePos.y());
+    const core::Point2D p(scenePos.x(), scenePos.y());
     switch (annoBridge_.currentTool()) {
         case AnnoTool::TEXT: {
             bool ok = false;
@@ -1057,7 +1049,7 @@ void MainWindow::onAnnoDragStart(const QPointF& scenePos) {
 // 绘制手势拖拽（按住左键移动）：两点形状实时更新预览；画笔追加顶点；折线仅橡皮筋预览。
 // 折线为点击式：顶点已在 onAnnoDragStart（按下）落定，故拖拽中只预览、不再追加正式顶点。
 void MainWindow::onAnnoDragMove(const QPointF& scenePos) {
-    const idc::core::Point2D p(scenePos.x(), scenePos.y());
+    const core::Point2D p(scenePos.x(), scenePos.y());
     switch (annoBridge_.currentTool()) {
         case AnnoTool::BRUSH:
             annoBridge_.appendPathPoint(p);
@@ -1101,7 +1093,7 @@ void MainWindow::onAnnoEscape() {
 // 其余工具无悬停语义（两点形状靠拖拽预览、画笔靠按住追点），故忽略。
 void MainWindow::onAnnoHover(const QPointF& scenePos) {
     if (annoBridge_.currentTool() != AnnoTool::POLYLINE) return;
-    annoBridge_.previewPolyline(idc::core::Point2D(scenePos.x(), scenePos.y()));
+    annoBridge_.previewPolyline(core::Point2D(scenePos.x(), scenePos.y()));
 }
 
 // 绘制态右键：退出当前绘制手势——有折线/画笔草稿则收笔提交（折线在此结束），
@@ -1113,30 +1105,27 @@ void MainWindow::onAnnoFinish() {
 
 // SELECT 工具下点中标注图元：委托 Core hitTest 选中（几何命中在 Core，A-0.1）。
 void MainWindow::onAnnotationSelect(const QPointF& scenePos) {
-    annoBridge_.selectAt(idc::core::Point2D(scenePos.x(), scenePos.y()));
+    annoBridge_.selectAt(core::Point2D(scenePos.x(), scenePos.y()));
 }
 
 // 拖动选中标注：委托 Core 平移其几何（下标须与当前选中项一致，防御误触）。
 void MainWindow::onAnnotationMoved(const int index, const double dx, const double dy) {
-    const std::optional<std::size_t> sel = annoBridge_.selectedIndex();
-    if (!sel || static_cast<int>(*sel) != index) return;
+    if (const std::optional<std::size_t> sel = annoBridge_.selectedIndex(); !sel || static_cast<int>(*sel) != index) return;
     annoBridge_.moveSelectedBy(dx, dy);
 }
 
 // 拖定向包围盒手柄（释放提交）：委托 Core 对选中标注施加缩放/旋转（与属性面板变换同一入口，下标防御误触）。
 void MainWindow::onAnnotationTransformed(const int index, const double sx, const double sy,
                                          const double rotateDeg) {
-    const std::optional<std::size_t> sel = annoBridge_.selectedIndex();
-    if (!sel || static_cast<int>(*sel) != index) return;
+    if (const std::optional<std::size_t> sel = annoBridge_.selectedIndex(); !sel || static_cast<int>(*sel) != index) return;
     annoBridge_.transformSelected(sx, sy, rotateDeg);
     // 提交后模型发 changed → onAnnoBridgeChanged → syncFromModel 依最新累积值回显面板（忠实反映底层，不回弹）。
 }
 
 // 手柄拖拽**进行中**：把逐帧**绝对**预览值实时回显到属性面板变换区（仅回显，不写模型；下标防御误触）。
 void MainWindow::onAnnotationTransformPreview(const int index, const double sx, const double sy,
-                                              const double rotateDeg) {
-    const std::optional<std::size_t> sel = annoBridge_.selectedIndex();
-    if (!sel || static_cast<int>(*sel) != index) return;
+                                              const double rotateDeg) const {
+    if (const std::optional<std::size_t> sel = annoBridge_.selectedIndex(); !sel || static_cast<int>(*sel) != index) return;
     if (annoPropPanel_) annoPropPanel_->setTransformPreview(sx, sy, rotateDeg);
 }
 
@@ -1152,8 +1141,8 @@ void MainWindow::onAnnoTransformApply(const double sx, const double sy, const do
 }
 
 // 图层面板 → 画布/模型（底图仅切画布可见；标注同时同步模型标志与画布图元）。
-void MainWindow::onBaseVisibilityChanged(const bool visible) { scene_->setBaseVisible(visible); }
-void MainWindow::onMaskVisibilityChanged(const bool visible) { scene_->setMasksVisible(visible); }
+void MainWindow::onBaseVisibilityChanged(const bool visible) const { scene_->setBaseVisible(visible); }
+void MainWindow::onMaskVisibilityChanged(const bool visible) const { scene_->setMasksVisible(visible); }
 void MainWindow::onGridVisibilityChanged(const bool visible) {
     scene_->setGridVisible(visible);
     refreshPreview();   // 网格线依 gridVisible_ 门控重建（L3 / L2 多矩形）。
@@ -1187,7 +1176,7 @@ void MainWindow::onAnnoClearAll() {
     const QMessageBox::StandardButton ret = QMessageBox::question(
         this, QStringLiteral("清除全部标注"),
         QStringLiteral("确定要清除全部 %1 个标注吗？此操作可用「撤销标注」回退。")
-            .arg(static_cast<qulonglong>(annoBridge_.count())),
+            .arg(annoBridge_.count()),
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     if (ret != QMessageBox::Yes) return;
     annoBridge_.clearAll();
@@ -1205,8 +1194,7 @@ void MainWindow::onSaveConfig() {
     const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("保存配置"), QString(),
         QStringLiteral("ImageDiscropper 配置 (*.json);;所有文件 (*)"));
     if (path.isEmpty()) return;
-    QString err;
-    if (bridge_.saveConfig(path, doc_.buildEngineConfig(), err))
+    if (QString err; EngineBridge::saveConfig(path, doc_.buildEngineConfig(), err))
         notify(QStringLiteral("配置已保存：%1").arg(path), false);
     else
         notify(QStringLiteral("保存配置失败：%1").arg(err), true);
@@ -1217,9 +1205,8 @@ void MainWindow::onLoadConfig() {
     const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("加载配置"), QString(),
         QStringLiteral("ImageDiscropper 配置 (*.json);;所有文件 (*)"));
     if (path.isEmpty()) return;
-    idc::engine::EngineConfig cfg;
-    QString err;
-    if (!bridge_.loadConfig(path, cfg, err)) { notify(QStringLiteral("加载配置失败：%1").arg(err), true); return; }
+    engine::EngineConfig cfg;
+    if (QString err; !EngineBridge::loadConfig(path, cfg, err)) { notify(QStringLiteral("加载配置失败：%1").arg(err), true); return; }
     // 先冲刷未落定的防抖变更，保证「栈顶＝载入前当前态」，使加载配置可一步撤销回去。
     if (docHistoryTimer_->isActive()) { docHistoryTimer_->stop(); onDocHistoryTimeout(); }
     suppressHistory_ = true;
@@ -1248,7 +1235,7 @@ bool MainWindow::annotationContextActive() const {
 }
 
 // 参数变更→重启防抖定时器（还原期间被 suppressHistory_ 抑制，避免 undo/redo 自身再入栈）。
-void MainWindow::scheduleHistoryCapture() {
+void MainWindow::scheduleHistoryCapture() const {
     if (suppressHistory_) return;
     docHistoryTimer_->start(); // 连续变更（拖拽/连点）只在静默 500ms 后合并为一条历史。
 }
@@ -1272,7 +1259,7 @@ void MainWindow::resetDocHistory() {
 void MainWindow::undoDocument() {
     if (docHistory_.undoSize() <= 1) { notify(QStringLiteral("没有可撤销的参数变更"), false); return; }
     docHistory_.popToRedo();
-    const idc::engine::EngineConfig* prev = docHistory_.top();
+    const engine::EngineConfig* prev = docHistory_.top();
     if (!prev) return;
     suppressHistory_ = true;
     doc_.applyEngineConfig(*prev);
@@ -1284,7 +1271,7 @@ void MainWindow::undoDocument() {
 // 文档参数重做：从重做栈弹回最近撤销的态并还原（与 undoDocument 对称）。
 void MainWindow::redoDocument() {
     if (!docHistory_.canRedo()) { notify(QStringLiteral("没有可重做的参数变更"), false); return; }
-    auto st = docHistory_.popFromRedo();
+    const auto st = docHistory_.popFromRedo();
     if (!st) return;
     suppressHistory_ = true;
     doc_.applyEngineConfig(*st);
@@ -1296,7 +1283,7 @@ void MainWindow::redoDocument() {
 // 依文档历史深度与标注上下文刷新编辑菜单撤销/重做启用态。
 // 文档侧：栈顶为当前态，需 >1 态才可撤销、重做栈非空才可重做；标注上下文激活时按上下文放行
 // （Core 标注历史无法在不触碰 Core 的前提下精确查询可用性，故按工具/选中态放行，空历史时撤销为无害空操作）。
-void MainWindow::updateUndoRedoEnabled() {
+void MainWindow::updateUndoRedoEnabled() const {
     if (!aUndo_ || !aRedo_) return;
     const bool docCanUndo = docHistory_.undoSize() > 1;
     const bool docCanRedo = docHistory_.canRedo();

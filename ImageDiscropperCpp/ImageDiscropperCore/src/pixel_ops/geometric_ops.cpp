@@ -86,18 +86,18 @@ core::Image flip(const core::Image& src, const bool horizontal) {
 // 避免旧实现「逐通道 × 逐角点」重复调用 pixelPtr/isGray 与逐像素 getPixel/setPixel 的边界检查、格式分支。
 // 输出与旧实现逐像素等价（双线性加权公式、夹取范围、通道处理均一致）。
 core::Image resize(const core::Image& src, const int newWidth, const int newHeight, const ResampleMode mode) {
-    if (newWidth <= 0 || newHeight <= 0 || src.empty()) return core::Image();
+    if (newWidth <= 0 || newHeight <= 0 || src.empty()) return {};
     core::Image out(newWidth, newHeight, src.format());
 
     const int sw = src.width();
     const int sh = src.height();
-    const int ch = src.isGray() ? 1 : (src.format() == core::ImageFormat::RGBA ? 4 : 3);
+    const int ch = src.isGray() ? 1 : src.format() == core::ImageFormat::RGBA ? 4 : 3;
     const std::uint8_t* sd = src.data();
     std::uint8_t* dd = out.data();
     const double stepX = static_cast<double>(sw) / newWidth;
     const double stepY = static_cast<double>(sh) / newHeight;
-    const double maxX = static_cast<double>(sw - 1);
-    const double maxY = static_cast<double>(sh - 1);
+    const double maxX = sw - 1;
+    const double maxY = sh - 1;
 
     for (int y = 0; y < newHeight; ++y) {
         const double srcYf = (y + 0.5) * stepY - 0.5;
@@ -143,7 +143,7 @@ core::Image resize(const core::Image& src, const int newWidth, const int newHeig
 
 // 按比例缩放：先计算目标宽高再委托给 resize。
 core::Image scale(const core::Image& src, const double s, const ResampleMode mode) {
-    if (s <= 0.0 || src.empty()) return core::Image();
+    if (s <= 0.0 || src.empty()) return {};
     const int nw = std::max(1, static_cast<int>(std::round(src.width() * s)));
     const int nh = std::max(1, static_cast<int>(std::round(src.height() * s)));
     return resize(src, nw, nh, mode);

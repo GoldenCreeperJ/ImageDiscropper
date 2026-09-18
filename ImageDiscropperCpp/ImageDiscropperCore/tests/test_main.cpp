@@ -6,7 +6,6 @@
 // 分块依据：每个模块一个 testXxx() 函数，main 依次调用；引擎的完整流水线/导出/边界
 //       验收拆分到 test_engine_*.cpp，经 test_harness.h 声明后在此统一调度，避免 God File。
 // ============================================================================
-#include <cmath>
 #include <cstdlib>
 #include <iostream>
 
@@ -302,8 +301,8 @@ static void testAnnotation() {
     movable->translate(5, 7);
     const geometry::BoundingBox b1 = movable->bounds();
     CHECK(movable->type() == geometry::ShapeType::RECTANGLE);            // 类型未退化
-    CHECK(std::abs((b1.x - b0.x) - 5.0) < 1e-6);
-    CHECK(std::abs((b1.y - b0.y) - 7.0) < 1e-6);
+    CHECK(std::abs(b1.x - b0.x - 5.0) < 1e-6);
+    CHECK(std::abs(b1.y - b0.y - 7.0) < 1e-6);
     CHECK(std::abs(b1.width - b0.width) < 1e-6 && std::abs(b1.height - b0.height) < 1e-6);
 
     // 文字：平移后仍为 TEXT（保留字形渲染所需的类型身份），基线锚点随之偏移。
@@ -318,8 +317,8 @@ static void testAnnotation() {
     txt->translate(-3, 4);
     const geometry::BoundingBox t1 = txt->bounds();
     CHECK(txt->type() == geometry::ShapeType::TEXT);                     // 未退化为 PATH
-    CHECK(std::abs((t1.x - t0.x) + 3.0) < 1e-6);
-    CHECK(std::abs((t1.y - t0.y) - 4.0) < 1e-6);
+    CHECK(std::abs(t1.x - t0.x + 3.0) < 1e-6);
+    CHECK(std::abs(t1.y - t0.y - 4.0) < 1e-6);
 
     // 多边形（正方形）：平移后仍为 SQUARE，逐顶点偏移。
     annotation::ShapeRequest r6;
@@ -331,7 +330,7 @@ static void testAnnotation() {
     sq->translate(2, 2);
     const geometry::BoundingBox s1 = sq->bounds();
     CHECK(sq->type() == geometry::ShapeType::SQUARE);
-    CHECK(std::abs((s1.x - s0.x) - 2.0) < 1e-6 && std::abs((s1.y - s0.y) - 2.0) < 1e-6);
+    CHECK(std::abs(s1.x - s0.x - 2.0) < 1e-6 && std::abs(s1.y - s0.y - 2.0) < 1e-6);
 
     // ViewTransform：屏幕 ↔ 逻辑坐标
     annotation::ViewTransform vt;

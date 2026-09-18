@@ -26,13 +26,13 @@ namespace idc::gui {
 // 成本与标注数成正比、与切割块数无关；随后的逐块 blit 自然让标注随像素被切割落位。src 为空则原样返回。
 QPixmap bakeAnnotationsInto(const QPixmap& src,
                             double invX, double invY,
-                            const std::vector<idc::annotation::Annotation>& annotations);
+                            const std::vector<annotation::Annotation>& annotations);
 
 // 按已算好的 Composition 把源图 src 渲染为最长边 ≤ maxDim 的输出缩略图：
 //   · 合并模式（canvasWidth/Height > 0）：等比缩放的输出画布，按 placement 的 source→dest blit（所见即所得）；
 //   · 分离模式（无统一画布，canvas 为 0）：拼成触图（cols=ceil(√n)），每块等比缩放进格子居中。
 // placements 为空 / src 为空 / maxDim<=0 / 触图格子过小 → 返回空 QPixmap（调用方回退占位文案）。
-QPixmap composeOutputThumbnail(const idc::engine::Composition& comp,
+QPixmap composeOutputThumbnail(const engine::Composition& comp,
                                const QPixmap& src,
                                double invX, double invY,
                                int maxDim);

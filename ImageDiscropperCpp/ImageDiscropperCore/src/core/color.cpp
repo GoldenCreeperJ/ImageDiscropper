@@ -46,7 +46,7 @@ void rgbToHsv(const std::uint8_t r, const std::uint8_t g, const std::uint8_t b,
     const float d = mx - mn;
 
     v = mx;
-    s = (mx == 0.0f) ? 0.0f : d / mx;
+    s = mx == 0.0f ? 0.0f : d / mx;
 
     if (d == 0.0f) {
         h = 0.0f;
@@ -94,19 +94,19 @@ void hsvToRgb(const float h, const float s, const float v,
 
 // 颜色打包为 0xAARRGGBB 整数。
 std::uint32_t colorToArgb(const Color& c) {
-    return (static_cast<std::uint32_t>(c.a) << 24) |
-           (static_cast<std::uint32_t>(c.r) << 16) |
-           (static_cast<std::uint32_t>(c.g) << 8) |
+    return static_cast<std::uint32_t>(c.a) << 24 |
+           static_cast<std::uint32_t>(c.r) << 16 |
+           static_cast<std::uint32_t>(c.g) << 8 |
            static_cast<std::uint32_t>(c.b);
 }
 
 // 从 0xAARRGGBB 整数还原颜色。
 Color colorFromArgb(const std::uint32_t argb) {
     return Color(
-        static_cast<std::uint8_t>((argb >> 16) & 0xFF),
-        static_cast<std::uint8_t>((argb >> 8) & 0xFF),
+        static_cast<std::uint8_t>(argb >> 16 & 0xFF),
+        static_cast<std::uint8_t>(argb >> 8 & 0xFF),
         static_cast<std::uint8_t>(argb & 0xFF),
-        static_cast<std::uint8_t>((argb >> 24) & 0xFF));
+        static_cast<std::uint8_t>(argb >> 24 & 0xFF));
 }
 
 } // namespace idc::core

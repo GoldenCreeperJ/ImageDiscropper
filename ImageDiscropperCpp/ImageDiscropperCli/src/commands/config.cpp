@@ -48,8 +48,7 @@ int cmdConfig(const std::vector<std::string>& tokens, const GlobalOptions& go) {
         return argError("--load 缺少文件路径", "请用 --load <file> 指定配置文件路径");
 
     // --- §5.3 第 6 步（文件层面）：配置文件须存在且可访问，否则输入文件错误（3）。---
-    std::error_code ec;
-    if (!std::filesystem::exists(loadPath, ec))
+    if (std::error_code ec; !std::filesystem::exists(loadPath, ec))
         return fail(ExitCode::InputError, "配置文件不存在或不可访问", "路径：" + loadPath,
                     "请检查 --load 的路径是否正确、文件是否存在且可读");
 
@@ -84,7 +83,7 @@ int cmdConfig(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     }
 
     // 输出目标由 emit.mode 决定：分离 → --output-dir（文件夹）；合并 → --output（单图）。
-    const bool separate = (config.emitParams.mode == engine::EmitMode::SEPARATE);
+    const bool separate = config.emitParams.mode == engine::EmitMode::SEPARATE;
     const std::string outKey = separate ? "--output-dir" : "--output";
     if (!args.has(outKey))
         return argError("执行配置需要 " + outKey,
@@ -92,8 +91,8 @@ int cmdConfig(const std::vector<std::string>& tokens, const GlobalOptions& go) {
                                  : "配置为合并导出，请用 --output <file> 指定输出路径");
 
     // 显式坍缩：仅 MERGED+COLLAPSE 时为真——不可坍缩则 job 返回退出码 2（IT-18 触发路径）。
-    const bool explicitCollapse = (config.emitParams.mode == engine::EmitMode::MERGED &&
-                                   config.emitParams.layout == engine::MergeLayout::COLLAPSE);
+    const bool explicitCollapse = config.emitParams.mode == engine::EmitMode::MERGED &&
+                                  config.emitParams.layout == engine::MergeLayout::COLLAPSE;
     const JobOptions opt = makeJobOptions(go, explicitCollapse);
 
     // --- §5.3 第 6 步：读图（失败退出码 3）。---

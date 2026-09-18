@@ -8,7 +8,6 @@
 // ============================================================================
 #pragma once
 
-#include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
@@ -17,7 +16,6 @@
 #include "core/color.h"
 #include "core/image.h"
 #include "core/point.h"
-#include "annotation/rasterizer.h"
 #include "geometry/shape_type.h"
 #include "geometry/shapes.h"
 #include "history/history_manager.h"

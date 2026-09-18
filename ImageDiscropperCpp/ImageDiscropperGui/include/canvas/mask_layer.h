@@ -28,11 +28,11 @@ class MaskLayer {
 public:
     // 依 Core 结果重建遮罩。visible=false 或结果不成功时清空（不显示遮罩）。
     // W/H 为原图尺寸（场景坐标范围），kept 区域按原图像素坐标叠加。
-    void rebuild(QGraphicsScene& scene, const idc::engine::EngineResult& result,
+    void rebuild(QGraphicsScene& scene, const engine::EngineResult& result,
                  int width, int height, bool visible);
 
     // 显隐切换（不重建，仅设可见性；对应右键菜单「切换预览遮罩」）。
-    void setVisible(bool visible);
+    void setVisible(bool visible) const;
 
     // 清空全部遮罩图元（从场景移除并释放）。
     void clear();

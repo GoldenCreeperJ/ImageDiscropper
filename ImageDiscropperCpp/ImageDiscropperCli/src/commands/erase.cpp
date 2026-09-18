@@ -40,8 +40,7 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     const bool hasRect = args.has("--rect");
     const bool hasH = args.has("--hband");
     const bool hasV = args.has("--vband");
-    const int geoKinds = static_cast<int>(hasRect) + static_cast<int>(hasH) + static_cast<int>(hasV);
-    if (geoKinds != 1)
+    if (const int geoKinds = static_cast<int>(hasRect) + static_cast<int>(hasH) + static_cast<int>(hasV); geoKinds != 1)
         return argError("--rect / --hband / --vband 必须三选一",
                         geoKinds == 0 ? "请给出恰好一种几何参数（--rect 可重复以做多矩形并集剔除）"
                                       : "不可混用多种几何参数");
@@ -61,7 +60,7 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
 
     std::string err;
     if (hasMerge) {
-        engine::MergeLayout layout = engine::MergeLayout::COLLAPSE;
+        auto layout = engine::MergeLayout::COLLAPSE;
         if (!parseMerge(args.get("--merge"), layout, err)) return argError(err);
         // 仅 L3 可重排（Core runEngine 硬约束）：erase 为 L2，显式 rearrange 直接拒绝。
         if (layout == engine::MergeLayout::REARRANGE)
@@ -69,7 +68,7 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
                             "合并重排仅 L3 grid 命令支持；L2 请用 --merge collapse，或去掉 --merge 分离导出");
         config.emitParams.mode = engine::EmitMode::MERGED;
         config.emitParams.layout = layout;
-        explicitCollapse = (layout == engine::MergeLayout::COLLAPSE);
+        explicitCollapse = layout == engine::MergeLayout::COLLAPSE;
         if (!args.has("--output"))
             return argError("合并导出缺少 --output", "请用 --output <file> 指定合并输出路径");
     } else {
@@ -82,8 +81,7 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     // --- §5.3 第 5 步：几何格式校验。带坐标先暂存，读图后再构造贯穿全图的带矩形。---
     int bandA = 0, bandB = 0;
     if (hasRect) {
-        const std::vector<std::string> rectStrs = args.getAll("--rect");
-        if (rectStrs.size() == 1) {
+        if (const std::vector<std::string> rectStrs = args.getAll("--rect"); rectStrs.size() == 1) {
             // 单矩形 → 十字切割（保留四角）。
             engine::RectRegion r;
             if (!parseRect(rectStrs[0], r, err)) return argError(err);

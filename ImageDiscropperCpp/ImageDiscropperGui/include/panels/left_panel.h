@@ -27,13 +27,13 @@ public:
     // 绑定 Document（面板据此读写状态）。
     void setDocument(Document* doc);
     // 从 Document 反向同步按钮选中态（用 blockSignals 防回环）。
-    void syncFromDocument();
+    void syncFromDocument() const;
 
 private slots:
     // 模式按钮切换（id：1=L1, 2=L2, 3=L3）。
-    void onModeToggled(int id, bool checked);
+    void onModeToggled(int id, bool checked) const;
     // 极性按钮切换（id：0=keep, 1=remove）。
-    void onPolarityToggled(int id, bool checked);
+    void onPolarityToggled(int id, bool checked) const;
 
 private:
     Document* doc_{nullptr};

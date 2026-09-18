@@ -40,8 +40,7 @@ void ArgParser::parse(const std::vector<std::string>& tokens) {
         if (onlyPositional || !startsWithDash(t)) { positional_.push_back(t); continue; }
 
         // "--name=value" 形式：在首个 '=' 处切分。
-        const std::size_t eq = t.find('=');
-        if (eq != std::string::npos) {
+        if (const std::size_t eq = t.find('='); eq != std::string::npos) {
             record(opts_, t.substr(0, eq), t.substr(eq + 1));
             continue;
         }
@@ -85,8 +84,8 @@ GlobalOptions parseGlobalOptions(const std::vector<std::string>& args) {
 
         // "=value" 形式的全局取值选项。
         const std::size_t eq = t.find('=');
-        const std::string name = (eq == std::string::npos) ? t : t.substr(0, eq);
-        const bool hasInline = (eq != std::string::npos);
+        const std::string name = eq == std::string::npos ? t : t.substr(0, eq);
+        const bool hasInline = eq != std::string::npos;
         const std::string inlineVal = hasInline ? t.substr(eq + 1) : std::string();
 
         if (name == "--help" || name == "-h") { go.help = true; continue; }
@@ -102,7 +101,6 @@ GlobalOptions parseGlobalOptions(const std::vector<std::string>& args) {
         if (name == "--save-config") {
             if (hasInline) go.saveConfig = inlineVal;
             else if (i + 1 < args.size()) go.saveConfig = args[++i];
-            continue;
         }
     }
     return go;

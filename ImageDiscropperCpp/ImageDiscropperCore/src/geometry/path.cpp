@@ -81,12 +81,12 @@ BoundingBox Path::bounds() const {
     double maxX = -std::numeric_limits<double>::infinity();
     double maxY = -std::numeric_limits<double>::infinity();
 
-    for (const auto& seg : segments_) {
-        for (std::size_t i = 0; i + 1 < seg.coords.size(); i += 2) {
-            minX = std::min(minX, seg.coords[i]);
-            maxX = std::max(maxX, seg.coords[i]);
-            minY = std::min(minY, seg.coords[i + 1]);
-            maxY = std::max(maxY, seg.coords[i + 1]);
+    for (const auto&[type, coords] : segments_) {
+        for (std::size_t i = 0; i + 1 < coords.size(); i += 2) {
+            minX = std::min(minX, coords[i]);
+            maxX = std::max(maxX, coords[i]);
+            minY = std::min(minY, coords[i + 1]);
+            maxY = std::max(maxY, coords[i + 1]);
         }
     }
     if (minX > maxX) return {0, 0, 0, 0};
@@ -135,25 +135,25 @@ static void flattenCubic(Path& out, const double c1x, const double c1y, const do
 Path Path::flattened(const double flatness) const {
     Path out;
     double curX = 0.0, curY = 0.0;
-    for (const auto& seg : segments_) {
-        switch (seg.type) {
+    for (const auto&[type, coords] : segments_) {
+        switch (type) {
             case PathSegmentType::MOVE_TO:
-                out.moveTo(seg.coords[0], seg.coords[1]);
-                curX = seg.coords[0]; curY = seg.coords[1];
+                out.moveTo(coords[0], coords[1]);
+                curX = coords[0]; curY = coords[1];
                 break;
             case PathSegmentType::LINE_TO:
-                out.lineTo(seg.coords[0], seg.coords[1]);
-                curX = seg.coords[0]; curY = seg.coords[1];
+                out.lineTo(coords[0], coords[1]);
+                curX = coords[0]; curY = coords[1];
                 break;
             case PathSegmentType::QUAD_TO:
-                flattenQuad(out, seg.coords[0], seg.coords[1], curX, curY,
-                            seg.coords[2], seg.coords[3], flatness);
-                curX = seg.coords[2]; curY = seg.coords[3];
+                flattenQuad(out, coords[0], coords[1], curX, curY,
+                            coords[2], coords[3], flatness);
+                curX = coords[2]; curY = coords[3];
                 break;
             case PathSegmentType::CUBIC_TO:
-                flattenCubic(out, seg.coords[0], seg.coords[1], seg.coords[2], seg.coords[3],
-                             curX, curY, seg.coords[4], seg.coords[5], flatness);
-                curX = seg.coords[4]; curY = seg.coords[5];
+                flattenCubic(out, coords[0], coords[1], coords[2], coords[3],
+                             curX, curY, coords[4], coords[5], flatness);
+                curX = coords[4]; curY = coords[5];
                 break;
             case PathSegmentType::CLOSE:
                 out.closePath();
@@ -170,15 +170,15 @@ static std::vector<std::vector<core::Point2D>> extractPolylines(const Path& flat
     std::vector<std::vector<core::Point2D>> polylines;
     std::vector<core::Point2D> current;
     core::Point2D first{0, 0};
-    for (const auto& seg : flat.segments()) {
-        if (seg.type == PathSegmentType::MOVE_TO) {
+    for (const auto&[type, coords] : flat.segments()) {
+        if (type == PathSegmentType::MOVE_TO) {
             if (!current.empty()) polylines.push_back(current);
             current.clear();
-            first = {seg.coords[0], seg.coords[1]};
+            first = {coords[0], coords[1]};
             current.push_back(first);
-        } else if (seg.type == PathSegmentType::LINE_TO) {
-            current.push_back({seg.coords[0], seg.coords[1]});
-        } else if (seg.type == PathSegmentType::CLOSE) {
+        } else if (type == PathSegmentType::LINE_TO) {
+            current.emplace_back(coords[0], coords[1]);
+        } else if (type == PathSegmentType::CLOSE) {
             if (!current.empty() && (current.back().x != first.x || current.back().y != first.y)) {
                 current.push_back(first);
             }
@@ -198,13 +198,12 @@ bool Path::contains(const double px, const double py, const double flatness) con
         for (std::size_t i = 0; i + 1 < poly.size(); ++i) {
             const double x1 = poly[i].x, y1 = poly[i].y;
             const double x2 = poly[i + 1].x, y2 = poly[i + 1].y;
-            if ((y1 > py) != (y2 > py)) {
-                const double xIntersect = x1 + (py - y1) * (x2 - x1) / (y2 - y1);
-                if (px < xIntersect) ++crossings;
+            if (y1 > py != y2 > py) {
+                if (const double xIntersect = x1 + (py - y1) * (x2 - x1) / (y2 - y1); px < xIntersect) ++crossings;
             }
         }
     }
-    return (crossings % 2) == 1;
+    return crossings % 2 == 1;
 }
 
 // 点到线段的最短距离（内部工具）。

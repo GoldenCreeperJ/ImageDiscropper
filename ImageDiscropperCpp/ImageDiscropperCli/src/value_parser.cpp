@@ -60,13 +60,13 @@ bool hexByte(const std::string& s, const std::size_t pos, std::uint8_t& out) {
     const int hi = hexNibble(s[pos]);
     const int lo = hexNibble(s[pos + 1]);
     if (hi < 0 || lo < 0) return false;
-    out = static_cast<std::uint8_t>((hi << 4) | lo);
+    out = static_cast<std::uint8_t>(hi << 4 | lo);
     return true;
 }
 
 } // namespace
 
-bool parseRect(const std::string& s, idc::engine::RectRegion& out, std::string& err) {
+bool parseRect(const std::string& s, engine::RectRegion& out, std::string& err) {
     const std::vector<std::string> p = split(s, ',');
     if (p.size() != 4) { err = "矩形须为 x1,y1,x2,y2 四个整数"; return false; }
     int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
@@ -74,7 +74,7 @@ bool parseRect(const std::string& s, idc::engine::RectRegion& out, std::string& 
         err = "矩形坐标含非整数值：'" + s + "'";
         return false;
     }
-    out = idc::engine::RectRegion(x1, y1, x2, y2);
+    out = engine::RectRegion(x1, y1, x2, y2);
     return true;
 }
 
@@ -131,14 +131,14 @@ bool parseOrderCells(const std::string& s, std::vector<std::pair<int, int>>& out
     return true;
 }
 
-bool parseColor(const std::string& s, idc::core::Color& out, std::string& err) {
+bool parseColor(const std::string& s, core::Color& out, std::string& err) {
     std::string h = s;
     if (!h.empty() && h.front() == '#') h.erase(0, 1);
     // #RGB：每位十六进制扩展为一个字节（0xF → 0xFF）。
     if (h.size() == 3) {
         const int r = hexNibble(h[0]), g = hexNibble(h[1]), b = hexNibble(h[2]);
         if (r < 0 || g < 0 || b < 0) { err = "颜色含非法十六进制字符：'" + s + "'"; return false; }
-        out = idc::core::Color(static_cast<std::uint8_t>(r * 17),
+        out = core::Color(static_cast<std::uint8_t>(r * 17),
                                static_cast<std::uint8_t>(g * 17),
                                static_cast<std::uint8_t>(b * 17), 255);
         return true;
@@ -148,7 +148,7 @@ bool parseColor(const std::string& s, idc::core::Color& out, std::string& err) {
         if (!hexByte(h, 0, r) || !hexByte(h, 2, g) || !hexByte(h, 4, b)) {
             err = "颜色含非法十六进制字符：'" + s + "'"; return false;
         }
-        out = idc::core::Color(r, g, b, 255);
+        out = core::Color(r, g, b, 255);
         return true;
     }
     if (h.size() == 8) { // #AARRGGBB（与 Core 配置约定一致）。
@@ -156,45 +156,45 @@ bool parseColor(const std::string& s, idc::core::Color& out, std::string& err) {
         if (!hexByte(h, 0, a) || !hexByte(h, 2, r) || !hexByte(h, 4, g) || !hexByte(h, 6, b)) {
             err = "颜色含非法十六进制字符：'" + s + "'"; return false;
         }
-        out = idc::core::Color(r, g, b, a);
+        out = core::Color(r, g, b, a);
         return true;
     }
     err = "颜色须为 #RGB / #RRGGBB / #AARRGGBB：'" + s + "'";
     return false;
 }
 
-bool parseFormat(const std::string& s, idc::engine::ExportFormat& out, std::string& err) {
+bool parseFormat(const std::string& s, engine::ExportFormat& out, std::string& err) {
     const std::string f = toLower(s);
-    if (f == "png") { out = idc::engine::ExportFormat::PNG; return true; }
-    if (f == "jpeg" || f == "jpg") { out = idc::engine::ExportFormat::JPEG; return true; }
-    if (f == "webp") { out = idc::engine::ExportFormat::WEBP; return true; }
-    if (f == "bmp") { out = idc::engine::ExportFormat::BMP; return true; }
+    if (f == "png") { out = engine::ExportFormat::PNG; return true; }
+    if (f == "jpeg" || f == "jpg") { out = engine::ExportFormat::JPEG; return true; }
+    if (f == "webp") { out = engine::ExportFormat::WEBP; return true; }
+    if (f == "bmp") { out = engine::ExportFormat::BMP; return true; }
     err = "不支持的格式：'" + s + "'（可选 png/jpeg/webp/bmp）";
     return false;
 }
 
-bool parseSort(const std::string& s, idc::engine::SortStrategy& out, std::string& err) {
+bool parseSort(const std::string& s, engine::SortStrategy& out, std::string& err) {
     const std::string v = toLower(s);
-    if (v == "row-major") { out = idc::engine::SortStrategy::ROW_MAJOR; return true; }
-    if (v == "column-major") { out = idc::engine::SortStrategy::COLUMN_MAJOR; return true; }
-    if (v == "custom") { out = idc::engine::SortStrategy::CUSTOM; return true; }
+    if (v == "row-major") { out = engine::SortStrategy::ROW_MAJOR; return true; }
+    if (v == "column-major") { out = engine::SortStrategy::COLUMN_MAJOR; return true; }
+    if (v == "custom") { out = engine::SortStrategy::CUSTOM; return true; }
     err = "不支持的排序策略：'" + s + "'（可选 row-major/column-major/custom）";
     return false;
 }
 
-bool parseMargin(const std::string& s, idc::engine::RemainderPolicy& out, std::string& err) {
+bool parseMargin(const std::string& s, engine::RemainderPolicy& out, std::string& err) {
     const std::string v = toLower(s);
-    if (v == "discard") { out = idc::engine::RemainderPolicy::DISCARD; return true; }
-    if (v == "keep-partial") { out = idc::engine::RemainderPolicy::KEEP_PARTIAL; return true; }
-    if (v == "pad") { out = idc::engine::RemainderPolicy::PAD; return true; }
+    if (v == "discard") { out = engine::RemainderPolicy::DISCARD; return true; }
+    if (v == "keep-partial") { out = engine::RemainderPolicy::KEEP_PARTIAL; return true; }
+    if (v == "pad") { out = engine::RemainderPolicy::PAD; return true; }
     err = "不支持的余量策略：'" + s + "'（可选 discard/keep-partial/pad）";
     return false;
 }
 
-bool parseMerge(const std::string& s, idc::engine::MergeLayout& out, std::string& err) {
+bool parseMerge(const std::string& s, engine::MergeLayout& out, std::string& err) {
     const std::string v = toLower(s);
-    if (v == "collapse") { out = idc::engine::MergeLayout::COLLAPSE; return true; }
-    if (v == "rearrange") { out = idc::engine::MergeLayout::REARRANGE; return true; }
+    if (v == "collapse") { out = engine::MergeLayout::COLLAPSE; return true; }
+    if (v == "rearrange") { out = engine::MergeLayout::REARRANGE; return true; }
     err = "不支持的合并方式：'" + s + "'（可选 collapse/rearrange）";
     return false;
 }

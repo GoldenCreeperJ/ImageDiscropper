@@ -27,8 +27,8 @@ idc::core::Image makeImage(const int w, const int h) {
     idc::core::Image img(w, h, idc::core::ImageFormat::RGBA);
     for (int y = 0; y < h; ++y)
         for (int x = 0; x < w; ++x)
-            img.setPixel(x, y, idc::core::Color(static_cast<std::uint8_t>((x * 5) % 256),
-                                                static_cast<std::uint8_t>((y * 9) % 256),
+            img.setPixel(x, y, idc::core::Color(static_cast<std::uint8_t>(x * 5 % 256),
+                                                static_cast<std::uint8_t>(y * 9 % 256),
                                                 100, 255));
     return img;
 }
@@ -36,7 +36,7 @@ idc::core::Image makeImage(const int w, const int h) {
 // 读取整个文件为字节。
 std::vector<std::uint8_t> readAll(const fs::path& p) {
     std::ifstream ifs(p, std::ios::binary);
-    return std::vector<std::uint8_t>((std::istreambuf_iterator<char>(ifs)),
+    return std::vector<std::uint8_t>(std::istreambuf_iterator(ifs),
                                      std::istreambuf_iterator<char>());
 }
 

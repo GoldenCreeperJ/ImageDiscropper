@@ -32,9 +32,9 @@ public:
     // 绑定标注模型（用于反向同步标注可见态）。
     void setModel(AnnotationBridge* model);
     // 从模型反向同步：标注显示开关 = layerVisible()（blockSignals 防回环）。
-    void syncFromModel();
+    void syncFromModel() const;
     // 外部（视图菜单 / 右键「切换预览遮罩」）改动遮罩显隐后，反向同步遮罩复选框（blockSignals 防回环）。
-    void setMaskVisible(bool visible);
+    void setMaskVisible(bool visible) const;
 
 signals:
     // 底图图层显示/隐藏（MainWindow 切换画布 base 图元可见性）。

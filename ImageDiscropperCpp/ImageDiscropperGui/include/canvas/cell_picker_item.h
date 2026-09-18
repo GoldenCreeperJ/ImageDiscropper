@@ -33,9 +33,9 @@ public:
     explicit CellPickerItem(QGraphicsItem* parent = nullptr);
 
     // 依 Core 网格更新可点选的单元几何（cells 的区域与序号）；width/height 为原图尺寸。
-    void setGrid(const idc::engine::Grid& grid, int width, int height);
+    void setGrid(const engine::Grid& grid, int width, int height);
     // 依 Document 更新当前选择集（有序；CUSTOM 下其顺序即自定义序）与排序策略。
-    void setSelection(const std::vector<int>& selected, idc::engine::SortStrategy strategy);
+    void setSelection(const std::vector<int>& selected, engine::SortStrategy strategy);
     // 视图缩放换算的覆盖层尺度（≈8 屏幕px 对应的场景单位）：用于单击/拖拽阈值与边框观感。
     void setOverlayScale(qreal sceneUnits);
 
@@ -73,11 +73,11 @@ private:
     // 局部重绘某序号单元（悬停反馈用；避免大选集下整层重绘）。
     void updateCell(int index);
 
-    std::vector<idc::engine::Cell> cells_;  // Core 单元（区域 + 序号）：命中测试与高亮的唯一几何来源。
+    std::vector<engine::Cell> cells_;  // Core 单元（区域 + 序号）：命中测试与高亮的唯一几何来源。
     std::vector<int> selected_;             // 当前选择集（有序）。
     std::vector<char> selFlag_;             // 按单元序号索引的选中标记（O(1) 查询）。
     std::vector<int> selPos_;               // 按单元序号索引的自定义序位（1-based；0=未选）。
-    idc::engine::SortStrategy strategy_{idc::engine::SortStrategy::ROW_MAJOR};
+    engine::SortStrategy strategy_{engine::SortStrategy::ROW_MAJOR};
     int imgW_{0};
     int imgH_{0};
     qreal overlayScale_{8.0};

@@ -17,8 +17,7 @@ std::vector<std::size_t> Selection::resolve() const {
     kept.reserve(selected_.size());
     for (std::size_t i = 0; i < selected_.size(); ++i) {
         // KEEP 保留选中项；REMOVE 保留未选中项（补集）。
-        const bool isKept = (polarity_ == Polarity::KEEP) ? selected_[i] : !selected_[i];
-        if (isKept) kept.push_back(i);
+        if (polarity_ == Polarity::KEEP ? selected_[i] : !selected_[i]) kept.push_back(i);
     }
     return kept;
 }
@@ -28,7 +27,7 @@ std::vector<std::size_t> Selection::resolve() const {
 RegionSet applyPolarity(const RegionSet& all, const Selection& selection) {
     // 将 resolve 结果展开为按序号索引的保留标志表，便于 O(1) 过滤。
     const std::vector<std::size_t> keptIndices = selection.resolve();
-    std::vector<bool> keepFlag(selection.cellCount(), false);
+    std::vector keepFlag(selection.cellCount(), false);
     for (const std::size_t idx : keptIndices) {
         if (idx < keepFlag.size()) keepFlag[idx] = true;
     }

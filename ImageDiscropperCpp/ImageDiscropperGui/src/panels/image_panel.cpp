@@ -14,7 +14,6 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QSpinBox>
-#include <QVBoxLayout>
 
 #include "model/document.h"
 
@@ -197,7 +196,7 @@ void ImagePanel::onResizeApply() {
 }
 
 // 保持宽高比时，改宽联动算高（比例取当前工作图宽高；纯 UI 便利，不涉及切割几何）。
-void ImagePanel::onWidthEdited(const int value) {
+void ImagePanel::onWidthEdited(const int value) const {
     if (!keepRatio_->isChecked() || !doc_ || !doc_->hasImage()) return;
     const int w = doc_->width();
     if (w <= 0) return;

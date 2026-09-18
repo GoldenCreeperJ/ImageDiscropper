@@ -15,13 +15,13 @@ namespace idc::gui {
 
 // 预览结果：降采样副本 + 预览→原图的放大系数（原图尺寸 / 预览尺寸）。
 struct PreviewImage {
-    idc::core::Image image;   // 预览图（scale==1 时为原图副本）
+    core::Image image;   // 预览图（scale==1 时为原图副本）
     double scaleX{1.0};       // 横向放大系数：原图宽 / 预览宽
     double scaleY{1.0};       // 纵向放大系数：原图高 / 预览高
 };
 
 // 生成用于画布显示的降采样副本：最长边不超过 maxDimension 时原样返回（系数 1.0）；
 // 否则按最近邻缩放到最长边 = maxDimension。maxDimension <= 0 视为不缩放。
-PreviewImage makePreview(const idc::core::Image& src, int maxDimension);
+PreviewImage makePreview(const core::Image& src, int maxDimension);
 
 } // namespace idc::gui

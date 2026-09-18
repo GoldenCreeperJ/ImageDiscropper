@@ -28,7 +28,7 @@ public:
     // 绑定标注模型（仅用于反向同步当前工具选中态）。
     void setModel(AnnotationBridge* model);
     // 从模型反向同步：勾选当前工具对应按钮（blockSignals 防回环）。
-    void syncFromModel();
+    void syncFromModel() const;
 
 signals:
     // 用户选择了某个标注工具。

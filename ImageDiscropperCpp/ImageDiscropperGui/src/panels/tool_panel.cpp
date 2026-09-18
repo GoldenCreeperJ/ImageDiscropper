@@ -17,7 +17,7 @@ namespace {
 
 // 工具按钮样式：中性底 + 选中态蓝色高亮（与 LeftPanel 模式按钮观感一致）。
 // 【深色模式】未选态背景为硬编码浅色（#f2f2f2），需显式指定深色文字，否则系统深色主题下白字浅底不可读。
-const char* kToolStyle =
+auto kToolStyle =
     "QPushButton{padding:5px;border:1px solid #bbb;border-radius:4px;background:#f2f2f2;color:#1b1b1b;}"
     "QPushButton:checked{background:#3b7ddd;color:#fff;border-color:#3b7ddd;}";
 
@@ -60,14 +60,14 @@ ToolPanel::ToolPanel(QWidget* parent) : QWidget(parent) {
     toolGroup_ = new QButtonGroup(this);
     toolGroup_->setExclusive(true);
 
-    const int cols = 3;
     int i = 0;
-    for (const ToolEntry& e : kTools) {
-        auto* btn = new QPushButton(QString::fromUtf8(e.label), box);
+    for (const auto&[tool, label, tip] : kTools) {
+        constexpr int cols = 3;
+        auto* btn = new QPushButton(QString::fromUtf8(label), box);
         btn->setCheckable(true);
         btn->setStyleSheet(kToolStyle);
-        btn->setToolTip(QString::fromUtf8(e.tip));
-        toolGroup_->addButton(btn, static_cast<int>(e.tool));
+        btn->setToolTip(QString::fromUtf8(tip));
+        toolGroup_->addButton(btn, static_cast<int>(tool));
         grid->addWidget(btn, i / cols, i % cols);
         ++i;
     }
@@ -85,7 +85,7 @@ void ToolPanel::setModel(AnnotationBridge* model) {
 }
 
 // 从模型反向同步当前工具选中态。
-void ToolPanel::syncFromModel() {
+void ToolPanel::syncFromModel() const {
     if (!model_) return;
     toolGroup_->blockSignals(true);
     if (auto* b = toolGroup_->button(static_cast<int>(model_->currentTool()))) b->setChecked(true);

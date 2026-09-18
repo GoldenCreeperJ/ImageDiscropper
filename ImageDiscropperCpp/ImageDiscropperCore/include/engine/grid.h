@@ -13,7 +13,6 @@
 // ============================================================================
 #pragma once
 
-#include <cstddef>
 #include <vector>
 
 #include "engine/region.h"

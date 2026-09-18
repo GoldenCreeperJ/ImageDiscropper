@@ -25,8 +25,8 @@ namespace idc::gui {
 //   · 文字（TEXT）：以 textXf（局部→世界的有效变换）临时叠加到 painter 后绘制真实字形（字号 fontSize）。
 // 仅发绘制指令；不绘选中高亮 / 手柄（图元专属，留在 AnnotationItem）。ann.shape 为空则忽略。
 void paintAnnotation(QPainter& painter,
-                     const idc::annotation::Annotation& ann,
+                     const annotation::Annotation& ann,
                      const QPainterPath& worldDrawPath,
-                     const idc::geometry::AffineTransform& textXf);
+                     const geometry::AffineTransform& textXf);
 
 } // namespace idc::gui

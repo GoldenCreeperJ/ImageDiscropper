@@ -21,8 +21,8 @@ idc::core::Image makeImage(const int w, const int h) {
     idc::core::Image img(w, h, idc::core::ImageFormat::RGBA);
     for (int y = 0; y < h; ++y)
         for (int x = 0; x < w; ++x)
-            img.setPixel(x, y, idc::core::Color(static_cast<std::uint8_t>((x * 7) % 256),
-                                                static_cast<std::uint8_t>((y * 11) % 256),
+            img.setPixel(x, y, idc::core::Color(static_cast<std::uint8_t>(x * 7 % 256),
+                                                static_cast<std::uint8_t>(y * 11 % 256),
                                                 128, 255));
     return img;
 }
@@ -187,7 +187,7 @@ void testEnginePipeline() {
     // 选择序 row-major、selectedCells={0,1,2,3} → 块列表 [c0,c1,c2,c3]；单元 100×100、2×2 画布。
     {
         const Image img = makeImage(300, 300);
-        auto base = [&]() {
+        auto base = [&] {
             EngineConfig cfg;
             cfg.source = SourceInfo{300, 300};
             cfg.cut.tier = Tier::L3;
@@ -240,16 +240,16 @@ void testEnginePipeline() {
     {
         Sequence s;
         s.build(9, 3, 3, SequenceParams{SortStrategy::ROW_MAJOR, false, false});
-        CHECK((s.order() == std::vector<int>{0, 1, 2, 3, 4, 5, 6, 7, 8}));
+        CHECK((s.order() == std::vector{0, 1, 2, 3, 4, 5, 6, 7, 8}));
 
         s.build(9, 3, 3, SequenceParams{SortStrategy::COLUMN_MAJOR, false, false});
-        CHECK((s.order() == std::vector<int>{0, 3, 6, 1, 4, 7, 2, 5, 8}));
+        CHECK((s.order() == std::vector{0, 3, 6, 1, 4, 7, 2, 5, 8}));
 
         s.build(9, 3, 3, SequenceParams{SortStrategy::ROW_MAJOR, true, false}); // 整体逆序
-        CHECK((s.order() == std::vector<int>{8, 7, 6, 5, 4, 3, 2, 1, 0}));
+        CHECK((s.order() == std::vector{8, 7, 6, 5, 4, 3, 2, 1, 0}));
 
         s.build(9, 3, 3, SequenceParams{SortStrategy::ROW_MAJOR, false, true}); // 蛇形
-        CHECK((s.order() == std::vector<int>{0, 1, 2, 5, 4, 3, 6, 7, 8}));
+        CHECK((s.order() == std::vector{0, 1, 2, 5, 4, 3, 6, 7, 8}));
 
         Sequence custom;
         custom.setCustom({3, 1, 2, 0});

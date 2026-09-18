@@ -125,9 +125,8 @@ bool exportSeparate(const Composition& composition, const core::Image& source,
     for (const Placement& p : composition.placements) {
         const core::Image sub =
             source.crop(p.source.left, p.source.top, p.source.right, p.source.bottom);
-        const int idx = (p.index >= 0) ? p.index : i; // 优先用单元序号命名。
-        const fs::path file = dir / (applyNaming(composition.naming, name, idx, p.row, p.col) + ext);
-        if (!writeImageFile(file.string(), sub, fmt, composition.quality, core::kTransparent))
+        const int idx = p.index >= 0 ? p.index : i; // 优先用单元序号命名。
+        if (const fs::path file = dir / (applyNaming(composition.naming, name, idx, p.row, p.col) + ext); !writeImageFile(file.string(), sub, fmt, composition.quality, core::kTransparent))
             allOk = false;
         ++i;
     }
@@ -139,8 +138,7 @@ bool exportSeparate(const Composition& composition, const core::Image& source,
 bool exportMerged(const Composition& composition, const core::Image& source,
                   const std::string& outputPath) {
     const fs::path outPath(outputPath);
-    const fs::path parent = outPath.parent_path();
-    if (!parent.empty() && !ensureDirectory(parent)) return false; // E-8：父目录不可创建。
+    if (const fs::path parent = outPath.parent_path(); !parent.empty() && !ensureDirectory(parent)) return false; // E-8：父目录不可创建。
 
     bool known = false;
     ExportFormat fmt = formatFromExt(extensionOf(outputPath), known);
@@ -168,7 +166,7 @@ bool exportImage(const Composition& composition, const core::Image& source,
     if (outputPath.empty()) return false;             // E-8：路径为空。
     if (source.empty()) return false;                 // 无源图像，无法裁剪。
 
-    const bool separate = (composition.canvasWidth <= 0 || composition.canvasHeight <= 0);
+    const bool separate = composition.canvasWidth <= 0 || composition.canvasHeight <= 0;
     return separate ? exportSeparate(composition, source, outputPath)
                     : exportMerged(composition, source, outputPath);
 }

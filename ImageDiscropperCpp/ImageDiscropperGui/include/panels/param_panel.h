@@ -37,39 +37,39 @@ public:
     // 从 Document 反向同步控件（形状/子功能/坐标），blockSignals 防回环。
     void syncFromDocument();
     // 切换到某模式对应的页（L1→0, L2→1, L3→2）。
-    void setMode(idc::engine::Tier tier);
+    void setMode(engine::Tier tier) const;
     // 由 MainWindow 依 Core isCollapsible 结果回灌坍缩可行性提示（L2 页）。
-    void setCollapseHint(bool collapsible, const QString& reason);
+    void setCollapseHint(bool collapsible, const QString& reason) const;
 
     // L2 多矩形：仅刷新列表中第 index 行的坐标文本（若为选中行则同步 spinbox），
     // 不重建整个列表——供画布拖拽期间实时回显矩形尺寸（此时 syncPanels 被跳过）。
-    void updateRectListItem(int index);
+    void updateRectListItem(int index) const;
     // L2 多矩形：把列表选中行置为 index（已是则免打扰），触发 rectSelected 与 spinbox 回填。
-    void selectRectRow(int index);
+    void selectRectRow(int index) const;
 
 signals:
     // L2 多矩形：列表选中行变化（-1 = 无），供 MainWindow 高亮画布上对应选区框。
     void rectSelected(int index);
 
 private slots:
-    void onL1ShapeChanged(int index);
-    void onL2SubChanged(int index);
-    void onCoordEdited(); // L1/L2 坐标变更统一入口。
-    void onConvertToGrid(); // L2「转为网格模式编辑」：把当前选区送入 L3。
+    void onL1ShapeChanged(int index) const;
+    void onL2SubChanged(int index) const;
+    void onCoordEdited() const; // L1/L2 坐标变更统一入口。
+    void onConvertToGrid() const; // L2「转为网格模式编辑」：把当前选区送入 L3。
     // L2 多矩形并集（仅 MULTI_RECT）。
     void onRectListSelectionChanged(); // 列表选中项 → 把该矩形坐标载入 spinbox。
-    void onRectDelClicked();           // 删除选中矩形。
-    void onRectClearClicked();         // 清空矩形列表。
+    void onRectDelClicked() const;           // 删除选中矩形。
+    void onRectClearClicked() const;         // 清空矩形列表。
     // L3 网格参数 / 选择集 / 排序。
-    void onGridOriginEdited();          // 基准点 x0/y0 变更。
-    void onCellSizeEdited();            // 单元尺寸 cw/ch 变更。
-    void onRemainderChanged(int index); // 余量策略变更。
-    void onSortStrategyChanged(int index); // 排序策略变更。
-    void onSortReverseToggled(bool on);    // 整体逆序。
-    void onSortSnakeToggled(bool on);      // 蛇形排序。
-    void onSelectAllCells();            // 全选。
-    void onInvertCells();               // 反选。
-    void onClearCells();                // 清空选择集。
+    void onGridOriginEdited() const;          // 基准点 x0/y0 变更。
+    void onCellSizeEdited() const;            // 单元尺寸 cw/ch 变更。
+    void onRemainderChanged(int index) const; // 余量策略变更。
+    void onSortStrategyChanged(int index) const; // 排序策略变更。
+    void onSortReverseToggled(bool on) const;    // 整体逆序。
+    void onSortSnakeToggled(bool on) const;      // 蛇形排序。
+    void onSelectAllCells() const;            // 全选。
+    void onInvertCells() const;               // 反选。
+    void onClearCells() const;                // 清空选择集。
 
 private:
     // 构建 L1 / L2 / L3 三页并加入 stack_。
@@ -77,7 +77,7 @@ private:
     QWidget* buildL2Page();
     QWidget* buildL3Page();
     // 把四个坐标 spinbox 组装为规范化矩形写回 Document。
-    void applyCoordsToDocument();
+    void applyCoordsToDocument() const;
 
     Document* doc_{nullptr};
     QStackedWidget* stack_{nullptr};

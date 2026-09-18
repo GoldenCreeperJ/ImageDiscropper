@@ -18,7 +18,6 @@
 // ============================================================================
 #pragma once
 
-#include <QColor>
 #include <QMainWindow>
 #include <QPixmap>
 
@@ -81,19 +80,19 @@ private slots:
     void onDocChanged();    // 参数变更：刷新预览 + 同步面板 + 状态栏。
     void onRightTabChanged(); // 右侧选项卡切换：切到「导出」页且预览已脏时补渲染一次（A：不可见时不渲染）。
     // 全局撤销/重做（G-12）：文档参数态历史的防抖采集（连接 Document::changed 与定时器 timeout）。
-    void scheduleHistoryCapture();  // 参数变更→重启防抖定时器（还原期间被 suppressHistory_ 抑制）。
+    void scheduleHistoryCapture() const;  // 参数变更→重启防抖定时器（还原期间被 suppressHistory_ 抑制）。
     void onDocHistoryTimeout();     // 防抖到点：把当前 EngineConfig 快照压入历史并刷新启用态。
     // 画布交互响应。
     void onRubberSelect(const QRectF& sceneRect);   // 框选新建选区。
     void onSelectionEdited(const QRectF& sceneRect);// 拖动/缩放/拖边既有选区（拖边＝移动切割线）。
     void onMultiRectEdited(int index, const QRectF& sceneRect); // L2 多矩形：拖动/缩放第 index 个选区框。
-    void onRectSelected(int index);                 // L2 多矩形：面板列表选中行→高亮画布对应选区框。
+    void onRectSelected(int index) const;                 // L2 多矩形：面板列表选中行→高亮画布对应选区框。
     void onCellToggled(int index);                  // L3 单击切换某单元。
     void onCellsMarquee(const std::vector<int>& indices); // L3 拖拽框选单元。
     void onCellReordered(int fromIndex, int toIndex); // L3 CUSTOM 拖拽调序。
     void onNudge(int dx, int dy);                   // 方向键微调选区。
-    void onCursor(const QPointF& scenePos);         // 光标坐标/像素颜色回报。
-    void onZoomChanged(qreal factor);               // 视图缩放倍数变化 → 更新状态栏放大倍数。
+    void onCursor(const QPointF& scenePos) const;         // 光标坐标/像素颜色回报。
+    void onZoomChanged(qreal factor) const;               // 视图缩放倍数变化 → 更新状态栏放大倍数。
     void onClearCut();                              // 清除切割线（清选区）。
     void onToggleMasks();                           // 切换预览遮罩显隐。
     void onModeAction(int tierInt);                 // 工具栏/快捷键切换模式。
@@ -112,9 +111,9 @@ private slots:
     // ---- 标注（第四阶段 G-4/G-5）：面板/画布意图 → AnnotationBridge（调 Core）→ 画布重绘 ----
     void onToolSelected(AnnoTool tool);              // 工具面板：切换标注工具（先收笔再切）。
     void onAnnoBridgeChanged();                       // 标注列表/预览变化：重绘画布标注层 + 属性面板同步。
-    void onAnnoPendingChanged();                     // 绘制拖拽预览（橡皮筋）变化：仅实时刷新预览图元。
-    void onAnnoSelectionChanged();                   // 选中项变化：重绘高亮 + 属性面板同步。
-    void onAnnoToolChanged();                        // 工具变化：同步工具面板 + 画布绘制态门控。
+    void onAnnoPendingChanged() const;                     // 绘制拖拽预览（橡皮筋）变化：仅实时刷新预览图元。
+    void onAnnoSelectionChanged() const;                   // 选中项变化：重绘高亮 + 属性面板同步。
+    void onAnnoToolChanged() const;                        // 工具变化：同步工具面板 + 画布绘制态门控。
     void onAnnoDragStart(const QPointF& scenePos);   // 画布绘制手势起点（依工具分派两点/折线/画笔/文字）。
     void onAnnoDragMove(const QPointF& scenePos);    // 画布绘制手势拖拽（两点形状预览/画笔追点/折线橡皮筋）。
     void onAnnoDragEnd(const QPointF& scenePos);     // 画布绘制手势释放（提交两点形状/画笔）。
@@ -124,15 +123,15 @@ private slots:
     void onAnnotationSelect(const QPointF& scenePos);// SELECT 工具下点中标注图元：Core hitTest 选中。
     void onAnnotationMoved(int index, double dx, double dy); // 拖动选中标注：Core 平移几何。
     void onAnnotationTransformed(int index, double sx, double sy, double rotateDeg); // 拖定向包围盒手柄：Core 缩放/旋转。
-    void onAnnotationTransformPreview(int index, double sx, double sy, double rotateDeg); // 手柄拖拽中：预览值实时回显到属性面板。
+    void onAnnotationTransformPreview(int index, double sx, double sy, double rotateDeg) const; // 手柄拖拽中：预览值实时回显到属性面板。
     void onAnnoColorPicked(const QColor& c);         // 属性面板：颜色。
     void onAnnoStrokeChanged(int width);             // 属性面板：描边粗细。
     void onAnnoFillChanged(bool fill);               // 属性面板：填充开关。
     void onAnnoTextChanged(const QString& text);     // 属性面板：文字内容。
     void onAnnoFontSizeChanged(double size);         // 属性面板：字号。
     void onAnnoTransformApply(double sx, double sy, double rotateDeg); // 属性面板：缩放/旋转选中标注（Core 非破坏性变换）。
-    void onBaseVisibilityChanged(bool visible);      // 图层面板：底图显隐（切画布 base 图元）。
-    void onMaskVisibilityChanged(bool visible);      // 图层面板：遮罩（保留/删除预览）显隐。
+    void onBaseVisibilityChanged(bool visible) const;      // 图层面板：底图显隐（切画布 base 图元）。
+    void onMaskVisibilityChanged(bool visible) const;      // 图层面板：遮罩（保留/删除预览）显隐。
     void onGridVisibilityChanged(bool visible);      // 图层面板：网格线显隐（重建落地）。
     void onCutLineVisibilityChanged(bool visible);   // 图层面板：切割线显隐。
     void onSelectionVisibilityChanged(bool visible); // 图层面板：选取边框显隐。
@@ -156,7 +155,7 @@ private:
     void refreshPreview();
     // 依引擎结果刷新导出面板的输出预览缩略图（G-11 / §4.6）：缓存 res.ok/composition 后转 renderExportPreviewFromCache。
     // 导出选项卡不可见时不渲染（仅置脏标志，A），避免无谓开销；切回该页时由 onRightTabChanged 补渲染。
-    void updateExportPreview(const idc::engine::EngineResult& res);
+    void updateExportPreview(const engine::EngineResult& res);
     // 用缓存的 lastComposition_/lastExportResOk_ 重渲染输出预览（不重跑 Core）：导出页可见时渲染、否则置脏。
     // 供烧录开关/标注变更等「不影响切割几何」的事件轻量刷新（B）与切回导出页时补渲染（A）共用。
     void renderExportPreviewFromCache();
@@ -164,26 +163,26 @@ private:
     // 则委托 util::bakeAnnotationsInto 把标注矢量烘焙到其副本上（渲染已下沉到 util，app 层只做编排）。
     QPixmap exportPreviewSource() const;
     // 预处理公共收尾：维度变化时清除失效选区（坐标基于旧尺寸），再写回工作图（触发 imageChanged）。
-    void applyWorkingImage(idc::core::Image next, const QString& okMsg);
+    void applyWorkingImage(core::Image next, const QString& okMsg);
     // 在模态忙碌对话框（不可取消、阻断其余输入）内同步执行 op：用于缩放/尺寸等可能耗时的重采样，
     // 给用户明确「正在处理」提示并禁止期间误触其他操作（防御性编程，NFR 卡顿兜底）。
     void runWithBusyDialog(const QString& text, const std::function<void()>& op);
     // 同步三个面板到 Document（blockSignals 防回环）。
-    void syncPanels();
+    void syncPanels() const;
     // 非模态提示（状态栏 + 提示标签），错误不打断用户（§5.2）。
-    void notify(const QString& msg, bool isError);
+    void notify(const QString& msg, bool isError) const;
     // 首次进入引导（§5.2）。
     void showFirstRunGuide();
     // 若焦点在数值输入控件上则忽略单键快捷键（避免打字误触）。
-    bool focusInTextInput() const;
+    static bool focusInTextInput();
     // 模式中文名。
-    static QString modeName(idc::engine::Tier tier);
+    static QString modeName(engine::Tier tier);
 
     // ---- 全局撤销/重做（G-12）：文档参数态历史（双历史之一；标注历史在 AnnotationBridge/Core）----
     void resetDocHistory();          // 清空历史并以当前态为唯一基线（构造/换图/载入配置后调用）。
     void undoDocument();             // 文档参数撤销：弹当前态到重做栈，还原新栈顶（上一态）。
     void redoDocument();             // 文档参数重做：从重做栈弹回并还原。
-    void updateUndoRedoEnabled();    // 依文档历史深度与标注上下文刷新编辑菜单撤销/重做启用态。
+    void updateUndoRedoEnabled() const;    // 依文档历史深度与标注上下文刷新编辑菜单撤销/重做启用态。
     // 标注上下文判定：标注工具激活（非 SELECT）或存在选中标注时，Ctrl+Z/Y 路由到标注撤销/重做。
     bool annotationContextActive() const;
 
@@ -200,7 +199,7 @@ private:
     double exportSrcScaleY_{1.0};
     bool exportPreviewDirty_{false};   // 导出页不可见期间参数有变→置脏；切回该页时补渲染（A）。
     // 上次引擎结果的合成缓存：供烧录/标注变更时**只重渲染缩略图、不重跑 Core**（切割几何不受标注影响）。
-    idc::engine::Composition lastComposition_;
+    engine::Composition lastComposition_;
     bool lastExportResOk_{false};
     // 预览最长边上限（NFR-3 降采样阈值）。取 4096：让绝大多数图片 1:1 显示，
     // 使放大后底图像素与精确整数坐标的切割线/遮罩对齐（仅超长边大图才降采样）。
@@ -211,7 +210,7 @@ private:
     // ---- 全局撤销/重做（G-12）：文档参数态历史（复用 Core HistoryManager，A-0.10）----
     // 快照类型为 EngineConfig（与 G-13 配置同构）：capture=buildEngineConfig、restore=applyEngineConfig，
     // 栈顶恒为「当前态」；undo 弹栈顶到重做栈后还原新栈顶，redo 反之。仅快照参数态，不含图像/预处理。
-    idc::history::HistoryManager<idc::engine::EngineConfig> docHistory_;
+    history::HistoryManager<engine::EngineConfig> docHistory_;
     QTimer* docHistoryTimer_{nullptr};  // 防抖定时器：把拖拽/连点的连续 changed() 合并为一条历史。
     bool suppressHistory_{false};       // 还原（undo/redo/applyEngineConfig）期间抑制历史采集，防回环污染。
 
