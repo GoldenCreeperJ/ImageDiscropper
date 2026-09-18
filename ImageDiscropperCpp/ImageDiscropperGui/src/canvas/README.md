@@ -109,7 +109,7 @@ L2「多矩形并集剔除」下，选区来自 `Document::rects()`。`CanvasSce
 - **增量维护**：`CanvasScene::updateAnnotations(model)` 按数量增删末位图元、逐个刷新几何与选中态，**绝不 clear+重建**
   （否则拖拽中会删掉正在处理事件的图元→崩溃）；拖拽中跳过对正在拖图元的回设。
 - **拖拽预览**：`model.pendingShape()` 非空时用惰性创建的 `pendingAnnoItem_`（不可交互）画橡皮筋矢量，不进 Core 历史。
-- **选中/移动**：SELECT 下图元自行响应鼠标——press → `annotationSelectRequested` → MainWindow 用 Core `hitTest` 选中；
+- **选中/移动**：SELECT 下图元自行响应鼠标——press → `annotationSelectRequested` → `AnnotationCoordinator` 用 Core `hitTest` 选中；
   拖动释放 → `annotationMoved(index,dx,dy)` → 委托 Core 平移。
 - **OBB 手柄变换**：选中时依 `computeObb(xf)` 画虚线 OBB + 8 缩放手柄 + 1 旋转手柄（抓取区半径 `handleSize_*2.0` 大于可视手柄）；
   拖拽中仅调 Core `obbPreviewTransform` 做**矢量预览**并逐帧 `emit transformPreview(累积绝对值)` 供属性面板回显；

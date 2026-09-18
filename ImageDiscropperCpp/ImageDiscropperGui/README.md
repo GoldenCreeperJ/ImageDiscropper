@@ -19,7 +19,7 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 | `model`  | `include/model/`  | [src/model/](src/model/README.md)   | 会话状态单一真相源 `Document`、唯一触碰切割引擎的 `EngineBridge`、唯一驱动 Core 标注的 `AnnotationBridge`  |
 | `canvas` | `include/canvas/` | [src/canvas/](src/canvas/README.md) | QGraphicsView/Scene 画布：图层化渲染底图/遮罩/切割线/选区/标注矢量叠加 + 交互                            |
 | `panels` | `include/panels/` | [src/panels/](src/panels/README.md) | 左侧模式/极性面板与标注工具/图层面板、右侧参数/导出/图像/标注属性面板                                           |
-| `app`    | `include/app/`    | [src/app/](src/app/README.md)       | 主窗口装配与编排、程序入口                                                                   |
+| `app`    | `include/app/`    | [src/app/](src/app/README.md)       | 主窗口装配壳 `MainWindow` + 四个控制器（预览/预处理/标注/历史）+ 状态栏组件 + 装配建造者 `MainWindowUi`、程序入口    |
 
 **依赖方向**：`app → panels/canvas/model → util → Core`。`model` 是唯一触碰 Core 引擎/标注的层，
 面板与画布只读写 `Document`/桥，不各自持有真相（降低耦合）。
@@ -285,7 +285,8 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
    快照（`capture=Document::buildEngineConfig`、`restore=Document::applyEngineConfig`，与配置加载同构、复用同一对互逆映射）；②**标注**沿用 Core
    `AnnotationLayer` 内建分层快照（`AnnotationBridge::undo/redo`）。编辑菜单/工具栏的 Ctrl+Z/Y 经 `MainWindow::onUndo/onRedo` **上下文路由**：
    标注工具激活（非 SELECT）或存在选中标注时转发到标注撤销，否则走文档参数撤销——两条历史不再各绑 Ctrl+Z/Y（消除原标注菜单与编辑菜单的快捷键冲突）。
-   文档历史用 **500ms 防抖定时器**把拖拽/连点的连续 `changed()` 合并为一条（栈顶恒为「当前态」，`undoSize>1` 才可撤销）；还原期以 `suppressHistory_` 抑制再采集防回环。
+   文档历史由 `app/DocHistory` 控制器持有：**500ms 防抖定时器**把拖拽/连点的连续 `changed()` 合并为一条（栈顶恒为「当前态」，
+   `undoSize>1` 才可撤销）；还原/载入期以 `suppress_` 抑制再采集防回环；启用态经 `availabilityChanged` 信号回灌菜单动作。
    **预处理不纳入全局撤销**（快照仅参数态、不含像素），靠现有「重置预处理」回退——此为产品决策，与「预处理可撤销」的理想态有意取舍。
 11. **配置文件加载/保存**：文件菜单「加载配置/保存配置」经 `EngineBridge::saveConfig/loadConfig` 委托 Core `saveEngineConfig/loadEngineConfig`
    （规格 SPEC §7 schema 的 JSON，GUI 不自实现 JSON、不感知 nlohmann）；加载走 `Document::applyEngineConfig` 反向映射回各状态字段（生成器+tier 还原 L1 形状/L2 子功能，
@@ -294,7 +295,7 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
    `refreshPreview` **已算好**的 `EngineResult.composition` 渲染——**不再跑 Core、不落盘**：把 `rebuildPreviewPixmap` 缓存的**小源图**
    `exportSrcPixmap_`（最长边 ≤ 512，与画布底图分离）按 `placements` 的 `source→dest` 用 `QPainter::drawPixmap` blit 到最长边 ≤ 192 的小画布。
    合并模式（坍缩/重排）按真实画布等比缩放、所见即所得；分离模式（无统一画布）拼成触图（cols=ceil(√n)）。源区域坐标经 `exportSrcScale*`
-   （working→小图放大系数）映射，故即便原图 8000×8000 也只在小图上运算（**像素少、速度快**）。面板只负责展示（`setPreviewPixmap`，仅缩不放）；**渲染逻辑下沉到 `util/`（离屏预览），MainWindow 只编排缓存与门控**。
+   （working→小图放大系数）映射，故即便原图 8000×8000 也只在小图上运算（**像素少、速度快**）。面板只负责展示（`setPreviewPixmap`，仅缩不放）；**渲染逻辑下沉到 `util/`（离屏预览），app 层（`PreviewController`）只编排缓存与门控**。
    **B（烧录可见）**：`exportPreviewSource()` 委托 `util::bakeAnnotationsInto`，在「导出时烧录标注」开启且有标注时，把各标注按 `worldPath` 矢量绘到小源图副本（working→小图变换，文字绘字形；实际绘制复用 `util::paintAnnotation`，与画布图元同一外观）——**只烘焙一次**，随后逐块 blit 自动让标注随像素被切割落位，与真实导出一致；细线在大图上按缩略比例自然淡化（忠实）。
    **A（按需渲染）**：`updateExportPreview` 先缓存 `lastComposition_/lastExportResOk_`，再由 `renderExportPreviewFromCache` 仅在「导出」页为当前选项卡时渲染，否则置 `exportPreviewDirty_`；`onRightTabChanged` 切回该页时用缓存补渲染。烧录开关/标注变更（`onBurnInChanged`/`onAnnoBridgeChanged`，仅烧录开启时）**不重跑 Core**，仅用缓存重渲染缩略图（切割几何不受标注影响），保证预览实时。
 
@@ -373,13 +374,13 @@ scheduleHistoryCapture（500ms 防抖）──► docHistory_ 压入 EngineConfi
 ### 预处理与标注数据流
 
 - `ImagePanel` 发意图信号（`rotateRequested`/`flipRequested`/`scaleRequested`/`resizeRequested`/`grayRequested`/
-  `invertRequested`/`splitRequested`/`resetRequested`）→ `MainWindow` 对应 `on*` 槽经 `EngineBridge` 调 Core
-  `pixel_ops::*` 变换 `doc_.working()` → 公共收尾 `applyWorkingImage(next, okMsg)`：结果为空图则报错；
-  **维度变化（旋转 90/270、缩放）时先清除失效选区**（`clearRect/clearRects/clearCells`，坐标基于旧尺寸）再
+  `invertRequested`/`splitRequested`/`resetRequested`）→ `PreprocessController` 对应槽经 `EngineBridge` 调 Core
+  `pixel_ops::*` 变换 `doc_.working()`（图像菜单与图像页共用同一批槽）→ 公共收尾 `applyWorkingImage(next, okMsg)`：结果为空图则报错；
+  **维度变化（旋转 90/270、缩放）时先清除失效选区与标注**（`clearRect/clearRects/clearCells` 坐标基于旧尺寸 + `annoBridge_.clearAll()`）再
   `setWorkingImage`（触发 `imageChanged` → 重建预览底图 + 刷新）；`onResetPreprocess` 把工作图还原为 `original_`（原图始终保留）。
 - 色道反色/分离共用面板 R/G/B 复选框作「作用通道」选择器（`invertChannels` 本就支持掩码，无需改 Core）。
 - 大图缩放/重采样经 `runWithBusyDialog(text, op)`：应用级模态、不可取消的 `QProgressDialog`，配 `busyResample_` 重入守卫。
-- 标注：每个 Core `Annotation` 对应一个 `AnnotationItem`（`QGraphicsObject`），用 `Shape::worldPath()`→`QPainterPath`
+- 标注（`AnnotationCoordinator` 编排）：每个 Core `Annotation` 对应一个 `AnnotationItem`（`QGraphicsObject`），用 `Shape::worldPath()`→`QPainterPath`
   矢量叠加绘制（z=`kAnnotation`）；OBB 非破坏性变换（决策 #9）与烧录仅在导出时发生（决策 #8）；
   移动标注经 Core `Shape::translateWorld` 世界系平移，保留具体类型（不退化为 PATH）。
 - 撤销/重做与配置保存/加载的机制见决策 #10 / #11；输出预览渲染见决策 #12。
@@ -390,7 +391,9 @@ scheduleHistoryCapture（500ms 防抖）──► docHistory_ 压入 EngineConfi
 
 1. 在 `include/panels/` 加头文件（`<模块>_panel.h`）、`src/panels/` 加实现，类继承 `QWidget`、`namespace idc::gui`。
 2. 面板**只发意图信号 / 只读写 `Document`**，不含业务逻辑；构造用布局管理器，控件加中文 tooltip。
-3. 在 `MainWindow` 构造中实例化并加入 `rightTabs_`（`addTab`），在 `connectAll()` 里把面板信号连到编排槽。
+3. 在 `MainWindowUi::buildCentral` 中实例化并加入 `rightTabs_`（`addTab`）；面板意图信号连到对应控制器
+   （预处理意图→`PreprocessController`、标注/图层意图→`AnnotationCoordinator`、选项卡切换→`PreviewController`），
+   画布交互意图在 `MainWindow::connectAll()` 连到编排槽。
 4. 若面板状态需持久化，扩展 `Document::buildEngineConfig/applyEngineConfig`（保持与配置加载互逆）。
 5. 在 `include/panels/README.md` 与 `src/panels/README.md` 补声明边界/实现说明（工程规范见 CONTRIBUTING.md）。
 

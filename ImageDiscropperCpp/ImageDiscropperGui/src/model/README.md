@@ -28,7 +28,7 @@ L3 网格参数 `GridParams`（默认单元 100×100，避免 `GridParams` 默�
 - `setMode()` 套用模式定义极性（L1→KEEP、L2→REMOVE；L1≡keep、L2≡remove）；**切入 L3 保留当前极性不变**（L3 极性独立，从 L2 进 L3 沿用 remove）；**离开 L3 时若 `layout_==REARRANGE` 自动复位为 COLLAPSE**（模型层维持「重排仅 L3」不变式）。
 - `setPolarity()` 反向耦合：在 L1/L2 下切换极性会同步切换模式（KEEP→L1、REMOVE→L2）；L3 极性独立、不改模式。
 - L3 网格：`setGridOrigin`/`setCellSize`（拒绝非正值）/`setRemainder` 改值后发 `changed`；`setDerivedGridSize(rows,cols)`
-  由 MainWindow 依 Core `Grid` 回灌、**不发 `changed`**（避免回环），仅供面板只读显示。
+  由 `PreviewController` 依 Core `Grid` 回灌、**不发 `changed`**（避免回环），仅供面板只读显示。
 - L3 选择集：`setSelectedCells`/`selectAllCells`/`invertCells`/`clearCells`（全选/反选依派生行列数）；
   `selectedCells` 的顺序在 CUSTOM 排序下即自定义序列（Core `runEngine` 约定）。
 - L3 排序：`setSortStrategy`/`setSortReverse`/`setSortSnake` → `SequenceParams`（FR-L3.5）。

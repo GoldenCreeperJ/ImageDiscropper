@@ -102,10 +102,22 @@ set(IDC_GUI_PANELS_SRC
         src/panels/annotation_prop_panel.cpp
 )
 
-# app：主窗口装配与程序入口。
+# app：主窗口装配壳 + 四个控制器（预览/预处理/标注/历史）+ 状态栏 + 装配建造者 + 程序入口。
 set(IDC_GUI_APP_SRC
+        include/app/annotation_coordinator.h
+        include/app/doc_history.h
         include/app/main_window.h
+        include/app/main_window_ui.h
+        include/app/preprocess_controller.h
+        include/app/preview_controller.h
+        include/app/status_bar.h
+        src/app/annotation_coordinator.cpp
+        src/app/doc_history.cpp
         src/app/main_window.cpp
+        src/app/main_window_ui.cpp
+        src/app/preprocess_controller.cpp
+        src/app/preview_controller.cpp
+        src/app/status_bar.cpp
         src/app/main.cpp
 )
 
