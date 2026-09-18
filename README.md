@@ -60,7 +60,7 @@ CLI ──────┘
 
 ```bash
 cd ImageDiscropperCpp
-cmake --preset windows-debug   # 或 windows-release
+cmake --preset windows         # VS 2022 多配置（Debug / Release）
 cmake --build --preset debug
 ctest --preset test-debug      # Core unit_tests + CLI cli_tests
 ```

@@ -85,7 +85,7 @@ CLI 命令与规格功能的对应（详见 [`ImageDiscropperCli/README.md`](Ima
 **以本目录为 CMake 源目录**加载工程，推荐用 Presets：
 
 ```bash
-cmake --preset windows-debug   # 首次配置自动安装清单依赖（qtbase 较慢）
+cmake --preset windows         # VS 2022 多配置；首次配置自动安装清单依赖（qtbase 较慢）
 cmake --build --preset debug   # 产出 bin/idc(.exe)、idc_gui(.exe) 与 demo(.exe)
 ctest --preset test-debug      # 同时运行 Core unit_tests 与 CLI cli_tests（IT-1~IT-18）
 ```

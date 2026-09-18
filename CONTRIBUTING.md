@@ -10,7 +10,7 @@
 ```bash
 # 依赖：CMake ≥ 3.28 + C++17 编译器 + vcpkg（设置环境变量 VCPKG_ROOT；包由 vcpkg.json 清单自动安装）
 cd ImageDiscropperCpp
-cmake --preset windows-debug
+cmake --preset windows
 cmake --build --preset debug
 ctest --preset test-debug     # Core unit_tests + CLI cli_tests，提交前必须全部通过
 ```

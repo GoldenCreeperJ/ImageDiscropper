@@ -1,6 +1,6 @@
 # CI：Windows 上配置（vcpkg 清单模式）→ 构建 → 测试。
-# 注意：首次运行需由 vcpkg 从源码构建 qtbase 等依赖，耗时较长（约 30-60 分钟）；
-# 如需加速，可在 Configure 前后加 actions/cache 缓存 vcpkg 二进制（后续可自行添加）。
+# 依赖二进制经 vcpkg 的 GitHub Actions 缓存后端（x-gha）复用：
+# 首次运行从源码构建 qtbase 等较慢（约 30-60 分钟），之后每次运行直接取缓存。
 name: CI
 
 on:
@@ -13,12 +13,14 @@ jobs:
     env:
       # GitHub 托管机自带 vcpkg 于 C:\vcpkg；preset 经 $env{VCPKG_ROOT} 定位工具链。
       VCPKG_ROOT: C:\vcpkg
+      # vcpkg 二进制缓存：写入/读取 GitHub Actions cache（ACTIONS_RUNTIME_TOKEN 由 runner 自动提供）。
+      VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
     steps:
       - uses: actions/checkout@v4
 
       - name: Configure
         working-directory: ImageDiscropperCpp
-        run: cmake --preset windows-debug
+        run: cmake --preset windows
 
       - name: Build
         working-directory: ImageDiscropperCpp

@@ -20,6 +20,7 @@
 #include <webp/encode.h>
 
 #include <algorithm>
+#include <cstring>
 #include <fstream>
 
 namespace idc::engine {

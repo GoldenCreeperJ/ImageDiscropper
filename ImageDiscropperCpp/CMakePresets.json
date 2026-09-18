@@ -7,54 +7,41 @@
   },
   "configurePresets": [
     {
-      "name": "windows-base",
-      "displayName": "Windows 基础配置（vcpkg 清单模式）",
-      "hidden": true,
-      "generator": "Ninja",
+      "name": "windows",
+      "displayName": "Windows（VS 2022 + vcpkg 清单模式）",
+      "generator": "Visual Studio 17 2022",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "VCPKG_TARGET_TRIPLET": "x64-windows"
-      }
-    },
-    {
-      "name": "windows-debug",
-      "displayName": "Windows Debug",
-      "inherits": "windows-base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
-      }
-    },
-    {
-      "name": "windows-release",
-      "displayName": "Windows Release",
-      "inherits": "windows-base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
       }
     }
   ],
   "buildPresets": [
     {
       "name": "debug",
-      "configurePreset": "windows-debug"
+      "configurePreset": "windows",
+      "configuration": "Debug"
     },
     {
       "name": "release",
-      "configurePreset": "windows-release"
+      "configurePreset": "windows",
+      "configuration": "Release"
     }
   ],
   "testPresets": [
     {
       "name": "test-debug",
-      "configurePreset": "windows-debug",
+      "configurePreset": "windows",
+      "configuration": "Debug",
       "output": {
         "outputOnFailure": true
       }
     },
     {
       "name": "test-release",
-      "configurePreset": "windows-release",
+      "configurePreset": "windows",
+      "configuration": "Release",
       "output": {
         "outputOnFailure": true
       }

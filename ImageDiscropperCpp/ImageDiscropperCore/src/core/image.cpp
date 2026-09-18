@@ -6,6 +6,7 @@
 #include "core/image.h"
 
 #include <algorithm>
+#include <cstring>
 
 namespace idc::core {
 namespace {
