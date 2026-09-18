@@ -9,6 +9,10 @@ full-span cut lines induce a regular grid over the image, a selection set plus a
 and the result is exported by separating, collapsing, or rearranging.
 
 ---
+## 🤖 AI-led development disclosure
+
+This project is primarily AI-led (~99%), and the documentation is AI-generated as well. The functional spec is
+[`SPEC.md`](ImageDiscropperCpp/SPEC.md); please read [`CONTRIBUTING.md`](CONTRIBUTING.md) before contributing.
 
 ## ✨ Features
 
@@ -61,9 +65,14 @@ CMake Presets are the recommended path (the first configure installs dependencie
 
 ```bash
 cd ImageDiscropperCpp
-cmake --preset windows         # VS 2022 multi-config (Debug / Release)
+cmake --preset windows         # Windows: VS 2022 multi-config
 cmake --build --preset debug
 ctest --preset test-debug      # Core unit_tests + CLI cli_tests
+
+# Linux / macOS: single-config Ninja presets (linux-debug / linux-release / macos-debug / macos-release)
+cmake --preset linux-debug
+cmake --build --preset linux-debug
+ctest --preset test-linux-debug
 ```
 
 Or configure manually (manifest mode activates automatically, no preinstalled packages needed):
@@ -77,7 +86,7 @@ ctest --test-dir build
 Binaries land in the build directory's `bin/`: `idc(.exe)`, `idc_gui(.exe)`, `demo(.exe)`.
 (CLion users can open `ImageDiscropperCpp/` directly as the CMake source directory; CLion picks up the presets.)
 
-Every push is built and tested on Windows by GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
+Every push is built (including the GUI) and tested on **Windows, Linux, and macOS** by GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
 ### CLI quick tour
 
@@ -117,8 +126,3 @@ Documentation is organized by level; **each level has a clearly delimited scope 
 ## 📄 License
 
 The project as a whole is licensed under [GPL-3.0](LICENSE), covering every language's Core implementation (C++ and the future Rust one, etc.) as well as the CLI and GUI.
-
-## 🤖 AI-led development disclosure
-
-This project is primarily AI-led (~99%), and the documentation is AI-generated as well. The functional spec is
-[`SPEC.md`](ImageDiscropperCpp/SPEC.md); please read [`CONTRIBUTING.md`](CONTRIBUTING.md) before contributing.

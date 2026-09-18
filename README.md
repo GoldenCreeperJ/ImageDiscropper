@@ -8,6 +8,10 @@ ImageDiscropper 是一款**本地运行**的图像切割工具。所有功能都
 通过贯穿全图的切割线把图像诱导为规则网格，再按「选择集 + 极性」决定保留/剔除，最后以分离、坍缩或重排的方式导出。
 
 ---
+## 🤖 AI 主导开发声明
+
+本项目主要由 AI 主导开发（约 99%），文档亦为 AI 生成。功能规格见
+[`SPEC.md`](ImageDiscropperCpp/SPEC.md)，贡献前请阅读 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
 
 ## ✨ 特性
 
@@ -60,9 +64,14 @@ CLI ──────┘
 
 ```bash
 cd ImageDiscropperCpp
-cmake --preset windows         # VS 2022 多配置（Debug / Release）
+cmake --preset windows         # Windows：VS 2022 多配置
 cmake --build --preset debug
 ctest --preset test-debug      # Core unit_tests + CLI cli_tests
+
+# Linux / macOS：Ninja 单配置预设（linux-debug / linux-release / macos-debug / macos-release）
+cmake --preset linux-debug
+cmake --build --preset linux-debug
+ctest --preset test-linux-debug
 ```
 
 也可手动指定工具链（清单模式自动生效，无需预装包）：
@@ -76,7 +85,7 @@ ctest --test-dir build
 产物位于构建目录 `bin/`：`idc(.exe)`、`idc_gui(.exe)`、`demo(.exe)`。
 （CLion 用户可直接以 `ImageDiscropperCpp/` 为 CMake 源目录打开工程，CLion 会识别 Presets。）
 
-每次提交由 GitHub Actions（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）在 Windows 上自动构建并跑测试。
+每次提交由 GitHub Actions（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）在 **Windows / Linux / macOS 三平台**自动构建（含 GUI）并跑 Core/CLI 测试。
 
 ### 命令行速览
 
@@ -116,8 +125,3 @@ idc config  --load my-config.json --input photo.jpg --output result.png
 ## 📄 许可
 
 本项目整体采用 [GPL-3.0](LICENSE)，覆盖所有语言实现的 Core（C++ / 未来的 Rust 等）以及 CLI 与 GUI。
-
-## 🤖 AI 主导开发声明
-
-本项目主要由 AI 主导开发（约 99%），文档亦为 AI 生成。功能规格见
-[`SPEC.md`](ImageDiscropperCpp/SPEC.md)，贡献前请阅读 [`CONTRIBUTING.md`](CONTRIBUTING.md)。

@@ -16,7 +16,8 @@ ctest --preset test-debug     # Core unit_tests + CLI cli_tests，提交前必�
 ```
 
 建议使用 CLion，直接以 `ImageDiscropperCpp/` 为 CMake 源目录打开工程（CLion 会识别 Presets）。
-每次 push / PR 由 GitHub Actions（`.github/workflows/ci.yml`）在 Windows 上自动构建并跑同一套测试。
+Linux / macOS 用 `linux-debug` / `macos-debug` 预设。
+每次 push / PR 由 GitHub Actions（`.github/workflows/ci.yml`）在 **Windows / Linux / macOS 三平台**自动构建（含 GUI）并跑同一套测试。
 
 ## 代码规范
 
