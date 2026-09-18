@@ -81,13 +81,17 @@ CLI 命令与规格功能的对应（详见 [`ImageDiscropperCli/README.md`](Ima
 ## 4. 构建与运行
 
 工程使用 CMake（>= 3.28）+ vcpkg（`stb` / `libwebp` / `nlohmann-json` 由 Core PRIVATE 接入；`qtbase` 供 GUI 使用）。
-**以仓库根为 CMake 源目录**加载工程：
+依赖由 `vcpkg.json` 清单自动安装（设置环境变量 `VCPKG_ROOT` 指向 vcpkg 根目录）。
+**以本目录为 CMake 源目录**加载工程，推荐用 Presets：
 
 ```bash
-cmake -S . -B build            # 需配置 vcpkg 工具链
-cmake --build build            # 产出 build/bin/idc(.exe)、idc_gui(.exe) 与 demo(.exe)
-ctest --test-dir build         # 同时运行 Core unit_tests 与 CLI cli_tests（IT-1~IT-18）
+cmake --preset windows-debug   # 首次配置自动安装清单依赖（qtbase 较慢）
+cmake --build --preset debug   # 产出 bin/idc(.exe)、idc_gui(.exe) 与 demo(.exe)
+ctest --preset test-debug      # 同时运行 Core unit_tests 与 CLI cli_tests（IT-1~IT-18）
 ```
+
+手动方式（清单模式自动生效）：`cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake`。
+每次提交由 GitHub Actions 在 Windows 上自动构建并跑测试（见仓库根 `.github/workflows/ci.yml`）。
 
 命令行速览见根 [`README.md`](../README.md)「快速开始」；完整选项见 `idc <command> --help` 或 [`ImageDiscropperCli/README.md`](ImageDiscropperCli/README.md)。
 

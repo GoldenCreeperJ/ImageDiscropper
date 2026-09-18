@@ -1,0 +1,29 @@
+# CI：Windows 上配置（vcpkg 清单模式）→ 构建 → 测试。
+# 注意：首次运行需由 vcpkg 从源码构建 qtbase 等依赖，耗时较长（约 30-60 分钟）；
+# 如需加速，可在 Configure 前后加 actions/cache 缓存 vcpkg 二进制（后续可自行添加）。
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    env:
+      # GitHub 托管机自带 vcpkg 于 C:\vcpkg；preset 经 $env{VCPKG_ROOT} 定位工具链。
+      VCPKG_ROOT: C:\vcpkg
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        working-directory: ImageDiscropperCpp
+        run: cmake --preset windows-debug
+
+      - name: Build
+        working-directory: ImageDiscropperCpp
+        run: cmake --build --preset debug
+
+      - name: Test
+        working-directory: ImageDiscropperCpp
+        run: ctest --preset test-debug

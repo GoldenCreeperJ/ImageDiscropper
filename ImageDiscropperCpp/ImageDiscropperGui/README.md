@@ -430,15 +430,16 @@ scheduleHistoryCapture（500ms 防抖）──► docHistory_ 压入 EngineConfi
 
 ## 构建
 
-前置：CLion（或命令行）以**仓库根**为 CMake 源，并配置好 vcpkg 工具链（`CMAKE_TOOLCHAIN_FILE`），
-且 vcpkg 已安装 `qtbase`（classic 模式，仓库无 `vcpkg.json`/`CMakePresets.json`）。
-
-根 `CMakeLists.txt` 已在 `add_subdirectory(ImageDiscropperCli)` 之后追加 `add_subdirectory(ImageDiscropperGui)`。
+前置：CMake ≥ 3.28 + vcpkg（设置环境变量 `VCPKG_ROOT` 指向 vcpkg 根目录）。
+依赖经 [`vcpkg.json`](../vcpkg.json) 清单自动安装（`qtbase` 首次构建较慢），推荐用 Presets：
 
 ```bash
-cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake
-cmake --build build --target idc_gui
+cmake --preset windows-debug   # 以 ImageDiscropperCpp/ 为源目录；或 windows-release
+cmake --build --preset debug --target idc_gui
 ```
+
+手动方式：`cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake && cmake --build build --target idc_gui`（清单模式自动生效）。
+根 `CMakeLists.txt` 已在 `add_subdirectory(ImageDiscropperCli)` 之后追加 `add_subdirectory(ImageDiscropperGui)`。
 
 - 版本号经编译期宏注入：`IDC_GUI_VERSION`（本工程版本）与 `IDC_CORE_VERSION`（Core 经 PARENT_SCOPE 回传，与 CLI 同一来源；独立配置本目录时为占位版本）。
 - 仅链接 `Qt6::Widgets Qt6::Gui Qt6::Core` + `image_discropper_core`。

@@ -8,13 +8,15 @@
 ## 快速上手
 
 ```bash
-# 依赖：CMake ≥ 3.28 + C++17 编译器 + vcpkg（stb / libwebp / nlohmann-json；GUI 另需 qtbase）
-cmake -S ImageDiscropperCpp -B build -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake
-cmake --build build
-ctest --test-dir build        # Core unit_tests + CLI cli_tests，提交前必须全部通过
+# 依赖：CMake ≥ 3.28 + C++17 编译器 + vcpkg（设置环境变量 VCPKG_ROOT；包由 vcpkg.json 清单自动安装）
+cd ImageDiscropperCpp
+cmake --preset windows-debug
+cmake --build --preset debug
+ctest --preset test-debug     # Core unit_tests + CLI cli_tests，提交前必须全部通过
 ```
 
-建议使用 CLion，直接以 `ImageDiscropperCpp/` 为 CMake 源目录打开工程。
+建议使用 CLion，直接以 `ImageDiscropperCpp/` 为 CMake 源目录打开工程（CLion 会识别 Presets）。
+每次 push / PR 由 GitHub Actions（`.github/workflows/ci.yml`）在 Windows 上自动构建并跑同一套测试。
 
 ## 代码规范
 

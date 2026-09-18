@@ -52,19 +52,32 @@ CLI ──────┘
 ### Prerequisites
 
 - CMake ≥ 3.28 + a C++17 compiler (MSVC / MinGW / Clang)
-- [vcpkg](https://vcpkg.io) (classic mode), with: `vcpkg install stb libwebp nlohmann-json`
-- For the GUI, additionally: `vcpkg install qtbase` (Qt 6.x)
+- [vcpkg](https://vcpkg.io) (manifest mode installs everything automatically — no manual `vcpkg install`): point the `VCPKG_ROOT` environment variable at your vcpkg directory
+- The dependency manifest lives in [`ImageDiscropperCpp/vcpkg.json`](ImageDiscropperCpp/vcpkg.json) (`stb` / `libwebp` / `nlohmann-json`, plus `qtbase` for the GUI)
 
 ### Build (Windows / Linux / macOS)
 
+CMake Presets are the recommended path (the first configure installs dependencies from the manifest; `qtbase` takes a while):
+
 ```bash
-cmake -S ImageDiscropperCpp -B build -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake
-cmake --build build
-ctest --test-dir build          # Core unit_tests + CLI cli_tests
+cd ImageDiscropperCpp
+cmake --preset windows-debug   # or windows-release
+cmake --build --preset debug
+ctest --preset test-debug      # Core unit_tests + CLI cli_tests
 ```
 
-Binaries land in `build/bin/`: `idc(.exe)`, `idc_gui(.exe)`, `demo(.exe)`.
-(CLion users can open `ImageDiscropperCpp/` directly as the CMake source directory.)
+Or configure manually (manifest mode activates automatically, no preinstalled packages needed):
+
+```bash
+cmake -S ImageDiscropperCpp -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
+cmake --build build
+ctest --test-dir build
+```
+
+Binaries land in the build directory's `bin/`: `idc(.exe)`, `idc_gui(.exe)`, `demo(.exe)`.
+(CLion users can open `ImageDiscropperCpp/` directly as the CMake source directory; CLion picks up the presets.)
+
+Every push is built and tested on Windows by GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
 ### CLI quick tour
 

@@ -51,19 +51,32 @@ CLI ──────┘
 ### 前置依赖
 
 - CMake ≥ 3.28 + 支持 C++17 的编译器（MSVC / MinGW / Clang）
-- [vcpkg](https://vcpkg.io)（classic 模式），安装：`vcpkg install stb libwebp nlohmann-json`
-- 构建 GUI 另需：`vcpkg install qtbase`（Qt 6.x）
+- [vcpkg](https://vcpkg.io)（清单模式自动安装，无需手动 `vcpkg install`）：把环境变量 `VCPKG_ROOT` 指向 vcpkg 根目录即可
+- 依赖清单见 [`ImageDiscropperCpp/vcpkg.json`](ImageDiscropperCpp/vcpkg.json)（`stb` / `libwebp` / `nlohmann-json`，GUI 另需 `qtbase`）
 
 ### 构建（Windows / Linux / macOS）
 
+推荐用 CMake Presets（首次配置会按清单自动安装依赖，其中 `qtbase` 较慢）：
+
 ```bash
-cmake -S ImageDiscropperCpp -B build -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake
-cmake --build build
-ctest --test-dir build          # Core unit_tests + CLI cli_tests
+cd ImageDiscropperCpp
+cmake --preset windows-debug   # 或 windows-release
+cmake --build --preset debug
+ctest --preset test-debug      # Core unit_tests + CLI cli_tests
 ```
 
-产物位于 `build/bin/`：`idc(.exe)`、`idc_gui(.exe)`、`demo(.exe)`。
-（CLion 用户可直接以 `ImageDiscropperCpp/` 为 CMake 源目录打开工程。）
+也可手动指定工具链（清单模式自动生效，无需预装包）：
+
+```bash
+cmake -S ImageDiscropperCpp -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
+cmake --build build
+ctest --test-dir build
+```
+
+产物位于构建目录 `bin/`：`idc(.exe)`、`idc_gui(.exe)`、`demo(.exe)`。
+（CLion 用户可直接以 `ImageDiscropperCpp/` 为 CMake 源目录打开工程，CLion 会识别 Presets。）
+
+每次提交由 GitHub Actions（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）在 Windows 上自动构建并跑测试。
 
 ### 命令行速览
 
