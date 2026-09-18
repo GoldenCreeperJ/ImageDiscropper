@@ -3,7 +3,7 @@
 // 作用：把单个 Core annotation::Annotation 以矢量方式绘制到 QPainter 的**公共渲染函数**——
 //       非文字形状描边 + 可选填充；文字（TEXT）直接绘真实字形。供画布图元 AnnotationItem::paint
 //       与导出输出预览的标注烘焙（util/output_preview_renderer）共用，消除两处重复的标注绘制逻辑。
-// 分块依据：仅承载「Annotation（几何 + 样式）→ QPainter 绘制指令」的渲染翻译（视图关注点，A-0.1），
+// 分块依据：仅承载「Annotation（几何 + 样式）→ QPainter 绘制指令」的渲染翻译（视图关注点，CONTRIBUTING.md「分层纪律」），
 //           不含任何几何计算，也不含选中高亮 / OBB 手柄等图元专属交互（那些留在 AnnotationItem）。
 // 说明：调用方须先把 painter 的变换设为「世界（原图）坐标 → 设备坐标」并按需设好裁剪；本函数只在
 //       该世界坐标系下按标注样式发绘制指令，除 TEXT 分支临时叠加字形变换外，不改动 painter 的世界变换。

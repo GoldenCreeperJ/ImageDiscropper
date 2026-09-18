@@ -1,12 +1,10 @@
 // ============================================================================
 // 文件：src/help.cpp
-// 作用：实现 help.h——顶层帮助、子命令帮助与版本信息文本（guideline §6）。
-// 分块依据：纯文本输出，集中一处以便命令清单 / 术语 / 示例与终稿保持一致（§2.3 术语、
-//       §6.1 帮助要求、§6.2 版本格式）；命令名统一用实际可执行名 "idc"（guideline §4：
-//       把占位的 image-tool 替换为实际命令名）。
-// 排版约定（替换早期手工数空格的对齐方式）：
-//   · 选项行经 optionRow() 以固定列宽打印——列宽按各命令最长选项常量维护，杜绝对齐
-//     漂移（早期 config 块曾出现 --output 与 --save-config 列宽不一致）；
+// 作用：实现 help.h——顶层帮助、子命令帮助与版本信息文本。
+// 分块依据：纯文本输出，集中一处以便命令清单 / 术语 / 示例与规格保持一致（SPEC §2.2 术语、
+//       帮助要求与版本格式见 Cli README）；命令名统一用实际可执行名 "idc"。
+// 排版约定：
+//   · 选项行经 optionRow() 以固定列宽打印——列宽按各命令最长选项常量维护，杜绝对齐漂移；
 //   · 选项按功能分组（输入 / 切割 / 导出……），组标题独占一行、组间空行；
 //   · 需求标签统一为 [必填] / [可重复] 两种；条件性必填（如「--compose 时必填」）写入
 //     描述括注，不再占用标签位；
@@ -33,11 +31,11 @@ namespace idc::cli {
 namespace {
 
 // 各命令的选项列宽（= 该命令最长选项串的长度，注释标注基准项）。
-constexpr int kTopOptWidth = 18;     // --save-config <file>
+constexpr int kTopOptWidth = 20;     // --save-config <file>
 constexpr int kExtractOptWidth = 18; // --rect x1,y1,x2,y2
 constexpr int kEraseOptWidth = 18;   // --rect x1,y1,x2,y2
-constexpr int kGridOptWidth = 24;    // --merge-decorate <method>
-constexpr int kConfigOptWidth = 18;  // --save-config <file>
+constexpr int kGridOptWidth = 25;    // --merge-decorate <method>
+constexpr int kConfigOptWidth = 20;  // --save-config <file>
 
 // 打印一行选项：两空格缩进 + 定宽选项列 + 两空格 + 描述。
 // 描述以 [必填] / [可重复] 标签开头（无标签时直接写描述），
@@ -48,7 +46,7 @@ void optionRow(const int width, const char* opt, const char* desc) {
 
 } // namespace
 
-// 顶层帮助：工具定位 + 三层模式 + 子命令 + 全局选项 + 退出码 + 各层示例（§6.1）。
+// 顶层帮助：工具定位 + 三层模式 + 子命令 + 全局选项 + 退出码 + 各层示例。
 void printTopHelp() {
     std::cout << R"HELP(idc — 图像区域提取 / 反向剔除 / 网格分割工具（命令行）
 
@@ -63,7 +61,7 @@ void printTopHelp() {
   extract   L1 标准提取：保留矩形 / 水平带 / 垂直带，输出单图
   erase     L2 反向剔除：删除十字带 / 横带 / 竖带 / 多矩形并集，分离或合并导出
   grid      L3 网格分割：按基准点与单元尺寸切网格，选择单元后分离或重排合并
-  config    从 JSON 配置文件执行作业（对应终稿 §9 结构）
+  config    从 JSON 配置文件执行作业（对应 SPEC §7 结构）
 
 全局选项：
 )HELP";
@@ -87,20 +85,20 @@ void printTopHelp() {
   # L3 网格保留四角并重排合并到 2x2 画布
   idc grid --input photo.jpg --grid 100,100,200,150 --keep 0,0 --keep 0,2 --keep 2,0 --keep 2,2 --compose --canvas 2x2 --output result.png
 
-查看某子命令的完整选项： idc <command> --help
+查看某子命令的完整选项：idc <command> --help
 )HELP";
 }
 
-// 版本信息：形如 "idc <version> (core <core-version>)"（§6.2）。
+// 版本信息：形如 "idc <version> (core <core-version>)"。
 void printVersion() {
     std::cout << "idc " << IDC_CLI_VERSION << " (core " << IDC_CORE_VERSION << ")\n";
 }
 
-// 各子命令帮助文本（§6.1：语义 / 全部选项 / 示例 / 常见错误）。
+// 各子命令帮助文本（语义 / 全部选项 / 示例 / 常见错误）。
 namespace {
 
 void helpExtract() {
-    std::cout << R"HELP(idc extract — L1 标准提取模式（终稿 §4.2）
+    std::cout << R"HELP(idc extract — L1 标准提取模式
 
 语义：极性恒为 keep，输出恒为单图。矩形保留中心单元；横线 / 竖线保留整条带。
       切割线贯穿全图（公理），保留区经坍缩拼接为单图。
@@ -130,14 +128,14 @@ void helpExtract() {
   idc extract --input photo.jpg --vband 100,300 --output band.png
 
 常见错误：
-  退出码 1：缺少 --input / --output；三选一未满足（缺切割线或同时给出多个）；坐标非法或退化（x1>=x2 / y1>=y2）
+  退出码 1：缺少 --input / --output；三选一未满足（缺切割线或同时给出多个）；坐标非法或退化（x1>=x2 / y1>=y2，退化选框请改用 --hband / --vband）
   退出码 3：输入图像不存在或无法读取
   退出码 4：输出写入失败
 )HELP";
 }
 
 void helpErase() {
-    std::cout << R"HELP(idc erase — L2 反向剔除模式（终稿 §4.3，差异化内核）
+    std::cout << R"HELP(idc erase — L2 反向剔除模式（差异化内核）
 
 语义：极性恒为 remove，"按线删除"——抽掉中缝、两侧对接，尺寸变小（W−Δx × H−Δy）。
       单矩形 → 十字切割（保留四角）；--rect 多次 → 多矩形并集剔除；
@@ -176,7 +174,7 @@ void helpErase() {
   idc erase --input photo.jpg --rect 100,100,200,150 --rect 400,300,500,400 --merge collapse --output out.png
 
 常见错误：
-  退出码 1：缺必填 / 互斥冲突 / 坐标非法 / --merge rearrange（L2 不支持重排）
+  退出码 1：缺必填 / 互斥冲突 / 坐标非法或退化（退化选框请改用 --hband / --vband）/ --merge rearrange（L2 不支持重排）
   退出码 2：坍缩不可行（见约束）
   退出码 3：输入图像错误
   退出码 4：输出目录 / 文件写入失败
@@ -184,7 +182,7 @@ void helpErase() {
 }
 
 void helpGrid() {
-    std::cout << R"HELP(idc grid — L3 网格分割模式（终稿 §4.4，完备表达层）
+    std::cout << R"HELP(idc grid — L3 网格分割模式（完备表达层）
 
 语义：以基准点 (x0,y0) 为相位锚、单元尺寸 (cw,ch) 为周期，生成贯穿全图的切割线并诱导
       网格；行数 / 列数由图像边界自动推导（不作为参数）。--keep / --remove 逐单元选择，
@@ -196,7 +194,7 @@ void helpGrid() {
     std::cout << R"HELP(
 网格：
 )HELP";
-    optionRow(kGridOptWidth, "--grid x0,y0,cw,ch", "[必填] 基准点 + 单元尺寸（cw,ch 必须为正）");
+    optionRow(kGridOptWidth, "--grid x0,y0,cw,ch", "[必填] 基准点 + 单元尺寸（基准点可为负，cw/ch 必须为正）");
     std::cout << R"HELP(
 选择（--keep 与 --remove 二选一）：
 )HELP";
@@ -252,7 +250,7 @@ void helpGrid() {
 }
 
 void helpConfig() {
-    std::cout << R"HELP(idc config — 配置文件作业（终稿 §9 / FR-L3.8）
+    std::cout << R"HELP(idc config — 配置文件作业
 
 语义：从 JSON 配置文件读取一次完整作业的全部参数（source/preprocess/cut/order/emit/select），
       复用 Core 的 JSON 模块解析（CLI 不自实现解析）。配置文件不含图像路径，故执行时仍须 --input。

@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：tests/test_engine_pipeline.cpp
-// 作用：引擎功能验收（终稿 §3.1 / §4 / §5.4）——通过 runEngine 跑通完整流水线，
+// 作用：引擎功能验收（SPEC §2.1 / §3 / §4.4）——通过 runEngine 跑通完整流水线，
 //       断言 L1 保留尺寸、L2 十字四角位置与坍缩尺寸、极性开关、L3 网格/选择/排序/重排，
 //       以及 Sequence::build 的 row-major / column-major / reverse / snake / custom 序号，
 //       并重排填充顺序 MergeOrder（行/列优先 + 蛇形 + 倒序）与「仅 L3 可重排」限制。
@@ -29,7 +29,7 @@ idc::core::Image makeImage(const int w, const int h) {
 
 } // namespace
 
-// 引擎流水线功能验收（§3.1）。
+// 引擎流水线功能验收（SPEC §3）。
 void testEnginePipeline() {
     using namespace idc::engine;
     using idc::core::Image;
@@ -84,7 +84,7 @@ void testEnginePipeline() {
         CHECK(r.composition.canvasWidth == 40 && r.composition.canvasHeight == 80);
     }
 
-    // ---- L2 十字剔除：保留四角，坍缩尺寸 (W−Δx)×(H−Δy)，四角落位符合 §5.2。----
+    // ---- L2 十字剔除：保留四角，坍缩尺寸 (W−Δx)×(H−Δy)，四角落位符合 SPEC §4.2。----
     {
         const Image img = makeImage(100, 80);
         EngineConfig cfg;

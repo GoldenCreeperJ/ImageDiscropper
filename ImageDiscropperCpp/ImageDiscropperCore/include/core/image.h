@@ -65,7 +65,8 @@ public:
     std::uint8_t* pixelPtr(int x, int y);
     const std::uint8_t* pixelPtr(int x, int y) const;
 
-    // 灰度模式下直接读写单通道值（0~255）。彩色模式调用会返回 0 / 忽略。
+    // 灰度值读写：GRAY 模式直接读写单通道（0~255）；彩色模式下 getGray 按 BT.601
+    // 即时换算亮度，setGray 将 R = G = B 置为同值（RGBA 的 alpha 置为 255）。
     std::uint8_t getGray(int x, int y) const;
     void setGray(int x, int y, std::uint8_t v);
 
@@ -87,7 +88,7 @@ public:
     void fill(const Color& c);
 
     // 裁剪子图：区间左闭右开 [left,right) × [top,bottom)，自动裁剪到图像边界。
-    // 空区域（宽或高 <= 0）返回同格式的 0×0 图像。引擎 split 与导出阶段依赖此接口。
+    // 空区域（宽或高 <= 0）返回同格式的 0×0 图像。引擎导出阶段（export）依赖此接口。
     Image crop(int left, int top, int right, int bottom) const;
 
     // 将 src 直接覆盖贴到当前图像的 (destX, destY) 处，越界部分自动裁剪。

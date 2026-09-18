@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：src/core/image.cpp
-// 作用：实现 include/core/image.h 中声明的 Image 类，包括像素缓冲管理、
-//       像素读写、格式转换、尺寸调整与整体填充等。
+// 作用：实现 include/core/image.h 中声明的 Image 类，包括像素缓冲管理、像素读写、
+//       格式转换（toRGBA / toGray）、缓冲重分配（reallocate）、裁剪贴图（crop / blit）与整体填充等。
 // ============================================================================
 #include "core/image.h"
 
@@ -114,7 +114,7 @@ std::uint8_t Image::getGray(const int x, const int y) const {
     return rgbToGray(p[0], p[1], p[2]); // 非灰度图按 BT.601 即时计算。
 }
 
-// 写入灰度值：GRAY 模式直接写；彩色模式将 R = G = B = v，alpha 保持 255。
+// 写入灰度值：GRAY 模式直接写；彩色模式将 R = G = B = v，RGBA 的 alpha 置为 255。
 void Image::setGray(const int x, const int y, const std::uint8_t v) {
     const std::ptrdiff_t off = byteOffset(x, y);
     if (off < 0) return;

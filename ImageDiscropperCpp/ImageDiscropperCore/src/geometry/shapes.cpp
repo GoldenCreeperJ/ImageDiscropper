@@ -2,8 +2,8 @@
 // 文件：src/geometry/shapes.cpp
 // 作用：实现 include/geometry/shapes.h 声明的各类具体形状，以及 shape_type.h
 //       中枚举到字符串的映射函数 shapeTypeName。
-// 说明：所有形状都通过 toPath() 转成 Path，命中检测与包围盒计算复用 Path 的
-//       实现，避免重复代码。
+// 说明：所有形状都可经 toPath() 转成 Path；命中检测与包围盒计算多数委托 Path 的实现
+//       以避免重复代码，矩形 / 椭圆 / 文字等则用更直接的特化判定（见各自实现）。
 // ============================================================================
 #include "geometry/shapes.h"
 
@@ -336,9 +336,16 @@ std::vector<core::Point2D> PathShape::controlPoints() const {
 TextShape::TextShape(std::string text, const double x, const double y, const double fontSize)
     : text_(std::move(text)), x_(x), y_(y), fontSize_(fontSize) {}
 
-// 估算文本宽度：无字体库时按每字符 0.5 * fontSize 粗略估算。
+// 估算文本宽度：无字体库时按「字符数 × 单字系数」粗略估算——
+// ASCII 半宽（0.5 × fontSize）、多字节字符全宽（1.0 × fontSize，如中文）。
+// 逐字节扫描 UTF-8：续字节（10xxxxxx）跳过，其余字节即字符起点。
 double TextShape::estimateWidth() const {
-    return static_cast<double>(text_.size()) * fontSize_ * 0.5;
+    double units = 0.0;
+    for (const unsigned char b : text_) {
+        if ((b & 0xC0) == 0x80) continue;  // UTF-8 续字节：随字符起点已计数，跳过
+        units += b < 0x80 ? 0.5 : 1.0;   // ASCII 半宽、多字节字符全宽
+    }
+    return units * fontSize_;
 }
 
 // 转为路径：以估算宽高构成矩形边界。

@@ -1,15 +1,15 @@
 // ============================================================================
 // 文件：src/commands/erase.cpp
-// 作用：实现 cmdErase——L2 反向剔除模式（终稿 §4.3 / guideline §4.2.2）的命令行薄壳。
+// 作用：实现 cmdErase——L2 反向剔除模式（SPEC §3.3）的命令行薄壳。
 //       支持四种剔除：单矩形十字切割、横线带、竖线带、多矩形并集（--rect 多次）。极性恒 remove；
 //       缺省分离导出到文件夹，给出 --merge collapse 时合并为单图（重排 rearrange 仅 L3 grid 支持，
-//       本命令拒绝）。职责仅四件（A-0.1）：
-//       解析参数 → 按 §5.3 校验 → 装配 EngineConfig → 交 job 执行；不含任何切割/几何/极性逻辑。
+//       本命令拒绝）。职责仅四件（CONTRIBUTING.md「分层纪律」）：
+//       解析参数 → 按固定顺序校验 → 装配 EngineConfig → 交 job 执行；不含任何切割/几何/极性逻辑。
 // 分块依据：一命令一文件（严禁上帝文件）；执行/退出码复用 job（NFR-0 同一通道），值解析复用
-//       value_parser，报错样板复用 command_support（A-0.2）。分离/合并输出目标的判定在本命令内完成
+//       value_parser，报错样板复用 command_support（CONTRIBUTING.md「分层纪律」）。分离/合并输出目标的判定在本命令内完成
 //       （与 grid 的差异：erase 无 --compose/--canvas，合并方式只 collapse——重排为 L3 专属）。
-// 说明：显式 --merge collapse 但选择集不可坍缩时由 job 返回退出码 2（§4.2.2.4）。四种剔除在合法
-//       参数下删除区恒为若干整行/整列（多矩形并集亦然，§4.2.2.2），故通常可坍缩；该分支主要为
+// 说明：显式 --merge collapse 但选择集不可坍缩时由 job 返回退出码 2。四种剔除在合法
+//       参数下删除区恒为若干整行/整列（多矩形并集亦然），故通常可坍缩；该分支主要为
 //       防御性对齐规范，真正稳定触发退出码 2 的场景见 config 命令的手写配置（IT-18）。
 // ============================================================================
 #include "commands.h"
@@ -32,11 +32,11 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     ArgParser args;
     args.parse(tokens);
 
-    // --- §5.3 第 3 步：必填。---
+    // --- 第 3 步：必填。---
     if (!args.has("--input"))
         return argError("缺少 --input", "请用 --input <file> 指定输入图像");
 
-    // --- §5.3 第 4 步：互斥——几何三选一（--rect 可重复，整体算作一类）。---
+    // --- 第 4 步：互斥——几何三选一（--rect 可重复，整体算作一类）。---
     const bool hasRect = args.has("--rect");
     const bool hasH = args.has("--hband");
     const bool hasV = args.has("--vband");
@@ -45,14 +45,14 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
                         geoKinds == 0 ? "请给出恰好一种几何参数（--rect 可重复以做多矩形并集剔除）"
                                       : "不可混用多种几何参数");
 
-    // --- §5.3 第 4 步：--merge 与 --output-dir 互斥；据此定「分离 / 合并」输出目标。---
+    // --- 第 4 步：--merge 与 --output-dir 互斥；据此定「分离 / 合并」输出目标。---
     const bool hasMerge = args.has("--merge");
     if (hasMerge && args.has("--output-dir"))
         return argError("--merge 与 --output-dir 不得同时出现",
                         "合并请用 --output <file>；分离请用 --output-dir <dir>（二者择一）");
 
     // --- 装配 EngineConfig 固定部分：L2 极性恒 remove；输出模式由 --merge 决定。---
-    const bool separate = !hasMerge; // 缺省分离导出（§4.2.2.3）。
+    const bool separate = !hasMerge; // 缺省分离导出。
     bool explicitCollapse = false;   // 仅显式 --merge collapse 时为真（不可坍缩 → 退出码 2）。
     engine::EngineConfig config;
     config.cut.tier = engine::Tier::L2;
@@ -78,7 +78,7 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
                             "请用 --output-dir <dir> 指定输出文件夹（不存在会自动创建）");
     }
 
-    // --- §5.3 第 5 步：几何格式校验。带坐标先暂存，读图后再构造贯穿全图的带矩形。---
+    // --- 第 5 步：几何格式校验。带坐标先暂存，读图后再构造贯穿全图的带矩形。---
     int bandA = 0, bandB = 0;
     if (hasRect) {
         if (const std::vector<std::string> rectStrs = args.getAll("--rect"); rectStrs.size() == 1) {
@@ -86,7 +86,7 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
             engine::RectRegion r;
             if (!parseRect(rectStrs[0], r, err)) return argError(err);
             if (r.width() <= 0 || r.height() <= 0)
-                return argError("矩形退化：需满足 x1<x2 且 y1<y2", "请检查 --rect 的坐标顺序");
+                return argError("矩形退化：需满足 x1<x2 且 y1<y2", "请检查 --rect 的坐标顺序；只需一条切割线时请改用 --hband / --vband");
             config.cut.generator = engine::CutGenerator::RECT;
             config.cut.rect = r;
         } else {
@@ -97,7 +97,7 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
                 if (!parseRect(s, r, err)) return argError(err);
                 if (r.width() <= 0 || r.height() <= 0)
                     return argError("矩形退化：需满足 x1<x2 且 y1<y2",
-                                    "请检查 --rect '" + s + "' 的坐标顺序");
+                                    "请检查 --rect '" + s + "' 的坐标顺序；只需一条切割线时请改用 --hband / --vband");
                 config.cut.rects.push_back(r);
             }
         }
@@ -115,7 +115,7 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     // 公共导出选项：--format（分离时决定扩展名 / 合并时作扩展名回退）/ --naming（分离命名模板）。
     if (!applyFormatNaming(args, config.emitParams, err)) return argError(err);
 
-    // --- §5.3 第 6 步：读图（失败退出码 3）。---
+    // --- 第 6 步：读图（失败退出码 3）。---
     const JobOptions opt = makeJobOptions(go, explicitCollapse);
     core::Image image;
     if (const ExitCode ec = loadInputImage(args.get("--input"), image, opt); ec != ExitCode::Ok)
@@ -129,7 +129,7 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     config.source.width = image.width();
     config.source.height = image.height();
 
-    // --- §5.3 第 7 步：执行 / dry-run（--save-config）。分离取 --output-dir，合并取 --output。---
+    // --- 第 7 步：执行 / dry-run（--save-config）。分离取 --output-dir，合并取 --output。---
     const JobOutput out{separate ? args.get("--output-dir") : args.get("--output"), separate};
     return toInt(finishJob(config, image, out, go.saveConfig, opt));
 }

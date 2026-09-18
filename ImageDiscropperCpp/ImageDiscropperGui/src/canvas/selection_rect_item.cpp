@@ -6,7 +6,7 @@
 // 分块依据：
 //   - 交互几何（命中手柄、命中边、平移钳制、对角缩放、单边拖动、吸附）集中在鼠标事件与私有工具；
 //   - 每次改动 rect_ 前调用 prepareGeometryChange()，保证场景索引与重绘区域正确；
-//   - 移动/缩放/拖边过程中实时 emit rectChanged，实现「拖拽即刷新遮罩」（A-0.8）。
+//   - 移动/缩放/拖边过程中实时 emit rectChanged，实现「拖拽即刷新遮罩」（CONTRIBUTING.md「分层纪律」）。
 // 说明：本图元不做切割；产出的矩形交 Document → Core 决定贯穿切割线与保留/删除集。
 //       切割线就是被标记边的贯穿延伸，与选区框同为一支橙色画笔、同一个图元（唯一橙色交互体），
 //       因此「拖动橙线」与「拖动选区边」是同一件事，物理上不可能错位/分离。
@@ -141,7 +141,7 @@ void SelectionRectItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*
                               QWidget* /*widget*/) {
     const QRectF r = rect_.normalized();
 
-    // 统一橙色画笔（§4.2：橙色实线 2px；cosmetic 使线宽不随缩放变化）。切割线与选区框共用此笔，
+    // 统一橙色画笔（本目录 README「画布视觉规范」：橙色实线 2px；cosmetic 使线宽不随缩放变化）。切割线与选区框共用此笔，
     // 故二者同色、同图元、天然合一。高亮态（多矩形选中项）颜色略深、线宽略粗以示区分。
     QPen pen(highlighted_ ? QColor(255, 90, 0) : QColor(255, 140, 0));
     pen.setWidth(highlighted_ ? 3 : 2);

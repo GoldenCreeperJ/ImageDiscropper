@@ -8,7 +8,7 @@
 
 namespace idc::pixel_ops {
 
-// 旋转：只支持 90 / 180 / 270 度的整数倍旋转，其他角度会退化到最近的合法值。
+// 旋转：只支持 90 的整数倍（90 / 180 / 270），其他角度返回未旋转的副本。
 // 参数 angle 单位为度，允许负值（内部会归一化到 [0, 360)）。
 core::Image rotate(const core::Image& src, int angle);
 

@@ -91,7 +91,7 @@ void Document::setL2Sub(const L2Sub s) {
 
 // 设置选区矩形（原图像素坐标），标记已有选区。
 // 校验：拒绝退化矩形（宽或高 ≤ 0）——非法几何会让 Core 的切割/网格计算异常甚至崩溃，
-// 故在此统一兜底（所有写回路径共用），退化输入时保持上一次有效选区不变（A-0.1 输入校验）。
+// 故在此统一兜底（所有写回路径共用），退化输入时保持上一次有效选区不变（CONTRIBUTING.md「分层纪律」 输入校验）。
 void Document::setRect(const engine::RectRegion& r) {
     if (r.width() <= 0 || r.height() <= 0) return;
     rect_ = r;
@@ -171,11 +171,11 @@ void Document::setDerivedGridSize(const int rows, const int cols) {
     gridCols_ = cols;
 }
 
-// 「转为网格模式编辑」（FR §4.4.3 / G-15）：把当前矩形选区一键送入 L3 继续精修。
+// 「转为网格模式编辑」：把当前矩形选区一键送入 L3 继续精修。
 // 语义：以选区左上为基准点、选区宽高为单元尺寸生成周期性网格——于是用户刚画的那个矩形
 // 恰成为网格中的一个单元（网格线精确穿过矩形四边），可在 L3 里逐单元点选/排序精修。
-// 说明：L3 网格是「基准点 + 单元尺寸」的周期铺满（§4.4.4），无法逐条复刻单矩形诱导的非均匀
-// 3×3 线；此映射为纯字段搬运（不含几何计算，A-0.1），保留矩形边界作为网格相位锚，视觉连续。
+// 说明：L3 网格是「基准点 + 单元尺寸」的周期铺满（SPEC §3.4.3），无法逐条复刻单矩形诱导的非均匀
+// 3×3 线；此映射为纯字段搬运（不含几何计算，CONTRIBUTING.md「分层纪律」），保留矩形边界作为网格相位锚，视觉连续。
 void Document::convertRectToGrid() {
     // 源矩形：优先用单选区 rect_；若无有效单选区但多矩形列表非空（MULTI_RECT），
     // 则取全部矩形的包围盒（min 左上 / max 右下）作为网格单元基准（纯字段派生，非切割几何）。
@@ -401,7 +401,7 @@ engine::CutConfig Document::buildCutConfig() const {
     c.polarity = polarity_;
     c.rect = rect_;
 
-    // 生成器映射：L1 形状 / L2 子功能 → Core CutGenerator；L3 → GRID（第二阶段细化）。
+    // 生成器映射：L1 形状 / L2 子功能 → Core CutGenerator；L3 → GRID。
     switch (mode_) {
         case engine::Tier::L1:
             switch (l1Shape_) {
@@ -434,7 +434,7 @@ engine::CutConfig Document::buildCutConfig() const {
 engine::EngineConfig Document::buildEngineConfig() const {
     engine::EngineConfig cfg;
 
-    // 源尺寸：以工作图实际尺寸为准（第一阶段无预处理，等于原图尺寸）。
+    // 源尺寸：以工作图实际尺寸为准（预处理可能改变尺寸，不能用原图尺寸）。
     cfg.source.width = width();
     cfg.source.height = height();
 
@@ -466,11 +466,11 @@ engine::EngineConfig Document::buildEngineConfig() const {
     if (mergeCellW_ > 0) cfg.emitParams.cellWidth = mergeCellW_;
     if (mergeCellH_ > 0) cfg.emitParams.cellHeight = mergeCellH_;
 
-    // preprocess 保持默认空流水线（预处理面板在第三阶段接入）。
+    // preprocess 保持默认空流水线：预处理已即时作用于工作图（见 setWorkingImage），不在此重复。
     return cfg;
 }
 
-// 反向映射（G-13 配置加载 / G-12 撤销重做共用）：把 EngineConfig 搬回 Document 状态，与 buildEngineConfig 互逆。
+// 反向映射（配置加载与撤销重做共用）：把 EngineConfig 搬回 Document 状态，与 buildEngineConfig 互逆。
 // 直接改私有字段（不走各 setter）后只发一次 changed()，避免逐字段多次触发刷新；图像/source 尺寸不还原。
 void Document::applyEngineConfig(const engine::EngineConfig& cfg) {
     // ---- 模式与极性 ----

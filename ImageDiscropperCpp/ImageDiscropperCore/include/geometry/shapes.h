@@ -79,7 +79,7 @@ public:
 
     // ---- 坐标映射（供交互式定向包围盒手柄）----
     // localToWorld / worldToLocal 在形状局部系与世界系之间映射点（worldToLocal 用 xform_ 的逆）。
-    // GUI 手柄拖拽据此把世界光标映回局部系以沿形状自身轴算缩放/旋转，不在 GUI 做矩阵运算（A-0.1）。
+    // GUI 手柄拖拽据此把世界光标映回局部系以沿形状自身轴算缩放/旋转，不在 GUI 做矩阵运算（CONTRIBUTING.md「分层纪律」）。
     core::Point2D localToWorld(const core::Point2D& p) const { return xform_.applyToPoint(p); }
     core::Point2D worldToLocal(const core::Point2D& p) const { return xform_.inverse().applyToPoint(p); }
 
@@ -310,7 +310,8 @@ private:
     std::string text_;
     double x_, y_, fontSize_;
 
-    // 估算文本宽度：无字体库时按字符数 * fontSize * 0.5 粗略计算。
+    // 估算文本宽度：无字体库时按字符数 × 单字系数 × fontSize 粗略计算
+    // （ASCII 0.5、多字节字符 1.0，如中文）。
     double estimateWidth() const;
 };
 

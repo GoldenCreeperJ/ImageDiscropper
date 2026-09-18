@@ -2,7 +2,7 @@
 // 文件：util/image_qt_adapter.h
 // 作用：Core 像素容器 idc::core::Image 与 Qt 图像类型（QImage/QPixmap）之间的
 //       适配转换。这是 GUI 的「视图关注点」——把 Core 的纯数据翻译成 Qt 能绘制
-//       的形式，不含任何切割/几何/像素算法（guideline §0 A-0.1）。
+//       的形式，不含任何切割/几何/像素算法（CONTRIBUTING.md「分层纪律」）。
 // 分块依据：仅承载 Image→QImage/QPixmap 的单向转换；反向（QImage→Image）GUI 阶段
 //           不需要（GUI 从不生产像素，只消费 Core 产物），故不提供，避免误用。
 // 说明：转换一律「深拷贝」像素——Core 的 Image 缓冲生命周期独立于 Qt 控件，

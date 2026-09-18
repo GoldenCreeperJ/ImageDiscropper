@@ -1,9 +1,9 @@
 // ============================================================================
 // 文件：canvas/grid_layer.h
 // 作用：网格线渲染层——把 Core 诱导网格 Grid 的单元边界画成贯穿线。两种样式（asCutLines）：
-//       灰色虚线（L3 网格，guideline §4.2：1px、z=kGrid）或橙色实线（L2 多矩形诱导切割线，
+//       灰色虚线（L3 网格，本目录 README「画布视觉规范」：1px、z=kGrid）或橙色实线（L2 多矩形诱导切割线，
 //       与选区框同一橙色）。与 MaskLayer 同构：纯显示、不接收鼠标、不含几何计算，
-//       只按 Core 给出的单元区域绘线（A-0.1）。
+//       只按 Core 给出的单元区域绘线（CONTRIBUTING.md「分层纪律」）。
 // 分块依据：网格线渲染独立成层，与遮罩(MaskLayer)、选区(SelectionRectItem)解耦，避免
 //           CanvasScene 变成上帝类；rebuild 每次先 clear 再按 Grid 重画，setVisible 只切显隐。
 // 说明：本层只画贯穿全图的线；单元编号角标（自定义排序）与单元点选交互由 CellPickerItem 承担。

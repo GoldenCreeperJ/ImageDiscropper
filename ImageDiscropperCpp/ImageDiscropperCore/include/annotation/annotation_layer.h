@@ -94,7 +94,7 @@ public:
     // 提交一个新形状（由 ShapeFactory 构造后调用）。
     void addAnnotation(std::unique_ptr<geometry::Shape> shape);
 
-    // 命中检测：返回顶层第一个包含 p 的形状索引，未命中返回 nullopt。
+    // 命中检测：返回顶层第一个命中的形状索引（填充形状优先判内部，其余按轮廓邻近判定），未命中返回 nullopt。
     std::optional<std::size_t> hitTest(const core::Point2D& p) const;
 
     // 设置选中形状索引（用于 EDIT 模式）。

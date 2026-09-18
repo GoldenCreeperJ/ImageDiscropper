@@ -118,8 +118,8 @@ void AnnotationLayer::changeFontSize(const double size) { currentFontSize_ = std
 
 // ------ 形状提交与命中 ------
 
-// 提交一个新形状：将其封装为 Annotation 推入撤销重做主栈（HistoryManager::push）
-// （新操作切断"未来"，符合常见撤销重做语义）。
+// 提交一个新形状：封装为 Annotation 后推入撤销重做主栈（HistoryManager::push，
+// 新操作会清空重做栈，即切断“未来”）。
 void AnnotationLayer::addAnnotation(std::unique_ptr<geometry::Shape> shape) {
     if (!shape) return;
     Annotation ps;
@@ -128,7 +128,7 @@ void AnnotationLayer::addAnnotation(std::unique_ptr<geometry::Shape> shape) {
     ps.strokeWidth = currentStrokeWidth_;
     ps.fillType = currentFill_;
     ps.shape = std::move(shape);
-    history_.push(std::move(ps));   // push 内部会清空重做栈（新操作切断“未来”）
+    history_.push(std::move(ps));   // push 内部清空重做栈
 }
 
 // 命中检测：从顶层（最后绘制的）开始遍历，返回第一个命中的索引。

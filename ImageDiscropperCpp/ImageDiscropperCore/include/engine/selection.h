@@ -1,9 +1,9 @@
 // ============================================================================
 // 文件：include/engine/selection.h
 // 作用：定义极性 Polarity 与选择集 Selection——Grid-Selection-Emit 阶段 ③④
-//       （终稿 §2）的数据载体，也是 L1/L2/L3 三层共用“保留 / 剔除”开关的落点。
+//       （SPEC §1）的数据载体，也是 L1/L2/L3 三层共用“保留 / 剔除”开关的落点。
 // 分块依据：
-//   - Polarity：keep / remove 二元极性（§3.2 术语），L2 反向剔除的核心即此开关。
+//   - Polarity：keep / remove 二元极性（SPEC §2.2 术语），L2 反向剔除的核心即此开关。
 //   - Selection：被选中的单元格序号集合 + 极性；提供点选 / 框选 / 全选 / 反选
 //     等集合操作（FR-L3.3），以及“按极性解析出最终保留集”的 resolve 接口。
 //   - resolve 按极性取补集解析保留序号，真实实现见 src/engine/selection.cpp。
@@ -20,7 +20,7 @@
 namespace idc::engine {
 
 // ---------------------------------------------------------------------------
-// Polarity：极性（终稿 §3.2 / §2 阶段④）。
+// Polarity：极性（SPEC §2.2 / SPEC §1 阶段④）。
 // ---------------------------------------------------------------------------
 enum class Polarity {
     KEEP,    // 保留选择集：R = S
@@ -82,7 +82,7 @@ private:
     std::vector<bool> selected_;
 };
 
-// ③④ 依据选择集与极性，从全集 all 过滤出最终保留集 R（终稿 §2 阶段③④）：
+// ③④ 依据选择集与极性，从全集 all 过滤出最终保留集 R（SPEC §1 阶段③④）：
 //   keep → R = S；remove → R = 全集 \ S。定义见 src/engine/selection.cpp。
 RegionSet applyPolarity(const RegionSet& all, const Selection& selection);
 

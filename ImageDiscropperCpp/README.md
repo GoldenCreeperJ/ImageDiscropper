@@ -4,14 +4,13 @@
 
 > 一句话定位：常规裁剪只回答「保留哪一块」；本工具回答「**沿哪些线切开、留下哪些块、怎么重新拼起来**」。
 
-本工程依据《图像区域提取、反向剔除与网格分割工具 · 需求规格说明（终稿 v1.0）》
-（[`Require.md`](Require.md)）实现，施工图见 [`guideline.md`](guideline.md)。
+功能规格（引擎 / CLI / GUI 的行为契约）见 [`SPEC.md`](SPEC.md)；贡献约定见 [`../CONTRIBUTING.md`](../CONTRIBUTING.md)。
 
 ---
 
 ## 1. 应用介绍
 
-所有功能归约为同一条 **Grid-Selection-Emit** 流水线（终稿 §2）：
+所有功能归约为同一条 **Grid-Selection-Emit** 流水线（SPEC §1）：
 
 ```text
 原图 → ① 切割线集合 → ② 诱导网格 → ③ 选择集 → ④ 极性(Keep/Remove) → ⑤ 排布导出(Collapse/Rearrange)
@@ -30,7 +29,7 @@
 
 ## 2. 工程组成
 
-采用终稿 §10.1 的三层结构（Core / CLI / GUI），Core 作为静态库被上层引用：
+采用三层结构（Core / CLI / GUI），Core 作为静态库被上层引用：
 
 ```text
 GUI ──────┐
@@ -50,11 +49,11 @@ CLI ──────┘
 
 ---
 
-## 3. 与终稿核心概念的映射
+## 3. 与功能规格核心概念的映射
 
-终稿 §10.2 建议的 Core 概念在本工程中的落点（详见 [`ImageDiscropperCore/README.md`](ImageDiscropperCore/README.md)）：
+SPEC §1 流水线概念在本工程中的落点（详见 [`ImageDiscropperCore/README.md`](ImageDiscropperCore/README.md)）：
 
-| 终稿概念          | 类型 / 接口                                          | 头文件                           |
+| 规格概念          | 类型 / 接口                                          | 头文件                           |
 |---------------|--------------------------------------------------|-------------------------------|
 | `Image`       | `idc::core::Image`                               | `core/image.h`                |
 | `Region`      | `idc::engine::RectRegion` / `RegionKind`         | `engine/region.h`             |
@@ -68,14 +67,14 @@ CLI ──────┘
 | 图像 I/O        | `readImageFile` / `writeImageFile`               | `engine/image_io.h`           |
 | 配置 JSON       | `loadEngineConfig` / `saveEngineConfig`          | `engine/engine_config_json.h` |
 
-CLI 命令与终稿功能的对应（详见 [`ImageDiscropperCli/README.md`](ImageDiscropperCli/README.md)）：
+CLI 命令与规格功能的对应（详见 [`ImageDiscropperCli/README.md`](ImageDiscropperCli/README.md)）：
 
-| CLI 命令    | 层级      | 极性            | 输出               | 对应终稿               |
-|-----------|---------|---------------|------------------|--------------------|
-| `extract` | L1 标准提取 | 恒 keep        | 合并单图（坍缩）         | §4.2               |
-| `erase`   | L2 反向剔除 | 恒 remove      | 分离 / 坍缩 / 重排     | §4.3（FR-L2.1~L2.6） |
-| `grid`    | L3 网格分割 | keep 或 remove | 分离 / 重排合并        | §4.4（FR-L3.1~L3.8） |
-| `config`  | 配置驱动    | 由 JSON 决定     | 由 JSON 的 emit 决定 | §9 / FR-L3.8       |
+| CLI 命令    | 层级      | 极性            | 输出               | 对应规格                    |
+|-----------|---------|---------------|------------------|-------------------------|
+| `extract` | L1 标准提取 | 恒 keep        | 合并单图（坍缩）         | SPEC §3.2               |
+| `erase`   | L2 反向剔除 | 恒 remove      | 分离 / 坍缩 / 重排     | SPEC §3.3（FR-L2.1~L2.6） |
+| `grid`    | L3 网格分割 | keep 或 remove | 分离 / 重排合并        | SPEC §3.4（FR-L3.1~L3.8） |
+| `config`  | 配置驱动    | 由 JSON 决定     | 由 JSON 的 emit 决定 | SPEC §7 / FR-L3.8       |
 
 ---
 
@@ -90,37 +89,29 @@ cmake --build build            # 产出 build/bin/idc(.exe)、idc_gui(.exe) 与 
 ctest --test-dir build         # 同时运行 Core unit_tests 与 CLI cli_tests（IT-1~IT-18）
 ```
 
-命令行速览（完整选项见 `idc <command> --help`）：
+命令行速览见根 [`README.md`](../README.md)「快速开始」；完整选项见 `idc <command> --help` 或 [`ImageDiscropperCli/README.md`](ImageDiscropperCli/README.md)。
 
-```bash
-idc extract --input photo.jpg --rect 100,100,300,250 --output out.png
-idc erase   --input photo.jpg --rect 100,100,300,250 --merge collapse --output out.png
-idc erase   --input photo.jpg --rect 100,100,300,250 --output-dir ./out/ --format png
-idc grid    --input photo.jpg --grid 100,100,200,150 --keep 0,0 --keep 0,2 --keep 2,0 --keep 2,2 \
-            --compose --canvas 2x2 --output result.png
-idc config  --load my-config.json --input photo.jpg --output result.png
-```
-
-退出码（guideline §5.1）：`0` 成功 · `1` 参数错误 · `2` 运行时错误 · `3` 输入文件错误 ·
+退出码：`0` 成功 · `1` 参数错误 · `2` 运行时错误 · `3` 输入文件错误 ·
 `4` 输出失败 · `5` 内部错误。
 
 ---
 
 ## 5. 文档索引
 
-| 文档                                                               | 说明                               |
-|------------------------------------------------------------------|----------------------------------|
-| [`Require.md`](Require.md)                                       | 需求规格说明（终稿 v1.0），唯一需求基线           |
-| [`guideline.md`](guideline.md)                                   | 给 AI Agent 的 CLI 施工图（终稿的可执行化版本）  |
-| [`ImageDiscropperCore/README.md`](ImageDiscropperCore/README.md) | Core 层：模块划分、概念映射、构建              |
-| [`ImageDiscropperCli/README.md`](ImageDiscropperCli/README.md)   | CLI 层：命令、选项、退出码、Core API 清单      |
-| [`ImageDiscropperGui/README.md`](ImageDiscropperGui/README.md)   | GUI 层：Qt6 桌面前端的画布 / 面板 / 文档模型与交互 |
+| 文档                                                               | 说明                                                 |
+|------------------------------------------------------------------|----------------------------------------------------|
+| [`../README.md`](../README.md)                                   | 仓库首页（项目定位、快速开始、文档导航；含英文版 `README.en.md`）           |
+| [`../CONTRIBUTING.md`](../CONTRIBUTING.md)                       | 贡献指南（构建/测试、代码与文档规范、提交与 PR 约定）                      |
+| [`SPEC.md`](SPEC.md)                                             | 功能规格：模式 / 导出 / 边界（E-1~E-8）/ NFR / 配置 schema，唯一行为基线 |
+| [`ImageDiscropperCore/README.md`](ImageDiscropperCore/README.md) | Core 层：模块划分、概念映射、构建                                |
+| [`ImageDiscropperCli/README.md`](ImageDiscropperCli/README.md)   | CLI 层：命令、选项、退出码、Core API 清单                        |
+| [`ImageDiscropperGui/README.md`](ImageDiscropperGui/README.md)   | GUI 层：Qt6 桌面前端——用户操作速览、画布 / 面板 / 文档模型与交互、关键设计决策、构建 |
 
-每个源码子目录下均有独立的 `README.md` 说明其职责边界与分块依据（guideline Strict Rule 1）。
+每个源码子目录下均有独立的 `README.md` 说明其职责边界与分块依据（全仓库目录说明约定）。
 
 ---
 
-## 6. 实现状态（对照终稿 §8 分期）
+## 6. 实现状态
 
 | 阶段      | 范围                                           | 状态                                        |
 |---------|----------------------------------------------|-------------------------------------------|
@@ -129,3 +120,9 @@ idc config  --load my-config.json --input photo.jpg --output result.png
 | **v3**  | 基础图像处理（FR-1）、标注图层                            | ⏳ Core 支撑层已重构保留（尚未接入 CLI / GUI）；GUI 前端已落地 |
 
 > 本地处理、无损优先（NFR-1 / NFR-2）：图像不上传服务器；切割为纯像素搬运，仅 JPEG 输出有损。
+
+---
+
+## 7. 许可
+
+本目录随仓库整体采用 **GPL-3.0**（见根 [`../LICENSE`](../LICENSE)），Core / CLI / GUI 及任何语言实现的 Core 均在统一许可下。

@@ -2,7 +2,7 @@
 // 文件：src/engine/grid.cpp
 // 作用：实现诱导网格阶段（Grid-Selection-Emit 阶段②）——参数化铺设 Grid::build（L3，
 //       含余量策略 FR-L3.2）、切割线诱导铺设 Grid::buildFromLines，以及流水线自由函数
-//       induceGrid（终稿 §2 / §4.4）。
+//       induceGrid（SPEC §1 / §3.4）。
 // 分块依据：网格是“选择与导出的最小单位”的载体；本文件只负责铺单元，
 //       切割线生成见 cut_line.cpp，切分见 split.cpp。
 // ============================================================================
@@ -32,7 +32,7 @@ int virtualStart(const int origin, const int cell) {
 
 // 依据基准点、单元尺寸、图像边界与余量策略，铺出单轴上全部被保留的单元区间。
 // 自虚拟起点 (-cell,0] 起，以 cell 为周期向右/下推进，直到起点越过图像边界为止，
-// 从而双向铺满整幅图像（切割线贯穿全图，终稿 §4.4.4）；跨越边界的残缺单元按
+// 从而双向铺满整幅图像（切割线贯穿全图，SPEC §3.4.3）；跨越边界的残缺单元按
 // remainder 处理：DISCARD 丢弃 / KEEP_PARTIAL 裁剪到图像内 / PAD 保留完整尺寸（越界）。
 std::vector<AxisCell> layoutAxis(const int origin, const int cell, const int limit,
                                  const RemainderPolicy remainder) {
@@ -54,10 +54,10 @@ std::vector<AxisCell> layoutAxis(const int origin, const int cell, const int lim
 
 } // namespace
 
-// 依据网格参数与图像尺寸铺设单元格（FR-L3.1 / FR-L3.2 / 终稿 §4.4.4）。
+// 依据网格参数与图像尺寸铺设单元格（FR-L3.1 / FR-L3.2 / SPEC §3.4.3）。
 // 网格仅由「基准点 + 单元尺寸」定义：以基准点为相位锚、单元尺寸为周期，自虚拟起点
 // (-cw,0]×(-ch,0] 双向铺满全图，行列数由图像边界自动推导；跨界残缺单元按余量策略处理。
-// origin=0 时虚拟起点即 0，等价于自左/上边界单向周期铺满（与旧行为一致）。
+// origin=0 时虚拟起点即 0，等价于自左/上边界单向周期铺满。
 void Grid::build(const GridParams& params, const int imageWidth, const int imageHeight) {
     params_ = params;
     cells_.clear();
@@ -91,7 +91,7 @@ void Grid::build(const GridParams& params, const int imageWidth, const int image
     }
 }
 
-// 由切割线集合诱导铺设 m×n 单元（终稿 §2 阶段②）。
+// 由切割线集合诱导铺设 m×n 单元（SPEC §1 阶段②）。
 // 单元 C[i][j] = [xs[i], xs[i+1]) × [ys[j], ys[j+1])，行主序编号。
 void Grid::buildFromLines(const std::vector<int>& xs, const std::vector<int>& ys) {
     cells_.clear();

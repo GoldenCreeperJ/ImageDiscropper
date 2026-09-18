@@ -7,7 +7,7 @@
 //       并支持把某已选单元拖到另一已选单元上调序（发 cellReordered）。
 // 分块依据：
 //   - 与 SelectionRectItem 并列的第二个交互图元，但二者互斥显隐（L1/L2 用选区框、L3 用点选）；
-//     本图元只做「命中测试 + 手势翻译成信号」，不含网格几何——单元区域全部来自 Core Grid（A-0.1）。
+//     本图元只做「命中测试 + 手势翻译成信号」，不含网格几何——单元区域全部来自 Core Grid（CONTRIBUTING.md「分层纪律」）。
 //   - 选择集的集合运算（toggle / union）落在 Document；本图元不认识 Document，只发意图信号，
 //     与 CanvasView「采集交互 → 翻译 → 交上层」的定位一致。
 //   - 派生自 QGraphicsObject（而非 QGraphicsItem）以获得 Q_OBJECT 信号能力（同 SelectionRectItem）。
@@ -36,8 +36,11 @@ public:
     void setGrid(const engine::Grid& grid, int width, int height);
     // 依 Document 更新当前选择集（有序；CUSTOM 下其顺序即自定义序）与排序策略。
     void setSelection(const std::vector<int>& selected, engine::SortStrategy strategy);
-    // 视图缩放换算的覆盖层尺度（≈8 屏幕px 对应的场景单位）：用于单击/拖拽阈值与边框观感。
+    // 视图缩放换算的覆盖层尺度（≈8 屏幕px 对应的场景单位）：用于单击/拖拽阈值与重绘余量。
     void setOverlayScale(qreal sceneUnits);
+
+    // 单元编号角标子图层显隐（图层面板「单元编号」开关）；角标是本图元的子图层，随本图元一起显隐。
+    void setBadgesVisible(bool visible) const;
 
     // 是否正处于拖拽框选手势中。
     bool isMarqueeing() const { return marquee_; }
@@ -72,6 +75,21 @@ private:
     void rebuildSelectionLookup();
     // 局部重绘某序号单元（悬停反馈用；避免大选集下整层重绘）。
     void updateCell(int index);
+
+    // ---------------------------------------------------------------------------
+    // CellNumberLayer：L3 CUSTOM 序的单元编号角标子图层（QGraphicsItem，非交互，不抢鼠标事件）。
+    // 作为 CellPickerItem 的子图元（选区图层子图层）随其一起显隐；子 z = kCellNumber − kSelection，
+    // 叠加在本图元的选区绘制之上，等效全局 z 序即 kCellNumber——展示为独立图层，逻辑归属选区图层。
+    // ---------------------------------------------------------------------------
+    class CellNumberLayer : public QGraphicsItem {
+    public:
+        explicit CellNumberLayer(CellPickerItem* owner);
+        QRectF boundingRect() const override;
+        void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
+    private:
+        CellPickerItem* owner_;
+    };
+    CellNumberLayer* numberLayer_{nullptr};  // 角标子图层（构造时创建；CUSTOM 序下才绘制内容）。
 
     std::vector<engine::Cell> cells_;  // Core 单元（区域 + 序号）：命中测试与高亮的唯一几何来源。
     std::vector<int> selected_;             // 当前选择集（有序）。

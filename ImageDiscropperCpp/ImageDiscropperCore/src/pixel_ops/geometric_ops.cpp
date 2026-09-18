@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：src/pixel_ops/geometric_ops.cpp
 // 作用：实现几何变换算法：90° 系列旋转、水平 / 垂直翻转、最近邻 / 双线性缩放。
-//       对应终稿 FR-1.1 旋转、FR-1.2 翻转、FR-1.4 缩放 / 尺寸调整。
+//       对应 SPEC §3.1 FR-1.1 旋转、FR-1.2 翻转、FR-1.4 缩放 / 尺寸调整。
 // ============================================================================
 #include "pixel_ops/geometric_ops.h"
 
@@ -83,8 +83,7 @@ core::Image flip(const core::Image& src, const bool horizontal) {
 
 // 尺寸调整：按目标宽高进行最近邻或双线性重采样。
 // 性能要点：直接基于行主序字节缓冲计算——四个角点指针每像素只求一次并一次性读取全部通道，
-// 避免旧实现「逐通道 × 逐角点」重复调用 pixelPtr/isGray 与逐像素 getPixel/setPixel 的边界检查、格式分支。
-// 输出与旧实现逐像素等价（双线性加权公式、夹取范围、通道处理均一致）。
+// 避免逐像素 getPixel/setPixel 的边界检查与逐通道的格式分支。
 core::Image resize(const core::Image& src, const int newWidth, const int newHeight, const ResampleMode mode) {
     if (newWidth <= 0 || newHeight <= 0 || src.empty()) return {};
     core::Image out(newWidth, newHeight, src.format());

@@ -163,7 +163,7 @@ int main() {
     // 9. 引擎实战演示：真正跑通 Grid-Selection-Emit 流水线并导出到磁盘。
     //    9.1 L2 十字剔除 → 坍缩合并单图；9.2 同作业分离导出到文件夹；
     //    9.3 L3 网格 → 选择四角单元 → 重排合并；9.4 配置 JSON 存取（NFR-4）。
-    //    输出写入 ./demo_output/（guideline §四：优先保证可演示）。
+    //    输出写入 ./demo_output/。
     // ------------------------------------------------------------------
     namespace fs = std::filesystem;
     const fs::path outDir = "demo_output";
@@ -179,7 +179,7 @@ int main() {
         cfg.cut.rect = engine::RectRegion(60, 30, 140, 90);
         cfg.cut.polarity = engine::Polarity::REMOVE;     // 剔除十字 → 保留四角
         cfg.emitParams.mode = engine::EmitMode::MERGED;
-        cfg.emitParams.layout = engine::MergeLayout::COLLAPSE; // 坍缩式合并（§5.2）
+        cfg.emitParams.layout = engine::MergeLayout::COLLAPSE; // 坍缩式合并（SPEC §4.2）
 
         const auto [ok, error, kept, composition, collapsible] = engine::runEngine(composed, cfg);
         std::cout << "[L2 collapse] ok=" << ok
@@ -226,7 +226,7 @@ int main() {
         cfg.selectedCells = {0, 3, 8, 11};               // 4×3 网格的四角单元
         cfg.order.strategy = engine::SortStrategy::ROW_MAJOR;
         cfg.emitParams.mode = engine::EmitMode::MERGED;
-        cfg.emitParams.layout = engine::MergeLayout::REARRANGE; // 重排式合并（§5.3）
+        cfg.emitParams.layout = engine::MergeLayout::REARRANGE; // 重排式合并（SPEC §4.3）
         cfg.emitParams.cols = 2;
 
         const engine::EngineResult r = engine::runEngine(composed, cfg);

@@ -2,7 +2,7 @@
 // 文件：canvas/canvas_scene.cpp
 // 作用：实现 CanvasScene 的图层装配与刷新（见同名头文件说明）。
 // 分块依据：底图/遮罩/切割线/选区四类图元各由专门方法管理；场景不含切割或几何逻辑，
-//           仅按 Core 结果与 Document 状态渲染（A-0.1）。
+//           仅按 Core 结果与 Document 状态渲染（CONTRIBUTING.md「分层纪律」）。
 // ============================================================================
 #include "canvas/canvas_scene.h"
 
@@ -145,6 +145,12 @@ void CanvasScene::clearGrid() {
         pickerItem_->setVisible(false);
         pickerItem_->setGrid(engine::Grid{}, imgW_, imgH_);
     }
+}
+
+// 单元编号角标图层显隐（图层面板「单元编号」开关）：角标是单元点选图元的子图层，
+// 随点选图元一起显隐；本开关只控制角标子图层自身。
+void CanvasScene::setCellNumberVisible(const bool on) const {
+    if (pickerItem_) pickerItem_->setBadgesVisible(on);
 }
 
 // 仅刷新 L2 多矩形的诱导切割线（委托 GridLayer 以橙色切割线样式重画），不触碰单元点选图元——

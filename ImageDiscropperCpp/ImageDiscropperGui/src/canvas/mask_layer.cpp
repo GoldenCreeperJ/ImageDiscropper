@@ -14,7 +14,7 @@
 namespace idc::gui {
 namespace {
 
-// 视觉规范（§4.2）：保留绿 rgba(0,200,0,60)、删除红 rgba(200,0,0,60)。
+// 视觉规范（本目录 README「画布视觉规范」）：保留绿 rgba(0,200,0,60)、删除红 rgba(200,0,0,60)。
 constexpr QColor kKeepColor(0, 200, 0, 60);
 constexpr QColor kDeleteColor(200, 0, 0, 60);
 

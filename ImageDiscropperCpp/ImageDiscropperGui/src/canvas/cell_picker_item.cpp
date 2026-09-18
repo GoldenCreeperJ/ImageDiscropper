@@ -60,6 +60,9 @@ CellPickerItem::CellPickerItem(QGraphicsItem* parent) : QGraphicsObject(parent) 
     setAcceptedMouseButtons(Qt::LeftButton);
     setAcceptHoverEvents(true);
     setZValue(zorder::kSelection);
+    // 角标子图层：随本图元显隐；子 z = kCellNumber − kSelection，使角标叠加在本图元选区绘制之上。
+    numberLayer_ = new CellNumberLayer(this);
+    numberLayer_->setZValue(zorder::kCellNumber - zorder::kSelection);
 }
 
 // 依 Core 网格更新单元几何（并重置悬停、重建选中查表）。
@@ -71,6 +74,7 @@ void CellPickerItem::setGrid(const engine::Grid& grid, const int width, const in
     hoverIndex_ = -1;
     rebuildSelectionLookup();
     update();
+    if (numberLayer_) numberLayer_->update();   // 角标子图层随网格变化刷新。
 }
 
 // 依 Document 更新选择集与排序策略。
@@ -80,11 +84,17 @@ void CellPickerItem::setSelection(const std::vector<int>& selected,
     strategy_ = strategy;
     rebuildSelectionLookup();
     update();
+    if (numberLayer_) numberLayer_->update();   // 选择集/排序变化 → 角标内容变化。
 }
 
 // 覆盖层尺度（≈8 屏幕px 的场景单位）。
 void CellPickerItem::setOverlayScale(const qreal sceneUnits) {
     if (sceneUnits > 0.0) overlayScale_ = sceneUnits;
+}
+
+// 单元编号角标子图层显隐（图层面板开关）。
+void CellPickerItem::setBadgesVisible(const bool visible) const {
+    if (numberLayer_) numberLayer_->setVisible(visible);
 }
 
 // 场景矩形 = 整幅原图。
@@ -221,6 +231,7 @@ void CellPickerItem::hoverLeaveEvent(QGraphicsSceneHoverEvent* event) {
 }
 
 // 绘制：已选单元高亮 → 悬停单元边框 → 框选带（仅绘暴露区内的单元，兼顾大选集性能）。
+// 编号角标由角标子图层 CellNumberLayer 绘制（不在此层，见文件尾实现）。
 void CellPickerItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget*) {
     if (cells_.empty() || imgW_ <= 0 || imgH_ <= 0) return;
     const QRectF exposed = option ? option->exposedRect : boundingRect();
@@ -254,37 +265,6 @@ void CellPickerItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* op
         painter->drawRect(band);
     }
 
-    // CUSTOM 角标：在每个已选单元左上角绘制其自定义序号（1-based）。
-    // 以设备像素绘制（字号恒定屏幕大小），避免高倍缩放下场景单位字号取整为 0。
-    if (strategy_ == engine::SortStrategy::CUSTOM && !selPos_.empty()) {
-        painter->save();
-        const QTransform wt = painter->worldTransform();
-        painter->resetTransform();
-        QFont f = painter->font();
-        f.setPixelSize(13);
-        f.setBold(true);
-        painter->setFont(f);
-        for (const engine::Cell& c : cells_) {
-            if (static_cast<std::size_t>(c.index) >= selPos_.size()) continue;
-            const int num = selPos_[static_cast<std::size_t>(c.index)];
-            if (num <= 0) continue;
-            const QRectF r = cellRect(c);
-            if (!exposed.intersects(r)) continue;
-            const QPointF dev = wt.map(r.topLeft());
-            // 单元在屏幕上过小则跳过角标，避免缩小时糊成一片。
-            if (const QPointF devBR = wt.map(r.bottomRight()); devBR.x() - dev.x() < 14.0 || devBR.y() - dev.y() < 14.0) continue;
-            const QString text = QString::number(num);
-            const qreal w = 8.0 * static_cast<qreal>(text.length()) + 6.0;
-            const QRectF badge(dev.x(), dev.y(), w, 16.0);
-            painter->setPen(Qt::NoPen);
-            painter->setBrush(kBadgeBg);
-            painter->drawRoundedRect(badge, 3.0, 3.0);
-            painter->setPen(kBadgeFg);
-            painter->drawText(badge, Qt::AlignCenter, text);
-        }
-        painter->restore();
-    }
-
     // 调序拖拽反馈：被拖单元橙色粗边框、目标单元黄色虚线边框（cosmetic，屏幕线宽恒定）。
     if (reorderDrag_) {
         painter->setBrush(Qt::NoBrush);
@@ -300,6 +280,54 @@ void CellPickerItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* op
             painter->drawRect(cellRect(cells_[static_cast<std::size_t>(reorderTarget_)]));
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// CellNumberLayer（单元编号角标子图层）实现
+// ---------------------------------------------------------------------------
+
+// 构造：作为 owner 的子图元挂载（选区图层子图层），纯展示、不接收鼠标事件。
+CellPickerItem::CellNumberLayer::CellNumberLayer(CellPickerItem* owner) : owner_(owner) {
+    setParentItem(owner);
+    setAcceptedMouseButtons(Qt::NoButton);
+}
+
+// 场景矩形与父图元同域（整幅原图）。
+QRectF CellPickerItem::CellNumberLayer::boundingRect() const {
+    return owner_->boundingRect();
+}
+
+// 绘制 CUSTOM 序的单元编号角标（1-based）：每个已选单元左上角，深色圆角底 + 白字。
+// 以设备像素绘制（字号恒定屏幕大小），避免高倍缩放下场景单位字号取整为 0。
+void CellPickerItem::CellNumberLayer::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget*) {
+    if (owner_->strategy_ != engine::SortStrategy::CUSTOM || owner_->selPos_.empty()) return;
+    const QRectF exposed = option ? option->exposedRect : boundingRect();
+    painter->save();
+    const QTransform wt = painter->worldTransform();
+    painter->resetTransform();
+    QFont f = painter->font();
+    f.setPixelSize(13);
+    f.setBold(true);
+    painter->setFont(f);
+    for (const engine::Cell& c : owner_->cells_) {
+        if (static_cast<std::size_t>(c.index) >= owner_->selPos_.size()) continue;
+        const int num = owner_->selPos_[static_cast<std::size_t>(c.index)];
+        if (num <= 0) continue;
+        const QRectF r = cellRect(c);
+        if (!exposed.intersects(r)) continue;
+        const QPointF dev = wt.map(r.topLeft());
+        // 单元在屏幕上过小则跳过角标，避免缩小时糊成一片。
+        if (const QPointF devBR = wt.map(r.bottomRight()); devBR.x() - dev.x() < 14.0 || devBR.y() - dev.y() < 14.0) continue;
+        const QString text = QString::number(num);
+        const qreal w = 8.0 * static_cast<qreal>(text.length()) + 6.0;
+        const QRectF badge(dev.x(), dev.y(), w, 16.0);
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(kBadgeBg);
+        painter->drawRoundedRect(badge, 3.0, 3.0);
+        painter->setPen(kBadgeFg);
+        painter->drawText(badge, Qt::AlignCenter, text);
+    }
+    painter->restore();
 }
 
 } // namespace idc::gui

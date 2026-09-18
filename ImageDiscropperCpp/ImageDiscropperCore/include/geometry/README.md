@@ -1,7 +1,7 @@
 # include/geometry
 
 **目录作用**：定义**标注图形**的几何数据——形状类型枚举、抽象形状接口与通用路径。
-它是 `annotation`（标注层）的几何基础，服务于终稿 FR-1.3 的标注能力
+它是 `annotation`（标注层）的几何基础，服务于 SPEC §3.1（FR-1.3） 的标注能力
 （矩形 / 圆 / 直线 / 文字 / 画笔等），与引擎的「区域几何」（见 `engine/region.h`）相互独立。
 
 **分块依据**：
@@ -12,11 +12,11 @@
    多边形 / 路径 / 文字）；基类提供 `translate(dx,dy)` 就地平移（各子类偏移自身参数，保留具体类型）。
 4. `affine_transform.h` —— header-only 2×3 仿射矩阵 `AffineTransform`（平移/缩放/旋转构造、矩阵乘法、作用于点/路径、行列式/逆/isIdentity），为形状提供**非破坏性变换**。
 
-**非破坏性变换（方案 A）**：`Shape` 基类持有 `AffineTransform xform_`（默认单位阵），变换**累积存入矩阵、不改子类参数化几何**（旋转矩形仍为矩形，不退化、不丢文字字形）。对外统一经 `worldPath()`/`worldBounds()`/`controlPointsWorld()` 取「已变换」结果供渲染/命中/导出；单位阵时回落 `toPath()`/`bounds()`/`controlPoints()`（向后兼容）。世界系平移经 `translateWorld`（把世界位移用逆线性换算到局部，使旋转/缩放后拖动方向仍跟随光标），`transform()` 只读返回累积矩阵；缩放/拉伸/旋转/翻转统一经下文的 OBB 交互变换（`applyObbTransform`）。`clone()` 必须复制 `xform_` 以保留变换。
+**shapes.h 的设计要点**（完整机制见头文件注释与 `src/geometry`）：
 
-**定向包围盒交互变换（阶段 B）**：`Shape` 另提供 `localToWorld`/`worldToLocal`（局部↔世界点映射）与 `obbPreviewTransform(sx,sy,deg)`/`applyObbTransform(sx,sy,deg)`，供 GUI 画布拖拽**定向包围盒（OBB）** 的 8 个缩放手柄 + 1 个旋转手柄做缩放 / 拉伸 / 旋转 / 翻转。复合语义分处矩阵左右两侧：**先**绕局部盒中心沿形状**自身轴**缩放（右乘，不产生世界轴剪切），**再**对当前世界外观做**绕世界中心的刚性旋转**（左乘）。旋转走世界系是关键——若把旋转也塞进局部右乘，则「非均匀缩放 ∘ 旋转」会退化为剪切，使已拉伸的形状一旋转就彻底变形；缩放系数为负即翻转（拖手柄越过对边自然产生负系数，无需独立翻转按钮）。`obbPreviewTransform` 只算不改状态、供拖拽逐帧矢量预览，`applyObbTransform` 写入与之完全一致的结果，保证预览帧与释放后提交帧逐像素一致（所见即所得）。GUI 只采集手柄拖拽、把世界光标经 `worldToLocal` 映回局部算缩放/旋转系数，矩阵运算全在 Core（A-0.1）。
-
-**累积 OBB 参数（供面板忠实回显）**：`applyObbTransform` 同时累积带符号参数 `obbScaleX_ *= sx`、`obbScaleY_ *= sy`、`obbRotationDeg_ += deg`（与 `xform_` 线性部分 `R(Σdeg)·diag(Πsx,Πsy)` 一致），由 `obbScaleX()`/`obbScaleY()`/`obbRotationDeg()` 读出。之所以显式存储而不从 `xform_` 分解：矩阵分解无法区分 `(sx<0)` 与 `(θ+180, sy<0)`（二重歧义），无法忠实展示翻转的负缩放。`clone()` 经 `copyXformTo` 一并复制这组参数（连同 `xform_`），避免深拷贝/撤销重做丢失回显基准。
+- **非破坏性变换**：`Shape` 持有 `AffineTransform xform_`，变换**累积存入矩阵、不改子类参数化几何**（旋转矩形仍为矩形、不丢文字字形）；对外经 `worldPath()`/`worldBounds()`/`controlPointsWorld()` 取已变换结果，单位阵时回落 `toPath()` 等（向后兼容）。
+- **OBB 交互变换**：`obbPreviewTransform`/`applyObbTransform` 供 GUI 画布手柄做缩放/拉伸/旋转/翻转——先绕局部盒中心沿自身轴缩放、再绕世界中心刚性旋转（旋转走世界系，避免「非均匀缩放 ∘ 旋转」退化为剪切）；预览与提交同一算子，所见即所得。
+- **累积 OBB 参数**：带符号 `obbScaleX_/obbScaleY_/obbRotationDeg_` 显式存储（而非从 `xform_` 分解——分解无法区分 `sx<0` 与 `θ+180°&sy<0` 的二重歧义），供属性面板忠实回显翻转的负缩放；`clone()` 经 `copyXformTo` 一并复制。
 
 | 文件                   | 职责                                                                                                                                                                          |
 |----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|

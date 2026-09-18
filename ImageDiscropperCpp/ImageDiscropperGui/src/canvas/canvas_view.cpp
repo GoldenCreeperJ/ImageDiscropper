@@ -5,7 +5,7 @@
 //   - 平移用手写滚动条位移（中键 / 空格+左键），避免与选区拖拽争用 DragMode；
 //   - 框选仅在「无图元接管鼠标」时启动（借 mouseGrabberItem() 判定），从而与选区框的
 //     移动/缩放手柄互不冲突；
-//   - 所有手势都翻译成信号，视图不改任何业务状态（A-0.1）。
+//   - 所有手势都翻译成信号，视图不改任何业务状态（CONTRIBUTING.md「分层纪律」）。
 // ============================================================================
 #include "canvas/canvas_view.h"
 
@@ -37,7 +37,7 @@ CanvasView::CanvasView(CanvasScene* scene, QWidget* parent)
     setResizeAnchor(AnchorViewCenter);
     setDragMode(NoDrag);                     // 拖拽逻辑自管
     setMouseTracking(true);                                 // 无按键也回报光标位置
-    setBackgroundBrush(QColor(45, 45, 45));                 // 画布深灰（§5.1）
+    setBackgroundBrush(QColor(45, 45, 45));                 // 画布深灰（本目录 README「画布视觉规范」）
 }
 
 // 放大。
@@ -79,7 +79,7 @@ void CanvasView::updateHandleSize() {
     if (scene_->selectionItem()) scene_->selectionItem()->setHandleSize(hs); // 手柄与抓边条带同步随缩放换算。
     scene_->setMultiRectHandleSize(hs); // L2 多矩形选区框手柄同步随缩放换算。
     scene_->setAnnotationHandleSize(hs); // 标注控制点手柄同步随缩放换算。
-    if (scene_->cellPickerItem()) scene_->cellPickerItem()->setOverlayScale(hs); // L3 点选阈值/边框同步随缩放换算。
+    if (scene_->cellPickerItem()) scene_->cellPickerItem()->setOverlayScale(hs); // L3 点选阈值/重绘余量同步随缩放换算。
 }
 
 // 标注绘制态门控：开启时左键手势路由到标注绘制（橡皮筋选区让位）；关闭时复位绘制手势态。

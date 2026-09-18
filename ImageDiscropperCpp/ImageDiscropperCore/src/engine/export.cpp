@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：src/engine/export.cpp
-// 作用：实现导出阶段——exportImage 把合成结果 Composition 落盘（终稿 §5.1/§5.2/§5.5）。
+// 作用：实现导出阶段——exportImage 把合成结果 Composition 落盘（SPEC §4.1/§4.2/§4.5）。
 //       分离模式（SEPARATE）把每个保留片段裁剪编码后，直接写入目标文件夹（不压缩打包）；
 //       合并模式（MERGED）构建画布、blit 各片段后写单图。像素搬运在此发生（split 只产区域描述）。
 // 分块依据：导出是唯一接触“像素裁剪 + 编码 I/O”的阶段，独立于合成计算（composition.cpp）；
@@ -134,7 +134,7 @@ bool exportSeparate(const Composition& composition, const core::Image& source,
 }
 
 // 合并模式导出：构建画布、以 padColor 填充、逐片段 blit，写单图。
-// 父目录不存在时自动创建（与分离导出行为一致，修复“合并导出不创建父目录”）。
+// 父目录不存在时自动创建（与分离导出行为一致）。
 bool exportMerged(const Composition& composition, const core::Image& source,
                   const std::string& outputPath) {
     const fs::path outPath(outputPath);

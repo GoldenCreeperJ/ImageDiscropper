@@ -97,7 +97,7 @@ public:
     bool contains(double px, double py, double flatness = 0.5) const;
 
     // 计算点到路径最近线段的距离（扁平化后按线段距离取最小）。
-    // 用于命中检测；tolerance 表示命中容差，超出则返回实际距离。
+    // 用于命中检测：返回实际距离，由调用方自行与容差比较。
     double distanceToOutline(double px, double py, double flatness = 0.5) const;
 
     // 平移整条路径。

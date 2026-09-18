@@ -1,13 +1,13 @@
 // ============================================================================
 // 文件：src/job.cpp
 // 作用：实现 job.h——CLI 与 Core 引擎之间的执行桥。把装配好的 EngineConfig 跑通、落盘，
-//       并把 Core 的结果 / 失败精确映射为退出码（guideline §5）。
+//       并把 Core 的结果 / 失败精确映射为退出码。
 // 分块依据：三层命令与 config 命令共用此执行路径（NFR-0），命令层不重复执行逻辑；
 //       本文件只调用 Core 公开 API（readImageFile / runEngine / exportImage /
-//       saveEngineConfig），不含任何切割 / 合成 / 编码实现（A-0.1/A-0.2）。
-// 说明：Core 的 runEngine 在「MERGED+COLLAPSE 但不可坍缩」时会自动降级为 REARRANGE 并
-//       返回 ok=true、collapsible=false；CLI 据 opt.explicitCollapse 判定是否应显式报错
-//       （§4.2.2.4：用户显式要 collapse → 退出码 2 并提示 rearrange）。
+//       saveEngineConfig），不含任何切割 / 合成 / 编码实现（CONTRIBUTING.md「分层纪律」）。
+// 说明：Core 的 runEngine 仅在 L3 遇到「MERGED+COLLAPSE 但不可坍缩」时自动改用 REARRANGE
+//       并返回 ok=true、collapsible=false（L1/L2 直接报错，见 SPEC §4.3）；CLI 据
+//       opt.explicitCollapse 判定是否应显式报错（用户显式要 collapse → 退出码 2 并提示 rearrange）。
 // ============================================================================
 #include "job.h"
 
@@ -56,7 +56,7 @@ ExitCode executeJob(engine::EngineConfig& config, const core::Image& image,
         return ExitCode::RuntimeError;
     }
 
-    // 显式要求坍缩但不可坍缩 → 退出码 2（§4.2.2.4 / §5.2 示例文本）。
+    // 显式要求坍缩但不可坍缩 → 退出码 2（固定错误文本）。
     if (opt.explicitCollapse && !result.collapsible) {
         reportError(makeError(ExitCode::RuntimeError, "当前选择集不满足坍缩条件",
                               "Core 返回：保留集不构成整行或整列的补集",
@@ -76,7 +76,7 @@ ExitCode executeJob(engine::EngineConfig& config, const core::Image& image,
         return ExitCode::OutputError;
     }
 
-    // 正常结果输出到 stdout（quiet 时抑制；A-0.6）。
+    // 正常结果输出到 stdout（quiet 时抑制；CONTRIBUTING.md「分层纪律」）。
     if (!opt.quiet) {
         if (out.separate) {
             std::cout << "已导出 " << result.composition.placements.size()

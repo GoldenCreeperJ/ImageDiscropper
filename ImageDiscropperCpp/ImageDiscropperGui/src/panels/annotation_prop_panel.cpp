@@ -2,7 +2,7 @@
 // 文件：src/panels/annotation_prop_panel.cpp
 // 作用：实现标注属性页的构建、取色器与模型回显（见同名头文件说明）。
 // 分块依据：QFormLayout 排布「颜色 / 粗细 / 填充 / 文字 / 字号」五行；控件变更转发为信号，
-//           取色器为纯 UI 关注点（QColorDialog）；槽内无任何几何 / 光栅化逻辑（A-0.1）。
+//           取色器为纯 UI 关注点（QColorDialog）；槽内无任何几何 / 光栅化逻辑（CONTRIBUTING.md「分层纪律」）。
 // ============================================================================
 #include "panels/annotation_prop_panel.h"
 
@@ -30,7 +30,7 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
 
     // 颜色：色块按钮，点击打开取色器（描边与填充共用同一颜色）。
     colorBtn_ = new QPushButton(QStringLiteral("选择颜色…"), this);
-    colorBtn_->setToolTip(QStringLiteral("标注描边 / 填充颜色"));
+    colorBtn_->setToolTip(QStringLiteral("标注描边 / 填充颜色（按钮文字依次为红、绿、蓝、透明度）"));
     form->addRow(QStringLiteral("颜色"), colorBtn_);
 
     // 描边粗细。
@@ -72,21 +72,21 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     scaleXSpin_->setValue(100);
     scaleXSpin_->setSuffix(QStringLiteral(" %"));
     scaleXSpin_->setKeyboardTracking(false);
-    scaleXSpin_->setToolTip(QStringLiteral("水平缩放绝对值（100%=原尺寸；负=翻转）；改动即生效，与画布手柄拖拽实时联动"));
+    scaleXSpin_->setToolTip(QStringLiteral("水平缩放（100%＝原尺寸，负值＝水平翻转）；改动即生效，与画布手柄拖拽实时联动"));
     tf->addRow(QStringLiteral("水平缩放"), scaleXSpin_);
     scaleYSpin_ = new QSpinBox(transformGroup_);
     scaleYSpin_->setRange(-100000, 100000);
     scaleYSpin_->setValue(100);
     scaleYSpin_->setSuffix(QStringLiteral(" %"));
     scaleYSpin_->setKeyboardTracking(false);
-    scaleYSpin_->setToolTip(QStringLiteral("垂直缩放绝对值（100%=原尺寸；负=翻转）；改动即生效，与画布手柄拖拽实时联动"));
+    scaleYSpin_->setToolTip(QStringLiteral("垂直缩放（100%＝原尺寸，负值＝垂直翻转）；改动即生效，与画布手柄拖拽实时联动"));
     tf->addRow(QStringLiteral("垂直缩放"), scaleYSpin_);
     rotateSpin_ = new QSpinBox(transformGroup_);
     rotateSpin_->setRange(-36000, 36000);   // 宽区间：容纳多次旋转的累积角度
     rotateSpin_->setValue(0);
     rotateSpin_->setSuffix(QStringLiteral(" °"));
     rotateSpin_->setKeyboardTracking(false);
-    rotateSpin_->setToolTip(QStringLiteral("旋转绝对角度（累积）；改动即生效，与画布手柄拖拽实时联动"));
+    rotateSpin_->setToolTip(QStringLiteral("旋转角度（相对原方向的累积值）；改动即生效，与画布手柄拖拽实时联动"));
     tf->addRow(QStringLiteral("旋转"), rotateSpin_);
     transformGroup_->setEnabled(false);   // 初始无选中→置灰（syncFromModel 依选中态刷新）
     root->addWidget(transformGroup_);
@@ -212,13 +212,13 @@ void AnnotationPropPanel::onPickColor() {
 // 依当前颜色刷新色块按钮背景（含 Alpha：rgba 背景 + 文案标注不透明度；浅色用深字、深色用浅字，保证可读）。
 void AnnotationPropPanel::updateSwatch() const {
     const QString fg = color_.lightness() < 128 ? QStringLiteral("#fff") : QStringLiteral("#000");
-    // 用 rgba() 而非 name()（后者丢弃 alpha），使色块能预览半透明；文案回显 RGBA 分量。
+    // 用 rgba() 而非 name()（后者丢弃 alpha），使色块能预览半透明；文案回显颜色分量。
     const QString bg = QStringLiteral("rgba(%1,%2,%3,%4)")
                            .arg(color_.red()).arg(color_.green()).arg(color_.blue()).arg(color_.alpha());
     colorBtn_->setStyleSheet(QStringLiteral("QPushButton{background:%1;color:%2;border:1px solid #999;"
                                             "border-radius:4px;padding:4px;}")
                                  .arg(bg, fg));
-    colorBtn_->setText(QStringLiteral("RGBA(%1,%2,%3,%4)")
+    colorBtn_->setText(QStringLiteral("颜色(%1,%2,%3,%4)")
                            .arg(color_.red()).arg(color_.green()).arg(color_.blue()).arg(color_.alpha()));
 }
 

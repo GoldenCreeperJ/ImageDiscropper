@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：src/cli_app.cpp
-// 作用：实现 cliMain——CLI 唯一的顶层编排点（guideline §5.3 校验顺序的骨架）。
+// 作用：实现 cliMain——CLI 唯一的顶层编排点（固定校验顺序的骨架）。
 //       负责：解析全局选项 → 处理 --version / --help → 定位子命令 → 分派到命令实现 →
 //       未捕获异常兜底（退出码 5）。main.cpp 仅把 argv 转发到此。
 // 分块依据：顶层「分派 + 全局横切」与「单命令参数装配」分离——各命令实现（commands/*.cpp）
@@ -42,23 +42,23 @@ std::string splitCommand(const std::vector<std::string>& args, std::vector<std::
 
 } // namespace
 
-// CLI 顶层入口。返回退出码整数（已含 §5 映射）。
+// CLI 顶层入口。返回退出码整数（已含退出码映射）。
 int cliMain(const std::vector<std::string>& args) {
     try {
         // 无任何参数：显示顶层帮助（友好退出 0）。
         if (args.empty()) { printTopHelp(); return toInt(ExitCode::Ok); }
 
-        // 1) 全局选项（§5.3 第 2 步）。
+        // 1) 全局选项（第 2 步）。
         const GlobalOptions go = parseGlobalOptions(args);
 
-        // --version 优先于一切（§6.2）。
+        // --version 优先于一切。
         if (go.version) { printVersion(); return toInt(ExitCode::Ok); }
 
-        // 定位子命令（§5.3 第 1 步）。
+        // 定位子命令（第 1 步）。
         std::vector<std::string> tokens;
         const std::string cmd = splitCommand(args, tokens);
 
-        // --help：有命令 → 该命令帮助；仅 --config（无命令）→ config 帮助；否则顶层帮助（§6.1）。
+        // --help：有命令 → 该命令帮助；仅 --config（无命令）→ config 帮助；否则顶层帮助。
         if (go.help) {
             if (!cmd.empty()) printCommandHelp(cmd);
             else if (!go.config.empty()) printCommandHelp("config");
@@ -81,7 +81,7 @@ int cliMain(const std::vector<std::string>& args) {
         // 有 --help / --config 之外的选项但无命令名：显示顶层帮助。
         if (cmd.empty()) { printTopHelp(); return toInt(ExitCode::Ok); }
 
-        // 2) 分派到子命令；各命令内部按 §5.3 第 3~5 步校验必填 / 互斥 / 格式。
+        // 2) 分派到子命令；各命令内部按 第 3~5 步校验必填 / 互斥 / 格式。
         if (cmd == "extract") return cmdExtract(tokens, go);
         if (cmd == "erase") return cmdErase(tokens, go);
         if (cmd == "grid") return cmdGrid(tokens, go);

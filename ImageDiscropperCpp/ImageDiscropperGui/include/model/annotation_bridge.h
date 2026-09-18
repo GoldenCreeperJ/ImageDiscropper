@@ -3,7 +3,7 @@
 // 作用：标注域的「桥」——GUI 中唯一持有并驱动 Core annotation::AnnotationLayer 的类
 //       （类比 EngineBridge 之于切割引擎）。它把画布手势 / 面板意图翻译成对 Core 标注
 //       API 的调用（buildShape / addAnnotation / hitTest / rasterize …），自身不含任何
-//       几何计算或光栅化实现（guideline §0 A-0.1 / A-0.3）。
+//       几何计算或光栅化实现（CONTRIBUTING.md「分层纪律」）。
 // 分块依据：
 //   - AnnoTool         : GUI 侧标注工具枚举（选择 + 各形状 + 多线段 + 文字 + 画笔），
 //                        与 Core geometry::ShapeType 一一映射（SELECT 无对应形状）。
@@ -11,7 +11,7 @@
 //                        撤销重做 / 图层可见性 / 导出烧录等意图方法，并以信号驱动画布重绘。
 // 说明：
 //   · 标注层与底图**分离**——画布用矢量叠加渲染（见 canvas/annotation_item），不改底图像素；
-//     仅在导出时按需 burnIn(base) 合成（A-0.15 标注与切割解耦、A-0.16 预处理→标注→切割→导出）。
+//     仅在导出时按需 burnIn(base) 合成（CONTRIBUTING.md「分层纪律」 标注与切割解耦、CONTRIBUTING.md「分层纪律」 预处理→标注→切割→导出）。
 //   · 撤销 / 重做复用 Core AnnotationLayer 内建 revoke()/redo()（分层快照），GUI 不自建历史栈。
 // ============================================================================
 #pragma once
@@ -112,7 +112,7 @@ public:
     void selectAt(core::Point2D p);     // 命中检测并选中（委托 Core hitTest/selectAnnotation）
     void clearSelection();                   // 取消选中
     std::optional<std::size_t> selectedIndex() const { return layer_.selectedAnnotationIndex(); }
-    // 平移选中标注：委托 Core Shape::translate 就地偏移形状自身参数，**保留具体类型**
+    // 平移选中标注：委托 Core Shape::translateWorld 就地偏移形状自身参数，**保留具体类型**
     // （不再展平重建为通用 PATH，故 TEXT 字形、参数化元数据与控制点语义均不丢失）。
     void moveSelectedBy(double dx, double dy);
     void removeSelected();                   // 删除选中标注（委托 Core removeAnnotation）

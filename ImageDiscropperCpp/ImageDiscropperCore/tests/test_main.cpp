@@ -90,6 +90,17 @@ static void testGeometry() {
     CHECK(p.distanceToOutline(50, 50) > 40.0); // 中心离边框较远
     CHECK(p.distanceToOutline(0, 50) < 1.0);   // 边框上
 
+    // 文本宽度估算：按字符数（非字节数）——ASCII 半宽、多字节字符全宽，中文不再被高估。
+    const TextShape asciiText("abc", 0, 0, 10);
+    const auto [ax, ay, aw, ah] = asciiText.bounds();
+    CHECK(aw == 15.0);                       // 3 个 ASCII × 0.5 × 10
+    const TextShape cjkText("中文", 0, 0, 10);
+    const auto [cx, cy, cw, ch] = cjkText.bounds();
+    CHECK(cw == 20.0);                       // 2 个中文字符 × 1.0 × 10（而非 6 字节 × 0.5 × 10 = 30）
+    const TextShape mixedText("中a", 0, 0, 10);
+    const auto [mx, my, mw, mh] = mixedText.bounds();
+    CHECK(mw == 15.0);                       // 1.0 + 0.5 = 1.5 × 10
+
     std::cout << "[geometry] OK\n";
 }
 
@@ -486,9 +497,9 @@ int main() {
     testPreprocess();
     testHistory();
     testEngine();          // 引擎数据结构骨架
-    testEnginePipeline();  // 引擎流水线功能（§3.1）
-    testEngineExport();    // 引擎导出落盘（§5）
-    testEngineBoundary();  // 引擎边界异常（§6 / E-1~E-8）
+    testEnginePipeline();  // 引擎流水线功能（SPEC §3）
+    testEngineExport();    // 引擎导出落盘（SPEC §4）
+    testEngineBoundary();  // 引擎边界异常（SPEC §5 / E-1~E-8）
     std::cout << "all tests passed.\n";
     return 0;
 }

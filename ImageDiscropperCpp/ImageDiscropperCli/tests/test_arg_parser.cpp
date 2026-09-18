@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：tests/test_arg_parser.cpp
 // 作用：单元测试 ArgParser 的「语法归类」与 parseGlobalOptions 的「全局选项扫描」
-//       （guideline §9.1：参数解析必须覆盖）。只验证语法层行为，不涉及值语义（见
+//       （参数解析必须覆盖）。只验证语法层行为，不涉及值语义（见
 //       test_value_parser.cpp）与命令编排（见 test_integration.cpp）。
 // 分块依据：一测试关注点一文件（严禁上帝文件）；复用共享 CHECK 宏（cli_test_harness.h）。
 // 说明：覆盖 --name value / --name=value / flag / 可重复选项 / 缺值 / 位置参数 / "--" 分隔，
@@ -55,6 +55,14 @@ void testArgParser() {
         CHECK(p.has("--input"));
         CHECK(p.get("--input").empty());    // --input 缺值（下一个是 --output）
         CHECK(p.get("--output") == "x.png");
+    }
+
+    // ---- 负数值：取值选项的值以 '-' 开头但为数字（如负网格基准点）→ 正常消费。----
+    {
+        ArgParser p;
+        p.parse({"--grid", "-5,-7,10,20", "--input", "p.png"});
+        CHECK(p.get("--grid") == "-5,-7,10,20");
+        CHECK(p.get("--input") == "p.png");   // 负数值之后仍正常解析选项
     }
 
     // ---- fallback：未出现的选项 get 返回给定默认；getAll 返回空；count 为 0。----

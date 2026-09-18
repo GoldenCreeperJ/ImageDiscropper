@@ -1,11 +1,11 @@
 // ============================================================================
 // 文件：tests/test_value_parser.cpp
 // 作用：单元测试 value_parser 的全部「字符串 → Core 强类型」解析与格式校验
-//       （guideline §9.1：值解析必须覆盖成功与失败两路）。只验证纯转换行为，
+//       （值解析必须覆盖成功与失败两路）。只验证纯转换行为，
 //       不涉及语法归类（见 test_arg_parser.cpp）与命令编排（见 test_integration.cpp）。
 // 分块依据：一测试关注点一文件（严禁上帝文件）；复用共享 CHECK 宏（cli_test_harness.h）。
 // 说明：每个解析函数至少覆盖一条成功路径与一条失败路径（返回 false 且写 err），
-//       以校验 §5.3 第 5 步「参数格式校验在调用 Core 之前完成」的输入契约。
+//       以校验 第 5 步「参数格式校验在调用 Core 之前完成」的输入契约。
 // ============================================================================
 #include "cli_test_harness.h"
 
@@ -46,7 +46,7 @@ void testValueParser() {
         CHECK(!parseBand("40,x", a, b, err));                      // 非整数
     }
 
-    // ---- parseGridGeo："x0,y0,cw,ch"；单元尺寸必须为正（终稿 §4.4.4）。----
+    // ---- parseGridGeo："x0,y0,cw,ch"；单元尺寸必须为正（SPEC §3.4.3）。----
     {
         int x0 = 0, y0 = 0, cw = 0, ch = 0;
         CHECK(parseGridGeo("0,0,100,75", x0, y0, cw, ch, err));
@@ -156,11 +156,11 @@ void testValueParser() {
     }
 
     // ---- checkNaming：非空且不含路径分隔符（防越界写盘）。----
-    // 覆盖 guideline §9.1 明列的两类模板：{name}_{index:03d} 与 {name}_r{row}c{col}
+    // 覆盖两类命名模板：{name}_{index:03d} 与 {name}_r{row}c{col}
     //（{row}/{col} 占位符的实际替换由 Core applyNaming 完成，此处仅校验模板合法性）。
     {
         CHECK(checkNaming("{name}_{index:03d}", err));
-        CHECK(checkNaming("{name}_r{row}c{col}", err));            // §9.1 行/列命名模板
+        CHECK(checkNaming("{name}_r{row}c{col}", err));            // 行/列命名模板
         CHECK(checkNaming("cell_{index}", err));
         CHECK(!checkNaming("", err) && !err.empty());              // 空模板
         CHECK(!checkNaming("a/b_{index}", err));                   // 含 '/'

@@ -2,7 +2,7 @@
 // 文件：app/main.cpp
 // 作用：GUI 程序入口。创建 QApplication、装配并显示主窗口 MainWindow，进入事件循环。
 // 分块依据：
-//   - 入口只负责「Qt 应用生命周期 + 顶层窗口」，不含任何业务逻辑（A-0.1）；
+//   - 入口只负责「Qt 应用生命周期 + 顶层窗口」，不含任何业务逻辑（CONTRIBUTING.md「分层纪律」）；
 //     业务编排全在 MainWindow，Core 调用全在 EngineBridge。
 // 说明：
 //   · 设置应用/组织名，使 QSettings（后续阶段的配置持久化）有稳定归属。

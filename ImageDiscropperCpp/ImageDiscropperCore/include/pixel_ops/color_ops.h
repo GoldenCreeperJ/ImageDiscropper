@@ -13,7 +13,7 @@
 namespace idc::pixel_ops {
 
 // 灰度化：将彩色图转换为单通道 GRAY 图像，公式采用 BT.601（0.299R + 0.587G + 0.114B）。
-// 已经是灰度图时直接返回原图。返回新对象，不修改输入。
+// 已经是灰度图时直接返回其副本。返回新对象，不修改输入。
 core::Image toGray(const core::Image& src);
 
 // 按通道反色：mask 为长度为 3 的字符串（形如 "101"），
@@ -22,7 +22,7 @@ core::Image toGray(const core::Image& src);
 core::Image invertChannels(const core::Image& src, const std::string& mask = "111");
 
 // 按通道分离：mask 中 '1' 表示保留对应通道，'0' 表示置 0。
-// 灰度图直接返回原图。返回新对象。
+// 灰度图直接返回其副本。返回新对象。
 core::Image splitChannels(const core::Image& src, const std::string& mask = "111");
 
 // 拾取指定坐标的像素颜色，用于"颜色选取"功能。

@@ -4,7 +4,7 @@
 // 分块依据：
 //   - buildCentral/buildMenus/buildToolbar/buildStatus/connectAll 各管一块装配（单键快捷键在 keyPressEvent 处理）；
 //   - on* 槽把用户意图落到 Document，再经 refreshPreview 调 EngineBridge（Core）刷新画布；
-//   - MainWindow 不含任何切割/几何/导出实现（A-0.1），只做编排与呈现。
+//   - MainWindow 不含任何切割/几何/导出实现（CONTRIBUTING.md「分层纪律」），只做编排与呈现。
 // ============================================================================
 #include "app/main_window.h"
 
@@ -48,16 +48,19 @@
 #ifndef IDC_GUI_VERSION
 #define IDC_GUI_VERSION "dev"
 #endif
+#ifndef IDC_CORE_VERSION
+#define IDC_CORE_VERSION "dev"
+#endif
 
 namespace idc::gui {
 
-// 输出预览（G-11 / §4.6）尺寸参数：
+// 输出预览（导出前预览）尺寸参数：
 //   kExportSrcMaxDim   —— 预览专用小源图的最长边上限（缩略图只在此小图上 blit，保证快）。
 //   kExportPreviewMaxDim —— 输出缩略图的最长边上限（像素少、仅示意，与面板标签框相区隔）。
 constexpr int kExportSrcMaxDim = 512;
 constexpr int kExportPreviewMaxDim = 192;
 
-// 构造：装配全部部件并显示首次引导。
+// 构造：装配全部部件。
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle(QStringLiteral("ImageDiscropper GUI %1").arg(QStringLiteral(IDC_GUI_VERSION)));
     resize(1280, 800);
@@ -67,7 +70,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     buildToolbar();
     buildStatus();
 
-    // 全局撤销/重做（G-12）：防抖定时器把拖拽/连点的连续参数变更合并为一条历史。
+    // 全局撤销/重做：防抖定时器把拖拽/连点的连续参数变更合并为一条历史。
     docHistoryTimer_ = new QTimer(this);
     docHistoryTimer_->setSingleShot(true);
     docHistoryTimer_->setInterval(500); // 500ms 静默即视为一次离散操作结束（拖拽释放/滑块停手）。
@@ -77,13 +80,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     syncPanels();
     refreshPreview();
-    resetDocHistory();          // 以初始参数态为撤销基线（G-12）。
+    resetDocHistory();          // 以初始参数态为撤销基线。
     updateUndoRedoEnabled();
     notify(QStringLiteral("请打开一张图像开始（Ctrl+O）。"), false);
-    showFirstRunGuide();
 }
 
-// 装配中央区：左面板 | 画布 | 右侧参数/导出选项卡（§4.1）。
+// 装配中央区：左面板 | 画布 | 右侧选项卡（参数 / 导出 / 图像 / 标注）。
 void MainWindow::buildCentral() {
     scene_ = new CanvasScene(this);
     view_ = new CanvasView(scene_, this);
@@ -103,7 +105,7 @@ void MainWindow::buildCentral() {
     layerPanel_->setModel(&annoBridge_);
     annoPropPanel_->setModel(&annoBridge_);
 
-    // 右侧用 QTabWidget 分组，避免面板过长（§4.1 布局约束）。
+    // 右侧用 QTabWidget 分组，避免面板过长（布局约束见本目录 README「布局结构与响应式规则」）。
     rightTabs_ = new QTabWidget(this);
     rightTabs_->addTab(param_, QStringLiteral("参数"));
     rightTabs_->addTab(exportPanel_, QStringLiteral("导出"));
@@ -140,7 +142,7 @@ void MainWindow::buildCentral() {
     setCentralWidget(split);
 }
 
-// 装配菜单栏（§4.1）。后续阶段的功能先以禁用项占位，明确交付边界。
+// 装配菜单栏：文件 / 编辑 / 图像 / 标注 / 视图 / 帮助。
 void MainWindow::buildMenus() {
     // ---- 文件 ----
     QMenu* mFile = menuBar()->addMenu(QStringLiteral("文件(&F)"));
@@ -151,9 +153,9 @@ void MainWindow::buildMenus() {
     aExport->setShortcut(QKeySequence::Save);
     connect(aExport, &QAction::triggered, this, &MainWindow::onExport);
     mFile->addSeparator();
-    // 配置文件加载/保存（G-13 / FR-L3.8）：复用 Core loadEngineConfig/saveEngineConfig（§9 schema）。
+    // 配置文件加载/保存（FR-L3.8）：复用 Core loadEngineConfig/saveEngineConfig（SPEC §7 schema）。
     QAction* aLoadCfg = mFile->addAction(QStringLiteral("加载配置(&L)…"));
-    aLoadCfg->setToolTip(QStringLiteral("从 JSON 配置文件还原切割/排序/导出参数（§9 schema）；可撤销。"));
+    aLoadCfg->setToolTip(QStringLiteral("从 JSON 配置文件还原切割/排序/导出参数；可撤销。"));
     connect(aLoadCfg, &QAction::triggered, this, &MainWindow::onLoadConfig);
     QAction* aSaveCfg = mFile->addAction(QStringLiteral("保存配置(&C)…"));
     aSaveCfg->setToolTip(QStringLiteral("把当前切割/排序/导出参数存为 JSON 配置文件，可复用于同尺寸图像。"));
@@ -162,22 +164,22 @@ void MainWindow::buildMenus() {
     const QAction* aExit = mFile->addAction(QStringLiteral("退出(&X)"));
     connect(aExit, &QAction::triggered, this, &QWidget::close);
 
-    // ---- 编辑（全局撤销/重做 G-12：上下文路由，复用 Core HistoryManager）----
+    // ---- 编辑（全局撤销/重做：上下文路由，复用 Core HistoryManager）----
     QMenu* mEdit = menuBar()->addMenu(QStringLiteral("编辑(&E)"));
     aUndo_ = mEdit->addAction(QStringLiteral("撤销(&U)"));
     aUndo_->setShortcut(QKeySequence::Undo);
-    aUndo_->setToolTip(QStringLiteral("撤销（Ctrl+Z）：标注上下文（绘制工具激活/选中标注）撤销标注，否则撤销文档参数变更。"));
+    aUndo_->setToolTip(QStringLiteral("撤销（Ctrl+Z）：正在画标注时撤销标注操作，否则撤销选区/排序/导出等参数修改。"));
     connect(aUndo_, &QAction::triggered, this, &MainWindow::onUndo);
     aRedo_ = mEdit->addAction(QStringLiteral("重做(&R)"));
     aRedo_->setShortcut(QKeySequence::Redo);
-    aRedo_->setToolTip(QStringLiteral("重做（Ctrl+Y）：与撤销对称。"));
+    aRedo_->setToolTip(QStringLiteral("重做（Ctrl+Y）：恢复上一步被撤销的操作。"));
     connect(aRedo_, &QAction::triggered, this, &MainWindow::onRedo);
     mEdit->addSeparator();
     QAction* aClear = mEdit->addAction(QStringLiteral("清除选区(&C)"));
     aClear->setShortcut(QKeySequence(Qt::Key_Escape));
     connect(aClear, &QAction::triggered, this, &MainWindow::onClearCut);
 
-    // ---- 图像（预处理 FR-1 / G-3：旋转/翻转/黑白/反色/重置；完整控件见右侧「图像」页）----
+    // ---- 图像（预处理 FR-1：旋转/翻转/黑白/反色/重置；完整控件见右侧「图像」页）----
     QMenu* mImage = menuBar()->addMenu(QStringLiteral("图像(&I)"));
     const QAction* aRotL = mImage->addAction(QStringLiteral("左转 90°"));
     connect(aRotL, &QAction::triggered, this, [this] { onRotate(-90); });
@@ -246,23 +248,23 @@ void MainWindow::buildMenus() {
     connect(aUsage, &QAction::triggered, this, [this] {
         QMessageBox::information(this, QStringLiteral("使用说明"),
             QStringLiteral("1) 文件→打开图像。\n"
-                           "2) 左侧选择模式（L1 标准提取 / L2 反向剔除 / L3 网格分割）与极性（保留/删除框内）。\n"
+                           "2) 左侧选择模式（L1 标准提取 / L2 反向剔除 / L3 网格分割），并决定保留还是删除框内区域。\n"
                            "3) L1/L2：在画布上拖拽出选区；橙色切割线贯穿全图（与选区同色），绿色为保留、红色为删除。\n"
                            "4) 可拖动选区/四角手柄调整，或直接拖动橙色切割线（＝选区边）移动对应边；方向键微调（Shift 大步）。\n"
                            "5) L3：在右侧「参数」页设定基准点、单元尺寸与余量策略，网格线自动铺满全图；用全选/反选/清空与排序策略控制输出。\n"
                            "6) 右侧「导出」页选择输出模式与路径，点击导出（Ctrl+S）。\n\n"
-                           "完整操作手册见程序目录下的 USAGE.md（设计说明见 DESIGN.md）。"));
+                           "完整操作手册见程序目录下的 README.md。"));
     });
     const QAction* aAbout = mHelp->addAction(QStringLiteral("关于"));
     connect(aAbout, &QAction::triggered, this, [this] {
         QMessageBox::about(this, QStringLiteral("关于"),
             QStringLiteral("ImageDiscropper GUI %1\n基于统一 Grid-Selection-Emit 引擎（Core %2）。\n"
                            "L1/L2/L3 共用同一代码路径，模式仅为参数预设。")
-                .arg(QStringLiteral(IDC_GUI_VERSION), QStringLiteral(IDC_GUI_VERSION)));
+                .arg(QStringLiteral(IDC_GUI_VERSION), QStringLiteral(IDC_CORE_VERSION)));
     });
 }
 
-// 装配工具栏（§4.1/§4.3）：打开/导出、缩放、模式切换（遮罩切换已迁入左侧图层面板）。
+// 装配工具栏：打开/导出、缩放、模式切换（遮罩切换已迁入左侧图层面板）。
 void MainWindow::buildToolbar() {
     QToolBar* tb = addToolBar(QStringLiteral("主工具栏"));
     tb->setMovable(false);
@@ -272,7 +274,7 @@ void MainWindow::buildToolbar() {
     const QAction* aExport = tb->addAction(QStringLiteral("导出"));
     connect(aExport, &QAction::triggered, this, &MainWindow::onExport);
     tb->addSeparator();
-    // 撤销/重做（G-12 / §4.7 工具栏按钮）：复用编辑菜单同一 QAction，共享 Ctrl+Z/Y 快捷键与动态启用态。
+    // 撤销/重做（工具栏按钮）：复用编辑菜单同一 QAction，共享 Ctrl+Z/Y 快捷键与动态启用态。
     if (aUndo_) tb->addAction(aUndo_);
     if (aRedo_) tb->addAction(aRedo_);
     tb->addSeparator();
@@ -285,7 +287,7 @@ void MainWindow::buildToolbar() {
     connect(aFit, &QAction::triggered, this, [this] { view_->fitToWindow(); });
     tb->addSeparator();
 
-    // 模式切换（§4.3）：三个可选动作（L1 标准提取 / L2 反向剔除 / L3 网格分割）。
+    // 模式切换：三个可选动作（L1 标准提取 / L2 反向剔除 / L3 网格分割）。
     auto* group = new QActionGroup(this);
     group->setExclusive(true);
     modeActionL1_ = group->addAction(QStringLiteral("标准提取 (L1)"));
@@ -303,7 +305,7 @@ void MainWindow::buildToolbar() {
     // 遮罩切换已迁入左侧「图层」面板（成为正式图层项）；视图菜单与画布右键仍保留快捷切换。
 }
 
-// 装配状态栏（§4.9）：光标坐标 / 像素颜色 / 当前模式 / 选中块数 / 缩放倍数 / 提示信息。
+// 装配状态栏：光标坐标 / 像素颜色 / 当前模式 / 保留块数 / 缩放倍数 / 提示信息。
 void MainWindow::buildStatus() {
     stCoord_ = new QLabel(QStringLiteral("坐标: (-, -)"), this);
     stColor_ = new QLabel(QStringLiteral("RGB(-,-,-)"), this);
@@ -323,7 +325,7 @@ void MainWindow::buildStatus() {
 void MainWindow::connectAll() {
     connect(&doc_, &Document::imageChanged, this, &MainWindow::onImageChanged);
     connect(&doc_, &Document::changed, this, &MainWindow::onDocChanged);
-    // 全局撤销/重做（G-12）：参数变更同时驱动防抖历史采集（与 onDocChanged 刷新并行，互不干扰）。
+    // 全局撤销/重做：参数变更同时驱动防抖历史采集（与 onDocChanged 刷新并行，互不干扰）。
     connect(&doc_, &Document::changed, this, &MainWindow::scheduleHistoryCapture);
 
     connect(view_, &CanvasView::rubberSelect, this, &MainWindow::onRubberSelect);
@@ -379,7 +381,9 @@ void MainWindow::connectAll() {
     connect(layerPanel_, &LayerPanel::cutLineVisibilityChanged, this, &MainWindow::onCutLineVisibilityChanged);
     connect(layerPanel_, &LayerPanel::selectionVisibilityChanged, this, &MainWindow::onSelectionVisibilityChanged);
     connect(layerPanel_, &LayerPanel::annotationVisibilityChanged, this, &MainWindow::onAnnotationVisibilityChanged);
-    // 「导出时烧录标注」开关已迁至导出面板（原属图层面板）。
+    connect(layerPanel_, &LayerPanel::numberVisibilityChanged, this,
+            [this](const bool v) { if (scene_) scene_->setCellNumberVisible(v); });
+    // 「导出时烧录标注」开关位于导出面板（控制导出时是否把标注烧录进像素）。
     connect(exportPanel_, &ExportPanel::burnInChanged, this, &MainWindow::onBurnInChanged);
     exportPanel_->setBurnInChecked(annoBridge_.burnInEnabled()); // 初始同步一次（两侧默认 false，对齐意图）。
     // 切到「导出」页时补渲染输出预览（A：不可见时不渲染，切回时若已脏则重算）。
@@ -403,7 +407,7 @@ void MainWindow::rebuildPreviewPixmap() {
     const QPixmap pm = toPixmap(preview_.image);
     // 场景坐标 = 原图像素坐标；底图用放大系数把预览 pixmap 铺到原图尺寸。
     scene_->setBaseImage(pm, preview_.scaleX, preview_.scaleY, doc_.width(), doc_.height());
-    // 输出预览（G-11）专用小源图：把底图再降到最长边 ≤ kExportSrcMaxDim，使缩略图只在小图上 blit。
+    // 输出预览专用小源图：把底图再降到最长边 ≤ kExportSrcMaxDim，使缩略图只在小图上 blit。
     const int longest = std::max(pm.width(), pm.height());
     exportSrcPixmap_ = longest > kExportSrcMaxDim
         ? pm.scaled(kExportSrcMaxDim, kExportSrcMaxDim, Qt::KeepAspectRatio, Qt::SmoothTransformation)
@@ -414,7 +418,7 @@ void MainWindow::rebuildPreviewPixmap() {
     view_->fitToWindow();
 }
 
-// 跑 Core 预览并刷新画布与状态（A-0.8 实时预览）。
+// 跑 Core 预览并刷新画布与状态（CONTRIBUTING.md「分层纪律」 实时预览）。
 void MainWindow::refreshPreview() {
     stMode_->setText(modeName(doc_.mode()));
     // 重排为 L3 专属：先把重排上下文清零（非 L3 保持 0），L3 分支再回灌真实保留块数/格尺寸。
@@ -434,8 +438,8 @@ void MainWindow::refreshPreview() {
     }
 
     // L3 网格分割：网格由「基准点 + 单元尺寸 + 余量策略」定义，不依赖选区矩形，
-    // 故在选区判定之前单独处理。网格线交给 GridLayer 画灰色虚线；橙色选区框在 L3 隐藏
-    // （单元点选交互由后续增量接入）。遮罩仍复用 runEngine 的 kept 结果（红底 + 绿块）。
+    // 故在选区判定之前单独处理。网格线交给 GridLayer 画灰色虚线；橙色选区框在 L3 隐藏，
+    // 单元点选改由 CellPickerItem 承担（见下方 updateCellSelection）。遮罩仍复用 runEngine 的 kept 结果（红底 + 绿块）。
     if (doc_.mode() == engine::Tier::L3) {
         const engine::EngineConfig cfg = doc_.buildEngineConfig();
         // 依 Core 网格产出刷新网格线，并回灌派生行列数（供参数面板只读显示）。
@@ -474,7 +478,7 @@ void MainWindow::refreshPreview() {
     // L2 多矩形并集剔除：选区来自 rects_（非单 rect_），单独处理。
     // 用 Core 诱导网格画灰色网格线（各矩形十字带并集诱导），但不启动单元点选图元——
     // picker 会 grab 鼠标、阻断画布框选（多矩形靠框选逐个追加）。橙色轮廓标出各矩形，
-    // 单选区框隐藏。遮罩复用 runPreview 的 kept 结果（A-0.1：GUI 不算并集）。
+    // 单选区框隐藏。遮罩复用 runPreview 的 kept 结果（CONTRIBUTING.md「分层纪律」：GUI 不算并集）。
     if (doc_.mode() == engine::Tier::L2 && doc_.l2Sub() == L2Sub::MULTI_RECT) {
         scene_->updateMultiRects(doc_.rects());     // 增量刷新可拖拽选区框（拖拽中不回设正在拖者）。
         scene_->clearCutLines();
@@ -558,7 +562,7 @@ void MainWindow::refreshPreview() {
     }
 }
 
-// 依引擎结果刷新导出面板的输出预览缩略图（G-11 / §4.6）：先缓存 res.ok/composition，再转 renderExportPreviewFromCache。
+// 依引擎结果刷新导出面板的输出预览缩略图（导出前预览）：先缓存 res.ok/composition，再转 renderExportPreviewFromCache。
 // 缓存让后续「不影响切割几何」的事件（烧录开关/标注变更）只需重渲染缩略图、无需重跑 Core。
 void MainWindow::updateExportPreview(const engine::EngineResult& res) {
     lastExportResOk_ = res.ok;
@@ -584,7 +588,7 @@ void MainWindow::onRightTabChanged() {
 
 // 输出预览的源图（B）：默认用未烧录的小源图；若「导出时烧录标注」开启且有标注，则委托 util::bakeAnnotationsInto
 // 把各标注按世界路径矢量烘焙到小源图副本上（working→小图变换），使预览与最终「烧录后随像素被切割落位」一致。
-// 渲染逻辑已下沉到 util（无状态），本方法只做「是否烧录 + 取哪张源图」的编排（app 层只编排，A-0.1）。
+// 渲染逻辑已下沉到 util（无状态），本方法只做「是否烧录 + 取哪张源图」的编排（app 层只编排，CONTRIBUTING.md「分层纪律」）。
 QPixmap MainWindow::exportPreviewSource() const {
     if (exportSrcPixmap_.isNull()) return exportSrcPixmap_;
     if (!annoBridge_.burnInEnabled() || annoBridge_.count() == 0) return exportSrcPixmap_;
@@ -592,7 +596,7 @@ QPixmap MainWindow::exportPreviewSource() const {
                                annoBridge_.annotations());
 }
 
-// 同步三个面板 + 工具栏模式动作到 Document。
+// 同步左侧面板与右侧「参数/导出/图像」页 + 工具栏模式动作到 Document。
 void MainWindow::syncPanels() const {
     left_->syncFromDocument();
     param_->syncFromDocument();
@@ -603,20 +607,10 @@ void MainWindow::syncPanels() const {
     if (modeActionL3_) modeActionL3_->setChecked(doc_.mode() == engine::Tier::L3);
 }
 
-// 非模态提示：写状态栏提示标签 + 限时消息（错误不打断用户，§5.2）。
+// 非模态提示：写状态栏提示标签 + 限时消息（错误不打断用户）。
 void MainWindow::notify(const QString& msg, const bool isError) const {
     stHint_->setText(msg);
     statusBar()->showMessage(msg, isError ? 8000 : 4000);
-}
-
-// 首次进入引导（§5.2）：一次性说明三种模式的区别。
-void MainWindow::showFirstRunGuide() {
-    QMessageBox::information(this, QStringLiteral("欢迎使用 ImageDiscropper"),
-        QStringLiteral("本工具沿「贯穿全图的切割线」切开图像，再决定保留哪些块、如何重新拼合。\n\n"
-                       "• 标准提取 (L1)：保留选区内的区域，最易上手（默认）。\n"
-                       "• 反向剔除 (L2)：删除选区诱导的十字带，保留其余——核心特色。\n"
-                       "• 网格分割 (L3)：铺满全图的网格 + 单元选择 + 排序。\n\n"
-                       "L1/L2/L3 共用同一引擎，模式只是参数预设。"));
 }
 
 // 判断焦点是否在数值/文本输入控件上（用于放行单键快捷键）。
@@ -627,10 +621,8 @@ bool MainWindow::focusInTextInput() {
            qobject_cast<QComboBox*>(fw);
 }
 
-// 单键快捷键（§4.10）：1/2/3 切模式、K/R 切极性。
-// 用 keyPressEvent 而非 QShortcut：焦点在坐标输入框时，数字/字母键被输入框消费、不冒泡到主窗口，
-// 故「数值输入时天然不触发」——修复了 QShortcut 抢先拦截数字键 1/2/3 导致坐标无法直接键入、
-// 只能点增减按钮的问题（NFR-5）。
+// 单键快捷键（见本目录 README「快捷键列表」）：1/2/3 切模式、K/R 切极性、Delete/Backspace 删除选中标注。
+// 用 keyPressEvent 而非 QShortcut，数值输入时天然不触发（理由见头文件说明，NFR-5）。
 void MainWindow::keyPressEvent(QKeyEvent* event) {
     if (!focusInTextInput()) {
         switch (event->key()) {
@@ -684,7 +676,7 @@ void MainWindow::openImageFromPath(const QString& path) {
 
 // 导出（委托 EngineBridge → Core runEngine + exportImage）。
 void MainWindow::onExport() {
-    if (!doc_.hasImage()) { notify(QStringLiteral("无图像可导出"), true); return; }
+    if (!doc_.hasImage()) { notify(QStringLiteral("无图像可导出，请先打开一张图像（Ctrl+O）。"), true); return; }
     if (!doc_.hasRect()) { notify(QStringLiteral("请先在画布创建选区"), true); return; }
 
     const engine::EngineConfig cfg = doc_.buildEngineConfig();
@@ -720,7 +712,7 @@ void MainWindow::onExport() {
     }
 
     // 导出烧录（G-4）：开关开且有标注时，以当前工作图为底逐个调 Core rasterize 合成标注，
-    // 再送引擎切割（标注随像素被切开，A-0.15/A-0.16）；否则直接送工作图。
+    // 再送引擎切割（标注随像素被切开，CONTRIBUTING.md「分层纪律」）；否则直接送工作图。
     core::Image exportSrc = doc_.working();
     if (annoBridge_.burnInEnabled() && annoBridge_.count() > 0) {
         exportSrc = annoBridge_.burnIn(doc_.working());
@@ -879,7 +871,7 @@ void MainWindow::onPolarityShortcut(const bool remove) {
 
 // ---------------------------------------------------------------------------
 // 预处理（FR-1 / G-3）：各操作经 EngineBridge 调 Core pixel_ops 变换工作图。
-// GUI 不自实现像素运算（A-0.1）；所有变换走公共收尾 applyWorkingImage。
+// GUI 不自实现像素运算（CONTRIBUTING.md「分层纪律」）；所有变换走公共收尾 applyWorkingImage。
 // ---------------------------------------------------------------------------
 
 // 预处理公共收尾：维度变化（旋转 90/270、缩放）会使既有选区坐标越界/失配，
@@ -983,7 +975,7 @@ void MainWindow::onResetPreprocess() {
 
 // ===========================================================================
 // 标注（第四阶段 G-4/G-5）：MainWindow 只做编排——把面板/画布意图转交 AnnotationBridge
-// （其内部调 Core annotation/geometry），再把模型变化下发画布与属性面板。不含几何/光栅化（A-0.1）。
+// （其内部调 Core annotation/geometry），再把模型变化下发画布与属性面板。不含几何/光栅化（CONTRIBUTING.md「分层纪律」）。
 // ===========================================================================
 
 // 工具面板选择：先收笔未完成的折线/画笔路径，再切换工具（setTool 内部会放弃两点预览）。
@@ -1103,7 +1095,7 @@ void MainWindow::onAnnoFinish() {
     else annoBridge_.cancelPending();
 }
 
-// SELECT 工具下点中标注图元：委托 Core hitTest 选中（几何命中在 Core，A-0.1）。
+// SELECT 工具下点中标注图元：委托 Core hitTest 选中（几何命中在 Core，CONTRIBUTING.md「分层纪律」）。
 void MainWindow::onAnnotationSelect(const QPointF& scenePos) {
     annoBridge_.selectAt(core::Point2D(scenePos.x(), scenePos.y()));
 }
@@ -1183,13 +1175,13 @@ void MainWindow::onAnnoClearAll() {
 }
 
 // ===========================================================================
-// 全局撤销/重做（G-12）与配置文件（G-13）：MainWindow 只做编排——
+// 全局撤销/重做与配置文件：MainWindow 只做编排——
 // 文档参数态历史复用 Core HistoryManager<EngineConfig>（capture=buildEngineConfig、
 // restore=applyEngineConfig）；标注历史沿用 Core AnnotationLayer 内建快照，由上下文路由分发。
-// 配置存取经 EngineBridge 委托 Core save/loadEngineConfig（A-0.1：Core 调用集中在桥）。
+// 配置存取经 EngineBridge 委托 Core save/loadEngineConfig（CONTRIBUTING.md「分层纪律」：Core 调用集中在桥）。
 // ===========================================================================
 
-// 保存配置（G-13）：把当前作业配置写为 §9 schema 的 JSON 文件（委托 EngineBridge → Core）。
+// 保存配置：把当前作业配置写为 SPEC §7 schema 的 JSON 文件（委托 EngineBridge → Core）。
 void MainWindow::onSaveConfig() {
     const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("保存配置"), QString(),
         QStringLiteral("ImageDiscropper 配置 (*.json);;所有文件 (*)"));
@@ -1200,7 +1192,7 @@ void MainWindow::onSaveConfig() {
         notify(QStringLiteral("保存配置失败：%1").arg(err), true);
 }
 
-// 加载配置（G-13）：读 JSON → Document::applyEngineConfig 反向映射；载入本身可撤销（入同一历史栈）。
+// 加载配置：读 JSON → Document::applyEngineConfig 反向映射；载入本身可撤销（入同一历史栈）。
 void MainWindow::onLoadConfig() {
     const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("加载配置"), QString(),
         QStringLiteral("ImageDiscropper 配置 (*.json);;所有文件 (*)"));
@@ -1217,13 +1209,13 @@ void MainWindow::onLoadConfig() {
     notify(QStringLiteral("配置已加载：%1").arg(path), false);
 }
 
-// 编辑菜单撤销（G-12）：上下文路由——标注上下文转发到标注撤销，否则走文档参数撤销。
+// 编辑菜单撤销：上下文路由——标注上下文转发到标注撤销，否则走文档参数撤销。
 void MainWindow::onUndo() {
     if (annotationContextActive()) onAnnoUndo();
     else undoDocument();
 }
 
-// 编辑菜单重做（G-12）：与撤销对称的上下文路由。
+// 编辑菜单重做：与撤销对称的上下文路由。
 void MainWindow::onRedo() {
     if (annotationContextActive()) onAnnoRedo();
     else redoDocument();

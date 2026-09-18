@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：src/engine/engine.cpp
-// 作用：Grid-Selection-Emit 流水线的顶层编排入口 runEngine（终稿 §10.2 概念流程）。
+// 作用：Grid-Selection-Emit 流水线的顶层编排入口 runEngine（SPEC §1 概念流程）。
 //       一次调用串起：① 切割线 → ② 诱导网格 → ③ 选择集 → ④ 极性 → split →
 //       Sequence → ⑤ 合成，产出 EngineResult（保留集 + 合成描述 + 坍缩可行性）。
 // 分块依据：六个阶段的函数定义分散在各阶段文件（cut_line/grid/split/selection/
@@ -16,11 +16,11 @@ namespace idc::engine {
 namespace {
 
 // 依据切割配置与诱导网格自动推导“选择区” S 的单元序号（L1/L2 无显式选择集时用）。
-// 语义（终稿 §4.3）：
+// 语义（SPEC §3.3）：
 //   RECT + KEEP    → S = 中心矩形单元；RECT + REMOVE → S = 十字带单元（行带 ∪ 列带），
-//                     剔除十字即删整行 + 整列，四角可坍缩（§5.2 / §5.4）。
+//                     剔除十字即删整行 + 整列，四角可坍缩（SPEC §4.2 / §4.4）。
 //   HORIZONTAL_LINE→ S = 横带单元（y ∈ [y1,y2)）；VERTICAL_LINE → S = 竖带单元（x ∈ [x1,x2)）。
-//   MULTI_RECT     → REMOVE：S = ⋃ 各矩形十字带（方案 A，§4.3.6）；KEEP：S = ⋃ 各矩形单元。
+//   MULTI_RECT     → REMOVE：S = ⋃ 各矩形十字带（方案 A，SPEC §3.3.4）；KEEP：S = ⋃ 各矩形单元。
 //   GRID           → 无显式选择时默认全选（配合极性；L3 通常由 selectedCells 覆盖）。
 std::vector<int> deriveSelection(const CutConfig& cut, const Grid& grid) {
     std::vector<int> S;
@@ -89,7 +89,7 @@ EngineResult runEngine(const core::Image& image, const EngineConfig& config) {
     }
 
     // --- FR-1：切割前先应用预处理流水线（旋转/翻转/灰度/反色/色道分离），其产出图像
-    //     才是切割引擎的真正输入（终稿 §4.1）。无步骤时直接复用原图，避免对大图做
+    //     才是切割引擎的真正输入（SPEC §3.1）。无步骤时直接复用原图，避免对大图做
     //     多余深拷贝（NFR-8）。---
     const bool hasPreprocess = !config.preprocess.steps().empty();
     const core::Image preprocessed =
@@ -131,7 +131,7 @@ EngineResult runEngine(const core::Image& image, const EngineConfig& config) {
         grid = induceGrid(lines, source);
     }
     if (grid.cellCount() == 0) {
-        result.error = "切割未产生有效网格（E-1/E-5）：参数非法或单元尺寸越界";
+        result.error = "切割未产生有效网格（E-1/E-5）：单元尺寸或图像尺寸非正，无法铺设";
         return result;
     }
     const int cellCount = static_cast<int>(grid.cellCount());
@@ -164,7 +164,7 @@ EngineResult runEngine(const core::Image& image, const EngineConfig& config) {
         return result;
     }
 
-    // --- ⑤ 坍缩可行性（§5.4）+ 序列 + 合成。---
+    // --- ⑤ 坍缩可行性（SPEC §4.4）+ 序列 + 合成。---
     result.collapsible = isCollapsible(selection, grid);
 
     Sequence sequence;
@@ -177,7 +177,7 @@ EngineResult runEngine(const core::Image& image, const EngineConfig& config) {
                        config.order);
     }
 
-    // 布局决策 +「仅 L3 可重排」限制（重排是 L3 网格的专属合成方式，§5.3）。
+    // 布局决策 +「仅 L3 可重排」限制（重排是 L3 网格的专属合成方式，SPEC §4.3）。
     CompositionParams emitParams = config.emitParams;
     const bool isL3 = config.cut.tier == Tier::L3;
     const bool merged = emitParams.mode == EmitMode::MERGED;
@@ -186,10 +186,10 @@ EngineResult runEngine(const core::Image& image, const EngineConfig& config) {
         result.error = "合并重排仅 L3 网格模式支持：请改用合并坍缩或分离导出";
         return result;
     }
-    // MERGED+COLLAPSE 但不可坍缩：L3 降级为重排（§5.4 推论）；L1/L2 无重排可用 → 报错。
+    // MERGED+COLLAPSE 但不可坍缩：L3 降级为重排（SPEC §4.4 推论）；L1/L2 无重排可用 → 报错。
     if (merged && emitParams.layout == MergeLayout::COLLAPSE && !result.collapsible) {
         if (!isL3) {
-            result.error = "保留集不可坍缩（§5.4），且 L1/L2 不支持合并重排："
+            result.error = "保留集不可坍缩（SPEC §4.4），且 L1/L2 不支持合并重排："
                            "请调整切割线使删除区覆盖整行/整列，或改用分离导出";
             return result;
         }

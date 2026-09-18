@@ -5,7 +5,7 @@
 //       EngineConfig。任何面板/画布都只读写 Document，不各自持有真相，避免耦合。
 // 分块依据：
 //   - Document 只做「状态存储 + 参数翻译」，绝不含切割/几何/排序/极性判定逻辑
-//     （那些全在 Core；A-0.1）。组装 EngineConfig 只是字段搬运与枚举映射。
+//     （那些全在 Core；CONTRIBUTING.md「分层纪律」）。组装 EngineConfig 只是字段搬运与枚举映射。
 //   - 真正调用 Core 的动作集中在桥接类（切割/预处理 EngineBridge、标注域 AnnotationBridge），Document 不碰 Core API。
 // 说明：状态变更统一发 changed() 信号；换图发 imageChanged()（需重建预览 pixmap）。
 //       MainWindow 监听这两个信号驱动预览刷新与面板同步。
@@ -46,7 +46,7 @@ public:
     explicit Document(QObject* parent = nullptr);
 
     // ---- 图像 ----
-    // 载入新图像：original_ 与 working_ 均置为 img（第一阶段无预处理，工作图=原图），
+    // 载入新图像：original_ 与 working_ 均置为 img（新图无预处理，工作图=原图），
     // 记录路径、清空选区，发 imageChanged()。
     void setImage(core::Image img, QString path);
     const core::Image& original() const { return original_; }
@@ -60,7 +60,7 @@ public:
 
     // ---- 预处理工作图（FR-1）----
     // 用一次预处理结果替换工作图；original_ 始终保留原图，供「重置预处理」还原。
-    // 由 MainWindow 经 EngineBridge 算出新图后写回（Document 不碰 Core，A-0.1）；触发 imageChanged()。
+    // 由 MainWindow 经 EngineBridge 算出新图后写回（Document 不碰 Core，CONTRIBUTING.md「分层纪律」）；触发 imageChanged()。
     void setWorkingImage(core::Image img);
     // 重置预处理：工作图恢复为原图、清除「已预处理」标记；未预处理时早退。触发 imageChanged()。
     void resetPreprocess();
@@ -88,7 +88,7 @@ public:
 
     // ---- L2 多矩形并集（FR-L2 多矩形；仅 L2Sub::MULTI_RECT 生效）----
     // rects_ 为用户框选追加的多个矩形，Core 对每个矩形诱导贯穿十字带后取并集剔除。
-    // GUI 只维护矩形列表（增/删/改/清空）并搬运进 CutConfig::rects，不做任何并集/几何计算（A-0.1）。
+    // GUI 只维护矩形列表（增/删/改/清空）并搬运进 CutConfig::rects，不做任何并集/几何计算（CONTRIBUTING.md「分层纪律」）。
     const std::vector<engine::RectRegion>& rects() const { return rects_; }
     void addRect(const engine::RectRegion& r);                 // 追加一个矩形（拒绝退化）
     void updateRect(std::size_t index, const engine::RectRegion& r); // 修改指定矩形（拒绝退化）
@@ -110,10 +110,10 @@ public:
     const QString& outputFile() const { return outputFile_; }
     void setOutputFile(const QString& f);
 
-    // ---- 重排合并参数（FR-L3.7 / §5.3；仅 MERGED+REARRANGE 生效）----
+    // ---- 重排合并参数（FR-L3.7 / SPEC §4.3；仅 MERGED+REARRANGE 生效）----
     // cols/rows/cellWidth/cellHeight 以 0 表示「未指定」→ buildEngineConfig 保持 nullopt，
     // 交 Core compose 依保留块数自动推导画布；正值才写入。padColor 为空位/余量填充色。
-    // GUI 只搬运字段，画布尺寸/落位全由 Core compose 计算（A-0.1）。
+    // GUI 只搬运字段，画布尺寸/落位全由 Core compose 计算（CONTRIBUTING.md「分层纪律」）。
     int mergeCols() const { return mergeCols_; }
     int mergeRows() const { return mergeRows_; }
     int mergeCellW() const { return mergeCellW_; }
@@ -125,7 +125,7 @@ public:
 
     // ---- 重排填充顺序（MergeOrder；仅 MERGED+REARRANGE 生效，与 L3 选择排序 order_ 正交）----
     // order_ 决定「保留块的先后列表」（含 CUSTOM 拖拽序）；mergeOrder_ 决定「该列表以行/列优先
-    // + 蛇形? + 倒序? 的路径铺进 cols×rows 输出画布」。GUI 只搬运字段，落位由 Core compose 计算（A-0.1）。
+    // + 蛇形? + 倒序? 的路径铺进 cols×rows 输出画布」。GUI 只搬运字段，落位由 Core compose 计算（CONTRIBUTING.md「分层纪律」）。
     const engine::MergeOrder& mergeOrder() const { return mergeOrder_; }
     void setMergeOrderStrategy(engine::SortStrategy s); // 仅 ROW_MAJOR / COLUMN_MAJOR（CUSTOM 按行优先）
     void setMergeOrderReverse(bool on);                      // 填充路径整体倒序
@@ -141,7 +141,7 @@ public:
     int gridRows() const { return gridRows_; }
     int gridCols() const { return gridCols_; }
     void setDerivedGridSize(int rows, int cols);
-    // 「转为网格模式编辑」（FR §4.4.3 / G-15）：把当前矩形选区一键送入 L3——
+    // 「转为网格模式编辑」：把当前矩形选区一键送入 L3——
     // 以选区左上为基准点、选区宽高为单元尺寸，切到 L3（极性置 keep）并清空选择集（用户再逐单元精修）。
     void convertRectToGrid();
 
@@ -168,7 +168,7 @@ public:
     engine::CutConfig buildCutConfig() const;
     // 构建一次完整作业的配置（供 runEngine / exportImage 使用）。
     engine::EngineConfig buildEngineConfig() const;
-    // 反向映射（G-13 配置加载 / G-12 撤销重做共用）：把一份 EngineConfig 的字段搬回 Document 状态，
+    // 反向映射（配置加载与撤销重做共用）：把一份 EngineConfig 的字段搬回 Document 状态，
     // 与 buildEngineConfig 互逆——生成器+tier 还原 L1 形状/L2 子功能，搬运几何/选择集/排序/导出参数。
     // 不还原 source 尺寸（图像不随配置/快照改变）；直接改字段后只发一次 changed()（避免逐 setter 多次刷新）。
     // 维持模型不变式：非 L3 不得为重排（复位为坍缩）、网格单元尺寸非正时回退默认，杜绝非法组合。

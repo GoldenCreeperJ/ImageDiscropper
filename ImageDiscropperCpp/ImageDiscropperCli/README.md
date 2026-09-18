@@ -1,7 +1,7 @@
 # ImageDiscropperCli
 
-**模块作用**：ImageDiscropper 的命令行层（终稿 §10.1 / guideline §0），产出可执行程序 **`idc`**。
-它是一层**薄壳**（A-0.1）：只做四件事——解析参数、调用 Core 的统一引擎、格式化输出、返回退出码；
+**模块作用**：ImageDiscropper 的命令行层，产出可执行程序 **`idc`**。
+它是一层**薄壳**：只做四件事——解析参数、调用 Core 的统一引擎、格式化输出、返回退出码；
 **不含任何切割 / 几何 / 排序 / 极性 / 合成 / 编解码逻辑**，全部委托 `ImageDiscropperCore`。
 
 三层模式共用 Core 的同一条 Grid-Selection-Emit 代码路径（NFR-0：模式即参数预设）：
@@ -27,16 +27,9 @@ ImageDiscropperCli/
 
 ## 构建与运行
 
-CLI 由**仓库根** `CMakeLists.txt` 统一编排（Core 先于 CLI 引入，CLI 链接 `image_discropper_core`）。
+CLI 由**仓库根** `CMakeLists.txt` 统一编排（Core 先于 CLI 引入，CLI 链接 `image_discropper_core`）；
+构建命令与测试运行见 [`../README.md`](../README.md)「构建与运行」。
 第三方库（stb / libwebp / nlohmann_json）由 Core 以 PRIVATE 封装，CLI 无需感知。
-
-```bash
-# 在仓库根（CLion 直接以根目录为 CMake 源加载工程即可）
-cmake -S . -B build            # 需配置 vcpkg 工具链（同 Core）
-cmake --build build            # 产出 build/bin/idc(.exe)
-ctest --test-dir build         # 运行 Core unit_tests + CLI cli_tests
-```
-
 版本经编译期宏注入：`IDC_CLI_VERSION`（根工程版本）与 `IDC_CORE_VERSION`（Core 经 PARENT_SCOPE 回传）。
 
 ## 用法速览
@@ -60,6 +53,9 @@ idc grid   --input photo.jpg --grid 100,100,200,150 --keep 0,0 --keep 0,1 --keep
 idc config --load my-config.json --input photo.jpg --output result.png
 ```
 
+> **负值写法**：`--grid x0,y0,cw,ch` 的基准点**可为负**（网格从图像左上边界之外开始铺），如
+> `--grid -50,-20,100,100`；`cw/ch` 必须为正。命令行负值选项（以 `-数字` 开头）会被正常当作值解析。
+
 完整选项见 `idc <command> --help`。
 
 ### 合并重排（仅 L3 `grid`）
@@ -75,18 +71,18 @@ idc config --load my-config.json --input photo.jpg --output result.png
 `-h/--help`、`-v/--version`、`--verbose`、`--quiet`、`--config <file>`（从 JSON 读取全部参数）、
 `--save-config <file>`（把当前参数序列化为 JSON，dry-run 不执行）。
 
-### 退出码（guideline §5.1）
+### 退出码
 
-| 码 | 含义                                            |
-|---|-----------------------------------------------|
-| 0 | 成功                                            |
-| 1 | 参数错误（缺必填 / 格式非法 / 互斥冲突，§5.3 前 5 步，早于 Core 调用） |
-| 2 | 运行时错误（Core 业务错误，如坍缩不可行）                       |
-| 3 | 输入文件错误（图像不存在 / 不可读 / 格式不支持）                   |
-| 4 | 输出失败（目录不可创建 / 文件被占用 / 磁盘满）                    |
-| 5 | 内部错误（未预期异常）                                   |
+| 码 | 含义                                       |
+|---|------------------------------------------|
+| 0 | 成功                                       |
+| 1 | 参数错误（缺必填 / 格式非法 / 互斥冲突，前 5 步，早于 Core 调用） |
+| 2 | 运行时错误（Core 业务错误，如坍缩不可行）                  |
+| 3 | 输入文件错误（图像不存在 / 不可读 / 格式不支持）              |
+| 4 | 输出失败（目录不可创建 / 文件被占用 / 磁盘满）               |
+| 5 | 内部错误（未预期异常）                              |
 
-### 错误格式（guideline §5.2，写 stderr）
+### 错误格式
 
 ```
 idc: error: <简述>
@@ -103,7 +99,7 @@ idc: error: <简述>
 - 图像 I/O：`engine::readImageFile`（解码）/ `writeImageFile`（示例 / 测试造图）
 - 基础类型：`core::Image` / `core::Color` / `kTransparent`
 
-## 已知限制（guideline §11.5）
+## 已知限制
 
 1. **合并导出的 JPEG/BMP 透明压平**：不支持透明的格式会把 alpha 压平到 `padColor`；
    若未指定 `--pad-color` 则为透明黑，转 JPEG 后表现为黑色背景（属格式固有特性，非缺陷）。
@@ -111,6 +107,10 @@ idc: error: <简述>
 > 此前记录的 4 项 Core 限制（`--pad-color` 不生效 / `{row}`·`{col}` 不支持 / 分离忽略 `--sort` /
 > 合并不建父目录）**均已在 Core 层修复**，见 `ImageDiscropperCore` 的 `composition.*` 与 `export.cpp`。
 
-## 待 Core 补充接口（guideline §11.6 TODO(core)）
+## 待 Core 补充接口
 
 - 暂无阻塞项。原 3 项 TODO（padColor 透传 / `{row}`·`{col}` 命名 / SEPARATE 尊重 Sequence）已落地。
+
+## 许可
+
+本模块随仓库整体采用 **GPL-3.0**（见根 [`LICENSE`](../../LICENSE)）。

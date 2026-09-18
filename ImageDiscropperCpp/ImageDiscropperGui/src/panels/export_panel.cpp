@@ -42,8 +42,8 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     modeCombo_ = new QComboBox(box);
     modeCombo_->addItems({QStringLiteral("分离导出"), QStringLiteral("合并坍缩"),
                           QStringLiteral("合并重排")});
-    modeCombo_->setToolTip(QStringLiteral("分离：每块一张图；合并坍缩：剩余块紧贴拼接为一张；"
-                                          "合并重排：按序列填入新画布。"));
+    modeCombo_->setToolTip(QStringLiteral("分离导出：每个保留块单独存为一张图；合并坍缩：删除整行/整列后剩余块紧贴拼成一张图；"
+                                          "合并重排：按指定顺序把块填入新画布。"));
     form->addWidget(modeCombo_);
 
     // 目录行（分离导出）。
@@ -64,7 +64,7 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     nh->setContentsMargins(0, 0, 0, 0);
     namingLabel_ = new QLabel(QStringLiteral("命名"), namingRow_);
     naming_ = new QLineEdit(QStringLiteral("{name}_{index:03d}"), namingRow_);
-    naming_->setToolTip(QStringLiteral("分离导出命名模板，支持 {name}/{index}/{index:03d}/{row}/{col}。"));
+    naming_->setToolTip(QStringLiteral("分离导出的文件名模板。可用占位符：{name}=原文件名，{index}=序号（{index:03d}=补零到 3 位），{row}/{col}=行/列号。"));
     nh->addWidget(namingLabel_);
     nh->addWidget(naming_, 1);
     form->addWidget(namingRow_);
@@ -81,7 +81,7 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     fh->addWidget(fileBtn_);
     form->addWidget(fileRow_);
 
-    // 合并重排参数行（FR-L3.7 / §4.6）：仅「合并重排」模式显示。
+    // 合并重排参数行（FR-L3.7）：仅「合并重排」模式显示。
     // 列/行/单元尺寸以 0 表示「自动」（setSpecialValueText 显示为“自动”），交 Core compose 推导。
     rearrangeRow_ = new QWidget(box);
     auto* rf = new QFormLayout(rearrangeRow_);
@@ -97,25 +97,25 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
         s->setKeyboardTracking(false);          // 提交才触发，避免逐键刷新。
         s->setSpecialValueText(QStringLiteral("自动")); // 最小值 0 显示为「自动」。
     }
-    mergeCols_->setToolTip(QStringLiteral("重排画布列数；自动=依保留块数推导。"));
-    mergeRows_->setToolTip(QStringLiteral("重排画布行数；自动=依保留块数推导。"));
-    mergeCellW_->setToolTip(QStringLiteral("重排单元宽；自动=用保留块原尺寸。"));
-    mergeCellH_->setToolTip(QStringLiteral("重排单元高；自动=用保留块原尺寸。"));
+    mergeCols_->setToolTip(QStringLiteral("重排画布的列数；选「自动」时按保留块数推导。"));
+    mergeRows_->setToolTip(QStringLiteral("重排画布的行数；选「自动」时按保留块数推导。"));
+    mergeCellW_->setToolTip(QStringLiteral("重排单元的宽度；选「自动」时用保留块原尺寸。"));
+    mergeCellH_->setToolTip(QStringLiteral("重排单元的高度；选「自动」时用保留块原尺寸。"));
     rf->addRow(QStringLiteral("列数"), mergeCols_);
     rf->addRow(QStringLiteral("行数"), mergeRows_);
     autoGridBtn_ = new QPushButton(QStringLiteral("按格数自动"), rearrangeRow_);
-    autoGridBtn_->setToolTip(QStringLiteral("依保留块数 n 计算 cols=ceil(sqrt(n))、rows=ceil(n/cols) 并填入。"));
+    autoGridBtn_->setToolTip(QStringLiteral("依保留块数自动推算列数与行数（尽量接近正方形排列）并填入。"));
     rf->addRow(QString(), autoGridBtn_);
     rf->addRow(QStringLiteral("单元宽"), mergeCellW_);
     rf->addRow(QStringLiteral("单元高"), mergeCellH_);
     // 重排填充顺序（MergeOrder）：与 L3 选择排序正交——决定块列表以何种路径铺进 cols×rows 画布。
     mergeSortCombo_ = new QComboBox(rearrangeRow_);
     mergeSortCombo_->addItems({QStringLiteral("行优先"), QStringLiteral("列优先")});
-    mergeSortCombo_->setToolTip(QStringLiteral("重排填充顺序：块列表按行优先/列优先铺进画布（与选择排序正交）。"));
+    mergeSortCombo_->setToolTip(QStringLiteral("重排时块的填充顺序：从左到右逐行（行优先）或从上到下逐列（列优先）。"));
     mergeSnake_ = new QCheckBox(QStringLiteral("蛇形"), rearrangeRow_);
-    mergeSnake_->setToolTip(QStringLiteral("隔行（行优先）/隔列（列优先）反向填充。"));
+    mergeSnake_->setToolTip(QStringLiteral("蛇形铺排：隔行（行优先）或隔列（列优先）反向填充。"));
     mergeReverse_ = new QCheckBox(QStringLiteral("倒序"), rearrangeRow_);
-    mergeReverse_->setToolTip(QStringLiteral("填充路径整体逆序。"));
+    mergeReverse_->setToolTip(QStringLiteral("倒序：从最后一个块开始反向填充。"));
     auto* orderRow = new QWidget(rearrangeRow_);
     auto* oh = new QHBoxLayout(orderRow);
     oh->setContentsMargins(0, 0, 0, 0);
@@ -125,7 +125,7 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     oh->addStretch(1);
     rf->addRow(QStringLiteral("填充顺序"), orderRow);
     padColorBtn_ = new QPushButton(rearrangeRow_);
-    padColorBtn_->setToolTip(QStringLiteral("空位/余量填充色（默认透明）。点击选择。"));
+    padColorBtn_->setToolTip(QStringLiteral("空位与余量的填充色（默认透明）。按钮文字依次为红、绿、蓝、透明度。点击选择。"));
     rf->addRow(QStringLiteral("填充色"), padColorBtn_);
     // 内联警告（红字）：cols*rows < 保留块数 或 cw/ch < 网格单元尺寸时提示（导出前另弹窗确认）。
     rearrangeWarn_ = new QLabel(rearrangeRow_);
@@ -152,7 +152,7 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
 
     root->addWidget(box);
 
-    // 输出图像预览（G-11 / §4.6）：固定尺寸的缩略图标签，由 MainWindow 按 Core Composition 回灌。
+    // 输出图像预览（导出前预览）：固定尺寸的缩略图标签，由 MainWindow 按 Core Composition 回灌。
     // 固定尺寸使 setPreviewPixmap 能依确定的框内缩放（不随布局时序变化），且不撑宽右侧面板。
     root->addWidget(new QLabel(QStringLiteral("输出预览"), this));
     previewLabel_ = new QLabel(QStringLiteral("（无输出预览）"), this);
@@ -164,14 +164,14 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     root->addWidget(previewLabel_);
 
     // 导出前文字信息（与缩略图并存：画布尺寸/保留块数）。
-    infoLabel_ = new QLabel(QStringLiteral("尚未计算预览。"), this);
+    infoLabel_ = new QLabel(QStringLiteral("暂无输出预览。"), this);
     infoLabel_->setWordWrap(true);
     root->addWidget(infoLabel_);
 
     // 导出时烧录标注（原属图层面板，现归入导出选项）：勾选后导出把标注合成进像素（随像素一起被切割）。
     burnIn_ = new QCheckBox(QStringLiteral("导出时烧录标注"), this);
     burnIn_->setChecked(false);
-    burnIn_->setToolTip(QStringLiteral("勾选后导出会把标注合成进像素（随像素一起被切割）；不勾选则导出纯底图"));
+    burnIn_->setToolTip(QStringLiteral("勾选后，导出时把标注画进图像（随图像一起被切割）；不勾选则导出的图像不含标注。"));
     root->addWidget(burnIn_);
 
     // 导出按钮。
@@ -283,7 +283,7 @@ void ExportPanel::setPreviewInfo(const QString& text) const {
     if (infoLabel_) infoLabel_->setText(text);
 }
 
-// 显示输出图像预览缩略图（G-11 / §4.6）：等比缩到标签框内（仅缩小、不放大，避免小图被拉伸模糊）。
+// 显示输出图像预览缩略图（导出前预览）：等比缩到标签框内（仅缩小、不放大，避免小图被拉伸模糊）。
 // 传入空 pixmap（无有效输出/无图像）时清空并回退到占位文案。
 void ExportPanel::setPreviewPixmap(const QPixmap& pm) const {
     if (!previewLabel_) return;
@@ -437,7 +437,7 @@ void ExportPanel::updatePadColorSwatch() const {
         "QPushButton{background:rgba(%1,%2,%3,%4);border:1px solid #999;border-radius:4px;min-height:20px;}")
         .arg(c.r).arg(c.g).arg(c.b).arg(c.a));
     padColorBtn_->setText(c.a == 0 ? QStringLiteral("透明")
-                                   : QStringLiteral("RGBA(%1,%2,%3,%4)").arg(c.r).arg(c.g).arg(c.b).arg(c.a));
+                                   : QStringLiteral("颜色(%1,%2,%3,%4)").arg(c.r).arg(c.g).arg(c.b).arg(c.a));
 }
 
 // 依当前输出模式切换目录/文件/命名/重排行显隐。
@@ -528,17 +528,17 @@ QString ExportPanel::rearrangeWarning() const {
     QStringList msgs;
     const int cols = mergeCols_->value();
     if (const int rows = mergeRows_->value(); keptCount_ > 0 && cols > 0 && rows > 0 && cols * rows < keptCount_) {
-        msgs << QStringLiteral("画布 %1×%2=%3 格 < 保留块数 %4，多出的块将被丢弃或覆盖。")
+        msgs << QStringLiteral("画布 %1×%2=%3 格 < 保留块数 %4，将自动增加行数以容纳全部块（与设置的画布大小不符）。")
                     .arg(cols).arg(rows).arg(cols * rows).arg(keptCount_);
     }
     const int cw = mergeCellW_->value();
     const int ch = mergeCellH_->value();
     if (cw > 0 && cellW_ > 0 && cw < cellW_) {
-        msgs << QStringLiteral("单元宽 %1 < 网格单元宽 %2，块会溢出格子并被相邻块覆盖/裁剪。")
+        msgs << QStringLiteral("单元宽 %1 小于网格单元宽 %2，相邻块会相互覆盖或越界被裁剪。")
                     .arg(cw).arg(cellW_);
     }
     if (ch > 0 && cellH_ > 0 && ch < cellH_) {
-        msgs << QStringLiteral("单元高 %1 < 网格单元高 %2，块会溢出格子并被相邻块覆盖/裁剪。")
+        msgs << QStringLiteral("单元高 %1 小于网格单元高 %2，相邻块会相互覆盖或越界被裁剪。")
                     .arg(ch).arg(cellH_);
     }
     return msgs.join(QStringLiteral("\n"));

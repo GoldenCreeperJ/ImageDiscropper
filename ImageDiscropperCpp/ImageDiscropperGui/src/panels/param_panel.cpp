@@ -67,8 +67,8 @@ QWidget* ParamPanel::buildL1Page() {
     form->addRow(QStringLiteral("y2"), l1y2_);
     v->addWidget(box);
 
-    auto* note = new QLabel(QStringLiteral("保留选区形状内的区域。切割线是贯穿全图的直线，"
-                                          "而非线段；极性可在左侧切换。"), page);
+    auto* note = new QLabel(QStringLiteral("保留选框内的区域。切割线贯穿全图（并非只有框边）；"
+                                          "保留/删除可在左侧切换。"), page);
     note->setWordWrap(true);
     v->addWidget(note);
     v->addStretch(1);
@@ -90,7 +90,7 @@ QWidget* ParamPanel::buildL2Page() {
     l2Sub_ = new QComboBox(box);
     l2Sub_->addItems({QStringLiteral("十字切割"), QStringLiteral("横线切割"),
                       QStringLiteral("竖线切割"), QStringLiteral("多矩形并集剔除")});
-    l2Sub_->setToolTip(QStringLiteral("每个矩形诱导贯穿全图的十字带，删除区域为所有十字带的并集。"));
+    l2Sub_->setToolTip(QStringLiteral("每个矩形删除的都是贯穿全图的「竖带 + 横带」（十字带）；多矩形时删除区域取并集。"));
     form->addRow(QStringLiteral("子功能"), l2Sub_);
 
     l2x1_ = makeCoordSpin(box); l2y1_ = makeCoordSpin(box);
@@ -103,7 +103,7 @@ QWidget* ParamPanel::buildL2Page() {
 
     // ---- 多矩形并集列表（仅 l2Sub_==MULTI_RECT 显示）----
     // 追加矩形的主入口是画布框选（MainWindow.onRubberSelect）；此处提供列表可视化 +
-    // 选中项坐标微调（复用上方 x1/y1/x2/y2）+ 删除/清空。面板只搬运，不做并集计算（A-0.1）。
+    // 选中项坐标微调（复用上方 x1/y1/x2/y2）+ 删除/清空。面板只搬运，不做并集计算（CONTRIBUTING.md「分层纪律」）。
     l2MultiBox_ = new QGroupBox(QStringLiteral("多矩形列表"), page);
     auto* mv = new QVBoxLayout(l2MultiBox_);
     l2RectList_ = new QListWidget(l2MultiBox_);
@@ -115,14 +115,14 @@ QWidget* ParamPanel::buildL2Page() {
     mbtnRow->addWidget(l2RectDelBtn_);
     mbtnRow->addWidget(l2RectClearBtn_);
     mv->addLayout(mbtnRow);
-    auto* mnote = new QLabel(QStringLiteral("在画布空白处拖拽框选可追加矩形；矩形可直接拖动/四角缩放/拖边调整。删除区域为各矩形十字带的并集。"), l2MultiBox_);
+    auto* mnote = new QLabel(QStringLiteral("在画布空白处拖拽框选可追加矩形；矩形可直接拖动/四角缩放/拖边调整。删除区域为各矩形十字带（竖带+横带）的并集。"), l2MultiBox_);
     mnote->setWordWrap(true);
     mv->addWidget(mnote);
     l2MultiBox_->setVisible(false); // 默认隐藏，切到 MULTI_RECT 才显示（见 syncFromDocument）。
     v->addWidget(l2MultiBox_);
 
     // 坍缩可行性提示：由 MainWindow 依 Core isCollapsible 结果回灌。
-    collapseHint_ = new QLabel(QStringLiteral("坍缩可行性：待选区确定后评估。"), page);
+    collapseHint_ = new QLabel(QStringLiteral("坍缩可行性：请先框选选区。"), page);
     collapseHint_->setWordWrap(true);
     v->addWidget(collapseHint_);
 
@@ -130,7 +130,7 @@ QWidget* ParamPanel::buildL2Page() {
     outNote->setWordWrap(true);
     v->addWidget(outNote);
 
-    // 「转为网格模式编辑」入口（FR §4.4.3 / G-15）：把当前矩形选区送入 L3 逐单元精修。
+    // 「转为网格模式编辑」入口：把当前矩形选区送入 L3 逐单元精修。
     l2ToGridBtn_ = new QPushButton(QStringLiteral("转为网格模式编辑…"), page);
     l2ToGridBtn_->setToolTip(QStringLiteral("以当前矩形选区的左上为基准点、宽高为单元尺寸，"
                                             "切换到 L3 网格模式，继续逐单元点选与排序精修。"));
@@ -148,8 +148,8 @@ QWidget* ParamPanel::buildL2Page() {
 }
 
 // L3 页：网格定义（基准点 + 单元尺寸 + 余量策略）+ 选择集（全选/反选/清空）+ 排序。
-// 说明：行列数由 Core 依图像边界自动推导（只读回显），面板不输入行列数（A-0.1）；
-//       画布单元点选/自定义拖拽调序由后续增量接入，本页先提供按钮式选择集与排序策略。
+// 说明：行列数由 Core 依图像边界自动推导（只读回显），面板不输入行列数（CONTRIBUTING.md「分层纪律」）；
+//       画布上可单击单元切换选中、拖拽框选批量选中、CUSTOM 下拖拽调序（见 canvas/cell_picker_item）；本页提供按钮式选择集与排序策略。
 QWidget* ParamPanel::buildL3Page() {
     auto* page = new QWidget(this);
     auto* v = new QVBoxLayout(page);
@@ -161,10 +161,10 @@ QWidget* ParamPanel::buildL3Page() {
     gx0_ = makeCoordSpin(defBox); gy0_ = makeCoordSpin(defBox);
     gcw_ = makeCoordSpin(defBox); gch_ = makeCoordSpin(defBox);
     gcw_->setMinimum(1); gch_->setMinimum(1); // 单元尺寸必须为正（Core Grid::build 要求）。
-    gx0_->setToolTip(QStringLiteral("基准点 x0：切割线相位锚，恒落在某条竖切割线上。"));
-    gy0_->setToolTip(QStringLiteral("基准点 y0：切割线相位锚，恒落在某条横切割线上。"));
-    gcw_->setToolTip(QStringLiteral("单元宽 cw：相邻竖切割线的周期距离（像素）。"));
-    gch_->setToolTip(QStringLiteral("单元高 ch：相邻横切割线的周期距离（像素）。"));
+    gx0_->setToolTip(QStringLiteral("基准点 x0：竖切割线的起始位置。"));
+    gy0_->setToolTip(QStringLiteral("基准点 y0：横切割线的起始位置。"));
+    gcw_->setToolTip(QStringLiteral("单元宽 cw：相邻竖切割线的间距（像素）。"));
+    gch_->setToolTip(QStringLiteral("单元高 ch：相邻横切割线的间距（像素）。"));
     defForm->addRow(QStringLiteral("基准点 x0"), gx0_);
     defForm->addRow(QStringLiteral("基准点 y0"), gy0_);
     defForm->addRow(QStringLiteral("单元宽 cw"), gcw_);
@@ -172,10 +172,10 @@ QWidget* ParamPanel::buildL3Page() {
 
     gRemainder_ = new QComboBox(defBox);
     // 索引与 Core RemainderPolicy 一致：0=DISCARD, 1=KEEP_PARTIAL, 2=PAD。
-    gRemainder_->addItems({QStringLiteral("丢弃残缺 (discard)"),
-                           QStringLiteral("保留残缺 (keep-partial)"),
-                           QStringLiteral("补白 (pad)")});
-    gRemainder_->setToolTip(QStringLiteral("跨越图像边界的残缺单元如何处理。"));
+    gRemainder_->addItems({QStringLiteral("丢弃残缺"),
+                           QStringLiteral("保留残缺"),
+                           QStringLiteral("补白")});
+    gRemainder_->setToolTip(QStringLiteral("图像边缘的残缺单元如何处理：丢弃、保留、或补白到完整尺寸。"));
     defForm->addRow(QStringLiteral("余量策略"), gRemainder_);
 
     gGridInfo_ = new QLabel(QStringLiteral("网格：待计算"), defBox);
@@ -207,9 +207,10 @@ QWidget* ParamPanel::buildL3Page() {
     auto* sortForm = new QFormLayout(sortBox);
     gSort_ = new QComboBox(sortBox);
     // 索引与 Core SortStrategy 一致：0=ROW_MAJOR, 1=COLUMN_MAJOR, 2=CUSTOM。
-    gSort_->addItems({QStringLiteral("横优先 (row-major)"),
-                      QStringLiteral("竖优先 (column-major)"),
-                      QStringLiteral("自定义 (custom)")});
+    gSort_->addItems({QStringLiteral("横优先"),
+                      QStringLiteral("竖优先"),
+                      QStringLiteral("自定义")});
+    gSort_->setToolTip(QStringLiteral("输出顺序：从左到右逐行（横优先）、从上到下逐列（竖优先）、或按点选顺序（自定义）。"));
     sortForm->addRow(QStringLiteral("策略"), gSort_);
     gReverse_ = new QCheckBox(QStringLiteral("整体逆序"), sortBox);
     gSnake_ = new QCheckBox(QStringLiteral("蛇形（隔行/隔列反向）"), sortBox);
@@ -358,9 +359,9 @@ void ParamPanel::setMode(const engine::Tier tier) const {
 void ParamPanel::setCollapseHint(const bool collapsible, const QString& reason) const {
     if (!collapseHint_) return;
     if (collapsible) {
-        collapseHint_->setText(QStringLiteral("坍缩可行：删除整行/整列后，剩余单元可紧贴拼接。"));
+        collapseHint_->setText(QStringLiteral("坍缩可行：剩余块可紧贴拼成一张图。"));
     } else {
-        collapseHint_->setText(QStringLiteral("坍缩不可行：%1（导出将自动降级为重排）").arg(reason));
+        collapseHint_->setText(QStringLiteral("坍缩不可行：%1（导出将自动改用分离导出）").arg(reason));
     }
 }
 
@@ -393,7 +394,7 @@ void ParamPanel::applyCoordsToDocument() const {
     const int a = x1->value(), b = y1->value(), c = x2->value(), d = y2->value();
     const engine::RectRegion r(std::min(a, c), std::min(b, d), std::max(a, c), std::max(b, d));
     // 校验：x1==x2 或 y1==y2 会得到零宽/零高的退化矩形，直接送入 Core 会崩溃；
-    // 此处拒绝退化输入（保持上一次有效选区），Document::setRect 另有兜底（A-0.1）。
+    // 此处拒绝退化输入（保持上一次有效选区），Document::setRect 另有兜底（CONTRIBUTING.md「分层纪律」）。
     if (r.width() <= 0 || r.height() <= 0) return;
     // L2 多矩形：坐标框编辑的是列表中当前选中的矩形（updateRect），而非单选区 rect_。
     if (!l1 && doc_->l2Sub() == L2Sub::MULTI_RECT) {

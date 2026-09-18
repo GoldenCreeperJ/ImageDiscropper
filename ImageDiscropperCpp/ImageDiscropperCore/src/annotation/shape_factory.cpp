@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：src/annotation/shape_factory.cpp
-// 作用：实现 include/annotation/shape_factory.h 声明的 buildShape 函数。
-//       依据 ShapeType 与两个锚点 (p1, p2) 构造对应 Shape，
+// 作用：实现 include/annotation/shape_factory.h 声明的 buildShape 函数：
+//       依据 ShapeType 与两个锚点 (p1, p2) 构造对应 Shape。
 // ============================================================================
 #include "annotation/shape_factory.h"
 

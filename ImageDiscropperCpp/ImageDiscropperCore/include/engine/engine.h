@@ -1,11 +1,11 @@
 // ============================================================================
 // 文件：include/engine/engine.h
-// 作用：定义统一引擎的顶层配置与 Grid-Selection-Emit 流水线接口（终稿 §2 / §10.2）。
+// 作用：定义统一引擎的顶层配置与 Grid-Selection-Emit 流水线接口（SPEC §1）。
 //       这是三层模式（L1 标准提取 / L2 反向剔除 / L3 网格分割）共用的同一代码路径，
 //       模式仅为参数预设（NFR-0）。
 // 分块依据：
-//   - Tier / CutGenerator：模式层级与切割线生成方式（§2 表：切割线生成方式×极性×输出）。
-//   - SourceInfo / CutConfig / EngineConfig：对应终稿 §9 的操作配置数据结构。
+//   - Tier / CutGenerator：模式层级与切割线生成方式（SPEC §1 表：切割线生成方式×极性×输出）。
+//   - SourceInfo / CutConfig / EngineConfig：对应 SPEC §7 的操作配置数据结构。
 //   - generateCutLines / induceGrid：桥接聚合配置的流水线阶段①② 声明；其余阶段函数
 //     （split / applyPolarity / compose / exportImage）声明已下沉到各自子头，本头聚合 include。
 // 说明：本头是统一管线 facade——聚合 include 各阶段子头，并直接声明桥接聚合配置的
@@ -33,7 +33,7 @@
 namespace idc::engine {
 
 // ---------------------------------------------------------------------------
-// Tier：模式层级（终稿 §1）。三者在数学上 L1 ⊂ L2 ⊂ L3，产品上并列呈现。
+// Tier：模式层级（SPEC §1）。三者在数学上 L1 ⊂ L2 ⊂ L3，产品上并列呈现。
 // ---------------------------------------------------------------------------
 enum class Tier {
     L1,  // 标准提取模式（兼容基线，极性恒为 keep）
@@ -42,7 +42,7 @@ enum class Tier {
 };
 
 // ---------------------------------------------------------------------------
-// CutGenerator：切割线生成方式（§2“切割线生成方式”维度）。
+// CutGenerator：切割线生成方式（SPEC §1“切割线生成方式”维度）。
 // ---------------------------------------------------------------------------
 enum class CutGenerator {
     RECT,             // 单矩形选框诱导十字切割线（L1/L2）
@@ -53,7 +53,7 @@ enum class CutGenerator {
 };
 
 // ---------------------------------------------------------------------------
-// SourceInfo：原图尺寸信息（§9 JSON 的 source 段）。
+// SourceInfo：原图尺寸信息（SPEC §7 JSON 的 source 段）。
 // ---------------------------------------------------------------------------
 struct SourceInfo {
     int width{0};
@@ -61,7 +61,7 @@ struct SourceInfo {
 };
 
 // ---------------------------------------------------------------------------
-// CutConfig：切割配置（§9 JSON 的 cut 段）。
+// CutConfig：切割配置（SPEC §7 JSON 的 cut 段）。
 // 分块依据：一个结构体覆盖三层模式所需的切割输入——层级、生成方式、几何参数、极性。
 // ---------------------------------------------------------------------------
 struct CutConfig {
@@ -74,7 +74,7 @@ struct CutConfig {
 };
 
 // ---------------------------------------------------------------------------
-// EngineConfig：一次完整作业的配置聚合（对应终稿 §9 的整份 JSON）。
+// EngineConfig：一次完整作业的配置聚合（对应 SPEC §7 的整份 JSON）。
 // ---------------------------------------------------------------------------
 struct EngineConfig {
     SourceInfo source;                          // 原图尺寸
@@ -82,11 +82,11 @@ struct EngineConfig {
     CutConfig cut;                              // 切割配置
     std::vector<int> selectedCells;             // 显式选择集 S（单元序号）；空 = L1/L2 由生成器自动推导
     SequenceParams order;                       // 排序策略（FR-L3.5）
-    CompositionParams emitParams;               // 导出/合成配置（§5；成员名避开 Qt emit 关键字宏）
+    CompositionParams emitParams;               // 导出/合成配置（SPEC §4；成员名避开 Qt emit 关键字宏）
 };
 
 // ===========================================================================
-// Grid-Selection-Emit 流水线接口（终稿 §2）
+// Grid-Selection-Emit 流水线接口（SPEC §1）
 // 原图 → ① 切割线集合 → ② 诱导网格 → ③ 选择集 → ④ 极性 → ⑤ 排布导出
 // 各阶段函数声明已下沉到对应子头（解耦：实现文件只依赖自身阶段头，不再全量依赖本 facade）：
 //   split → engine/split.h；applyPolarity → engine/selection.h；
@@ -103,7 +103,7 @@ CutLineSet generateCutLines(const CutConfig& cut, const SourceInfo& source);
 Grid induceGrid(const CutLineSet& lines, const SourceInfo& source);
 
 // ===========================================================================
-// 顶层编排入口（终稿 §10.2 概念流程）
+// 顶层编排入口（SPEC §1 概念流程）
 // generateCutLines → induceGrid → 构建选择集 → split → applyPolarity →
 // Sequence::build → compose，一次调用跑通整条 Grid-Selection-Emit 管线。
 // ===========================================================================
@@ -114,7 +114,8 @@ Grid induceGrid(const CutLineSet& lines, const SourceInfo& source);
 //   error       —— 失败原因（可读中文提示，供上层 UI/CLI 展示）。
 //   kept        —— 保留集 R（带单元序号的片段集合）。
 //   composition —— 合成/排布描述（画布尺寸 + 各片段落位）。
-//   collapsible —— 坍缩可行性判定结果（§5.4）；false 时上层应降级为重排。
+//   collapsible —— 坍缩可行性判定结果（SPEC §4.4）；false 时不可合并坍缩
+//               （L3 由 runEngine 自动改用重排，L1/L2 直接报错）。
 // ---------------------------------------------------------------------------
 struct EngineResult {
     bool ok{false};
@@ -125,7 +126,7 @@ struct EngineResult {
 };
 
 // 依据配置对图像跑通完整流水线，返回保留集与合成描述（不落盘）。
-// 落盘由 exportImage 单独完成，以分离“计算”与“I/O”（§10.2）。
+// 落盘由 exportImage 单独完成，以分离“计算”与“I/O”（SPEC §1）。
 EngineResult runEngine(const core::Image& image, const EngineConfig& config);
 
 } // namespace idc::engine

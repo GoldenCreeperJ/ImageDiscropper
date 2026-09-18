@@ -56,7 +56,7 @@ void rgbToHsv(std::uint8_t r, std::uint8_t g, std::uint8_t b,
 void hsvToRgb(float h, float s, float v,
               std::uint8_t& r, std::uint8_t& g, std::uint8_t& b);
 
-// 将颜色打包为 0xRRGGBB 或 0xAARRGGBB 整数，便于序列化 / 调试。
+// 将颜色打包为 0xAARRGGBB 整数，便于序列化 / 调试。
 std::uint32_t colorToArgb(const Color& c);
 
 // 从 0xAARRGGBB 整数还原颜色。

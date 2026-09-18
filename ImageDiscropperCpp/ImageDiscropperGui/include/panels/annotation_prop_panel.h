@@ -1,8 +1,8 @@
 // ============================================================================
 // 文件：panels/annotation_prop_panel.h
-// 作用：右侧「标注」属性页（guideline §4.5.5）——颜色选择器、描边粗细、填充开关、
+// 作用：右侧「标注」属性页——颜色选择器、描边粗细、填充开关、
 //       文字内容与字号。面板只采集属性意图并发信号，MainWindow 写回 AnnotationBridge
-//       （EDIT 模式作用选中项，DRAW 模式作为下一次绘制默认）；面板不含几何 / 光栅化（A-0.1）。
+//       （EDIT 模式作用选中项，DRAW 模式作为下一次绘制默认）；面板不含几何 / 光栅化（CONTRIBUTING.md「分层纪律」）。
 // 分块依据：每个属性控件对应一个信号，参数即最小信息（QColor / int / bool / QString / double）；
 //           syncFromModel 从模型回显（选中项属性，否则当前默认），blockSignals 防回环。
 // 说明：Core Annotation 只有单一 color + fill 布尔（填充复用同一颜色），故本面板不提供独立填充色。

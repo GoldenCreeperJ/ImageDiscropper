@@ -123,8 +123,15 @@ add_executable(idc_gui WIN32
 # （与 Core 的 include/、CLI 的 include/ 同一约定：包含根下直接是功能分组子目录）。
 target_include_directories(idc_gui PRIVATE include)
 
-# 注入 GUI 版本号，供窗口标题与「关于」显示。
-target_compile_definitions(idc_gui PRIVATE IDC_GUI_VERSION="${PROJECT_VERSION}")
+# 版本注入（与 CLI 同一形式）：IDC_CORE_VERSION 正常由根 CMakeLists 经 PARENT_SCOPE 回传；
+# 独立配置本子目录时给出占位默认，避免空宏。GUI 版本 = 本工程版本。
+if(NOT DEFINED IDC_CORE_VERSION)
+    set(IDC_CORE_VERSION "1.0.0")
+endif()
+target_compile_definitions(idc_gui PRIVATE
+    IDC_GUI_VERSION="${PROJECT_VERSION}"
+    IDC_CORE_VERSION="${IDC_CORE_VERSION}"
+)
 
 # 链接：Qt6 Widgets（含 Gui/Core 传递）+ Core 静态库。
 target_link_libraries(idc_gui PRIVATE

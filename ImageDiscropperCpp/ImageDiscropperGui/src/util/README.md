@@ -1,6 +1,6 @@
 # util/ — 图像适配、降采样预览与无状态渲染工具
 
-GUI 侧的**视图关注点**工具：Core 类型↔Qt 类型适配、大图降采样、以及从 app/canvas 下沉的无状态渲染（标注矢量绘制、导出离屏预览）；不含任何切割 / 几何 / 引擎逻辑（A-0.1）。
+GUI 侧的**视图关注点**工具：Core 类型↔Qt 类型适配、大图降采样、以及从 app/canvas 下沉的无状态渲染（标注矢量绘制、导出离屏预览）；不含任何切割 / 几何 / 引擎逻辑。
 
 | 文件                                | 职责                                                                                         |
 |-----------------------------------|--------------------------------------------------------------------------------------------|
@@ -19,7 +19,7 @@ GUI 侧的**视图关注点**工具：Core 类型↔Qt 类型适配、大图降�
 
 ## path_qt_adapter
 
-标注矢量渲染与属性面板取色的纯翻译层（不含几何计算，曲线离散化/命中/填充全在 Core，A-0.1）。
+标注矢量渲染与属性面板取色的纯翻译层（不含几何计算，曲线离散化/命中/填充全在 Core）。
 
 - `QPainterPath toQPainterPath(const geometry::Path&)`：逐段映射 `MOVE_TO`→`moveTo`、`LINE_TO`→`lineTo`、
   `QUAD_TO`→`quadTo`、`CUBIC_TO`→`cubicTo`、`CLOSE`→`closeSubpath`。QPainterPath 原生支持二/三次贝塞尔，
@@ -44,7 +44,7 @@ GUI 侧的**视图关注点**工具：Core 类型↔Qt 类型适配、大图降�
 
 ## output_preview_renderer
 
-导出面板「输出图像预览」（G-11 / §4.6）的**离屏渲染**，从 app 层 `MainWindow` 下沉而来（无状态自由函数）：
+导出面板「输出图像预览」的**离屏渲染**，从 app 层 `MainWindow` 下沉而来（无状态自由函数）：
 
 - `QPixmap bakeAnnotationsInto(src, invX, invY, annotations)`：把标注矢量烘焙到 `src` 副本（working→源图 用 `invX/invY` 变换），逐条调 `paintAnnotation`——**只在源图（通常 ≤512）上绘一次**，成本与标注数成正比、与切割块数无关；不改传入的 `src`。
 - `QPixmap composeOutputThumbnail(comp, src, invX, invY, maxDim)`：按已算好的 `Composition.placements` 把 `src` 用 `QPainter::drawPixmap` 按 `source→dest` blit 到最长边 ≤ `maxDim` 的小画布（**不落盘、不跑 Core**）：合并模式（`canvasWidth/Height>0`）等比缩放、所见即所得；分离模式（画布为 0）拼成触图（cols=ceil(√n)，每块等比居中）。`placements` 空 / `src` 空 / `maxDim<=0` / 触图格子过小 → 返回空 `QPixmap`。

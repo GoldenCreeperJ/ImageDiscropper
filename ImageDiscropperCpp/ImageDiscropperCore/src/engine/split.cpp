@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：src/engine/split.cpp
-// 作用：实现 Grid-Selection-Emit 的 split 阶段（终稿 §10.2 概念流程）——按诱导网格
+// 作用：实现 Grid-Selection-Emit 的 split 阶段（SPEC §1 概念流程）——按诱导网格
 //       把图像切分为互不重叠、恰好铺满的区域集合 RegionSet。
 // 分块依据：split 只产出“区域描述”（RectRegion + 单元序号），不搬运像素；真正的
 //       像素裁剪在导出阶段（export.cpp）用 Image::crop 完成，避免中间态持有大量

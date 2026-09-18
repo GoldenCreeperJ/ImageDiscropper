@@ -2,7 +2,7 @@
 // 文件：panels/left_panel.cpp
 // 作用：实现左侧面板的构建与 Document 双向同步（见同名头文件说明）。
 // 分块依据：build 阶段用 QGroupBox 分区（模式 / 极性）；工具 / 图层已迁出为独立面板；
-//           槽函数只把用户选择写回 Document，不触碰任何引擎逻辑（A-0.1）。
+//           槽函数只把用户选择写回 Document，不触碰任何引擎逻辑（CONTRIBUTING.md「分层纪律」）。
 // ============================================================================
 #include "panels/left_panel.h"
 
@@ -17,7 +17,7 @@
 namespace idc::gui {
 namespace {
 
-// 模式按钮的强调样式：L2（核心特色）用橙色强调，其余中性；选中态高亮（§4.3）。
+// 模式按钮的强调样式：L2（核心特色）用橙色强调，其余中性；选中态高亮。
 // 【深色模式】未选态背景为硬编码浅色（#f2f2f2/#fdeede），若不显式指定文字色，
 // 跟随系统深色主题时会继承调色板的白字→白字浅底不可读；故显式给未选态深色文字。
 auto kModeStyle =
@@ -26,7 +26,7 @@ auto kModeStyle =
 auto kL2Style =
     "QPushButton{padding:6px;border:1px solid #d9a05b;border-radius:4px;background:#fdeede;color:#1b1b1b;}"
     "QPushButton:checked{background:#e67e22;color:#fff;border-color:#e67e22;}";
-// 极性按钮：keep 绿、remove 红，选中态填充对应色（§4.4）。
+// 极性按钮：keep 绿、remove 红，选中态填充对应色。
 auto kKeepStyle =
     "QPushButton{padding:6px;border:1px solid #bbb;border-radius:4px;}"
     "QPushButton:checked{background:#2ecc71;color:#fff;border-color:#2ecc71;}";
@@ -41,7 +41,7 @@ LeftPanel::LeftPanel(QWidget* parent) : QWidget(parent) {
     setMinimumWidth(220); // 左侧面板下限（实际左栏最小宽由主窗 leftScroll 控制，需容纳标注工具 3 列网格）。
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(8, 8, 8, 8);
-    root->setSpacing(12); // 分组间距 12px（§5.1）。
+    root->setSpacing(12); // 分组间距 12px（本目录 README「画布视觉规范」）。
 
     // ---- 模式切换分组 ----
     auto* modeBox = new QGroupBox(QStringLiteral("模式"), this);
@@ -53,7 +53,7 @@ LeftPanel::LeftPanel(QWidget* parent) : QWidget(parent) {
     auto* l1Btn = new QPushButton(QStringLiteral("标准提取 (L1)"), modeBox);
     l1Btn->setCheckable(true);
     l1Btn->setStyleSheet(kModeStyle);
-    l1Btn->setToolTip(QStringLiteral("保留框内区域，输出裁剪结果。默认进入模式，最易上手。"));
+    l1Btn->setToolTip(QStringLiteral("保留选框内的区域，得到裁剪结果。默认模式，最易上手。"));
     modeGroup_->addButton(l1Btn, 1);
     modeLay->addWidget(l1Btn);
 
@@ -61,7 +61,7 @@ LeftPanel::LeftPanel(QWidget* parent) : QWidget(parent) {
     l2Btn->setCheckable(true);
     l2Btn->setStyleSheet(kL2Style); // 强调色区分核心特色。
     l2Btn->setToolTip(QStringLiteral(
-        "每个矩形诱导贯穿全图的十字带，删除区域为所有十字带的并集，保留其余部分。"));
+        "每个矩形删除贯穿全图的「竖带 + 横带」（十字带），多矩形时删除区域取并集，保留其余部分。"));
     modeGroup_->addButton(l2Btn, 2);
     modeLay->addWidget(l2Btn);
 
@@ -76,20 +76,20 @@ LeftPanel::LeftPanel(QWidget* parent) : QWidget(parent) {
     root->addWidget(modeBox);
 
     // ---- 极性开关分组 ----
-    auto* polBox = new QGroupBox(QStringLiteral("极性"), this);
+    auto* polBox = new QGroupBox(QStringLiteral("保留 / 删除"), this);
     auto* polLay = new QVBoxLayout(polBox);
     polLay->setSpacing(6);
     polarityGroup_ = new QButtonGroup(this);
     polarityGroup_->setExclusive(true);
 
-    auto* keepBtn = new QPushButton(QStringLiteral("保留框内 (keep)"), polBox);
+    auto* keepBtn = new QPushButton(QStringLiteral("保留框内"), polBox);
     keepBtn->setCheckable(true);
     keepBtn->setStyleSheet(kKeepStyle);
     keepBtn->setToolTip(QStringLiteral("保留选区内的单元（绿色遮罩）。"));
     polarityGroup_->addButton(keepBtn, 0);
     polLay->addWidget(keepBtn);
 
-    auto* removeBtn = new QPushButton(QStringLiteral("删除框内 (remove)"), polBox);
+    auto* removeBtn = new QPushButton(QStringLiteral("删除框内"), polBox);
     removeBtn->setCheckable(true);
     removeBtn->setStyleSheet(kRemoveStyle);
     removeBtn->setToolTip(QStringLiteral("剔除选区内的单元（红色遮罩），保留其余部分。"));
@@ -99,8 +99,8 @@ LeftPanel::LeftPanel(QWidget* parent) : QWidget(parent) {
     connect(polarityGroup_, &QButtonGroup::idToggled, this, &LeftPanel::onPolarityToggled);
     root->addWidget(polBox);
 
-    // 工具 / 图层分组已迁出为独立的 ToolPanel / LayerPanel（第四阶段 G-4/G-5），
-    // 由主窗口左侧容器统一装配，本面板专注模式 + 极性。
+    // 工具 / 图层分组已迁出为独立的 ToolPanel / LayerPanel，由主窗口左侧容器统一装配，
+    // 本面板只放模式切换与保留/删除开关。
 
     root->addStretch(1); // 底部弹性，使分组靠上。
 }

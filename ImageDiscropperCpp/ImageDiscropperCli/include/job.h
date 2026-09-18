@@ -5,11 +5,11 @@
 // 分块依据：
 //   - 三层命令（extract/erase/grid）与 config 命令共用同一条执行路径（NFR-0：模式即参数
 //     预设），故把「读图 → runEngine → 坍缩校验 → exportImage → 退出码」抽到本模块，
-//     命令层只负责「解析参数 + 装配 EngineConfig」，不重复执行逻辑（A-0.1/A-0.2）。
+//     命令层只负责「解析参数 + 装配 EngineConfig」，不重复执行逻辑（CONTRIBUTING.md「分层纪律」）。
 //   - 本模块只调用 Core 公开 API（readImageFile / runEngine / exportImage /
 //     save/loadEngineConfig），不含任何切割 / 合成 / 编码实现。
-// 说明：坍缩不可行的处理对齐 guideline §4.2.2.4——用户显式 --merge collapse 而 Core 判定
-//       不可坍缩时返回退出码 2 并提示改用 rearrange（Core 内部会自动降级，但 CLI 须显式报错）。
+// 说明：坍缩不可行的处理对齐 Cli README「合并重排」——用户显式 --merge collapse 而 Core 判定
+//       不可坍缩时返回退出码 2 并提示改用 rearrange（仅 L3 时 Core 会自动改用重排，CLI 仍须显式报错）。
 // ============================================================================
 #pragma once
 
@@ -42,11 +42,11 @@ struct JobOptions {
 };
 
 // 读取输入图像（Core readImageFile）。成功返回 Ok 并填充 out；
-// 失败（不存在 / 不可读 / 非图像）返回 InputError(3) 并已按 §5.2 打印错误。
+// 失败（不存在 / 不可读 / 非图像）返回 InputError(3) 并已按错误格式打印错误。
 ExitCode loadInputImage(const std::string& path, core::Image& out, const JobOptions& opt);
 
 // 执行作业：以 image 的实际尺寸校正 config.source → runEngine → 坍缩校验 → exportImage。
-// 返回退出码；失败时已按 §5.2 打印错误。config 以引用传入（内部会写入 source 尺寸）。
+// 返回退出码；失败时已按错误格式打印错误。config 以引用传入（内部会写入 source 尺寸）。
 ExitCode executeJob(engine::EngineConfig& config, const core::Image& image,
                     const JobOutput& out, const JobOptions& opt);
 
@@ -56,7 +56,7 @@ ExitCode saveConfigToFile(const engine::EngineConfig& config, const std::string&
                           const JobOptions& opt);
 
 // 作业收尾（三层命令 + config 共用）：若 saveConfigPath 非空则序列化配置并返回（dry-run，
-// 不执行切割）；否则执行 executeJob。使命令层收尾逻辑单点化（A-0.2 不重复）。
+// 不执行切割）；否则执行 executeJob。使命令层收尾逻辑单点化（CONTRIBUTING.md「分层纪律」 不重复）。
 ExitCode finishJob(engine::EngineConfig& config, const core::Image& image,
                    const JobOutput& out, const std::string& saveConfigPath, const JobOptions& opt);
 

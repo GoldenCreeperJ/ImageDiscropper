@@ -1,11 +1,11 @@
 // ============================================================================
 // 文件：canvas/canvas_scene.h
-// 作用：画布场景——按 guideline §4.2 的 z 序图层化组织：底图、遮罩、切割线、选区框。
+// 作用：画布场景——按 z 序图层化组织：底图、遮罩、切割线、选区框。
 //       场景坐标统一为「原图像素坐标」；底图用降采样 pixmap 经变换铺到原图尺寸，
 //       于是遮罩/切割线/选区都能直接按原图坐标叠加（无需到处做坐标换算）。
 // 分块依据：
 //   - CanvasScene 只做「图层装配与刷新调度」，把遮罩交给 MaskLayer、选区与切割线交给 SelectionRectItem
-//     （切割线即选区标记边的贯穿延伸，同一橙色图元、可直接拖边），自身不实现任何切割/几何（A-0.1）。
+//     （切割线即选区标记边的贯穿延伸，同一橙色图元、可直接拖边），自身不实现任何切割/几何（CONTRIBUTING.md「分层纪律」）。
 //   - 所有数据来自 Core（EngineResult.kept / CutLineSet）与 Document（选区矩形），场景只渲染。
 // 说明：交互（缩放/平移/框选/微调/右键）在 CanvasView；场景只持有并刷新图元。
 // ============================================================================
@@ -54,7 +54,7 @@ public:
     void clearCutLines() const;
 
     // 依 Core 诱导网格刷新 L3 网格线（show=false 或非 L3 模式时清空）。
-    // 网格线纯显示，与遮罩/选区解耦；单元区域均来自 Core Grid（A-0.1）。
+    // 网格线纯显示，与遮罩/选区解耦；单元区域均来自 Core Grid（CONTRIBUTING.md「分层纪律」）。
     // 同时把网格下发给单元点选图元（L3 交互）并按 show 切换其显隐。
     void updateGrid(const engine::Grid& grid, bool show);
     void clearGrid();
@@ -78,6 +78,8 @@ public:
     // 依 Document 的选择集与排序策略刷新单元点选图元的高亮（L3）。
     void updateCellSelection(const std::vector<int>& selected, engine::SortStrategy strategy) const;
     CellPickerItem* cellPickerItem() const { return pickerItem_; }
+    // 单元编号角标图层显隐（图层面板「单元编号」开关；角标为单元点选图元的子图层，随其一起显隐）。
+    void setCellNumberVisible(bool on) const;
 
     // L3 框选命中查询：委托单元点选图元返回与场景矩形相交的单元序号（无图元时返回空）。
     // 供 CanvasView 橡皮筋框选从图像外起拖（未被 picker grab）时，仍能在 L3 选中单元。
@@ -89,7 +91,7 @@ public:
     // 选区框是否正被用户拖拽（供上层在拖拽期间跳过回设/面板回同步）。
     bool isDraggingSelection() const { return selItem_ && selItem_->isDragging(); }
 
-    // ---- 标注图层（第四阶段 G-4/G-5）----
+    // ---- 标注图层 ----
     // 依 AnnotationBridge 增量维护标注矢量图元（每个 Core Annotation 一个 AnnotationItem）+ 拖拽预览图元。
     // 增量维护（按数量增删末位、逐个刷新几何），绝不 clear+重建（否则拖拽中删除正在处理事件的图元→崩溃）。
     void updateAnnotations(const AnnotationBridge& model);

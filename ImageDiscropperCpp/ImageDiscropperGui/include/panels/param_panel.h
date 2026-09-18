@@ -1,8 +1,8 @@
 // ============================================================================
 // 文件：panels/param_panel.h
-// 作用：右侧「参数面板」（guideline §4.5）——随模式切换的 QStackedWidget：
-//       L1 形状+坐标、L2 子功能+坐标+坤缩可行性提示、L3 网格定义+选择集+排序（第二阶段）。
-//       面板只把用户输入写回 Document（数值直接输入回车生效，NFR-5），不含几何逻辑（A-0.1）。
+// 作用：右侧「参数面板」——随模式切换的 QStackedWidget：
+//       L1 形状+坐标、L2 子功能+坐标+坍缩可行性提示、L3 网格定义+选择集+排序。
+//       面板只把用户输入写回 Document（数值直接输入回车生效，NFR-5），不含几何逻辑（CONTRIBUTING.md「分层纪律」）。
 // 分块依据：每个模式一页，页内控件与该模式的一两个 Document 字段对应；坍缩提示由 MainWindow
 //           依 Core 的 isCollapsible 结果回灌（面板不自算可行性）。
 // 说明：坐标 spinbox 关闭 keyboardTracking，避免逐键触发预览；提交（回车/失焦/箭头）才写回。
@@ -96,7 +96,7 @@ private:
     QSpinBox* l2x2_{nullptr};
     QSpinBox* l2y2_{nullptr};
     QLabel* collapseHint_{nullptr};
-    QPushButton* l2ToGridBtn_{nullptr};  // 「转为网格模式编辑」入口（G-15）
+    QPushButton* l2ToGridBtn_{nullptr};  // 「转为网格模式编辑」入口
 
     // L2 多矩形并集控件（仅 MULTI_RECT 显示）。
     QWidget* l2MultiBox_{nullptr};         // 多矩形列表分组容器

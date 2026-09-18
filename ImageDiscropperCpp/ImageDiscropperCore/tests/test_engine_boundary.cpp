@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：tests/test_engine_boundary.cpp
-// 作用：边界与异常验收（终稿 §6 / guideline §2.5 的 E-1~E-8）+ 空块跳过 +
+// 作用：边界与异常验收（SPEC §5 的 E-1~E-8）+ 空块跳过 +
 //       像素归属无重复无丢失（左闭右开）。直接驱动 generateCutLines / induceGrid /
 //       Grid::build / split / runEngine / exportImage，逐项断言异常契约。
 // 分块依据：边界异常是独立关注点，与正常功能（pipeline）、导出落盘（export）分文件，
@@ -30,7 +30,7 @@ idc::core::Image makeImage(const int w, const int h) {
 
 } // namespace
 
-// 边界与异常验收（§6）。
+// 边界与异常验收（SPEC §5）。
 void testEngineBoundary() {
     using namespace idc::engine;
     using idc::core::Image;

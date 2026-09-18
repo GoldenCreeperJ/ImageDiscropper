@@ -2,12 +2,12 @@
 // 文件：model/engine_bridge.cpp
 // 作用：实现 EngineBridge——把每个 GUI 需求映射到对应的 Core API 调用（见头文件）。
 // 分块依据：每个方法只做「参数转 std::string / 调 Core / 结果或错误回传」，
-//           不含任何切割、几何、排序、编解码实现（那些全在 Core；A-0.1/A-0.3）。
+//           不含任何切割、几何、排序、编解码实现（那些全在 Core；CONTRIBUTING.md「分层纪律」）。
 // ============================================================================
 #include "model/engine_bridge.h"
 
 #include "engine/image_io.h" // readImageFile（loadImage 委托 Core 解码）。
-#include "engine/engine_config_json.h" // saveEngineConfig/loadEngineConfig（配置文件存取，G-13）。
+#include "engine/engine_config_json.h" // saveEngineConfig/loadEngineConfig（配置文件存取）。
 #include "pixel_ops/color_ops.h"     // toGray/invertChannels/splitChannels（预处理颜色变换）。
 #include "pixel_ops/geometric_ops.h" // rotate/flip/resize/scale（预处理几何变换）。
 
@@ -74,9 +74,9 @@ bool EngineBridge::exportResult(const core::Image& work, const engine::EngineCon
     return true;
 }
 
-// ---- 配置文件存取（G-13）：逐个委托 Core saveEngineConfig/loadEngineConfig，不自实现 JSON（A-0.1）----
+// ---- 配置文件存取：逐个委托 Core saveEngineConfig/loadEngineConfig，不自实现 JSON（CONTRIBUTING.md「分层纪律」）----
 
-// 保存配置：委托 Core saveEngineConfig（§9 schema、缩进美化）；path 空或写盘失败透传中文错误。
+// 保存配置：委托 Core saveEngineConfig（SPEC §7 schema、缩进美化）；path 空或写盘失败透传中文错误。
 bool EngineBridge::saveConfig(const QString& path, const engine::EngineConfig& cfg, QString& err) {
     if (path.isEmpty()) {
         err = QStringLiteral("未指定配置文件路径");
@@ -102,9 +102,9 @@ bool EngineBridge::loadConfig(const QString& path, engine::EngineConfig& out, QS
     return true;
 }
 
-// ---- 预处理转发（FR-1）：逐个委托 Core pixel_ops::*，不做任何像素运算（A-0.1）----
+// ---- 预处理转发（FR-1）：逐个委托 Core pixel_ops::*，不做任何像素运算（CONTRIBUTING.md「分层纪律」）----
 
-// 旋转：委托 pixel_ops::rotate（仅 90 的整数倍，其余角度 Core 内部退化到最近合法值）。
+// 旋转：委托 pixel_ops::rotate（仅 90 的整数倍，其余角度返回未旋转的副本）。
 core::Image EngineBridge::rotateImage(const core::Image& src, const int angleDeg) {
     return pixel_ops::rotate(src, angleDeg);
 }

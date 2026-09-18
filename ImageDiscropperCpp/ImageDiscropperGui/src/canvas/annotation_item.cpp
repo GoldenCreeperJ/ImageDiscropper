@@ -7,7 +7,7 @@
 //   3. 拖动平移    mousePress/Move/Release —— setPos 实时反馈，释放先复位再发 moveRequested（拖拽安全）
 //   4. 手柄变换    computeObb / hitHandle / begin|updateHandleDrag —— 定向包围盒 8 手柄缩放 + 旋转手柄，
 //                  拖拽中仅本地矢量预览（Core obbPreviewTransform），释放发 transformRequested（拖拽安全）
-// 说明：颜色/坐标翻译走 util/path_qt_adapter；包围盒手柄坐标、缩放/旋转矩阵均由 Core 提供（A-0.1）。
+// 说明：颜色/坐标翻译走 util/path_qt_adapter；包围盒手柄坐标、缩放/旋转矩阵均由 Core 提供（CONTRIBUTING.md「分层纪律」）。
 // ============================================================================
 #include "canvas/annotation_item.h"
 

@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：include/engine/sequence.h
 // 作用：定义排序策略 SortStrategy 与序列 Sequence——L3 独有的“第三个自由度”
-//       （终稿 §4.4.1：顺序），承载 FR-L3.5 的显式排序与自定义序号。
+//       （SPEC §3.4.1：顺序），承载 FR-L3.5 的显式排序与自定义序号。
 // 分块依据：
 //   - SortStrategy / SequenceParams：排序策略配置（row-major / column-major /
 //     custom，可叠加 reverse、snake）。

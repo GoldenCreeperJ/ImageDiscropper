@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：src/engine/image_io.cpp
-// 作用：image_io.h 的实现——图像编解码 I/O（终稿 §5.5）：把 core::Image 编码为
+// 作用：image_io.h 的实现——图像编解码 I/O（SPEC §4.5）：把 core::Image 编码为
 //       PNG/JPEG/BMP/WebP（写盘 / 编码到内存两种出口），并从文件解码图像为 core::Image。
 // 分块依据：stb（header-only）负责解码（stb_image）与 PNG/JPEG/BMP 编码（stb_image_write），
 //       其实现宏 STB_IMAGE_IMPLEMENTATION / STB_IMAGE_WRITE_IMPLEMENTATION 必须且只能在全工程
@@ -16,7 +16,7 @@
 #include <stb_image.h>
 #include <stb_image_write.h>
 
-// libwebp：WebP 编码（WebPEncodeRGBA 见 encode.h；释放编码缓冲的 WebPFree 见 decode.h）。
+// libwebp：WebP 编码（WebPEncodeRGBA 见 encode.h；释放编码缓冲的 WebPFree 见 types.h）。
 #include <webp/encode.h>
 
 #include <algorithm>
@@ -25,7 +25,7 @@
 namespace idc::engine {
 namespace {
 
-// 把任意格式图像整理为 RGBA 连续缓冲（PNG 用，保留 alpha 通道）。
+// 把任意格式图像整理为 RGBA 连续缓冲（PNG / WebP 用，保留 alpha 通道）。
 std::vector<std::uint8_t> toRGBABuffer(const core::Image& img) {
     if (img.format() == core::ImageFormat::RGBA) {
         return std::vector(img.data(), img.data() + img.sizeInBytes());

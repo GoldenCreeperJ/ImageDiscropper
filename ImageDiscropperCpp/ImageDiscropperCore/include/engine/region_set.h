@@ -2,9 +2,9 @@
 // 文件：include/engine/region_set.h
 // 作用：定义区域集合 RegionSet 与区域片段 Fragment——切割结果的容器。
 // 分块依据：
-//   - Fragment 对应终稿 §3.2“区域片段”：切割后产生的每一个独立矩形像素块。
+//   - Fragment 对应 SPEC §2.2“区域片段”：切割后产生的每一个独立矩形像素块。
 //   - RegionSet 是若干 RectRegion 的有序集合，用于承载 split / remove 的产出，
-//     也是导出（§5）阶段的输入。
+//     也是导出（SPEC §4）阶段的输入。
 //   - 仅承载“集合”语义（增删查、面积/包围盒统计），不含像素搬运逻辑。
 // 说明：RegionSet 以 Fragment（区域 + 序号 + 种类）为元素，使单元序号能贯穿
 //       split → applyPolarity → compose 全流程（坍缩位置映射与重排排序均依赖）。
@@ -64,7 +64,7 @@ public:
     auto begin() { return fragments_.begin(); }
     auto end() { return fragments_.end(); }
 
-    // 所有片段的像素面积之和（用于 §6“保留区域为空”判定与统计）。
+    // 所有片段的像素面积之和（统计用；为 0 即保留区域为空，对应 SPEC §5 的 E-7）。
     long long totalArea() const {
         long long sum = 0;
         for (const auto& f : fragments_) sum += f.region.area();

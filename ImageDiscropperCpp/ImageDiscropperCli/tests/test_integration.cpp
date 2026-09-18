@@ -1,11 +1,11 @@
 // ============================================================================
 // 文件：tests/test_integration.cpp
-// 作用：集成测试 IT-1~IT-21（guideline §9.2）——进程内直接调用 cliMain，端到端验证
+// 作用：集成测试 IT-1~IT-21——进程内直接调用 cliMain，端到端验证
 //       三层命令 + config + 全局选项的「退出码 / 输出尺寸 / 像素落位 / 错误文本」。
 //       不启动子进程（链接 idc_cli_lib），用 rdbuf 重定向捕获 stdout/stderr。
 // 分块依据：一测试关注点一文件（严禁上帝文件）；复用共享 CHECK 宏（cli_test_harness.h）。
 // 说明：测试图为程序化生成的 200×150 四象限纯色图（每象限 100×75，恰好对齐 --grid
-//       0,0,100,75 的 2×2 网格），写入系统临时目录，结束时清理——不污染仓库、不依赖网络（§9.3）。
+//       0,0,100,75 的 2×2 网格），写入系统临时目录，结束时清理——不污染仓库、不依赖网络。
 //       象限↔单元映射：cell(0,0)=index0=红、(0,1)=1=绿、(1,0)=2=蓝、(1,1)=3=黄。
 // ============================================================================
 #include "cli_test_harness.h"
@@ -291,7 +291,7 @@ void testIntegration() {
         CHECK(r.out.find("config") != std::string::npos);
     }
 
-    // ---- IT-15：缺少必填（extract 无几何参数）→ 退出码 1，stderr 有 §5.2 错误前缀。----
+    // ---- IT-15：缺少必填（extract 无几何参数）→ 退出码 1，stderr 有 `idc: error:` 错误前缀。----
     {
         const std::string out = (root / "it15.png").string();
         const Captured r = runCli({"extract", "--input", in, "--output", out});
@@ -308,7 +308,7 @@ void testIntegration() {
     }
 
     // ---- IT-17：输出父路径被同名普通文件占用（合并单图无法创建父目录）→ 退出码 4。----
-    // 说明：合并导出现已自动创建父目录（Core 修复），故改用“父路径是文件”触发 E-8。
+    // 说明：合并导出会自动创建父目录，故改用“父路径被普通文件占用”触发 E-8。
     {
         const fs::path blocker = root / "blocker";
         { std::ofstream ofs(blocker.string()); ofs << "x"; } // 制造普通文件占用父路径

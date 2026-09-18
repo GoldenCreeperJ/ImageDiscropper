@@ -1,11 +1,11 @@
 // ============================================================================
 // 文件：src/engine/engine_config_json.cpp
-// 作用：engine_config_json.h 的实现——EngineConfig 与 §9 schema JSON 的双向映射与文件存取。
+// 作用：engine_config_json.h 的实现——EngineConfig 与 SPEC §7 schema JSON 的双向映射与文件存取。
 // 分块依据：集中承载“配置字段 ↔ JSON 键”的语义映射（枚举串、颜色十六进制、矩形/网格
 //       子对象、预处理步骤数组）；JSON 语法委托第三方库 nlohmann/json，本文件不手写解析器。
 //       转换函数（engineConfigToJson / engineConfigFromJson）为文件内私有实现，仅由
 //       saveEngineConfig / loadEngineConfig 调用，故 nlohmann/json 依赖不泄漏到公共头（PRIVATE）。
-// 说明：读取一律宽容（缺字段/类型不符取默认值，绝不抛异常给调用方），写出严格对齐 §9
+// 说明：读取一律宽容（缺字段/类型不符取默认值，绝不抛异常给调用方），写出严格对齐 SPEC §7
 //       示例的键名与嵌套结构；nlohmann::json 以 std::map 存对象，序列化按键升序输出。
 // ============================================================================
 #include "engine/engine_config_json.h"
@@ -25,7 +25,7 @@ namespace {
 using json = nlohmann::json;
 
 // ---------------------------------------------------------------------------
-// 枚举 ↔ 短横线小写串（§9：如 "row-major" / "multi-rect"）。
+// 枚举 ↔ 短横线小写串（SPEC §7：如 "row-major" / "multi-rect"）。
 // ---------------------------------------------------------------------------
 const char* tierName(const Tier t) {
     switch (t) { case Tier::L1: return "L1"; case Tier::L2: return "L2"; case Tier::L3: return "L3"; }
@@ -121,7 +121,7 @@ RemainderPolicy remainderFromName(const std::string& s) {
 }
 
 // ---------------------------------------------------------------------------
-// 颜色 ↔ "#AARRGGBB"（§9 示例 "#00000000" 即全透明）。
+// 颜色 ↔ "#AARRGGBB"（SPEC §7 示例 "#00000000" 即全透明）。
 // ---------------------------------------------------------------------------
 std::string colorToHex(const core::Color& c) {
     char buf[16];
@@ -199,7 +199,7 @@ RectRegion rectFromJson(const json& v) {
                       jInt(at(v, "x2"), 0), jInt(at(v, "y2"), 0));
 }
 
-// 网格参数 ↔ JSON：仅「基准点 + 单元尺寸 + 余量策略」（终稿 §4.4.4）；
+// 网格参数 ↔ JSON：仅「基准点 + 单元尺寸 + 余量策略」（SPEC §3.4.3）；
 // 行列数由图像边界自动推导，不作为配置字段（无 gap / cols / rows）。
 json gridToJson(const GridParams& g) {
     return json{
@@ -226,7 +226,7 @@ std::optional<int> jsonToOptInt(const json& v) {
 }
 
 // ---------------------------------------------------------------------------
-// 预处理步骤 ↔ {op, ...params}（§9 preprocess 数组）。
+// 预处理步骤 ↔ {op, ...params}（SPEC §7 preprocess 数组）。
 // ---------------------------------------------------------------------------
 json preprocessToJson(const preprocess::PreprocessConfig& cfg) {
     using namespace preprocess;
@@ -258,9 +258,9 @@ bool preprocessFromJson(const json& v, preprocess::PreprocessConfig& out) {
 }
 
 // ---------------------------------------------------------------------------
-// EngineConfig ↔ §9 schema JSON（文件内私有；仅由下方 save/load 调用）。
+// EngineConfig ↔ SPEC §7 schema JSON（文件内私有；仅由下方 save/load 调用）。
 // ---------------------------------------------------------------------------
-// 把 EngineConfig 序列化为 §9 schema 的 JSON 值。
+// 把 EngineConfig 序列化为 SPEC §7 schema 的 JSON 值。
 json engineConfigToJson(const EngineConfig& config) {
     json root;
 
@@ -384,7 +384,7 @@ bool engineConfigFromJson(const json& value, EngineConfig& out) {
     out.emitParams.rows = jsonToOptInt(at(merge, "rows"));
     out.emitParams.cellWidth = jsonToOptInt(at(merge, "cellWidth"));
     out.emitParams.cellHeight = jsonToOptInt(at(merge, "cellHeight"));
-    // 兼容 §9 示例的 "cellSize"：{width,height} / {w,h} / [w,h] 三种写法。
+    // 兼容 SPEC §7 示例的 "cellSize"：{width,height} / {w,h} / [w,h] 三种写法。
     if (!out.emitParams.cellWidth && !out.emitParams.cellHeight) {
         if (const json& cs = at(merge, "cellSize"); cs.is_array() && cs.size() >= 2) {
             out.emitParams.cellWidth = jInt(cs[0], 0);

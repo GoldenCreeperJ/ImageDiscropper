@@ -2,9 +2,11 @@
 // 文件：src/arg_parser.cpp
 // 作用：实现 arg_parser.h——ArgParser::parse（token 归类）与 parseGlobalOptions（全局选项扫描）。
 // 分块依据：只处理「语法层」token 归类，不理解值语义（值转换见 value_parser.cpp）；
-//       纯标准库实现，无第三方依赖（A-0.2/A-0.3）。
+//       纯标准库实现，无第三方依赖（CONTRIBUTING.md「分层纪律」）。
 // ============================================================================
 #include "arg_parser.h"
+
+#include <cctype>
 
 namespace idc::cli {
 namespace {
@@ -18,6 +20,13 @@ bool isFlagOption(const std::string& name) {
 
 // 判断 token 是否以 '-' 开头（即选项 / flag，而非值 / 位置参数）。
 bool startsWithDash(const std::string& t) { return !t.empty() && t.front() == '-'; }
+
+// 判断 token 是否为「负数值」形式（如 -5 或 -5,-7,10,20）：'-' 后紧跟数字。
+// 负值合法（如负网格基准点），可作为取值选项的值被消费；其余 '-' 开头 token 仍视为选项。
+bool isNegativeNumberToken(const std::string& t) {
+    return t.size() >= 2 && t.front() == '-' &&
+           std::isdigit(static_cast<unsigned char>(t[1])) != 0;
+}
 
 // 把一个「取值选项」的值追加到 opts_[name]（保持出现顺序，支持可重复选项）。
 void record(std::unordered_map<std::string, std::vector<std::string>>& opts,
@@ -48,8 +57,9 @@ void ArgParser::parse(const std::vector<std::string>& tokens) {
         // flag：仅记录出现过（空串占位）。
         if (isFlagOption(t)) { record(opts_, t, ""); continue; }
 
-        // 取值选项：消费紧随其后、不以 '-' 开头的 token 作为值；否则记为空值（缺值）。
-        if (i + 1 < tokens.size() && !startsWithDash(tokens[i + 1])) {
+        // 取值选项：消费紧随其后、不以 '-' 开头的 token（或负数值 token）作为值；否则记为空值（缺值）。
+        if (i + 1 < tokens.size() &&
+            (!startsWithDash(tokens[i + 1]) || isNegativeNumberToken(tokens[i + 1]))) {
             record(opts_, t, tokens[i + 1]);
             ++i; // 跳过已被消费的值。
         } else {

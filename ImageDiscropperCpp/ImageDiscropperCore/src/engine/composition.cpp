@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：src/engine/composition.cpp
 // 作用：实现合成阶段（Grid-Selection-Emit 阶段⑤）——isCollapsible 判定坍缩可行性
-//       （终稿 §5.4 定理），compose 依据输出模式生成合成描述（分离 / 坍缩 / 重排，§5.1-§5.3）。
+//       （SPEC §4.4 定理），compose 依据输出模式生成合成描述（分离 / 坍缩 / 重排，SPEC §4.1-§4.3）。
 // 分块依据：本文件只计算“怎么摆”（画布尺寸 + 各片段落位），不搬运像素；
 //       落盘见 export.cpp，序列见 sequence.cpp。
 // ============================================================================
@@ -37,8 +37,8 @@ int totalSpan(const std::vector<std::pair<int, int>>& iv) {
     return sum;
 }
 
-// 辅助：坍缩偏移——start 左侧（上方）所有保留区间的累计跨度。
-// 即 destCoord = start - （start 左侧被删除的总宽），等价于左侧保留总宽。
+// 辅助：坍缩偏移——start 左侧（上方）所有保留区间的累计跨度，
+// 即 destCoord = start - start 左侧被删除的总宽。
 int collapsedOffset(const std::vector<std::pair<int, int>>& iv, const int start) {
     int acc = 0;
     for (const auto&[fst, snd] : iv) {
@@ -78,7 +78,7 @@ std::vector<const Fragment*> orderBySequence(const std::vector<Fragment>& frags,
 
 } // namespace
 
-// 判定保留集能否无空洞、无重叠地坍缩为矩形图（终稿 §5.4 定理）：
+// 判定保留集能否无空洞、无重叠地坍缩为矩形图（SPEC §4.4 定理）：
 // 当且仅当被剔除单元恰好构成诱导网格中的若干整行和/或整列。
 bool isCollapsible(const Selection& selection, const Grid& grid) {
     const int rows = grid.rowCount();
@@ -124,16 +124,16 @@ bool isCollapsible(const Selection& selection, const Grid& grid) {
 Composition compose(const RegionSet& kept, const Sequence& sequence,
                     const CompositionParams& params) {
     Composition comp;
-    // 透传导出设置，使 exportImage 能按配置决定格式 / 命名 / 质量（无需再依赖路径扩展名）。
+    // 透传导出设置，使 exportImage 能按配置决定格式 / 命名 / 质量（扩展名无法识别时以该格式为准）。
     comp.format = params.format;
     comp.naming = params.naming;
     comp.quality = params.quality;
-    comp.padColor = params.padColor; // 透传填充色，供 exportMerged 填充画布（修复 --pad-color 不生效）。
+    comp.padColor = params.padColor; // 透传填充色，供 exportMerged 填充画布。
     const std::vector<Fragment>& frags = kept.fragments();
     if (frags.empty()) return comp; // 空保留集：返回空合成（E-7 由上层处理）。
 
     // ---- 分离模式：每块独立成图，dest 从各自 (0,0) 起，无统一画布。----
-    // 按 sequence 排序（修复“分离导出忽略 --sort”），落盘顺序即排序结果。
+    // 按 sequence 排序，落盘顺序即排序结果。
     if (params.mode == EmitMode::SEPARATE) {
         comp.canvasWidth = 0;
         comp.canvasHeight = 0;
@@ -151,7 +151,7 @@ Composition compose(const RegionSet& kept, const Sequence& sequence,
         return comp;
     }
 
-    // ---- 坍缩合并（§5.2）：由 kept 区域的 x/y 投影并集推导保留列/行区间。----
+    // ---- 坍缩合并（SPEC §4.2）：由 kept 区域的 x/y 投影并集推导保留列/行区间。----
     if (params.layout == MergeLayout::COLLAPSE) {
         std::vector<std::pair<int, int>> xs, ys;
         xs.reserve(frags.size());
@@ -180,7 +180,7 @@ Composition compose(const RegionSet& kept, const Sequence& sequence,
         return comp;
     }
 
-    // ---- 重排合并（§5.3）：块列表按 sequence 序（L3 选择排序），再按 mergeOrder 的填充路径
+    // ---- 重排合并（SPEC §4.3）：块列表按 sequence 序（L3 选择排序），再按 mergeOrder 的填充路径
     //      （行/列优先 + 蛇形 + 倒序）落入 cols×rows 画布，空位补 padColor。两者正交。----
     // 单元尺寸缺省取 kept 区域的最大宽/高（不缩放，纯像素搬运，NFR-2）。
     int cw = 0, ch = 0;

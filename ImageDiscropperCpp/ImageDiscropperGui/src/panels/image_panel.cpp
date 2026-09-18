@@ -2,8 +2,8 @@
 // 文件：panels/image_panel.cpp
 // 作用：实现图像处理面板（预处理）的控件装配与意图信号发送（见同名头文件说明）。
 // 分块依据：构造函数只做「排版 + 串联信号」；各组控件的创建分散到 build*Group（避免上帝方法）；
-//           槽函数只把控件值翻译成 *Requested 信号，绝不触碰 Core / 不做像素运算（A-0.1）。
-// 视觉规范（§5.1）：面板内边距 8px、控件间距 6px、分组间距 12px。
+//           槽函数只把控件值翻译成 *Requested 信号，绝不触碰 Core / 不做像素运算（CONTRIBUTING.md「分层纪律」）。
+// 视觉规范（本目录 README「画布视觉规范」）：面板内边距 8px、控件间距 6px、分组间距 12px。
 // ============================================================================
 #include "panels/image_panel.h"
 
@@ -22,14 +22,14 @@ namespace idc::gui {
 // 构造：竖向排列各分组 + 底部「重置预处理」按钮。
 ImagePanel::ImagePanel(QWidget* parent) : QWidget(parent) {
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(8, 8, 8, 8);   // 面板内边距 8px（§5.1）。
+    root->setContentsMargins(8, 8, 8, 8);   // 面板内边距 8px（本目录 README「画布视觉规范」）。
     root->setSpacing(12);                    // 分组间距 12px。
     root->addWidget(buildRotateGroup());
     root->addWidget(buildFlipGroup());
     root->addWidget(buildScaleGroup());
     root->addWidget(buildColorGroup());
 
-    // 重置预处理：恢复到原图（§4.5.4「重置预处理」按钮）。仅在已预处理时可用（syncFromDocument 控制）。
+    // 重置预处理：恢复到原图（「重置预处理」按钮）。仅在已预处理时可用（syncFromDocument 控制）。
     resetBtn_ = new QPushButton(QStringLiteral("重置预处理（恢复原图）"), this);
     resetBtn_->setToolTip(QStringLiteral("丢弃全部预处理，把工作图恢复为最初打开的原图。"));
     connect(resetBtn_, &QPushButton::clicked, this, &ImagePanel::resetRequested);
@@ -40,7 +40,7 @@ ImagePanel::ImagePanel(QWidget* parent) : QWidget(parent) {
 
 // 旋转分组：左转 90° / 右转 90° / 180°。
 QGroupBox* ImagePanel::buildRotateGroup() {
-    auto* box = new QGroupBox(QStringLiteral("旋转（FR-1.1）"), this);
+    auto* box = new QGroupBox(QStringLiteral("旋转"), this);
     auto* lay = new QHBoxLayout(box);
     lay->setSpacing(6);                      // 控件间距 6px。
     rotLeftBtn_ = new QPushButton(QStringLiteral("左转 90°"), box);
@@ -60,7 +60,7 @@ QGroupBox* ImagePanel::buildRotateGroup() {
 
 // 翻转分组：水平翻转 / 垂直翻转。
 QGroupBox* ImagePanel::buildFlipGroup() {
-    auto* box = new QGroupBox(QStringLiteral("翻转（FR-1.2）"), this);
+    auto* box = new QGroupBox(QStringLiteral("翻转"), this);
     auto* lay = new QHBoxLayout(box);
     lay->setSpacing(6);
     flipHBtn_ = new QPushButton(QStringLiteral("水平翻转"), box);
@@ -76,7 +76,7 @@ QGroupBox* ImagePanel::buildFlipGroup() {
 
 // 缩放 / 尺寸分组：按比例缩放 + 目标尺寸缩放（FR-1.4）。
 QGroupBox* ImagePanel::buildScaleGroup() {
-    auto* box = new QGroupBox(QStringLiteral("缩放 / 图像尺寸（FR-1.4）"), this);
+    auto* box = new QGroupBox(QStringLiteral("缩放 / 图像尺寸"), this);
     auto* grid = new QGridLayout(box);
     grid->setSpacing(6);
 
@@ -118,14 +118,14 @@ QGroupBox* ImagePanel::buildScaleGroup() {
 
 // 颜色调整分组：黑白 / 色道反色 / 色道分离（后两者共用 R/G/B 通道选择）（FR-1.4）。
 QGroupBox* ImagePanel::buildColorGroup() {
-    auto* box = new QGroupBox(QStringLiteral("颜色调整（FR-1.4）"), this);
+    auto* box = new QGroupBox(QStringLiteral("颜色调整"), this);
     auto* grid = new QGridLayout(box);
     grid->setSpacing(6);
 
     grayBtn_ = new QPushButton(QStringLiteral("黑白"), box);
-    grayBtn_->setToolTip(QStringLiteral("转为灰度图（BT.601 加权）。"));
+    grayBtn_->setToolTip(QStringLiteral("转为灰度图。"));
     invertBtn_ = new QPushButton(QStringLiteral("色道反色"), box);
-    invertBtn_->setToolTip(QStringLiteral("对勾选的通道取反（255 - 值）；未勾选的通道保持不变。灰度图整体反相。"));
+    invertBtn_->setToolTip(QStringLiteral("对勾选的通道反相（亮变暗、暗变亮）；未勾选的通道保持不变。灰度图会整体反相。"));
     connect(grayBtn_, &QPushButton::clicked, this, &ImagePanel::grayRequested);
     // 色道反色与色道分离共用下方 R/G/B 通道选择：反色＝对勾选通道取反（点击时才读取，故此处连接安全）。
     connect(invertBtn_, &QPushButton::clicked, this, [this] {
@@ -139,9 +139,9 @@ QGroupBox* ImagePanel::buildColorGroup() {
     chG_ = new QCheckBox(QStringLiteral("G"), box);
     chB_ = new QCheckBox(QStringLiteral("B"), box);
     for (QCheckBox* c : {chR_, chG_, chB_}) c->setChecked(true);
-    chR_->setToolTip(QStringLiteral("红色通道：『色道反色』反色它、『色道分离』保留它。"));
-    chG_->setToolTip(QStringLiteral("绿色通道：『色道反色』反色它、『色道分离』保留它。"));
-    chB_->setToolTip(QStringLiteral("蓝色通道：『色道反色』反色它、『色道分离』保留它。"));
+    chR_->setToolTip(QStringLiteral("红色通道：勾选后，「色道反色」反相它、「色道分离」保留它。"));
+    chG_->setToolTip(QStringLiteral("绿色通道：勾选后，「色道反色」反相它、「色道分离」保留它。"));
+    chB_->setToolTip(QStringLiteral("蓝色通道：勾选后，「色道反色」反相它、「色道分离」保留它。"));
     splitBtn_ = new QPushButton(QStringLiteral("色道分离"), box);
     splitBtn_->setToolTip(QStringLiteral("仅保留勾选的通道，其余通道置零。"));
     connect(splitBtn_, &QPushButton::clicked, this, [this] {
@@ -164,7 +164,7 @@ void ImagePanel::setDocument(Document* doc) {
 // 从 Document 反向同步：整板启停、尺寸框回灌当前工作图宽高、按灰度态启停色道分离、重置按钮启停。
 void ImagePanel::syncFromDocument() {
     const bool has = doc_ && doc_->hasImage();
-    setEnabled(has);                         // 无图像时整板禁用（§5.2 即时反馈）。
+    setEnabled(has);                         // 无图像时整板禁用（即时反馈）。
     if (!has) return;
     // 目标尺寸框回灌当前工作图宽高（阻断信号，避免联动回调把高改乱）。
     for (QSpinBox* s : {targetW_, targetH_}) s->blockSignals(true);

@@ -4,7 +4,7 @@
 # 作用：演示 L3「网格分割」模式（grid）——以基准点 (x0,y0) 为相位锚、单元尺寸 (cw,ch) 为周期
 #       生成贯穿全图的切割线并诱导网格（行 / 列数由图像边界自动推导，非参数）；逐单元
 #       --keep / --remove 选择，可排序（--sort/--decorate/--order）后分离导出或 --compose 重排合并。
-# 约定（guideline §8.1）：使用仓库内示例图片 examples/sample.png；输出到系统临时目录，
+# 约定（examples/README.md 约定）：使用仓库内示例图片 examples/sample.png；输出到系统临时目录，
 #       不污染仓库；每一步带中文注释。
 # 前置：需先构建出 idc；sample.png 需自备（建议 640×480，见 examples/README.md）。
 #       本脚本以 --grid 0,0,160,120 为例：640×480 图恰好铺成 4 列 × 4 行 = 16 个单元，

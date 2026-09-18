@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：tests/test_engine_export.cpp
-// 作用：导出验收（终稿 §5）——分离导出写入文件夹（含自动创建）、坍缩合并单图、
+// 作用：导出验收（SPEC §4）——分离导出写入文件夹（含自动创建）、坍缩合并单图、
 //       坍缩不可行降级重排、PNG/BMP/JPEG/WebP 四格式写盘成功。
 // 分块依据：本文件是唯一“落盘”的测试段，写入系统临时目录并在结束时清理；
 //       计算路径见 test_engine_pipeline.cpp，边界异常见 test_engine_boundary.cpp。
@@ -42,7 +42,7 @@ std::vector<std::uint8_t> readAll(const fs::path& p) {
 
 } // namespace
 
-// 导出功能验收（§5）。
+// 导出功能验收（SPEC §4）。
 void testEngineExport() {
     using namespace idc::engine;
     using idc::core::Image;

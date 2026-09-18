@@ -4,15 +4,15 @@
 Document 发 `changed()` → MainWindow 刷新预览；反向同步用 `blockSignals` 防回环）。
 （例外：图像处理面板发「意图信号」，由 MainWindow 经 EngineBridge 调 Core pixel_ops 变换工作图；标注工具/图层/属性面板发意图信号，由 MainWindow 写回 `AnnotationBridge`。）
 
-| 文件                              | 职责                                                                                                                                  |
-|---------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
-| `left_panel.{h,cpp}`            | 左侧：模式切换 L1/L2/L3、极性开关（保留绿 / 删除红）（工具/图层已迁出）                                                                                          |
-| `param_panel.{h,cpp}`           | 右侧「参数」页：QStackedWidget 分 L1/L2/L3 三页                                                                                                |
-| `export_panel.{h,cpp}`          | 右侧「导出」页：输出模式、目录/文件、格式、质量、命名、**导出时烧录标注开关**、**输出图像预览缩略图（G-11）**、导出按钮                                                                  |
-| `image_panel.{h,cpp}`           | 右侧「图像」页：预处理（旋转/翻转/缩放/尺寸/黑白/反色/色道分离/重置）                                                                                              |
-| `tool_panel.{h,cpp}`            | 左侧「标注工具」组：选择/各形状/多线段/文字/画笔互斥按钮（G-4）                                                                                                 |
-| `layer_panel.{h,cpp}`           | 左侧「图层」组：底图/遮罩/网格线/切割线/选取边框/标注显示开关（G-5；标注烧录开关已迁至导出面板）                                                                                |
-| `annotation_prop_panel.{h,cpp}` | 右侧「标注」属性页：颜色/粗细/填充/文字/字号（G-4）+ 变换区（缩放%/旋转° 显示选中形状的**绝对累积变换**、含负=翻转，**改动即生效无应用按钮**，作用于当前选中标注；`setTransformPreview` 与画布 OBB 手柄拖拽实时联动） |
+| 文件                              | 职责                                                                                                                             |
+|---------------------------------|--------------------------------------------------------------------------------------------------------------------------------|
+| `left_panel.{h,cpp}`            | 左侧：模式切换 L1/L2/L3、极性开关（保留绿 / 删除红）（工具/图层已迁出）                                                                                     |
+| `param_panel.{h,cpp}`           | 右侧「参数」页：QStackedWidget 分 L1/L2/L3 三页                                                                                           |
+| `export_panel.{h,cpp}`          | 右侧「导出」页：输出模式、目录/文件、格式、质量、命名、**导出时烧录标注开关**、**输出图像预览缩略图**、导出按钮                                                                   |
+| `image_panel.{h,cpp}`           | 右侧「图像」页：预处理（旋转/翻转/缩放/尺寸/黑白/反色/色道分离/重置）                                                                                         |
+| `tool_panel.{h,cpp}`            | 左侧「标注工具」组：选择/各形状/多线段/文字/画笔互斥按钮                                                                                                 |
+| `layer_panel.{h,cpp}`           | 左侧「图层」组：底图/标注/遮罩/网格线/切割线/选取边框/单元编号显示开关（按 z 序；标注烧录开关已迁至导出面板）                                                                    |
+| `annotation_prop_panel.{h,cpp}` | 右侧「标注」属性页：颜色/粗细/填充/文字/字号+ 变换区（缩放%/旋转° 显示选中形状的**绝对累积变换**、含负=翻转，**改动即生效无应用按钮**，作用于当前选中标注；`setTransformPreview` 与画布 OBB 手柄拖拽实时联动） |
 
 ## left_panel
 
@@ -32,7 +32,7 @@ Document 发 `changed()` → MainWindow 刷新预览；反向同步用 `blockSig
 - **L3 页**：网格定义（基准点 x0/y0 + 单元宽/高 cw/ch + 余量策略 combo）+ 选择集（全选/反选/清空按钮）
   + 排序（策略 combo row-major/column-major/custom + 整体逆序/蛇形复选框）；派生行列数与已选单元数为**只读回显**。
   行列数由 Core 依图像边界自动推导（面板不输入）；枚举↔combo 索引与 Core `RemainderPolicy`/`SortStrategy` 一致（直接 `static_cast`）。
-  画布单元点选/自定义拖拽调序由后续增量接入。
+  画布单元点选/自定义拖拽调序由 `cell_picker_item` 承担（单击切换/拖拽框选/CUSTOM 拖拽调序），本页提供按钮式选择集与排序策略。
 - `setMode()` 切换页；`syncFromDocument()` 回填形状/子功能/坐标与 L3 网格参数/排序/只读回显，并依图像尺寸收紧 spin 上限；
 - `setCollapseHint(bool, reason)` 显示 Core `isCollapsible` 结果（不可行时禁用坍缩）；
 - `onCoordEdited`→`applyCoordsToDocument`：取当前页 spin 组装**规范化** `RectRegion`；L2 多矩形下写回 `updateRect(选中行)`，其余 → `doc_->setRect`。
@@ -54,15 +54,15 @@ Document 发 `changed()` → MainWindow 刷新预览；反向同步用 `blockSig
 - **双警告**：`rearrangeWarning()` 当 cols×rows < 保留块数、或单元宽/高 < 网格单元宽/高时返回警告文本；
   `updateRearrangeWarning()` 将其以**内联红字** `rearrangeWarn_` 呈现；导出前的**弹窗确认**由 MainWindow 调 `rearrangeWarning()` 完成。
 - `setPreviewInfo(text)`：以文字回显输出画布尺寸/保留块数/可行性。
-- **输出图像预览缩略图（G-11 / §4.6）**：`setPreviewPixmap(pm)` 把 MainWindow 按 Core `Composition` 渲染的低分辨率缩略图
+- **输出图像预览缩略图**：`setPreviewPixmap(pm)` 把 MainWindow 按 Core `Composition` 渲染的低分辨率缩略图
   显示在固定尺寸（200×160）的 `previewLabel_` 上（等比缩到框内、仅缩不放）；传空 pixmap 时回退到占位文案「（无输出预览）」。
-  与 `setPreviewInfo` 的文字信息并存；渲染逻辑（小源图 blit）在 MainWindow，面板只负责展示（A-0.1）。
+  与 `setPreviewInfo` 的文字信息并存；渲染逻辑（小源图 blit）在 MainWindow，面板只负责展示。
 - **导出时烧录标注**（`burnIn_`，默认 false）：勾选后导出把标注合成进像素（随像素一起被切割）；`toggled`→`burnInChanged(bool)` 交 MainWindow 写回 `AnnotationBridge::setBurnIn`；`setBurnInChecked(bool)` 供反向同步（`blockSignals` 防回环）。此开关原属图层面板，因属导出行为而迁入导出面板。
 - 导出按钮 `emit exportRequested()`，实际导出由 MainWindow 经 EngineBridge 完成。
 
 ## image_panel
 
-预处理（FR-1 / G-3）面板，对应 guideline §4.5.4。面板**不碰 Core、不做像素运算**，只把控件值翻译为意图信号（A-0.1）；
+预处理（FR-1）面板。面板**不碰 Core、不做像素运算**，只把控件值翻译为意图信号；
 实际变换由 MainWindow 经 `EngineBridge` 调 Core `pixel_ops::*` 完成，结果写回 `Document` 工作图（原图始终保留）。
 
 - **旋转组**：左转 90° / 右转 90° / 180° → `rotateRequested(angleDeg)`（-90/90/180）。
@@ -74,30 +74,30 @@ Document 发 `changed()` → MainWindow 刷新预览；反向同步用 `blockSig
 - **重置预处理**按钮 → `resetRequested()`：仅当 `doc_->hasPreprocess()` 时可用。
 - `syncFromDocument()`：无图时整板禁用；有图时把目标宽/高回灌为当前工作图尺寸（`blockSignals` 防联动回调）；
   **工作图为灰度（黑白后）时禁用「黑白」与「色道分离」组控件**（灰度无 R/G/B 可分、黑白幂等），反色保持可用；并按 `hasPreprocess()` 启停重置按钮。
-- §4.5.4「颜色选取（取色器）」与标注属性（描边/填充色）强相关，已由第四阶段的 `annotation_prop_panel` 统一提供（见下）。
+- 「颜色选取（取色器）」与标注属性（描边/填充色）强相关，已由 `annotation_prop_panel` 统一提供（见下）。
 
-## tool_panel（G-4；§4.5.5）
+## tool_panel
 
-左侧「标注工具」互斥按钮组。面板只采集意图，真正切工具由 MainWindow 写回 `AnnotationBridge`（A-0.1）。
+左侧「标注工具」互斥按钮组。面板只采集意图，真正切工具由 MainWindow 写回 `AnnotationBridge`。
 
 - 一个 `QButtonGroup`（互斥）承载全部工具按钮，`id = static_cast<int>(AnnoTool)`，避免额外映射表；`QGridLayout` 3 列排布，工具提示齐备。
 - 按钮样式未选态为硬编码浅底，已显式指定深色文字（`color:#1b1b1b`），避免系统深色主题下白字浅底不可读。
 - 3 列网格含「等腰直角三角形」等宽标签，需较宽左栏（左栏最小宽由主窗 `leftScroll->setMinimumWidth` 控制）。
 - `onToolToggled(id, checked)` 仅 checked 时 `emit toolSelected(static_cast<AnnoTool>(id))`；默认勾选 SELECT。
 - `setModel()`/`syncFromModel()`：从模型反向同步当前工具选中态（`blockSignals` 防回环）。
-- **本轮不含箭头**（Core `ShapeType` 无 ARROW，见计划「已知限制」）。
+- **不含箭头**（Core `ShapeType` 无 ARROW，见 Gui README「已知限制」）。
 
-## layer_panel（G-5；§4.5.6）
+## layer_panel
 
-左侧「图层」组：集中管理画布各图层显示/隐藏（底图 / 遮罩 / 网格线 / 切割线 / 选取边框 / 标注）。遵循「隐藏图层=不可交互」原则。
+左侧「图层」组：集中管理画布各图层显示/隐藏（底图 / 标注 / 遮罩 / 网格线 / 切割线 / 选取边框 / 单元编号，按 z 序）。遵循「隐藏图层=不可交互」原则。
 
-- 六个 `QCheckBox`：`baseVisible_`/`maskVisible_`/`gridVisible_`/`cutLineVisible_`/`selectionVisible_`/`annoVisible_`（均默认 true）；toggled 直接转发 `baseVisibilityChanged`/`maskVisibilityChanged`/`gridVisibilityChanged`/`cutLineVisibilityChanged`/`selectionVisibilityChanged`/`annotationVisibilityChanged`。（标注「导出时烧录」开关已迁至导出面板，见 export_panel。）
+- 七个 `QCheckBox`（按 z 序）：`baseVisible_`/`annoVisible_`/`maskVisible_`/`gridVisible_`/`cutLineVisible_`/`selectionVisible_`/`numberVisible_`（均默认 true）；toggled 直接转发 `baseVisibilityChanged`/`annotationVisibilityChanged`/`maskVisibilityChanged`/`gridVisibilityChanged`/`cutLineVisibilityChanged`/`selectionVisibilityChanged`/`numberVisibilityChanged`。（标注「导出时烧录」开关已迁至导出面板，见 export_panel。）
 - **遮罩开关已从工具栏/视图菜单迁入本面板**（成为正式图层项）；视图菜单与画布右键仍可切换，切换后由 MainWindow 调 `setMaskVisible(bool)` 反向同步复选框（`blockSignals` 防回环）。
 - 网格线/切割线/选取边框的落地：MainWindow 把信号分派到 `CanvasScene::setGridVisible`（仅置标志）/`setCutLinesVisible`/`setSelectionVisible`，三者均随后调 `refreshPreview` 重建落地（L3 网格依 `gridVisible_`、L2 诱导切割线依 `cutLinesVisible_`、L3 单元选择高亮依 `selectionVisible_`）；选取边框隐藏同时禁用选区拖拽交互（`SelectionRectItem::setBorderVisible` 切 `setAcceptedMouseButtons`）。
 - `syncFromModel()`：标注显示开关 = `layerVisible()`（`blockSignals` 防回环）。
-- **底图/遮罩/网格线/切割线/选取边框的「隐藏」仅切换画布预览可见性与交互性，不影响导出**（见计划「已知限制」）。
+- **各图层的「隐藏」仅切换画布预览可见性与交互性，不影响导出**（见 Gui README「图层与烧录」）。
 
-## annotation_prop_panel（G-4；§4.5.5）
+## annotation_prop_panel
 
 右侧「标注」属性页。面板只采集属性意图并发信号，MainWindow 写回 `AnnotationBridge`（EDIT 作用选中项、DRAW 作下一次绘制默认）。
 

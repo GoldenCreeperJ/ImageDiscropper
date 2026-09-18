@@ -2,8 +2,8 @@
 // 文件：util/output_preview_renderer.h
 // 作用：导出面板「输出图像预览」的**离屏渲染器**（无状态自由函数）——把 Core 已算好的
 //       engine::Composition 渲染成一张降采样缩略图（不落盘、不再跑 Core），并可选先把标注矢量
-//       烘焙进源图（供「导出时烧录标注」的所见即所得预览，G-11 / guideline §4.6）。
-// 分块依据：纯视图渲染工具（A-0.1）——只消费 Core 结果（Composition / Annotation）+ Qt 绘图，
+//       烘焙进源图（供「导出时烧录标注」的所见即所得预览）。
+// 分块依据：纯视图渲染工具（CONTRIBUTING.md「分层纪律」）——只消费 Core 结果（Composition / Annotation）+ Qt 绘图，
 //           不含切割 / 合成 / 几何逻辑；与 preview_scaler 同属 util「预览生成」关注点。把渲染从
 //           app 层 MainWindow **下沉**到此，令 app 只做编排（消除边界模糊与 MainWindow 职责膨胀）。
 // 说明：坐标约定——placements 的 source 在 working（原图）坐标系；invX/invY 为 working→源图 的

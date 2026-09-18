@@ -9,7 +9,7 @@
 //   5. 选择/移动/删除     selectAt / moveSelectedBy / removeSelected（复用 Core，不算几何）
 //   6. 撤销重做/图层/烧录 undo/redo/clearAll、可见性、burnIn（逐个调 Core rasterize）
 // 说明：所有几何构造走 Core buildShape、命中走 Core hitTest、合成走 Core rasterize——
-//       本文件不含任何自实现的几何 / 光栅化（guideline §0 A-0.1 / A-0.3）。
+//       本文件不含任何自实现的几何 / 光栅化（CONTRIBUTING.md「分层纪律」）。
 // ============================================================================
 #include "model/annotation_bridge.h"
 
@@ -213,7 +213,7 @@ void AnnotationBridge::moveSelectedBy(const double dx, const double dy) {
 void AnnotationBridge::removeSelected() {
     const std::optional<std::size_t> idx = layer_.selectedAnnotationIndex();
     if (!idx) return;
-    layer_.removeAnnotation(*idx);                 // 委托 Core（本会话新增的 API）
+    layer_.removeAnnotation(*idx);                 // 委托 Core 删除（属新操作，会清空重做栈）
     emit changed();
     emit selectionChanged();
 }

@@ -2,7 +2,7 @@
 // 文件：src/panels/tool_panel.cpp
 // 作用：实现标注工具面板的构建与模型双向同步（见同名头文件说明）。
 // 分块依据：工具清单集中为一张 {工具, 标签, 提示} 表，构造时按表批量建按钮入互斥组；
-//           槽函数只把选择翻译为 toolSelected 信号，不触碰任何几何（A-0.1）。
+//           槽函数只把选择翻译为 toolSelected 信号，不触碰任何几何（CONTRIBUTING.md「分层纪律」）。
 // ============================================================================
 #include "panels/tool_panel.h"
 
@@ -33,11 +33,11 @@ const ToolEntry kTools[] = {
     {AnnoTool::SQUARE,         "正方形",      "两点拖拽绘制正方形"},
     {AnnoTool::RHOMBUS,        "菱形",        "起点为中心，拖拽绘制菱形"},
     {AnnoTool::CIRCLE,         "圆形",        "起点为圆心，拖拽绘制圆形"},
-    {AnnoTool::ELLIPSE,        "椭圆",        "两点确定外接矩形绘制椭圆"},
+    {AnnoTool::ELLIPSE,        "椭圆",        "拖拽出外接矩形绘制椭圆"},
     {AnnoTool::ROUNDRECT,      "圆角矩形",    "两点拖拽绘制圆角矩形"},
     {AnnoTool::ISOS_TRI,       "等腰三角形",  "起点为底边中点，拖拽绘制等腰三角形"},
-    {AnnoTool::EQU_TRI,        "等边三角形",  "起点到当前点为一条边，绘制等边三角形"},
-    {AnnoTool::RECT_TRI,       "直角三角形",  "起点、当前点与直角点三点绘制直角三角形"},
+    {AnnoTool::EQU_TRI,        "等边三角形",  "起点到当前点作为一条边，绘制等边三角形"},
+    {AnnoTool::RECT_TRI,       "直角三角形",  "两点拖拽绘制直角三角形（两点为斜边两端）"},
     {AnnoTool::EQU_RECT_TRI,   "等腰直角三角形", "拖拽绘制等腰直角三角形"},
     {AnnoTool::LINE,           "直线",        "两点拖拽绘制直线段"},
     {AnnoTool::POLYLINE,       "多线段",      "连续单击追加顶点，Esc 或切换工具收笔"},

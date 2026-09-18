@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：include/engine/image_io.h
-// 作用：图像编解码 I/O 封装（终稿 §5.5）——把 core::Image 编码为 PNG/JPEG/BMP/WebP 并写盘
+// 作用：图像编解码 I/O 封装（SPEC §4.5）——把 core::Image 编码为 PNG/JPEG/BMP/WebP 并写盘
 //       或编码到内存缓冲；以及从文件解码图像为 core::Image。底层用 stb_image（解码）+
 //       stb_image_write（PNG/JPEG/BMP 编码）+ libwebp（WebP 编码），均由 vcpkg 提供。
 // 分块依据：把“编码/解码/读写盘”这一 I/O 关注点从合成逻辑（composition）与导出编排（export）
@@ -27,7 +27,7 @@ namespace idc::engine {
 bool readImageFile(const std::string& path, core::Image& out);
 
 // 将图像编码并写入文件。format 决定编码器；quality 仅对有损格式（JPEG/WebP）生效；
-// jpegBg 用于不支持透明的格式（JPEG/BMP）把 alpha 压平到该背景色（§5.5）。
+// jpegBg 用于不支持透明的格式（JPEG/BMP）把 alpha 压平到该背景色（SPEC §4.5）。
 // 成功返回 true；写盘失败（E-8）返回 false。
 bool writeImageFile(const std::string& path, const core::Image& image,
                     ExportFormat format, int quality, const core::Color& jpegBg);

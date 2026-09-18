@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：src/engine/selection.cpp
 // 作用：实现选择/极性阶段（Grid-Selection-Emit 阶段③④）——Selection::resolve 按极性
-//       解析保留序号，applyPolarity 据此从全集过滤出保留集 R（终稿 §2 / §4.3 / §4.4）。
+//       解析保留序号，applyPolarity 据此从全集过滤出保留集 R（SPEC §1 / §3.3 / §3.4）。
 // 分块依据：极性（keep/remove）是 L1/L2/L3 三层共用的同一开关；本文件只做“集合取补”，
 //       不涉及像素，切分见 split.cpp，合成见 composition.cpp。
 // ============================================================================
@@ -9,7 +9,7 @@
 
 namespace idc::engine {
 
-// 按当前极性解析出“最终保留”的单元序号集合（§2 阶段④）。
+// 按当前极性解析出“最终保留”的单元序号集合（SPEC §1 阶段④）。
 //   KEEP   → 返回所有被选中的序号（R = S）；
 //   REMOVE → 返回所有未被选中的序号（R = 全集 \ S，反向剔除内核）。
 std::vector<std::size_t> Selection::resolve() const {
@@ -22,7 +22,7 @@ std::vector<std::size_t> Selection::resolve() const {
     return kept;
 }
 
-// 依据选择集与极性，从全集中过滤出保留集 R（§2 阶段③④）。
+// 依据选择集与极性，从全集中过滤出保留集 R（SPEC §1 阶段③④）。
 // all 的每个 Fragment 携带单元序号，与 Selection 的位向量按序号对齐。
 RegionSet applyPolarity(const RegionSet& all, const Selection& selection) {
     // 将 resolve 结果展开为按序号索引的保留标志表，便于 O(1) 过滤。

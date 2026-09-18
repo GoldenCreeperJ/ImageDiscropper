@@ -2,22 +2,22 @@
 
 // ============================================================================
 // 文件：src/commands/grid.cpp
-// 作用：实现 cmdGrid——L3 网格分割模式（终稿 §4.4 / guideline §4.2.3）的命令行薄壳。
-//       网格仅由「基准点 + 单元尺寸」定义（终稿 §4.4.4：切割线贯穿全图，行列数与单元位置尺寸
-//       由图像边界自动推导，不存在“行数/列数/间距”这类输入参数）。职责仅四件（A-0.1）：
-//       解析参数 → 按 §5.3 校验 → 用 Core 的 Grid 把 (r,c) 映射为单元序号并装配 EngineConfig →
+// 作用：实现 cmdGrid——L3 网格分割模式（SPEC §3.4）的命令行薄壳。
+//       网格仅由「基准点 + 单元尺寸」定义（SPEC §3.4.3：切割线贯穿全图，行列数与单元位置尺寸
+//       由图像边界自动推导，不存在“行数/列数/间距”这类输入参数）。职责仅四件（CONTRIBUTING.md「分层纪律」）：
+//       解析参数 → 按固定顺序校验 → 用 Core 的 Grid 把 (r,c) 映射为单元序号并装配 EngineConfig →
 //       交 job 执行；不含任何切割 / 几何 / 排序逻辑，全部委托 Core 的统一引擎（NFR-0）。
 // 分块依据：一命令一文件（严禁上帝文件）；(r,c)→单元序号的映射复用 Core Grid::build/cellAt
-//       （A-0.2：不在 CLI 重算几何——value_parser.h 已注明该步在命令层用 Core Grid 完成）；
+//       （CONTRIBUTING.md「分层纪律」：不在 CLI 重算几何——value_parser.h 已注明该步在命令层用 Core Grid 完成）；
 //       执行 / 退出码复用 job（同一执行通道），值解析复用 value_parser，报错样板复用 command_support。
 // 说明：
 //   - 三种“选择来源”互斥：--sort custom 用 --order（点选顺序即保留序，极性 keep）；否则
-//     --keep（极性 keep）与 --remove（极性 remove）二选一（§4.2.3 重要约束）。
+//     --keep（极性 keep）与 --remove（极性 remove）二选一（重要约束）。
 //   - --compose 恒为重排合并（REARRANGE，按 --canvas ColxRow 落位）；缺省为分离导出到文件夹。
-//     网格保留集通常是任意单元子集，不满足坍缩定理（§5.4），故 grid 不提供 collapse，
+//     网格保留集通常是任意单元子集，不满足坍缩定理（SPEC §4.4），故 grid 不提供 collapse，
 //     explicitCollapse 恒为 false，本命令不会触发退出码 2。
 //   - 越界的 (r,c) 属参数错误（退出码 1），但其判定依赖图像尺寸才能铺出网格，故只能在读图
-//     （第 6 步，退出码 3）之后检查——这是 §5.3 顺序在“几何依赖图像尺寸”时的固有例外。
+//     （第 6 步，退出码 3）之后检查——这是固定校验顺序在“几何依赖图像尺寸”时的固有例外。
 //   - --pad-color：写入 emit.padColor；Core 的 compose 已把 padColor 透传进 Composition，
 //     exportMerged 以之填充合并画布空位 / 余量（并对 JPEG/BMP 作压平背景），故对合并导出生效。
 // ============================================================================
@@ -44,7 +44,7 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     ArgParser args;
     args.parse(tokens);
 
-    // --- §5.3 第 3 步：必填。---
+    // --- 第 3 步：必填。---
     if (!args.has("--input"))
         return argError("缺少 --input", "请用 --input <file> 指定输入图像");
     if (!args.has("--grid"))
@@ -57,13 +57,13 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
 
     std::string err;
 
-    // --- §5.3 第 5 步（提前解析 --sort：第 4 步的选择来源互斥判定依赖它）。---
+    // --- 第 5 步（提前解析 --sort：第 4 步的选择来源互斥判定依赖它）。---
     auto strategy = engine::SortStrategy::ROW_MAJOR;
     if (args.has("--sort") && !parseSort(args.get("--sort"), strategy, err)) return argError(err);
     config.order.strategy = strategy;
     const bool custom = strategy == engine::SortStrategy::CUSTOM;
 
-    // --- §5.3 第 4 步：选择来源互斥（--keep / --remove / --order 三者的合法组合）。---
+    // --- 第 4 步：选择来源互斥（--keep / --remove / --order 三者的合法组合）。---
     const bool hasKeep = args.has("--keep");
     const bool hasRemove = args.has("--remove");
     if (hasKeep && hasRemove)
@@ -89,7 +89,7 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
         config.cut.polarity = hasRemove ? engine::Polarity::REMOVE : engine::Polarity::KEEP;
     }
 
-    // --- §5.3 第 5 步：网格几何（基准点 + 单元尺寸）与余量策略。---
+    // --- 第 5 步：网格几何（基准点 + 单元尺寸）与余量策略。---
     engine::GridParams gp;
     int x0 = 0, y0 = 0, cw = 0, ch = 0;
     if (!parseGridGeo(args.get("--grid"), x0, y0, cw, ch, err)) return argError(err);
@@ -101,7 +101,7 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
         return argError(err);
     config.cut.grid = gp;
 
-    // --- §5.3 第 5 步：排序修饰（reverse / snake，仅非 custom）。---
+    // --- 第 5 步：排序修饰（reverse / snake，仅非 custom）。---
     if (!custom && args.has("--decorate")) {
         bool reverse = false, snake = false;
         if (!parseDecorate(args.get("--decorate"), reverse, snake, err)) return argError(err);
@@ -109,7 +109,7 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
         config.order.snake = snake;
     }
 
-    // --- §5.3 第 4/5 步：输出模式（--compose 重排合并 / 缺省分离）与画布 ColxRow。---
+    // --- 第 4/5 步：输出模式（--compose 重排合并 / 缺省分离）与画布 ColxRow。---
     const bool separate = !args.has("--compose");
     if (!separate) { // --compose：合并为单图，恒 REARRANGE（网格保留集一般不可坍缩）。
         if (args.has("--output-dir"))
@@ -148,7 +148,7 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
         config.emitParams.mode = engine::EmitMode::SEPARATE;
     }
 
-    // --- §5.3 第 5 步：填充色与公共导出选项 --format / --naming。---
+    // --- 第 5 步：填充色与公共导出选项 --format / --naming。---
     if (args.has("--pad-color")) {
         core::Color pad;
         if (!parseColor(args.get("--pad-color"), pad, err)) return argError(err);
@@ -156,7 +156,7 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     }
     if (!applyFormatNaming(args, config.emitParams, err)) return argError(err);
 
-    // --- §5.3 第 5 步：选择单元 (r,c) 的格式解析（映射为序号需网格，故读图后再映射）。---
+    // --- 第 5 步：选择单元 (r,c) 的格式解析（映射为序号需网格，故读图后再映射）。---
     std::vector<std::pair<int, int>> chosen; // 保持出现顺序（custom 下即输出序）。
     if (custom) {
         if (!parseOrderCells(args.get("--order"), chosen, err)) return argError(err);
@@ -175,13 +175,13 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
         }
     }
 
-    // --- §5.3 第 6 步：读图（失败退出码 3）。---
+    // --- 第 6 步：读图（失败退出码 3）。---
     const JobOptions opt = makeJobOptions(go, /*explicitCollapse=*/false);
     core::Image image;
     if (const ExitCode ec = loadInputImage(args.get("--input"), image, opt); ec != ExitCode::Ok)
         return toInt(ec);
 
-    // --- 用 Core Grid 铺网格（复用引擎几何，A-0.2），据此把 (r,c) 映射为单元序号。---
+    // --- 用 Core Grid 铺网格（复用引擎几何，CONTRIBUTING.md「分层纪律」），据此把 (r,c) 映射为单元序号。---
     engine::Grid grid;
     grid.build(gp, image.width(), image.height());
     if (grid.cellCount() == 0)
@@ -199,7 +199,7 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     config.source.width = image.width();
     config.source.height = image.height();
 
-    // --- §5.3 第 7 步：执行 / dry-run（--save-config）。分离取 --output-dir，合并取 --output。---
+    // --- 第 7 步：执行 / dry-run（--save-config）。分离取 --output-dir，合并取 --output。---
     const JobOutput out{separate ? args.get("--output-dir") : args.get("--output"), separate};
     return toInt(finishJob(config, image, out, go.saveConfig, opt));
 }

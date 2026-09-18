@@ -1,16 +1,16 @@
 // ============================================================================
 // 文件：canvas/annotation_item.h
 // 作用：画布上的「单个标注」矢量图元——持有一份 Core annotation::Annotation 拷贝，
-//       用 Shape::worldPath() → QPainterPath 以矢量方式叠加渲染（不改底图像素，A-0.15）。
+//       用 Shape::worldPath() → QPainterPath 以矢量方式叠加渲染（不改底图像素，CONTRIBUTING.md「分层纪律」）。
 //       选中时绘制**定向包围盒（OBB）+ 8 个缩放手柄 + 1 个旋转手柄**：拖手柄做缩放/拉伸/旋转
 //       （拖角越过对边产生负缩放＝翻转），拖拽中实时矢量预览、释放发 transformRequested(sx,sy,deg)；
-//       拖形状本体则平移，释放发 moveRequested(dx,dy)。二者均交上层委托 Core（本图元不自算几何，A-0.1）。
+//       拖形状本体则平移，释放发 moveRequested(dx,dy)。二者均交上层委托 Core（本图元不自算几何，CONTRIBUTING.md「分层纪律」）。
 // 分块依据：
 //   - 仿 SelectionRectItem 的 QGraphicsObject 范式（Q_OBJECT + 自绘 paint + 自管拖拽），
 //     但只处理「渲染一条既有形状 + 拖动它」，形状几何全在 Core（buildShape/toPath）。
-//   - 拖拽安全（见记忆教训）：拖动期间只做 setPos 视觉反馈，释放时先复位 pos 再发信号，
+//   - 拖拽安全：拖动期间只做 setPos 视觉反馈，释放时先复位 pos 再发信号，
 //     且场景以增量方式刷新（数量不变→不删除正在拖动的图元），避免自删崩溃。
-// 说明：z 序 = zorder::kAnnotation(10)，位于底图之上、遮罩/网格/选区之下（§4.2 图层顺序）。
+// 说明：z 序 = zorder::kAnnotation(10)，位于底图之上、遮罩/网格/选区之下（本目录 README「图层 z 序」）。
 // ============================================================================
 #pragma once
 
@@ -50,7 +50,7 @@ public:
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
 signals:
-    // 左键按下本图元：上报场景坐标，交上层用 Core hitTest 决定选中项（几何命中在 Core，A-0.1）。
+    // 左键按下本图元：上报场景坐标，交上层用 Core hitTest 决定选中项（几何命中在 Core，CONTRIBUTING.md「分层纪律」）。
     // 选中会同步骤回灌 setSelectedState(true)，于是本次手势即可接着拖动平移（单击选中 + 同手势移动）。
     void pressed(const QPointF& scenePos);
     // 拖动平移结束：请求把该标注平移 (dx,dy) 个场景（原图）像素。上层委托 Core 重建几何。

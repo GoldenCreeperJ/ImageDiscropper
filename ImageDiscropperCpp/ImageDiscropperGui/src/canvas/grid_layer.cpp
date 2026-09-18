@@ -2,7 +2,7 @@
 // 文件：canvas/grid_layer.cpp
 // 作用：实现 L3 网格线层的重建、显隐与清理（见同名头文件说明）。
 // 分块依据：线样式常量集中定义；rebuild 只做「按 Core 单元边界收集去重坐标 → 画贯穿线」，
-//           无任何网格几何推导（那在 Core Grid::build；A-0.1）。
+//           无任何网格几何推导（那在 Core Grid::build；CONTRIBUTING.md「分层纪律」）。
 // ============================================================================
 #include "canvas/grid_layer.h"
 
@@ -17,7 +17,7 @@
 namespace idc::gui {
 namespace {
 
-// 网格线样式（§4.2）：灰色虚线 1px；cosmetic 使线宽不随缩放变化。
+// 网格线样式（本目录 README「画布视觉规范」）：灰色虚线 1px；cosmetic 使线宽不随缩放变化。
 QPen gridPen() {
     QPen pen(QColor(150, 150, 150));
     pen.setWidth(1);

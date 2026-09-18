@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：include/engine/split.h
-// 作用：声明 Grid-Selection-Emit 的 split 阶段（终稿 §10.2 概念流程）——按诱导网格
+// 作用：声明 Grid-Selection-Emit 的 split 阶段（SPEC §1 概念流程）——按诱导网格
 //       把图像切分为互不重叠、恰好铺满的区域集合 RegionSet。
 // 分块依据：split 是独立的流水线阶段，声明从 engine.h facade 下沉至此，使 split.cpp 只
 //       依赖本阶段头（core::Image + Grid + RegionSet），不再全量 include engine.h（解耦）。
