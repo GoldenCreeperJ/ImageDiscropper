@@ -26,13 +26,13 @@ jobs:
             "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
           }
 
-      # runner 镜像的 vcpkg 是旧 commit 的浅克隆，不含清单声明的基线 commit；
-      # fetch 后直接 checkout 到基线，使工作区（ports/versions 数据库）与清单完全一致，
-      # 版本解析不再依赖镜像里的旧状态。
+      # runner 镜像的 vcpkg 是旧 commit 的浅克隆且带镜像补丁，不含清单声明的基线 commit；
+      # fetch 后 reset --hard 强制对齐基线（丢弃镜像补丁），使工作区 ports/versions 数据库
+      # 与清单完全一致，版本解析不再依赖镜像里的旧状态。
       - name: Update vcpkg to manifest baseline
         run: |
           git -C "$env:VCPKG_ROOT" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
-          git -C "$env:VCPKG_ROOT" checkout --detach e6f9e70a29a3e80a1fc510d8503304315447112f
+          git -C "$env:VCPKG_ROOT" reset --hard e6f9e70a29a3e80a1fc510d8503304315447112f
 
       # vcpkg 的 qtbase 构建树路径超过 260 字符 MAX_PATH（uiautomation 插件层级很深），
       # cl.exe 报 C1083 "Cannot open compiler generated file"。
@@ -68,6 +68,15 @@ jobs:
           call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64
           ctest --preset test-debug
 
+      # VCPKG_INSTALLED_DIR=D:/vcpkg_installed 在工作区外，artifact 无法直接上传；
+      # 失败时先把端口构建日志拷回工作区再上传。
+      - name: Collect vcpkg logs on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force ImageDiscropperCpp/build/vcpkg-logs | Out-Null
+          Copy-Item "D:/vcpkg_installed/vcpkg/blds/*/install-*-out.log" ImageDiscropperCpp/build/vcpkg-logs/ -ErrorAction SilentlyContinue
+
       - name: Upload vcpkg logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -75,7 +84,7 @@ jobs:
           name: vcpkg-logs-windows
           path: |
             ImageDiscropperCpp/build/*/vcpkg-manifest-install.log
-            ImageDiscropperCpp/build/*/vcpkg_installed/vcpkg/blds/**/install-*-out.log
+            ImageDiscropperCpp/build/vcpkg-logs/
           if-no-files-found: ignore
 
   build-linux:
@@ -88,13 +97,13 @@ jobs:
       - name: Set up vcpkg environment
         run: echo "VCPKG_ROOT=${VCPKG_INSTALLATION_ROOT}" >> "$GITHUB_ENV"
 
-      # runner 镜像的 vcpkg 是旧 commit 的浅克隆，不含清单声明的基线 commit；
-      # fetch 后直接 checkout 到基线，使工作区（ports/versions 数据库）与清单完全一致，
-      # 版本解析不再依赖镜像里的旧状态。
+      # runner 镜像的 vcpkg 是旧 commit 的浅克隆且带镜像补丁，不含清单声明的基线 commit；
+      # fetch 后 reset --hard 强制对齐基线（丢弃镜像补丁），使工作区 ports/versions 数据库
+      # 与清单完全一致，版本解析不再依赖镜像里的旧状态。
       - name: Update vcpkg to manifest baseline
         run: |
           git -C "$VCPKG_INSTALLATION_ROOT" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
-          git -C "$VCPKG_INSTALLATION_ROOT" checkout --detach e6f9e70a29a3e80a1fc510d8503304315447112f
+          git -C "$VCPKG_INSTALLATION_ROOT" reset --hard e6f9e70a29a3e80a1fc510d8503304315447112f
 
       # qtbase 在 Linux 上构建需系统 X11/EGL/字体等开发库；其依赖
       # gperf / libpq / libxcrypt 经 autotools 从源码构建，需 autoconf 全家桶与 libltdl。
@@ -142,13 +151,13 @@ jobs:
       - name: Set up vcpkg environment
         run: echo "VCPKG_ROOT=${VCPKG_INSTALLATION_ROOT}" >> "$GITHUB_ENV"
 
-      # runner 镜像的 vcpkg 是旧 commit 的浅克隆，不含清单声明的基线 commit；
-      # fetch 后直接 checkout 到基线，使工作区（ports/versions 数据库）与清单完全一致，
-      # 版本解析不再依赖镜像里的旧状态。
+      # runner 镜像的 vcpkg 是旧 commit 的浅克隆且带镜像补丁，不含清单声明的基线 commit；
+      # fetch 后 reset --hard 强制对齐基线（丢弃镜像补丁），使工作区 ports/versions 数据库
+      # 与清单完全一致，版本解析不再依赖镜像里的旧状态。
       - name: Update vcpkg to manifest baseline
         run: |
           git -C "$VCPKG_INSTALLATION_ROOT" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
-          git -C "$VCPKG_INSTALLATION_ROOT" checkout --detach e6f9e70a29a3e80a1fc510d8503304315447112f
+          git -C "$VCPKG_INSTALLATION_ROOT" reset --hard e6f9e70a29a3e80a1fc510d8503304315447112f
 
       # gperf / libpq（qtbase 依赖）经 autotools 从源码构建，需 autoconf 全家桶。
       - name: Install Qt build dependencies
