@@ -1,4 +1,6 @@
 # CI：Windows / Linux / macOS 三平台——配置（vcpkg 清单模式）→ 构建（含 GUI）→ 测试。
+# 采用单 job + OS matrix；调试期 fail-fast: false（一轮看全三个平台的失败信息），
+# 全绿稳定后可改回 true 止损省时。
 # 依赖二进制经 vcpkg 的 GitHub Actions 缓存后端（x-gha）按平台复用：
 # 每个平台首次运行从源码构建 qtbase 等依赖较慢（约 30-60 分钟），之后每次运行直接取缓存。
 # 失败时上传 vcpkg 构建日志（vcpkg-logs-* artifact）便于定位依赖构建错误。
@@ -25,17 +27,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-windows:
-    if: github.event_name != 'workflow_dispatch' || contains(inputs.platforms, 'windows')
-    runs-on: windows-latest
+  build:
+    # 手动触发时按 platforms 输入筛选矩阵腿；push/PR 全部运行。
+    if: github.event_name != 'workflow_dispatch' || contains(inputs.platforms, matrix.key)
+    strategy:
+      # 调试/解锁期：false——让三个平台都跑到各自的自然失败点，一轮拿到全部失败信息
+      # （true 会在某平台早挂时掐掉其余进行中的平台，掩盖它们各自的错误）。
+      # 三平台全绿进入稳定期后可改回 true：失败罕见，止损省时。
+      fail-fast: true
+      matrix:
+        include:
+          - key: windows
+            os: windows-latest
+            configure: windows
+            build: debug
+            test: test-debug
+          - key: linux
+            os: ubuntu-latest
+            configure: linux-debug
+            build: linux-debug
+            test: test-linux-debug
+          - key: macos
+            os: macos-latest
+            configure: macos-debug
+            build: macos-debug
+            test: test-macos-debug
+    runs-on: ${{ matrix.os }}
     env:
       VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
     steps:
       - uses: actions/checkout@v4
 
-      # 优先用镜像上独立的 C:\vcpkg（VS 18 自带的捆绑版 vcpkg 构建 qtbase 会失败）；
+      # Windows：优先用镜像上独立的 C:\vcpkg（VS 18 自带的捆绑版 vcpkg 构建 qtbase 会失败）；
       # 仅当独立版不存在时才回退到 VCPKG_INSTALLATION_ROOT。
-      - name: Set up vcpkg environment
+      - name: Set up vcpkg environment (Windows)
+        if: matrix.key == 'windows'
         run: |
           if (Test-Path "C:\vcpkg") {
             "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
@@ -43,89 +69,38 @@ jobs:
             "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
           }
 
+      - name: Set up vcpkg environment (Linux/macOS)
+        if: matrix.key != 'windows'
+        run: echo "VCPKG_ROOT=${VCPKG_INSTALLATION_ROOT}" >> "$GITHUB_ENV"
+
       # runner 镜像的 vcpkg 是旧 commit 的浅克隆且带镜像补丁，不含清单声明的基线 commit；
       # fetch 后 reset --hard 强制对齐基线（丢弃镜像补丁），使工作区 ports/versions 数据库
       # 与清单完全一致，版本解析不再依赖镜像里的旧状态。
-      - name: Update vcpkg to manifest baseline
+      - name: Update vcpkg to manifest baseline (Windows)
+        if: matrix.key == 'windows'
         run: |
           git -C "$env:VCPKG_ROOT" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
           git -C "$env:VCPKG_ROOT" reset --hard e6f9e70a29a3e80a1fc510d8503304315447112f
+
+      - name: Update vcpkg to manifest baseline (Linux/macOS)
+        if: matrix.key != 'windows'
+        run: |
+          git -C "$VCPKG_INSTALLATION_ROOT" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
+          git -C "$VCPKG_INSTALLATION_ROOT" reset --hard e6f9e70a29a3e80a1fc510d8503304315447112f
 
       # vcpkg 的 qtbase 构建树路径超过 260 字符 MAX_PATH（uiautomation 插件层级很深），
       # cl.exe 报 C1083 "Cannot open compiler generated file"。
       # 根治在 preset 里：VCPKG_INSTALLED_DIR=D:/vcpkg_installed 把依赖树移出深层构建目录；
       # 此处再启用长路径策略作双保险。
       - name: Enable Windows long paths
+        if: matrix.key == 'windows'
         shell: cmd
         run: reg add "HKLM\SYSTEM\CurrentControlSet\Control\FileSystem" /v LongPathsEnabled /t REG_DWORD /d 1 /f
 
-      # Ninja 预设不绑定特定 VS 版本：经 vswhere 定位最新 VS 并用 VsDevCmd 注入 MSVC 编译环境
-      #（PATH 里另有 MinGW 时 Ninja 默认会误选，必须显式限定）。
-      - name: Configure
-        shell: cmd
-        working-directory: ImageDiscropperCpp
-        run: |
-          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
-          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64
-          cmake --preset windows
-
-      - name: Build
-        shell: cmd
-        working-directory: ImageDiscropperCpp
-        run: |
-          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
-          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64
-          cmake --build --preset debug
-
-      - name: Test
-        shell: cmd
-        working-directory: ImageDiscropperCpp
-        run: |
-          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
-          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64
-          ctest --preset test-debug
-
-      # VCPKG_INSTALLED_DIR=D:/vcpkg_installed 在工作区外，artifact 无法直接上传；
-      # 失败时先把端口构建日志拷回工作区再上传。
-      - name: Collect vcpkg logs on failure
-        if: failure()
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force ImageDiscropperCpp/build/vcpkg-logs | Out-Null
-          Copy-Item "D:/vcpkg_installed/vcpkg/blds/*/install-*-out.log" ImageDiscropperCpp/build/vcpkg-logs/ -ErrorAction SilentlyContinue
-
-      - name: Upload vcpkg logs on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: vcpkg-logs-windows
-          path: |
-            ImageDiscropperCpp/build/*/vcpkg-manifest-install.log
-            ImageDiscropperCpp/build/vcpkg-logs/
-          if-no-files-found: ignore
-
-  build-linux:
-    if: github.event_name != 'workflow_dispatch' || contains(inputs.platforms, 'linux')
-    runs-on: ubuntu-latest
-    env:
-      VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up vcpkg environment
-        run: echo "VCPKG_ROOT=${VCPKG_INSTALLATION_ROOT}" >> "$GITHUB_ENV"
-
-      # runner 镜像的 vcpkg 是旧 commit 的浅克隆且带镜像补丁，不含清单声明的基线 commit；
-      # fetch 后 reset --hard 强制对齐基线（丢弃镜像补丁），使工作区 ports/versions 数据库
-      # 与清单完全一致，版本解析不再依赖镜像里的旧状态。
-      - name: Update vcpkg to manifest baseline
-        run: |
-          git -C "$VCPKG_INSTALLATION_ROOT" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
-          git -C "$VCPKG_INSTALLATION_ROOT" reset --hard e6f9e70a29a3e80a1fc510d8503304315447112f
-
       # qtbase 在 Linux 上构建需系统 X11/EGL/字体等开发库（vcpkg 官方 Ubuntu 完整清单）；
       # 其依赖 gperf / libpq / libxcrypt 经 autotools 从源码构建，另需 autoconf 全家桶与 libltdl。
-      - name: Install Qt build dependencies
+      - name: Install Qt build dependencies (Linux)
+        if: matrix.key == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config ninja-build \
@@ -144,69 +119,71 @@ jobs:
             libfreetype6-dev libgl1-mesa-dev libglu1-mesa-dev libegl1-mesa-dev \
             libdbus-1-dev libsm-dev libice-dev
 
-      - name: Configure
-        working-directory: ImageDiscropperCpp
-        run: cmake --preset linux-debug
-
-      - name: Build
-        working-directory: ImageDiscropperCpp
-        run: cmake --build --preset linux-debug
-
-      - name: Test
-        working-directory: ImageDiscropperCpp
-        run: ctest --preset test-linux-debug
-
-      - name: Upload vcpkg logs on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: vcpkg-logs-linux
-          path: |
-            ImageDiscropperCpp/build/*/vcpkg-manifest-install.log
-            ImageDiscropperCpp/build/*/vcpkg_installed/vcpkg/blds/**/install-*-out.log
-          if-no-files-found: ignore
-
-  build-macos:
-    if: github.event_name != 'workflow_dispatch' || contains(inputs.platforms, 'macos')
-    runs-on: macos-latest
-    env:
-      VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up vcpkg environment
-        run: echo "VCPKG_ROOT=${VCPKG_INSTALLATION_ROOT}" >> "$GITHUB_ENV"
-
-      # runner 镜像的 vcpkg 是旧 commit 的浅克隆且带镜像补丁，不含清单声明的基线 commit；
-      # fetch 后 reset --hard 强制对齐基线（丢弃镜像补丁），使工作区 ports/versions 数据库
-      # 与清单完全一致，版本解析不再依赖镜像里的旧状态。
-      - name: Update vcpkg to manifest baseline
-        run: |
-          git -C "$VCPKG_INSTALLATION_ROOT" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
-          git -C "$VCPKG_INSTALLATION_ROOT" reset --hard e6f9e70a29a3e80a1fc510d8503304315447112f
-
       # gperf / libpq（qtbase 依赖）经 autotools 从源码构建，需 autoconf 全家桶。
-      - name: Install Qt build dependencies
+      - name: Install Qt build dependencies (macOS)
+        if: matrix.key == 'macos'
         run: brew install autoconf autoconf-archive automake libtool ninja
 
-      - name: Configure
+      # Ninja 预设不绑定特定 VS 版本：经 vswhere 定位最新 VS 并用 VsDevCmd 注入 MSVC 编译环境
+      #（PATH 里另有 MinGW 时 Ninja 默认会误选，必须显式限定）。
+      - name: Configure (Windows)
+        if: matrix.key == 'windows'
+        shell: cmd
         working-directory: ImageDiscropperCpp
-        run: cmake --preset macos-debug
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64
+          cmake --preset ${{ matrix.configure }}
 
-      - name: Build
+      - name: Configure (Linux/macOS)
+        if: matrix.key != 'windows'
         working-directory: ImageDiscropperCpp
-        run: cmake --build --preset macos-debug
+        run: cmake --preset ${{ matrix.configure }}
 
-      - name: Test
+      - name: Build (Windows)
+        if: matrix.key == 'windows'
+        shell: cmd
         working-directory: ImageDiscropperCpp
-        run: ctest --preset test-macos-debug
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64
+          cmake --build --preset ${{ matrix.build }}
+
+      - name: Build (Linux/macOS)
+        if: matrix.key != 'windows'
+        working-directory: ImageDiscropperCpp
+        run: cmake --build --preset ${{ matrix.build }}
+
+      - name: Test (Windows)
+        if: matrix.key == 'windows'
+        shell: cmd
+        working-directory: ImageDiscropperCpp
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64
+          ctest --preset ${{ matrix.test }}
+
+      - name: Test (Linux/macOS)
+        if: matrix.key != 'windows'
+        working-directory: ImageDiscropperCpp
+        run: ctest --preset ${{ matrix.test }}
+
+      # Windows 的 VCPKG_INSTALLED_DIR=D:/vcpkg_installed 在工作区外，artifact 无法直接上传；
+      # 失败时先把端口构建日志拷回工作区再上传。
+      - name: Collect vcpkg logs on failure (Windows)
+        if: failure() && matrix.key == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force ImageDiscropperCpp/build/vcpkg-logs | Out-Null
+          Copy-Item "D:/vcpkg_installed/vcpkg/blds/*/install-*-out.log" ImageDiscropperCpp/build/vcpkg-logs/ -ErrorAction SilentlyContinue
 
       - name: Upload vcpkg logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: vcpkg-logs-macos
+          name: vcpkg-logs-${{ matrix.key }}
           path: |
             ImageDiscropperCpp/build/*/vcpkg-manifest-install.log
             ImageDiscropperCpp/build/*/vcpkg_installed/vcpkg/blds/**/install-*-out.log
+            ImageDiscropperCpp/build/vcpkg-logs/
           if-no-files-found: ignore
