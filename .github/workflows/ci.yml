@@ -1,6 +1,7 @@
 # CI：Windows / Linux / macOS 三平台——配置（vcpkg 清单模式）→ 构建（含 GUI）→ 测试。
 # 依赖二进制经 vcpkg 的 GitHub Actions 缓存后端（x-gha）按平台复用：
 # 每个平台首次运行从源码构建 qtbase 等依赖较慢（约 30-60 分钟），之后每次运行直接取缓存。
+# 失败时上传 vcpkg 构建日志（vcpkg-logs-* artifact）便于定位依赖构建错误。
 name: CI
 
 on:
@@ -15,8 +16,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 优先用镜像上独立的 C:\vcpkg（VS 18 自带的捆绑版 vcpkg 构建 qtbase 会失败）；
+      # 仅当独立版不存在时才回退到 VCPKG_INSTALLATION_ROOT。
       - name: Set up vcpkg environment
-        run: echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+        run: |
+          if (Test-Path "C:\vcpkg") {
+            "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
+          } else {
+            "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+          }
 
       # Ninja 预设不绑定特定 VS 版本：经 vswhere 定位最新 VS 并用 VsDevCmd 注入 MSVC 编译环境
       #（PATH 里另有 MinGW 时 Ninja 默认会误选，必须显式限定）。
@@ -44,6 +52,16 @@ jobs:
           call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64
           ctest --preset test-debug
 
+      - name: Upload vcpkg logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vcpkg-logs-windows
+          path: |
+            ImageDiscropperCpp/build/*/vcpkg-manifest-install.log
+            ImageDiscropperCpp/build/*/vcpkg_installed/vcpkg/blds/**/install-*-out.log
+          if-no-files-found: ignore
+
   build-linux:
     runs-on: ubuntu-latest
     env:
@@ -54,13 +72,13 @@ jobs:
       - name: Set up vcpkg environment
         run: echo "VCPKG_ROOT=${VCPKG_INSTALLATION_ROOT}" >> "$GITHUB_ENV"
 
-      # qtbase 在 Linux 上构建需系统 X11/EGL/字体等开发库；
-      # gperf / libpq（qtbase 依赖）经 autotools 从源码构建，需 autoconf 全家桶。
+      # qtbase 在 Linux 上构建需系统 X11/EGL/字体等开发库；其依赖
+      # gperf / libpq / libxcrypt 经 autotools 从源码构建，需 autoconf 全家桶与 libltdl。
       - name: Install Qt build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config ninja-build \
-            autoconf autoconf-archive automake libtool \
+            autoconf autoconf-archive automake libtool libltdl-dev \
             libx11-dev libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev \
             libxcb-icccm4-dev libxcb-image0-dev libxcb-keysyms1-dev \
             libxcb-randr0-dev libxcb-render-util0-dev libxcb-shape0-dev \
@@ -79,6 +97,16 @@ jobs:
       - name: Test
         working-directory: ImageDiscropperCpp
         run: ctest --preset test-linux-debug
+
+      - name: Upload vcpkg logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vcpkg-logs-linux
+          path: |
+            ImageDiscropperCpp/build/*/vcpkg-manifest-install.log
+            ImageDiscropperCpp/build/*/vcpkg_installed/vcpkg/blds/**/install-*-out.log
+          if-no-files-found: ignore
 
   build-macos:
     runs-on: macos-latest
@@ -105,3 +133,13 @@ jobs:
       - name: Test
         working-directory: ImageDiscropperCpp
         run: ctest --preset test-macos-debug
+
+      - name: Upload vcpkg logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vcpkg-logs-macos
+          path: |
+            ImageDiscropperCpp/build/*/vcpkg-manifest-install.log
+            ImageDiscropperCpp/build/*/vcpkg_installed/vcpkg/blds/**/install-*-out.log
+          if-no-files-found: ignore

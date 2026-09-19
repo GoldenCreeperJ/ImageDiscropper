@@ -3,7 +3,7 @@
   "version-string": "1.0.0",
   "description": "图像区域提取、反向剔除与网格分割工具（Grid-Selection-Emit 引擎，C++ 实现）",
   "license": "GPL-3.0-only",
-  "builtin-baseline": "8cf84605ce9764de46caeb47b9e710db9493add9",
+  "builtin-baseline": "e6f9e70a29a3e80a1fc510d8503304315447112f",
   "dependencies": [
     "libwebp",
     "nlohmann-json",
