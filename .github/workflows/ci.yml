@@ -6,10 +6,27 @@ name: CI
 
 on:
   push:
+    # 纯文档提交不触发（仅代码路径变化才触发）。
+    paths:
+      - 'ImageDiscropperCpp/**'
+      - '.github/workflows/ci.yml'
   pull_request:
+  # 手动触发：可选择要运行的平台（逗号分隔；留空=全部）。
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: '要运行的平台（逗号分隔：windows,linux,macos；留空=全部）'
+        required: false
+        default: 'windows,linux,macos'
+
+# 同一分支新 push 自动取消仍在运行的旧 run，避免并行重复烧配额。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-windows:
+    if: github.event_name != 'workflow_dispatch' || contains(inputs.platforms, 'windows')
     runs-on: windows-latest
     env:
       VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
@@ -88,6 +105,7 @@ jobs:
           if-no-files-found: ignore
 
   build-linux:
+    if: github.event_name != 'workflow_dispatch' || contains(inputs.platforms, 'linux')
     runs-on: ubuntu-latest
     env:
       VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
@@ -124,7 +142,7 @@ jobs:
             libxcb-xv0-dev libxcb-xvmc0-dev \
             libxkbcommon-dev libxkbcommon-x11-dev libfontconfig1-dev \
             libfreetype6-dev libgl1-mesa-dev libglu1-mesa-dev libegl1-mesa-dev \
-            libdbus-1-dev
+            libdbus-1-dev libsm-dev libice-dev
 
       - name: Configure
         working-directory: ImageDiscropperCpp
@@ -149,6 +167,7 @@ jobs:
           if-no-files-found: ignore
 
   build-macos:
+    if: github.event_name != 'workflow_dispatch' || contains(inputs.platforms, 'macos')
     runs-on: macos-latest
     env:
       VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
