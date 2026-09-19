@@ -65,7 +65,7 @@ CMake Presets are the recommended path (the first configure installs dependencie
 
 ```bash
 cd ImageDiscropperCpp
-cmake --preset windows         # Windows: VS 2022 multi-config
+cmake --preset windows         # Windows: Ninja + MSVC (Debug; use windows-release for Release)
 cmake --build --preset debug
 ctest --preset test-debug      # Core unit_tests + CLI cli_tests
 

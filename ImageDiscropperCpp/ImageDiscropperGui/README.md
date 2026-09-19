@@ -434,7 +434,7 @@ scheduleHistoryCapture（500ms 防抖）──► docHistory_ 压入 EngineConfi
 依赖经 [`vcpkg.json`](../vcpkg.json) 清单自动安装（`qtbase` 首次构建较慢），推荐用 Presets：
 
 ```bash
-cmake --preset windows         # 以 ImageDiscropperCpp/ 为源目录（VS 2022 多配置）
+cmake --preset windows         # 以 ImageDiscropperCpp/ 为源目录（Ninja + MSVC，Debug）
 cmake --build --preset debug --target idc_gui
 ```
 

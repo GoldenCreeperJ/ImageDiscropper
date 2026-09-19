@@ -18,17 +18,31 @@ jobs:
       - name: Set up vcpkg environment
         run: echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
 
+      # Ninja 预设不绑定特定 VS 版本：经 vswhere 定位最新 VS 并用 VsDevCmd 注入 MSVC 编译环境
+      #（PATH 里另有 MinGW 时 Ninja 默认会误选，必须显式限定）。
       - name: Configure
+        shell: cmd
         working-directory: ImageDiscropperCpp
-        run: cmake --preset windows
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64
+          cmake --preset windows
 
       - name: Build
+        shell: cmd
         working-directory: ImageDiscropperCpp
-        run: cmake --build --preset debug
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64
+          cmake --build --preset debug
 
       - name: Test
+        shell: cmd
         working-directory: ImageDiscropperCpp
-        run: ctest --preset test-debug
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64
+          ctest --preset test-debug
 
   build-linux:
     runs-on: ubuntu-latest
@@ -40,11 +54,13 @@ jobs:
       - name: Set up vcpkg environment
         run: echo "VCPKG_ROOT=${VCPKG_INSTALLATION_ROOT}" >> "$GITHUB_ENV"
 
-      # qtbase 在 Linux 上构建需系统 X11/EGL/字体等开发库（vcpkg 官方 Qt 依赖清单）。
+      # qtbase 在 Linux 上构建需系统 X11/EGL/字体等开发库；
+      # gperf / libpq（qtbase 依赖）经 autotools 从源码构建，需 autoconf 全家桶。
       - name: Install Qt build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config ninja-build \
+          sudo apt-get install -y build-essential pkg-config ninja-build \
+            autoconf autoconf-archive automake libtool \
             libx11-dev libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev \
             libxcb-icccm4-dev libxcb-image0-dev libxcb-keysyms1-dev \
             libxcb-randr0-dev libxcb-render-util0-dev libxcb-shape0-dev \
@@ -73,6 +89,10 @@ jobs:
 
       - name: Set up vcpkg environment
         run: echo "VCPKG_ROOT=${VCPKG_INSTALLATION_ROOT}" >> "$GITHUB_ENV"
+
+      # gperf / libpq（qtbase 依赖）经 autotools 从源码构建，需 autoconf 全家桶。
+      - name: Install Qt build dependencies
+        run: brew install autoconf autoconf-archive automake libtool ninja
 
       - name: Configure
         working-directory: ImageDiscropperCpp

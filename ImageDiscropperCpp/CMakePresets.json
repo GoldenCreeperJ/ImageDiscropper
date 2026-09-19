@@ -8,11 +8,22 @@
   "configurePresets": [
     {
       "name": "windows",
-      "displayName": "Windows（VS 2022 多配置 + vcpkg 清单模式）",
-      "generator": "Visual Studio 17 2022",
+      "displayName": "Windows Debug（Ninja + MSVC + vcpkg 清单模式）",
+      "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "windows-release",
+      "displayName": "Windows Release（Ninja + MSVC + vcpkg 清单模式）",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
@@ -59,13 +70,11 @@
   "buildPresets": [
     {
       "name": "debug",
-      "configurePreset": "windows",
-      "configuration": "Debug"
+      "configurePreset": "windows"
     },
     {
       "name": "release",
-      "configurePreset": "windows",
-      "configuration": "Release"
+      "configurePreset": "windows-release"
     },
     {
       "name": "linux-debug",
@@ -88,15 +97,13 @@
     {
       "name": "test-debug",
       "configurePreset": "windows",
-      "configuration": "Debug",
       "output": {
         "outputOnFailure": true
       }
     },
     {
       "name": "test-release",
-      "configurePreset": "windows",
-      "configuration": "Release",
+      "configurePreset": "windows-release",
       "output": {
         "outputOnFailure": true
       }
