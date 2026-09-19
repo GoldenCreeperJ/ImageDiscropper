@@ -26,6 +26,17 @@ jobs:
             "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
           }
 
+      # runner 镜像的 vcpkg 是旧 commit 的浅克隆，不含清单声明的基线 commit；
+      # 配置前把它 fetch 进本地仓库（已存在则无操作）。
+      - name: Fetch vcpkg baseline
+        run: git -C "$env:VCPKG_ROOT" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
+
+      # vcpkg 的 qtbase 构建树路径超过 260 字符 MAX_PATH（uiautomation 插件层级很深），
+      # cl.exe 报 C1083 "Cannot open compiler generated file"；启用 Windows 长路径策略解决。
+      - name: Enable Windows long paths
+        shell: cmd
+        run: reg add "HKLM\SYSTEM\CurrentControlSet\Control\FileSystem" /v LongPathsEnabled /t REG_DWORD /d 1 /f
+
       # Ninja 预设不绑定特定 VS 版本：经 vswhere 定位最新 VS 并用 VsDevCmd 注入 MSVC 编译环境
       #（PATH 里另有 MinGW 时 Ninja 默认会误选，必须显式限定）。
       - name: Configure
@@ -72,6 +83,11 @@ jobs:
       - name: Set up vcpkg environment
         run: echo "VCPKG_ROOT=${VCPKG_INSTALLATION_ROOT}" >> "$GITHUB_ENV"
 
+      # runner 镜像的 vcpkg 是旧 commit 的浅克隆，不含清单声明的基线 commit；
+      # 配置前把它 fetch 进本地仓库，否则 vcpkg 无法解析版本（versions/baseline.json 找不到）。
+      - name: Fetch vcpkg baseline
+        run: git -C "$VCPKG_INSTALLATION_ROOT" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
+
       # qtbase 在 Linux 上构建需系统 X11/EGL/字体等开发库；其依赖
       # gperf / libpq / libxcrypt 经 autotools 从源码构建，需 autoconf 全家桶与 libltdl。
       - name: Install Qt build dependencies
@@ -117,6 +133,11 @@ jobs:
 
       - name: Set up vcpkg environment
         run: echo "VCPKG_ROOT=${VCPKG_INSTALLATION_ROOT}" >> "$GITHUB_ENV"
+
+      # runner 镜像的 vcpkg 是旧 commit 的浅克隆，不含清单声明的基线 commit；
+      # 配置前把它 fetch 进本地仓库，否则 vcpkg 无法解析版本（versions/baseline.json 找不到）。
+      - name: Fetch vcpkg baseline
+        run: git -C "$VCPKG_INSTALLATION_ROOT" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
 
       # gperf / libpq（qtbase 依赖）经 autotools 从源码构建，需 autoconf 全家桶。
       - name: Install Qt build dependencies
