@@ -13,13 +13,6 @@ on:
       - 'ImageDiscropperCpp/**'
       - '.github/workflows/ci.yml'
   pull_request:
-  # 手动触发：可选择要运行的平台（逗号分隔；留空=全部）。
-  workflow_dispatch:
-    inputs:
-      platforms:
-        description: '要运行的平台（逗号分隔：windows,linux,macos；留空=全部）'
-        required: false
-        default: 'windows,linux,macos'
 
 # 同一分支新 push 自动取消仍在运行的旧 run，避免并行重复烧配额。
 concurrency:
@@ -28,8 +21,6 @@ concurrency:
 
 jobs:
   build:
-    # 手动触发时按 platforms 输入筛选矩阵腿；push/PR 全部运行。
-    if: github.event_name != 'workflow_dispatch' || contains(inputs.platforms, matrix.key)
     strategy:
       # 调试/解锁期：false——让三个平台都跑到各自的自然失败点，一轮拿到全部失败信息
       # （true 会在某平台早挂时掐掉其余进行中的平台，掩盖它们各自的错误）。
