@@ -3,7 +3,7 @@
 > **状态：规划中，尚未开始实现。**
 
 计划中的 **Rust 实现**，与 [`ImageDiscropperCpp/`](../ImageDiscropperCpp) 共享同一份功能规格
-（[`SPEC.md`](../ImageDiscropperCpp/SPEC.md)）。
+（[`SPEC.md`](../SPEC.md)）。
 
 ## 规划要点
 

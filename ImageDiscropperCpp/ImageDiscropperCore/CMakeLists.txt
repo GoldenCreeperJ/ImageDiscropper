@@ -2,7 +2,7 @@
 # 文件：CMakeLists.txt
 # 作用：ImageDiscropperCore 工程顶层构建脚本。定义 C++ 标准、Core 静态库目标、
 #       演示可执行程序与极简自测程序。
-# 架构定位：本库即终稿 §10.1 所述 Core 层（纯逻辑、无 GUI 依赖），
+# 架构定位：Core 层（纯逻辑、无 GUI 依赖），
 #           供上层 CLI / GUI 以静态库方式引用。
 # 分块依据：源文件按功能模块分组（core / geometry / pixel_ops / annotation /
 #           preprocess / history / engine），与 include、src 目录一一对应。
@@ -53,7 +53,7 @@ set(IDC_PIXEL_OPS_SRC
         src/pixel_ops/geometric_ops.cpp
 )
 
-# annotation：标注层（FR-1.3），由原 drawing 模块重命名而来
+# annotation：标注层（FR-1.3）
 set(IDC_ANNOTATION_SRC
         src/annotation/shape_factory.cpp
         src/annotation/rasterizer.cpp
@@ -61,7 +61,7 @@ set(IDC_ANNOTATION_SRC
         src/annotation/view_transform.cpp
 )
 
-# preprocess：切割前的基础图像处理流水线（FR-1），由原 operation 模块重命名而来
+# preprocess：切割前的基础图像处理流水线（FR-1）
 set(IDC_PREPROCESS_SRC
         src/preprocess/preprocess_config.cpp
         src/preprocess/preprocess_pipeline.cpp
@@ -72,7 +72,7 @@ set(IDC_HISTORY_SRC
         src/history/history_manager.cpp
 )
 
-# engine：Grid-Selection-Emit 统一引擎（终稿 §2 / §10.2）——切割线 / 网格 / 切分 /
+# engine：Grid-Selection-Emit 统一引擎（SPEC §1）——切割线 / 网格 / 切分 /
 #         选择极性 / 排序 / 合成 / 导出 / 图像编码(stb+libwebp) / JSON 配置(nlohmann) / 顶层编排。
 set(IDC_ENGINE_SRC
         src/engine/cut_line.cpp
@@ -123,13 +123,12 @@ if(IDC_BUILD_TESTS)
     )
     target_link_libraries(unit_tests PRIVATE image_discropper_core)
 
-    enable_testing()
     add_test(NAME unit_tests COMMAND unit_tests)
 endif()
 
 # ---------------------------------------------------------------------------
 # 作为子工程被根 CMakeLists 引入时，向父作用域回传 Core 版本号，供 CLI 的
-# --version 输出 "idc <version> (core <core-version>)"（guideline §6.2）。
+# --version 输出 "idc <version> (core <core-version>)"。
 # 独立构建（Core 即顶层）时跳过——此时不存在父作用域。
 # ---------------------------------------------------------------------------
 if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)

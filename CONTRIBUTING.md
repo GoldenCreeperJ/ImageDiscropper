@@ -3,7 +3,7 @@
 感谢你考虑为 ImageDiscropper 贡献代码或文档！在动手之前，请先了解下面的约定。
 
 > 本项目主要由 AI 主导开发（约 99%）。无论改动来自人工还是 AI，**提交前必须经人工审核**，
-> 尤其是许可合规（GPL-3.0）与行为一致性（以 [`SPEC.md`](ImageDiscropperCpp/SPEC.md) 为唯一行为基线）。
+> 尤其是许可合规（GPL-3.0）与行为一致性（以 [`SPEC.md`](SPEC.md) 为唯一行为基线）。
 
 ## 快速上手
 
@@ -42,7 +42,7 @@ Linux / macOS 用 `linux-debug` / `macos-debug` 预设。
 | 仓库首页 | 根 `README.md` / `README.en.md` | 只做导读与导航，**不展开**技术细节       |
 | 贡献约定 | 根 `CONTRIBUTING.md`            | 构建/测试、代码与文档规范、提交约定        |
 | 实现总览 | `ImageDiscropperCpp/README.md` | C++ 工程组成与需求概念映射，细节下沉到模块文档 |
-| 功能规格 | `ImageDiscropperCpp/SPEC.md`   | 唯一行为基线。改行为先改 `SPEC.md`    |
+| 功能规格 | `SPEC.md`   | 唯一行为基线。改行为先改 `SPEC.md`    |
 | 模块说明 | 各模块 `README.md`                | 模块职责、API 映射、构建；不重复目录级细节   |
 | 目录说明 | 各子目录 `README.md`               | 该目录职责边界、分块依据、文件清单         |
 

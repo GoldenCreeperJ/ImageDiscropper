@@ -1,39 +1,48 @@
 # ============================================================================
 # 文件：CMakeLists.txt
 # 作用：ImageDiscropperGui 工程构建脚本。定义 Qt 6 GUI 可执行目标 idc_gui，
-#       并链接 Core 静态库 image_discropper_core（终稿 §10.1 GUI 层）。
-# 架构定位：GUI 是 Core 的纯消费者（guideline §0 A-0.1）——只采集交互、翻译为
+#       并链接 Core 静态库 image_discropper_core。
+# 架构定位：GUI 是 Core 的纯消费者——只采集交互、翻译为
 #           Core 参数、调用 Core、渲染结果；切割/几何/排序/极性/导出逻辑全在 Core。
 # 分块依据：源文件按职责分组（app / model / canvas / panels / util），与本目录
-#           的子目录一一对应，避免上帝文件（guideline §0 A-0.12 / Strict Rule 3）。
+#           的子目录一一对应，避免上帝文件。
 # 说明：
-#   · Qt 6 由 vcpkg 的 qtbase 提供，仅使用 Widgets / Gui / Core 三个组件；
-#     vcpkg qtbase 附带的 DB2/PPS/OCI/Libb2 等可选驱动目标本 GUI 不需要，故不链接。
+#   · Qt 6 由 vcpkg 的 qtbase 提供，仅链接 Widgets / Gui / Core 三个组件；
+#     qtbase 的可选驱动目标（Windows 的 DB2/PPS/OCI/Libb2 等）或依赖链
+#     （Linux/macOS 上为构建 qtbase 而编译的 sql 驱动等）本 GUI 均不链接。
 #   · Core 的第三方依赖（stb / WebP / nlohmann_json）在 Core 侧以 PRIVATE 接入，
 #     GUI 仅经 Core 公共头间接使用，无需感知（依赖单向）。
 # ============================================================================
 cmake_minimum_required(VERSION 3.28)
-project(ImageDiscropperGui LANGUAGES CXX VERSION 1.0.0)
+project(ImageDiscropperGui LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+# 编译选项与 Core/CLI 保持一致：MSVC 用 /W3 /utf-8（中文注释需 UTF-8），其余用 -Wall -Wextra。
+if(MSVC)
+    add_compile_options(/W3 /utf-8)
+else()
+    add_compile_options(-Wall -Wextra)
+endif()
+
+# 版本注入（与 CLI 同一形式）：IDC_GUI_VERSION 由根 CMakeLists 提供（产品版本单一来源）；
+# IDC_CORE_VERSION 正常由根经 PARENT_SCOPE 回传。独立配置本子目录时给出占位默认，避免空宏。
+if(NOT DEFINED IDC_GUI_VERSION)
+    set(IDC_GUI_VERSION "1.0.0")
+endif()
+if(NOT DEFINED IDC_CORE_VERSION)
+    set(IDC_CORE_VERSION "1.0.0")
+endif()
 
 # ---------------------------------------------------------------------------
 # Qt 6（Widgets + QGraphicsView）。AUTOMOC 处理 Q_OBJECT 头文件的元对象编译。
 # ---------------------------------------------------------------------------
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Widgets Gui Core)
 
-# 手动开启 AUTOMOC/AUTOUIC/AUTORCC（不依赖 qt_standard_project_setup 的最低版本）。
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTOUIC ON)
-set(CMAKE_AUTORCC ON)
-
-if(MSVC)
-    add_compile_options(/W3 /utf-8)
-else()
-    add_compile_options(-Wall -Wextra)
-endif()
+# Qt 6.3+ 标准工程初始化：开启 AUTOMOC/AUTOUIC/AUTORCC（清单基线已锁 Qt 6.11）。
+qt_standard_project_setup()
 
 # ---------------------------------------------------------------------------
 # 源文件清单（按模块分组）。与 Core/CLI 一致做 include/src 分离：
@@ -135,13 +144,8 @@ add_executable(idc_gui WIN32
 # （与 Core 的 include/、CLI 的 include/ 同一约定：包含根下直接是功能分组子目录）。
 target_include_directories(idc_gui PRIVATE include)
 
-# 版本注入（与 CLI 同一形式）：IDC_CORE_VERSION 正常由根 CMakeLists 经 PARENT_SCOPE 回传；
-# 独立配置本子目录时给出占位默认，避免空宏。GUI 版本 = 本工程版本。
-if(NOT DEFINED IDC_CORE_VERSION)
-    set(IDC_CORE_VERSION "1.0.0")
-endif()
 target_compile_definitions(idc_gui PRIVATE
-    IDC_GUI_VERSION="${PROJECT_VERSION}"
+    IDC_GUI_VERSION="${IDC_GUI_VERSION}"
     IDC_CORE_VERSION="${IDC_CORE_VERSION}"
 )
 

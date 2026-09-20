@@ -1,5 +1,9 @@
 # ImageDiscropper
 
+[![CI](https://github.com/GoldenCreeperJ/ImageDiscropper/actions/workflows/ci.yml/badge.svg)](https://github.com/GoldenCreeperJ/ImageDiscropper/actions/workflows/ci.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](.github/workflows/ci.yml)
+
 **Image region extraction, reverse erasing & grid splitting tool** | [中文](README.md)
 
 > In one sentence: conventional cropping only answers "which part to keep"; this tool answers "**which lines to cut along, which blocks to keep, and how to reassemble them**".
@@ -12,7 +16,7 @@ and the result is exported by separating, collapsing, or rearranging.
 ## 🤖 AI-led development disclosure
 
 This project is primarily AI-led (~99%), and the documentation is AI-generated as well. The functional spec is
-[`SPEC.md`](ImageDiscropperCpp/SPEC.md); please read [`CONTRIBUTING.md`](CONTRIBUTING.md) before contributing.
+[`SPEC.md`](SPEC.md); please read [`CONTRIBUTING.md`](CONTRIBUTING.md) before contributing.
 
 ## ✨ Features
 
@@ -110,7 +114,7 @@ Documentation is organized by level; **each level has a clearly delimited scope 
 | ① Repo front page             | [`README.md`](README.md) / this file                             | What the project is, features, quick start, doc navigation, license — **an index only**, no deep technical detail                                        |
 | ② Contributing                | [`CONTRIBUTING.md`](CONTRIBUTING.md)                             | Build & test workflow, code/doc conventions, commit & PR etiquette                                                                                       |
 | ③ C++ implementation overview | [`ImageDiscropperCpp/README.md`](ImageDiscropperCpp/README.md)   | Composition of the C++ codebase, mapping to spec concepts, build & run, implementation status                                                            |
-| ④ Functional spec             | [`ImageDiscropperCpp/SPEC.md`](ImageDiscropperCpp/SPEC.md)       | **The single behavioral baseline**: modes / export / boundary cases (E-1~E-8) / NFRs / config schema; contributing conventions live in `CONTRIBUTING.md` |
+| ④ Functional spec             | [`SPEC.md`](SPEC.md)       | **The single behavioral baseline**: modes / export / boundary cases (E-1~E-8) / NFRs / config schema; contributing conventions live in `CONTRIBUTING.md` |
 | ⑤ Module docs                 | `ImageDiscropper{Core,Cli,Gui}/README.md`                        | Each module's responsibility, API mapping to the spec, build instructions; the GUI README also covers user operations and design notes                   |
 | ⑥ Directory docs              | `README.md` inside every `include/`, `src/`, … subdirectory      | That directory's responsibility boundary, file-splitting rationale, file list (repo-wide directory doc convention)                                       |
 | ⑦ Placeholder implementation  | [`ImageDiscropperRust/README.md`](ImageDiscropperRust/README.md) | Planning status of the Rust implementation                                                                                                               |
@@ -126,3 +130,4 @@ Documentation is organized by level; **each level has a clearly delimited scope 
 ## 📄 License
 
 The project as a whole is licensed under [GPL-3.0](LICENSE), covering every language's Core implementation (C++ and the future Rust one, etc.) as well as the CLI and GUI.
+Community standards: [Code of Conduct](CODE_OF_CONDUCT.md); vulnerability reporting: [Security Policy](SECURITY.md).

@@ -1,5 +1,9 @@
 # ImageDiscropper
 
+[![CI](https://github.com/GoldenCreeperJ/ImageDiscropper/actions/workflows/ci.yml/badge.svg)](https://github.com/GoldenCreeperJ/ImageDiscropper/actions/workflows/ci.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](.github/workflows/ci.yml)
+
 **图像区域提取、反向剔除与网格分割工具** | [English](README.en.md)
 
 > 一句话定位：常规裁剪只回答「保留哪一块」；本工具回答「**沿哪些线切开、留下哪些块、怎么重新拼起来**」。
@@ -11,7 +15,7 @@ ImageDiscropper 是一款**本地运行**的图像切割工具。所有功能都
 ## 🤖 AI 主导开发声明
 
 本项目主要由 AI 主导开发（约 99%），文档亦为 AI 生成。功能规格见
-[`SPEC.md`](ImageDiscropperCpp/SPEC.md)，贡献前请阅读 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
+[`SPEC.md`](SPEC.md)，贡献前请阅读 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
 
 ## ✨ 特性
 
@@ -109,7 +113,7 @@ idc config  --load my-config.json --input photo.jpg --output result.png
 | ① 仓库首页     | 本文件 / [`README.en.md`](README.en.md)                             | 项目定位、特性、快速开始、文档导航、许可——**只做导读**，不展开技术细节                                    |
 | ② 贡献约定     | [`CONTRIBUTING.md`](CONTRIBUTING.md)                             | 构建与测试方式、代码/文档规范、提交与 PR 约定                                                 |
 | ③ C++ 实现总览 | [`ImageDiscropperCpp/README.md`](ImageDiscropperCpp/README.md)   | C++ 工程的组成、与需求概念的映射、构建运行、实现状态                                              |
-| ④ 功能规格     | [`ImageDiscropperCpp/SPEC.md`](ImageDiscropperCpp/SPEC.md)       | **唯一行为基线**：模式 / 导出 / 边界（E-1~E-8）/ NFR / 配置 schema；贡献规范见 `CONTRIBUTING.md` |
+| ④ 功能规格     | [`SPEC.md`](SPEC.md)       | **唯一行为基线**：模式 / 导出 / 边界（E-1~E-8）/ NFR / 配置 schema；贡献规范见 `CONTRIBUTING.md` |
 | ⑤ 模块说明     | `ImageDiscropper{Core,Cli,Gui}/README.md`                        | 各模块职责、与规格的 API 映射、构建方式；Gui README 另含用户操作速览与设计说明                           |
 | ⑥ 目录说明     | 各 `include/`、`src/` 等子目录内的 `README.md`                           | 该目录的职责边界、分块依据、文件清单（全仓库目录说明约定）                                             |
 | ⑦ 占位实现     | [`ImageDiscropperRust/README.md`](ImageDiscropperRust/README.md) | Rust 实现的规划状态说明                                                            |
@@ -125,3 +129,4 @@ idc config  --load my-config.json --input photo.jpg --output result.png
 ## 📄 许可
 
 本项目整体采用 [GPL-3.0](LICENSE)，覆盖所有语言实现的 Core（C++ / 未来的 Rust 等）以及 CLI 与 GUI。
+社区规范见 [行为准则](CODE_OF_CONDUCT.md)，漏洞报告方式见 [安全策略](SECURITY.md)。

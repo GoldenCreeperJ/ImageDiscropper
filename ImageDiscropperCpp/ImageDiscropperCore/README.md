@@ -1,7 +1,7 @@
 # ImageDiscropperCore
 
 `ImageDiscropperCore` 是「**图像区域提取、反向剔除与网格分割工具**」的 **Core 层**
-（纯逻辑静态库，命名空间 `idc`）。它是功能规格 [`../SPEC.md`](../SPEC.md) 所述三层架构
+（纯逻辑静态库，命名空间 `idc`）。它是功能规格 [`../SPEC.md`](../../SPEC.md 所述三层架构
 （Core / CLI / GUI）中的 **Core**，不依赖任何 GUI，可被上层 CLI 与 GUI 直接引用。
 
 > 本库由早期的图像绘制与处理逻辑库重构而来：**保留并重定位**了可复用的基础图像处理与

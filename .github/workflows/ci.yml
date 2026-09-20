@@ -115,9 +115,10 @@ jobs:
         if: matrix.key == 'macos'
         run: brew install autoconf autoconf-archive automake libtool ninja
 
-      # Ninja 预设不绑定特定 VS 版本：经 vswhere 定位最新 VS 并用 VsDevCmd 注入 MSVC 编译环境
-      #（PATH 里另有 MinGW 时 Ninja 默认会误选，必须显式限定）。
-      - name: Configure (Windows)
+      # 配置 → 构建 → 测试合并为单步（Windows 的 MSVC 环境注入只写一次）。
+      # Windows：Ninja 预设不绑定特定 VS 版本，经 vswhere 定位最新 VS 并用 VsDevCmd 注入
+      # MSVC 编译环境（PATH 里另有 MinGW 时 Ninja 默认会误选，必须显式限定）。
+      - name: Configure, build and test (Windows)
         if: matrix.key == 'windows'
         shell: cmd
         working-directory: ImageDiscropperCpp
@@ -125,39 +126,16 @@ jobs:
           for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
           call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64
           cmake --preset ${{ matrix.configure }}
-
-      - name: Configure (Linux/macOS)
-        if: matrix.key != 'windows'
-        working-directory: ImageDiscropperCpp
-        run: cmake --preset ${{ matrix.configure }}
-
-      - name: Build (Windows)
-        if: matrix.key == 'windows'
-        shell: cmd
-        working-directory: ImageDiscropperCpp
-        run: |
-          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
-          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64
           cmake --build --preset ${{ matrix.build }}
-
-      - name: Build (Linux/macOS)
-        if: matrix.key != 'windows'
-        working-directory: ImageDiscropperCpp
-        run: cmake --build --preset ${{ matrix.build }}
-
-      - name: Test (Windows)
-        if: matrix.key == 'windows'
-        shell: cmd
-        working-directory: ImageDiscropperCpp
-        run: |
-          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
-          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64
           ctest --preset ${{ matrix.test }}
 
-      - name: Test (Linux/macOS)
+      - name: Configure, build and test (Linux/macOS)
         if: matrix.key != 'windows'
         working-directory: ImageDiscropperCpp
-        run: ctest --preset ${{ matrix.test }}
+        run: |
+          cmake --preset ${{ matrix.configure }}
+          cmake --build --preset ${{ matrix.build }}
+          ctest --preset ${{ matrix.test }}
 
       # Windows 的 VCPKG_INSTALLED_DIR=D:/vcpkg_installed 在工作区外，artifact 无法直接上传；
       # 失败时先把端口构建日志拷回工作区再上传。

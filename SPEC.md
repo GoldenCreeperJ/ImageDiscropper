@@ -1,6 +1,6 @@
-# ImageDiscropperCpp 功能规格（SPEC）
+# ImageDiscropper 功能规格（SPEC）
 
-> 本文件由原需求文档《Require.md（终稿 v1.0）》提炼而来：**保留行为契约，删除过程性与历史性内容**。
+> 本文件是**唯一行为基线**：只保留行为契约，不含实现细节与过程性内容。
 > 引擎（Core）、命令行（CLI）、桌面端（GUI）的行为与测试均以此为准；实现状态见各模块 README，
 > 贡献约定见仓库根 `CONTRIBUTING.md`。
 
