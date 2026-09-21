@@ -23,6 +23,10 @@ on:
       vcpkg-installed:
         required: true
         type: string        # vcpkg_installed 目录（Windows 为 D:/vcpkg_installed，其余为 build/<preset>/vcpkg_installed）
+      vcpkg-downloads:
+        required: false
+        type: string
+        default: ''         # vcpkg 源码下载目录（防 codeload 偶发 504；留空则不缓存下载）
       cache-deps:
         required: false
         type: boolean
@@ -68,6 +72,14 @@ jobs:
           git -C "$GITHUB_WORKSPACE/vcpkg-src" checkout --detach e6f9e70a29a3e80a1fc510d8503304315447112f
           echo "VCPKG_ROOT=$GITHUB_WORKSPACE/vcpkg-src" >> "$GITHUB_ENV"
 
+      # 源码下载缓存：codeload 偶发 504 时靠上次的归档直接复用（未命中则 job 结束自动 save）。
+      - name: Restore vcpkg downloads cache
+        if: inputs.cache-deps && inputs.vcpkg-downloads != ''
+        uses: actions/cache@v4
+        with:
+          path: ${{ inputs.vcpkg-downloads }}
+          key: vcpkg-downloads-${{ inputs.key }}-baseline-e6f9e70a29
+
       # 二进制缓存：整树 restore（命中则 vcpkg 跳过已装包；未命中则 job 结束自动 save）。
       # 弃用原因备注：x-gha 后端已被新版 vcpkg 移除；nuget,github 在该版本下
       # 源解析失效且非 Windows 需 mono（runner 屏蔽 keyserver），故退回 actions/cache 整树方案。
@@ -87,8 +99,6 @@ jobs:
         shell: cmd
         run: reg add "HKLM\SYSTEM\CurrentControlSet\Control\FileSystem" /v LongPathsEnabled /t REG_DWORD /d 1 /f
 
-      # qtbase 在 Linux 上构建需系统 X11/EGL/字体等开发库（vcpkg 官方 Ubuntu 完整清单）；
-      # 其依赖 gperf / libpq / libxcrypt 经 autotools 从源码构建，另需 autoconf 全家桶与 libltdl。
       # qtbase 在 Linux 上构建需系统 X11/EGL/字体等开发库（vcpkg 官方 Ubuntu 完整清单）；
       # 其依赖 gperf / libpq / libxcrypt 经 autotools 从源码构建，另需 autoconf 全家桶与 libltdl。
       - name: Install build dependencies (Linux)

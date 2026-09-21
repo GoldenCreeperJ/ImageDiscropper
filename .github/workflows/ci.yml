@@ -33,15 +33,19 @@ jobs:
             os: windows-latest
             preset: windows
             vcpkg-installed: D:/vcpkg_installed
+            vcpkg-downloads: D:/vcpkg-src/downloads
+            cmake-args: '-DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON -DIDC_BUILD_GUI=OFF'
           - key: linux-x64
             os: ubuntu-latest
             preset: linux-debug
             vcpkg-installed: build/linux-debug/vcpkg_installed
+            vcpkg-downloads: vcpkg-src/downloads
             cmake-args: '-DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON -DIDC_BUILD_GUI=OFF'
           - key: macos-arm64
             os: macos-latest
             preset: macos-debug
             vcpkg-installed: build/macos-debug/vcpkg_installed
+            vcpkg-downloads: vcpkg-src/downloads
             cmake-args: '-DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON -DIDC_BUILD_GUI=OFF'
     uses: ./.github/workflows/_build-platform.yml
     with:
@@ -49,4 +53,5 @@ jobs:
       os: ${{ matrix.os }}
       preset: ${{ matrix.preset }}
       vcpkg-installed: ${{ matrix.vcpkg-installed }}
+      vcpkg-downloads: ${{ matrix.vcpkg-downloads }}
       cmake-args: ${{ matrix.cmake-args }}
