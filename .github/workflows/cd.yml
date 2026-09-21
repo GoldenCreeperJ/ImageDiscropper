@@ -3,7 +3,8 @@
 # 平台级构建步骤复用 _build-platform.yml（prepare-dist=true 时整理并上传产物）。
 #
 # 说明：
-#   · 手动触发（workflow_dispatch）需填写已存在于仓库的标签名（如 v1.0.0）。
+#   · 手动触发（workflow_dispatch）填写标签名（如 v1.0.0）；标签不存在时会在
+#     当前默认分支 HEAD 上自动创建并推送（无需手工打 tag）。
 #   · Release 与 CI Debug 是不同 ABI；首次发布需完整构建 qtbase（约 1 小时），
 #     之后 x-gha 缓存按平台/三元组复用。
 #   · Linux 裸二进制依赖系统 X11 库（正常桌面环境均有）；macOS 若检测到动态 Qt
@@ -18,15 +19,41 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: '要发布的标签（如 v1.0.0；标签须已存在于仓库）'
+        description: '要发布的标签（如 v1.0.0；不存在时会在当前 HEAD 自动创建）'
         required: true
         type: string
 
 permissions:
   contents: write
 
+# 同一标签的重复触发互斥（防手滑二次触发）；不同标签的发布互不影响。
+# 注意手动触发时 github.ref 是默认分支，故用 inputs.tag 参与分组。
+concurrency:
+  group: cd-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
+  # 手动触发时若标签不存在：在当前默认分支 HEAD 上创建并推送该标签
+  # （打标即「此刻的 main 就是要发布的版本」）。tag push 触发的运行跳过本 job。
+  prepare:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Create tag if missing
+        run: |
+          if git rev-parse "refs/tags/${{ inputs.tag }}" >/dev/null 2>&1; then
+            echo "标签 ${{ inputs.tag }} 已存在，跳过创建"
+          else
+            git tag "${{ inputs.tag }}"
+            git push origin "refs/tags/${{ inputs.tag }}"
+            echo "已创建标签 ${{ inputs.tag }}（指向当前 HEAD）"
+          fi
+
   build:
+    needs: prepare
     strategy:
       # 发布场景：三平台各自尽力，一个失败不砍其他。
       fail-fast: false

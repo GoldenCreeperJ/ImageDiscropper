@@ -101,7 +101,7 @@ uploads **6 executables** (3 platforms × GUI/CLI) plus a `SHA256SUMS` checksum 
 git tag v1.0.0 && git push origin v1.0.0
 ```
 
-The CD can also be triggered manually from the Actions tab (enter an existing tag name, no push needed).
+The CD can also be triggered manually from the Actions tab — just enter a tag name (created automatically at the current HEAD if missing; no push needed).
 
 > Binaries are unsigned for now (SmartScreen may warn on Windows); Linux builds require system X11 libraries (present on any normal desktop).
 

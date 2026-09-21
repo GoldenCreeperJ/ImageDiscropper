@@ -100,7 +100,7 @@ ctest --test-dir build
 git tag v1.0.0 && git push origin v1.0.0
 ```
 
-也可在 Actions 页面手动触发 CD（填写已存在的标签名，无需 push）。
+也可在 Actions 页面手动触发 CD（填写标签名即可——不存在时会自动在当前 HEAD 创建，无需 push）。
 
 > 产物未做代码签名，Windows 首次下载运行 SmartScreen 会提示；Linux 版依赖系统 X11 库（正常桌面环境均有）。
 
