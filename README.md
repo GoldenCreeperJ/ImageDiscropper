@@ -89,7 +89,9 @@ ctest --test-dir build
 产物位于构建目录 `bin/`：`idc(.exe)`、`idc_gui(.exe)`、`demo(.exe)`。
 （CLion 用户可直接以 `ImageDiscropperCpp/` 为 CMake 源目录打开工程，CLion 会识别 Presets。）
 
-每次提交由 GitHub Actions（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）在 **Windows / Linux / macOS 三平台**自动构建（含 GUI）并跑 Core/CLI 测试。
+每次提交由 GitHub Actions（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）自动验证：**Windows 构建 GUI + 三平台跑 Core/CLI 测试**（分钟级）；三平台 GUI 完整构建验证手动运行（[`.github/workflows/gui-verify.yml`](.github/workflows/gui-verify.yml)）。
+
+无需 GUI 的环境可跳过 Qt（不安装 qtbase）：`cmake --preset windows -DIDC_BUILD_GUI=OFF -DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON`。
 
 ### 发布（Release）
 

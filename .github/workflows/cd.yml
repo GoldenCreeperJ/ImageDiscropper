@@ -25,7 +25,6 @@ on:
 
 permissions:
   contents: write
-  packages: write
 
 # 同一标签的重复触发互斥（防手滑二次触发）；不同标签的发布互不影响。
 # 注意手动触发时 github.ref 是默认分支，故用 inputs.tag 参与分组。
@@ -63,17 +62,23 @@ jobs:
           - key: win-x64
             os: windows-latest
             preset: windows-release
+            vcpkg-installed: D:/vcpkg_installed
           - key: linux-x64
             os: ubuntu-latest
             preset: linux-release
+            vcpkg-installed: build/linux-release/vcpkg_installed
           - key: macos-arm64
             os: macos-latest
             preset: macos-release
+            vcpkg-installed: build/macos-release/vcpkg_installed
     uses: ./.github/workflows/_build-platform.yml
     with:
       key: ${{ matrix.key }}
       os: ${{ matrix.os }}
       preset: ${{ matrix.preset }}
+      vcpkg-installed: ${{ matrix.vcpkg-installed }}
+      cmake-args: ''
+      cache-deps: false
       run-tests: false
       prepare-dist: true
       # 手动触发时构建用户指定的标签，否则构建触发本次运行的标签。

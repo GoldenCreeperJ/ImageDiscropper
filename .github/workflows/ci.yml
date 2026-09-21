@@ -1,10 +1,8 @@
-# CI：Windows / Linux / macOS 三平台 Debug——配置（vcpkg 清单模式）→ 构建（含 GUI）→ 测试。
+# CI：每 push——Windows 构建 GUI + 测试；Linux/macOS 只构建 Core/CLI + 测试（不装 Qt，分钟级）。
+# 三平台 GUI 完整验证见 gui-verify.yml。
 # 平台级步骤（vcpkg 基线对齐 / vswhere / apt·brew 清单 / 长路径 / 日志收集）
 # 集中在 _build-platform.yml 可复用工作流中，本文件只声明矩阵与触发条件。
 name: CI
-
-permissions:
-  packages: write
 
 on:
   push:
@@ -34,14 +32,21 @@ jobs:
           - key: win-x64
             os: windows-latest
             preset: windows
+            vcpkg-installed: D:/vcpkg_installed
           - key: linux-x64
             os: ubuntu-latest
             preset: linux-debug
+            vcpkg-installed: build/linux-debug/vcpkg_installed
+            cmake-args: '-DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON -DIDC_BUILD_GUI=OFF'
           - key: macos-arm64
             os: macos-latest
             preset: macos-debug
+            vcpkg-installed: build/macos-debug/vcpkg_installed
+            cmake-args: '-DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON -DIDC_BUILD_GUI=OFF'
     uses: ./.github/workflows/_build-platform.yml
     with:
       key: ${{ matrix.key }}
       os: ${{ matrix.os }}
       preset: ${{ matrix.preset }}
+      vcpkg-installed: ${{ matrix.vcpkg-installed }}
+      cmake-args: ${{ matrix.cmake-args }}

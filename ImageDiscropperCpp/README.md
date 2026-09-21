@@ -92,7 +92,7 @@ ctest --test-dir build/windows --output-on-failure   # 同时运行 Core unit_te
 
 首次配置自动安装清单依赖（qtbase 较慢）。手动方式（清单模式自动生效）：
 `cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake`。
-每次提交由 GitHub Actions 在 Windows / Linux / macOS 三平台自动构建（含 GUI）并跑测试（见仓库根 `.github/workflows/ci.yml`）。
+每次提交由 GitHub Actions 自动验证：Windows 构建 GUI + 三平台跑 Core/CLI 测试；三平台 GUI 完整构建手动验证（`.github/workflows/gui-verify.yml`）。
 
 命令行速览见根 [`README.md`](../README.md)「快速开始」；完整选项见 `idc <command> --help` 或 [`ImageDiscropperCli/README.md`](ImageDiscropperCli/README.md)。
 

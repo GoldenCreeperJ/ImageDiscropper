@@ -1,0 +1,39 @@
+# 三平台 GUI 完整验证：手动触发。
+# 日常 CI（ci.yml）为控制缓存池占用只验证 Windows GUI；本工作流补齐
+# Linux/macOS 的 GUI 构建验证（不写缓存，避免挤占 10GB 池）。
+name: GUI Verify
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: gui-verify
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: win-x64
+            os: windows-latest
+            preset: windows
+            vcpkg-installed: D:/vcpkg_installed
+          - key: linux-x64
+            os: ubuntu-latest
+            preset: linux-debug
+            vcpkg-installed: build/linux-debug/vcpkg_installed
+          - key: macos-arm64
+            os: macos-latest
+            preset: macos-debug
+            vcpkg-installed: build/macos-debug/vcpkg_installed
+    uses: ./.github/workflows/_build-platform.yml
+    with:
+      key: ${{ matrix.key }}
+      os: ${{ matrix.os }}
+      preset: ${{ matrix.preset }}
+      vcpkg-installed: ${{ matrix.vcpkg-installed }}
+      cmake-args: ''
+      cache-deps: false
+      run-tests: true

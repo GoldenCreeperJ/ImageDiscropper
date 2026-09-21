@@ -440,7 +440,7 @@ cmake --build build/windows --target idc_gui
 
 手动方式：`cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake && cmake --build build --target idc_gui`（清单模式自动生效）。
 Linux / macOS 用 `linux-debug` / `macos-debug` 预设（Linux 上 qtbase 构建需系统 X11/EGL 等开发库，清单见 CI 工作流）。
-GUI 在 CI 中以 **Windows / Linux / macOS 三平台构建验证**；运行验证以 Windows 为主。
+GUI 构建验证：每次 push 覆盖 **Windows**（ci.yml），**Linux / macOS 手动**（gui-verify.yml）；运行验证以 Windows 为主。
 根 `CMakeLists.txt` 已在 `add_subdirectory(ImageDiscropperCli)` 之后追加 `add_subdirectory(ImageDiscropperGui)`。
 
 - 版本号经编译期宏注入：`IDC_GUI_VERSION`（本工程版本）与 `IDC_CORE_VERSION`（Core 经 PARENT_SCOPE 回传，与 CLI 同一来源；独立配置本目录时为占位版本）。
