@@ -1,0 +1,192 @@
+# 可复用工作流：单平台「环境准备 → 配置 → 构建 → 测试」。
+# 由 ci.yml（Debug 矩阵）与 cd.yml（Release 矩阵）调用；平台相关的所有
+# 环境魔法（vcpkg 基线对齐 / vswhere / apt·brew 清单 / 长路径 / 日志收集）
+# 集中在此一处，CI 与 CD 不再各自维护副本。
+name: _build-platform
+
+on:
+  workflow_call:
+    inputs:
+      key:
+        required: true
+        type: string        # win-x64 / linux-x64 / macos-arm64
+      os:
+        required: true
+        type: string
+      configure:
+        required: true
+        type: string        # configure 预设名
+      build:
+        required: true
+        type: string        # build 预设名
+      test:
+        required: true
+        type: string        # test 预设名
+      prepare-dist:
+        required: false
+        type: boolean
+        default: false      # true：整理 dist 产物并上传（CD 用）
+      ref:
+        required: false
+        type: string
+        default: ''         # CD 手动触发时传入标签名；空则用触发本次运行的 ref
+
+jobs:
+  build:
+    runs-on: ${{ inputs.os }}
+    env:
+      VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+
+      # Windows：优先用镜像上独立的 C:\vcpkg（VS 18 自带的捆绑版 vcpkg 构建 qtbase 会失败）；
+      # 仅当独立版不存在时才回退到 VCPKG_INSTALLATION_ROOT。
+      - name: Set up vcpkg environment (Windows)
+        if: inputs.key == 'win-x64'
+        run: |
+          if (Test-Path "C:\vcpkg") {
+            "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
+          } else {
+            "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+          }
+
+      - name: Set up vcpkg environment (Linux/macOS)
+        if: inputs.key != 'win-x64'
+        run: echo "VCPKG_ROOT=${VCPKG_INSTALLATION_ROOT}" >> "$GITHUB_ENV"
+
+      # runner 镜像的 vcpkg 是旧 commit 的浅克隆且带镜像补丁，不含清单声明的基线 commit；
+      # fetch 后 reset --hard 强制对齐基线（丢弃镜像补丁），使工作区 ports/versions 数据库
+      # 与清单完全一致，版本解析不再依赖镜像里的旧状态。
+      - name: Update vcpkg to manifest baseline (Windows)
+        if: inputs.key == 'win-x64'
+        run: |
+          git -C "$env:VCPKG_ROOT" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
+          git -C "$env:VCPKG_ROOT" reset --hard e6f9e70a29a3e80a1fc510d8503304315447112f
+
+      - name: Update vcpkg to manifest baseline (Linux/macOS)
+        if: inputs.key != 'win-x64'
+        run: |
+          git -C "$VCPKG_INSTALLATION_ROOT" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
+          git -C "$VCPKG_INSTALLATION_ROOT" reset --hard e6f9e70a29a3e80a1fc510d8503304315447112f
+
+      # vcpkg 的 qtbase 构建树路径超过 260 字符 MAX_PATH（uiautomation 插件层级很深），
+      # cl.exe 报 C1083 "Cannot open compiler generated file"。
+      # 根治在 preset 里：VCPKG_INSTALLED_DIR=D:/vcpkg_installed 把依赖树移出深层构建目录；
+      # 此处再启用长路径策略作双保险。
+      - name: Enable Windows long paths
+        if: inputs.key == 'win-x64'
+        shell: cmd
+        run: reg add "HKLM\SYSTEM\CurrentControlSet\Control\FileSystem" /v LongPathsEnabled /t REG_DWORD /d 1 /f
+
+      # qtbase 在 Linux 上构建需系统 X11/EGL/字体等开发库（vcpkg 官方 Ubuntu 完整清单）；
+      # 其依赖 gperf / libpq / libxcrypt 经 autotools 从源码构建，另需 autoconf 全家桶与 libltdl。
+      - name: Install Qt build dependencies (Linux)
+        if: inputs.key == 'linux-x64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config ninja-build \
+            autoconf autoconf-archive automake libtool libltdl-dev \
+            libx11-dev libx11-xcb-dev libxext-dev libxrender-dev libxi-dev \
+            libxcb1-dev libxcb-cursor-dev libxcb-glx0-dev libxcb-icccm4-dev \
+            libxcb-image0-dev libxcb-keysyms1-dev libxcb-randr0-dev \
+            libxcb-render-util0-dev libxcb-shape0-dev libxcb-shm0-dev \
+            libxcb-sync-dev libxcb-util-dev libxcb-xfixes0-dev \
+            libxcb-xinerama0-dev libxcb-xkb-dev libxcb-xinput-dev \
+            libxcb-composite0-dev libxcb-damage0-dev libxcb-dri2-0-dev \
+            libxcb-dri3-dev libxcb-present-dev libxcb-record0-dev \
+            libxcb-res0-dev libxcb-screensaver0-dev libxcb-xtest0-dev \
+            libxcb-xv0-dev libxcb-xvmc0-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libfontconfig1-dev \
+            libfreetype6-dev libgl1-mesa-dev libglu1-mesa-dev libegl1-mesa-dev \
+            libdbus-1-dev libsm-dev libice-dev
+
+      # gperf / libpq（qtbase 依赖）经 autotools 从源码构建，需 autoconf 全家桶。
+      - name: Install Qt build dependencies (macOS)
+        if: inputs.key == 'macos-arm64'
+        run: brew install autoconf autoconf-archive automake libtool ninja
+
+      # 配置 → 构建 → 测试合并为单步（Windows 的 MSVC 环境注入只写一次）。
+      # Windows：Ninja 预设不绑定特定 VS 版本，经 vswhere 定位最新 VS 并用 VsDevCmd 注入
+      # MSVC 编译环境（PATH 里另有 MinGW 时 Ninja 默认会误选，必须显式限定）。
+      - name: Configure, build and test (Windows)
+        if: inputs.key == 'win-x64'
+        shell: cmd
+        working-directory: ImageDiscropperCpp
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64
+          cmake --preset ${{ inputs.configure }}
+          cmake --build --preset ${{ inputs.build }}
+          ctest --preset ${{ inputs.test }}
+
+      - name: Configure, build and test (Linux/macOS)
+        if: inputs.key != 'win-x64'
+        working-directory: ImageDiscropperCpp
+        run: |
+          cmake --preset ${{ inputs.configure }}
+          cmake --build --preset ${{ inputs.build }}
+          ctest --preset ${{ inputs.test }}
+
+      # ---- CD 产物整理（CI 不启用） ----
+      - name: Prepare dist artifacts (Windows)
+        if: inputs.prepare-dist && inputs.key == 'win-x64'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item "ImageDiscropperCpp\build\windows-release\bin\idc_gui.exe" "dist\idc_gui-${{ inputs.key }}.exe"
+          Copy-Item "ImageDiscropperCpp\build\windows-release\bin\idc.exe" "dist\idc-${{ inputs.key }}.exe"
+
+      - name: Prepare dist artifacts (Linux)
+        if: inputs.prepare-dist && inputs.key == 'linux-x64'
+        run: |
+          mkdir -p dist
+          cp "ImageDiscropperCpp/build/linux-release/bin/idc_gui" "dist/idc_gui-${{ inputs.key }}"
+          cp "ImageDiscropperCpp/build/linux-release/bin/idc" "dist/idc-${{ inputs.key }}"
+
+      - name: Prepare dist artifacts (macOS)
+        if: inputs.prepare-dist && inputs.key == 'macos-arm64'
+        run: |
+          mkdir -p dist
+          cp "ImageDiscropperCpp/build/macos-release/bin/idc_gui" "dist/idc_gui-${{ inputs.key }}"
+          cp "ImageDiscropperCpp/build/macos-release/bin/idc" "dist/idc-${{ inputs.key }}"
+          # 守卫：qtbase port 在非 Windows 上强制静态 Qt，但此处仍校验两个二进制
+          # 均无「系统路径之外」的动态依赖（Qt6 框架 / vcpkg dylib / @rpath 等），
+          # 确保裸二进制在任何 macOS 上可运行；检测到即失败（不发坏产物）。
+          check() {
+            if otool -L "$1" | tail -n +2 | awk '{print $1}' | grep -vE "^/(usr/lib|System/Library)" | grep -q .; then
+              echo "::error::$1 存在非系统动态依赖，裸二进制不可分发；需引入 macdeployqt 打包"
+              exit 1
+            fi
+          }
+          check "dist/idc_gui-${{ inputs.key }}"
+          check "dist/idc-${{ inputs.key }}"
+
+      # Windows 的 VCPKG_INSTALLED_DIR=D:/vcpkg_installed 在工作区外，artifact 无法直接上传；
+      # 失败时先把端口构建日志拷回工作区再上传。
+      - name: Collect vcpkg logs on failure (Windows)
+        if: failure() && inputs.key == 'win-x64'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force ImageDiscropperCpp/build/vcpkg-logs | Out-Null
+          Copy-Item "D:/vcpkg_installed/vcpkg/blds/*/install-*-out.log" ImageDiscropperCpp/build/vcpkg-logs/ -ErrorAction SilentlyContinue
+
+      - name: Upload vcpkg logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vcpkg-logs-${{ inputs.key }}
+          path: |
+            ImageDiscropperCpp/build/*/vcpkg-manifest-install.log
+            ImageDiscropperCpp/build/*/vcpkg_installed/vcpkg/blds/**/install-*-out.log
+            ImageDiscropperCpp/build/vcpkg-logs/
+          if-no-files-found: ignore
+
+      - name: Upload dist artifacts
+        if: inputs.prepare-dist && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ inputs.key }}
+          path: dist/*
+          if-no-files-found: error

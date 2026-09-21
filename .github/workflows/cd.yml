@@ -1,0 +1,83 @@
+# CD：打 v* 标签或手动触发 → 三平台 Release 构建（静态 Qt 单文件）→
+# 6 个裸可执行文件（3 GUI + 3 CLI）+ SHA256SUMS 校验文件 → GitHub Release。
+# 平台级构建步骤复用 _build-platform.yml（prepare-dist=true 时整理并上传产物）。
+#
+# 说明：
+#   · 手动触发（workflow_dispatch）需填写已存在于仓库的标签名（如 v1.0.0）。
+#   · Release 与 CI Debug 是不同 ABI；首次发布需完整构建 qtbase（约 1 小时），
+#     之后 x-gha 缓存按平台/三元组复用。
+#   · Linux 裸二进制依赖系统 X11 库（正常桌面环境均有）；macOS 若检测到动态 Qt
+#     链接则该平台腿直接失败（不发坏产物），届时需引入 macdeployqt 打包。
+#   · 产物未做代码签名（Windows SmartScreen 会提示），后续可加。
+name: CD
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布的标签（如 v1.0.0；标签须已存在于仓库）'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      # 发布场景：三平台各自尽力，一个失败不砍其他。
+      fail-fast: false
+      matrix:
+        include:
+          - key: win-x64
+            os: windows-latest
+            configure: windows-release
+            build: release
+            test: test-release
+          - key: linux-x64
+            os: ubuntu-latest
+            configure: linux-release
+            build: linux-release
+            test: test-linux-release
+          - key: macos-arm64
+            os: macos-latest
+            configure: macos-release
+            build: macos-release
+            test: test-macos-release
+    uses: ./.github/workflows/_build-platform.yml
+    with:
+      key: ${{ matrix.key }}
+      os: ${{ matrix.os }}
+      configure: ${{ matrix.configure }}
+      build: ${{ matrix.build }}
+      test: ${{ matrix.test }}
+      prepare-dist: true
+      # 手动触发时构建用户指定的标签，否则构建触发本次运行的标签。
+      ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist
+
+      - name: Compute checksums
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS
+
+      - name: Create release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          files: |
+            dist/*
+          generate_release_notes: true

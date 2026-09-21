@@ -68,7 +68,7 @@ CLI ──────┘
 
 ```bash
 cd ImageDiscropperCpp
-cmake --preset windows         # Windows：Ninja + MSVC（Debug；Release 用 windows-release）
+cmake --preset windows         # Windows：Ninja + MSVC（Debug；Release 用 windows-release，静态 Qt 单文件）
 cmake --build --preset debug
 ctest --preset test-debug      # Core unit_tests + CLI cli_tests
 
@@ -90,6 +90,19 @@ ctest --test-dir build
 （CLion 用户可直接以 `ImageDiscropperCpp/` 为 CMake 源目录打开工程，CLion 会识别 Presets。）
 
 每次提交由 GitHub Actions（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）在 **Windows / Linux / macOS 三平台**自动构建（含 GUI）并跑 Core/CLI 测试。
+
+### 发布（Release）
+
+打 `v*` 标签即自动发布（[`.github/workflows/cd.yml`](.github/workflows/cd.yml)）：三平台 Release 构建（**静态 Qt，单文件**）→
+上传 **6 个可执行文件**（3 平台 × GUI/CLI）+ `SHA256SUMS` 校验文件 → 自动创建 GitHub Release。
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+也可在 Actions 页面手动触发 CD（填写已存在的标签名，无需 push）。
+
+> 产物未做代码签名，Windows 首次下载运行 SmartScreen 会提示；Linux 版依赖系统 X11 库（正常桌面环境均有）。
 
 ### 命令行速览
 
@@ -113,7 +126,7 @@ idc config  --load my-config.json --input photo.jpg --output result.png
 | ① 仓库首页     | 本文件 / [`README.en.md`](README.en.md)                             | 项目定位、特性、快速开始、文档导航、许可——**只做导读**，不展开技术细节                                    |
 | ② 贡献约定     | [`CONTRIBUTING.md`](CONTRIBUTING.md)                             | 构建与测试方式、代码/文档规范、提交与 PR 约定                                                 |
 | ③ C++ 实现总览 | [`ImageDiscropperCpp/README.md`](ImageDiscropperCpp/README.md)   | C++ 工程的组成、与需求概念的映射、构建运行、实现状态                                              |
-| ④ 功能规格     | [`SPEC.md`](SPEC.md)       | **唯一行为基线**：模式 / 导出 / 边界（E-1~E-8）/ NFR / 配置 schema；贡献规范见 `CONTRIBUTING.md` |
+| ④ 功能规格     | [`SPEC.md`](SPEC.md)                                             | **唯一行为基线**：模式 / 导出 / 边界（E-1~E-8）/ NFR / 配置 schema；贡献规范见 `CONTRIBUTING.md` |
 | ⑤ 模块说明     | `ImageDiscropper{Core,Cli,Gui}/README.md`                        | 各模块职责、与规格的 API 映射、构建方式；Gui README 另含用户操作速览与设计说明                           |
 | ⑥ 目录说明     | 各 `include/`、`src/` 等子目录内的 `README.md`                           | 该目录的职责边界、分块依据、文件清单（全仓库目录说明约定）                                             |
 | ⑦ 占位实现     | [`ImageDiscropperRust/README.md`](ImageDiscropperRust/README.md) | Rust 实现的规划状态说明                                                            |
