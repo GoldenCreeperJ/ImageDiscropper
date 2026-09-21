@@ -86,8 +86,8 @@ CLI 命令与规格功能的对应（详见 [`ImageDiscropperCli/README.md`](Ima
 
 ```bash
 cmake --preset windows         # Windows：Ninja + MSVC；Linux/macOS 用 linux-debug / macos-debug
-cmake --build --preset debug   # 产出 bin/idc(.exe)、idc_gui(.exe) 与 demo(.exe)
-ctest --preset test-debug      # 同时运行 Core unit_tests 与 CLI cli_tests（IT-1~IT-18）
+cmake --build build/windows    # 产出 bin/idc(.exe)、idc_gui(.exe) 与 demo(.exe)
+ctest --test-dir build/windows --output-on-failure   # 同时运行 Core unit_tests 与 CLI cli_tests（IT-1~IT-18）
 ```
 
 首次配置自动安装清单依赖（qtbase 较慢）。手动方式（清单模式自动生效）：
@@ -107,7 +107,7 @@ ctest --preset test-debug      # 同时运行 Core unit_tests 与 CLI cli_tests�
 |------------------------------------------------------------------|----------------------------------------------------|
 | [`../README.md`](../README.md)                                   | 仓库首页（项目定位、快速开始、文档导航；含英文版 `README.en.md`）           |
 | [`../CONTRIBUTING.md`](../CONTRIBUTING.md)                       | 贡献指南（构建/测试、代码与文档规范、提交与 PR 约定）                      |
-| [`SPEC.md`](../SPEC.md)                                             | 功能规格：模式 / 导出 / 边界（E-1~E-8）/ NFR / 配置 schema，唯一行为基线 |
+| [`SPEC.md`](../SPEC.md)                                          | 功能规格：模式 / 导出 / 边界（E-1~E-8）/ NFR / 配置 schema，唯一行为基线 |
 | [`ImageDiscropperCore/README.md`](ImageDiscropperCore/README.md) | Core 层：模块划分、概念映射、构建                                |
 | [`ImageDiscropperCli/README.md`](ImageDiscropperCli/README.md)   | CLI 层：命令、选项、退出码、Core API 清单                        |
 | [`ImageDiscropperGui/README.md`](ImageDiscropperGui/README.md)   | GUI 层：Qt6 桌面前端——用户操作速览、画布 / 面板 / 文档模型与交互、关键设计决策、构建 |

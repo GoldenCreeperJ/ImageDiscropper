@@ -25,6 +25,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 # 同一标签的重复触发互斥（防手滑二次触发）；不同标签的发布互不影响。
 # 注意手动触发时 github.ref 是默认分支，故用 inputs.tag 参与分组。
@@ -61,26 +62,19 @@ jobs:
         include:
           - key: win-x64
             os: windows-latest
-            configure: windows-release
-            build: release
-            test: test-release
+            preset: windows-release
           - key: linux-x64
             os: ubuntu-latest
-            configure: linux-release
-            build: linux-release
-            test: test-linux-release
+            preset: linux-release
           - key: macos-arm64
             os: macos-latest
-            configure: macos-release
-            build: macos-release
-            test: test-macos-release
+            preset: macos-release
     uses: ./.github/workflows/_build-platform.yml
     with:
       key: ${{ matrix.key }}
       os: ${{ matrix.os }}
-      configure: ${{ matrix.configure }}
-      build: ${{ matrix.build }}
-      test: ${{ matrix.test }}
+      preset: ${{ matrix.preset }}
+      run-tests: false
       prepare-dist: true
       # 手动触发时构建用户指定的标签，否则构建触发本次运行的标签。
       ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}

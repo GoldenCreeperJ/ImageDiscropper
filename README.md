@@ -69,13 +69,13 @@ CLI ──────┘
 ```bash
 cd ImageDiscropperCpp
 cmake --preset windows         # Windows：Ninja + MSVC（Debug；Release 用 windows-release，静态 Qt 单文件）
-cmake --build --preset debug
-ctest --preset test-debug      # Core unit_tests + CLI cli_tests
+cmake --build build/windows
+ctest --test-dir build/windows --output-on-failure   # Core unit_tests + CLI cli_tests
 
 # Linux / macOS：Ninja 单配置预设（linux-debug / linux-release / macos-debug / macos-release）
 cmake --preset linux-debug
-cmake --build --preset linux-debug
-ctest --preset test-linux-debug
+cmake --build build/linux-debug
+ctest --test-dir build/linux-debug --output-on-failure
 ```
 
 也可手动指定工具链（清单模式自动生效，无需预装包）：

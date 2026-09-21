@@ -3,6 +3,9 @@
 # 集中在 _build-platform.yml 可复用工作流中，本文件只声明矩阵与触发条件。
 name: CI
 
+permissions:
+  packages: write
+
 on:
   push:
     # 显式限定「仅分支推送」：标签推送根本不会进入本触发（发布由 cd.yml 负责），
@@ -30,23 +33,15 @@ jobs:
         include:
           - key: win-x64
             os: windows-latest
-            configure: windows
-            build: debug
-            test: test-debug
+            preset: windows
           - key: linux-x64
             os: ubuntu-latest
-            configure: linux-debug
-            build: linux-debug
-            test: test-linux-debug
+            preset: linux-debug
           - key: macos-arm64
             os: macos-latest
-            configure: macos-debug
-            build: macos-debug
-            test: test-macos-debug
+            preset: macos-debug
     uses: ./.github/workflows/_build-platform.yml
     with:
       key: ${{ matrix.key }}
       os: ${{ matrix.os }}
-      configure: ${{ matrix.configure }}
-      build: ${{ matrix.build }}
-      test: ${{ matrix.test }}
+      preset: ${{ matrix.preset }}

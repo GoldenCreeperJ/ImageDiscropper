@@ -13,15 +13,13 @@ on:
       os:
         required: true
         type: string
-      configure:
+      preset:
         required: true
-        type: string        # configure 预设名
-      build:
-        required: true
-        type: string        # build 预设名
-      test:
-        required: true
-        type: string        # test 预设名
+        type: string        # configure 预设名（二进制目录约定为 build/<preset>）
+      run-tests:
+        required: false
+        type: boolean
+        default: true       # CD 传 false：Release 不构建测试目标
       prepare-dist:
         required: false
         type: boolean
@@ -35,7 +33,9 @@ jobs:
   build:
     runs-on: ${{ inputs.os }}
     env:
-      VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
+      # 二进制缓存：GitHub Packages NuGet 源（公共仓库免费、无容量上限）。
+      # 注意：x-gha 后端已被新版 vcpkg 移除，不可再用。
+      VCPKG_BINARY_SOURCES: 'clear;nuget,github,readwrite'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -117,17 +117,15 @@ jobs:
         run: |
           for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
           call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64
-          cmake --preset ${{ inputs.configure }}
-          cmake --build --preset ${{ inputs.build }}
-          ctest --preset ${{ inputs.test }}
+          cmake --preset ${{ inputs.preset }}
+          cmake --build build/${{ inputs.preset }}
 
       - name: Configure, build and test (Linux/macOS)
         if: inputs.key != 'win-x64'
         working-directory: ImageDiscropperCpp
         run: |
-          cmake --preset ${{ inputs.configure }}
-          cmake --build --preset ${{ inputs.build }}
-          ctest --preset ${{ inputs.test }}
+          cmake --preset ${{ inputs.preset }}
+          cmake --build build/${{ inputs.preset }}
 
       # ---- CD 产物整理（CI 不启用） ----
       - name: Prepare dist artifacts (Windows)

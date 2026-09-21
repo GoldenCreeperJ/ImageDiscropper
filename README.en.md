@@ -70,13 +70,13 @@ CMake Presets are the recommended path (the first configure installs dependencie
 ```bash
 cd ImageDiscropperCpp
 cmake --preset windows         # Windows: Ninja + MSVC (Debug; windows-release = static Qt, single file)
-cmake --build --preset debug
-ctest --preset test-debug      # Core unit_tests + CLI cli_tests
+cmake --build build/windows
+ctest --test-dir build/windows --output-on-failure   # Core unit_tests + CLI cli_tests
 
 # Linux / macOS: single-config Ninja presets (linux-debug / linux-release / macos-debug / macos-release)
 cmake --preset linux-debug
-cmake --build --preset linux-debug
-ctest --preset test-linux-debug
+cmake --build build/linux-debug
+ctest --test-dir build/linux-debug --output-on-failure
 ```
 
 Or configure manually (manifest mode activates automatically, no preinstalled packages needed):

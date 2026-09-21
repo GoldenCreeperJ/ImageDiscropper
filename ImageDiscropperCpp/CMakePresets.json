@@ -15,7 +15,8 @@
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "CMAKE_BUILD_TYPE": "Debug",
         "VCPKG_TARGET_TRIPLET": "x64-windows",
-        "VCPKG_INSTALLED_DIR": "D:/vcpkg_installed"
+        "VCPKG_INSTALLED_DIR": "D:/vcpkg_installed",
+        "VCPKG_BUILD_TYPE": "debug"
       }
     },
     {
@@ -27,7 +28,8 @@
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "CMAKE_BUILD_TYPE": "Release",
         "VCPKG_TARGET_TRIPLET": "x64-windows-static",
-        "VCPKG_INSTALLED_DIR": "D:/vcpkg_installed"
+        "VCPKG_INSTALLED_DIR": "D:/vcpkg_installed",
+        "VCPKG_BUILD_TYPE": "release"
       }
     },
     {
@@ -37,7 +39,8 @@
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "VCPKG_BUILD_TYPE": "debug"
       }
     },
     {
@@ -47,7 +50,8 @@
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_BUILD_TYPE": "release"
       }
     },
     {
@@ -57,7 +61,8 @@
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "VCPKG_BUILD_TYPE": "debug"
       }
     },
     {
@@ -67,77 +72,8 @@
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-        "CMAKE_BUILD_TYPE": "Release"
-      }
-    }
-  ],
-  "buildPresets": [
-    {
-      "name": "debug",
-      "configurePreset": "windows"
-    },
-    {
-      "name": "release",
-      "configurePreset": "windows-release"
-    },
-    {
-      "name": "linux-debug",
-      "configurePreset": "linux-debug"
-    },
-    {
-      "name": "linux-release",
-      "configurePreset": "linux-release"
-    },
-    {
-      "name": "macos-debug",
-      "configurePreset": "macos-debug"
-    },
-    {
-      "name": "macos-release",
-      "configurePreset": "macos-release"
-    }
-  ],
-  "testPresets": [
-    {
-      "name": "test-debug",
-      "configurePreset": "windows",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "test-release",
-      "configurePreset": "windows-release",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "test-linux-debug",
-      "configurePreset": "linux-debug",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "test-linux-release",
-      "configurePreset": "linux-release",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "test-macos-debug",
-      "configurePreset": "macos-debug",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "test-macos-release",
-      "configurePreset": "macos-release",
-      "output": {
-        "outputOnFailure": true
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_BUILD_TYPE": "release"
       }
     }
   ]

@@ -435,7 +435,7 @@ scheduleHistoryCapture（500ms 防抖）──► docHistory_ 压入 EngineConfi
 
 ```bash
 cmake --preset windows         # 以 ImageDiscropperCpp/ 为源目录（Ninja + MSVC，Debug）
-cmake --build --preset debug --target idc_gui
+cmake --build build/windows --target idc_gui
 ```
 
 手动方式：`cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake && cmake --build build --target idc_gui`（清单模式自动生效）。

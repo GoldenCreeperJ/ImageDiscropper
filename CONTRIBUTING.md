@@ -11,8 +11,8 @@
 # 依赖：CMake ≥ 3.28 + C++17 编译器 + vcpkg（设置环境变量 VCPKG_ROOT；包由 vcpkg.json 清单自动安装）
 cd ImageDiscropperCpp
 cmake --preset windows
-cmake --build --preset debug
-ctest --preset test-debug     # Core unit_tests + CLI cli_tests，提交前必须全部通过
+cmake --build build/windows
+ctest --test-dir build/windows --output-on-failure    # Core unit_tests + CLI cli_tests，提交前必须全部通过
 ```
 
 建议使用 CLion，直接以 `ImageDiscropperCpp/` 为 CMake 源目录打开工程（CLion 会识别 Presets）。
@@ -42,7 +42,7 @@ Linux / macOS 用 `linux-debug` / `macos-debug` 预设。
 | 仓库首页 | 根 `README.md` / `README.en.md` | 只做导读与导航，**不展开**技术细节       |
 | 贡献约定 | 根 `CONTRIBUTING.md`            | 构建/测试、代码与文档规范、提交约定        |
 | 实现总览 | `ImageDiscropperCpp/README.md` | C++ 工程组成与需求概念映射，细节下沉到模块文档 |
-| 功能规格 | `SPEC.md`   | 唯一行为基线。改行为先改 `SPEC.md`    |
+| 功能规格 | `SPEC.md`                      | 唯一行为基线。改行为先改 `SPEC.md`    |
 | 模块说明 | 各模块 `README.md`                | 模块职责、API 映射、构建；不重复目录级细节   |
 | 目录说明 | 各子目录 `README.md`               | 该目录职责边界、分块依据、文件清单         |
 
