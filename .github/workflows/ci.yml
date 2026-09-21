@@ -9,6 +9,10 @@ on:
     paths:
       - 'ImageDiscropperCpp/**'
       - '.github/workflows/**'
+    # 标签推送不触发 CI：标签指向的 commit 在其分支 push 时已验证过；
+    # 发布流程（Release 构建 + 测试）由 cd.yml 全权负责，避免重复构建。
+    tags-ignore:
+      - 'v*'
   pull_request:
 
 # 同一分支新 push 自动取消仍在运行的旧 run，避免并行重复烧配额。
