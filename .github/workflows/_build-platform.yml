@@ -82,11 +82,20 @@ jobs:
 
       # qtbase 在 Linux 上构建需系统 X11/EGL/字体等开发库（vcpkg 官方 Ubuntu 完整清单）；
       # 其依赖 gperf / libpq / libxcrypt 经 autotools 从源码构建，另需 autoconf 全家桶与 libltdl。
-      - name: Install Qt build dependencies (Linux)
+      # 一次装齐 Linux 全部构建依赖：
+      #   · qtbase 需系统 X11/EGL/字体等开发库（vcpkg 官方 Ubuntu 完整清单）；
+      #     其依赖 gperf / libpq / libxcrypt 经 autotools 从源码构建，另需 autoconf 全家桶与 libltdl。
+      #   · mono（Ubuntu 24.04+ 官方源已移除，经 mono-project 官方源安装）：
+      #     用于运行 nuget.exe（GitHub Packages 二进制缓存，非 Windows 平台必需）。
+      - name: Install build dependencies (Linux)
         if: inputs.key == 'linux-x64'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config ninja-build \
+          sudo apt-get install -y ca-certificates gnupg
+          sudo gpg --homedir /tmp --no-default-keyring --keyring /usr/share/keyrings/mono-official-archive-keyring.gpg             --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF
+          echo "deb [signed-by=/usr/share/keyrings/mono-official-archive-keyring.gpg] https://download.mono-project.com/repo/ubuntu stable-focal main"             | sudo tee /etc/apt/sources.list.d/mono-official-stable.list
+          sudo apt-get update
+          sudo apt-get install -y mono-devel build-essential pkg-config ninja-build \
             autoconf autoconf-archive automake libtool libltdl-dev \
             libx11-dev libx11-xcb-dev libxext-dev libxrender-dev libxi-dev \
             libxcb1-dev libxcb-cursor-dev libxcb-glx0-dev libxcb-icccm4-dev \
@@ -102,15 +111,16 @@ jobs:
             libfreetype6-dev libgl1-mesa-dev libglu1-mesa-dev libegl1-mesa-dev \
             libdbus-1-dev libsm-dev libice-dev
 
-      # gperf / libpq（qtbase 依赖）经 autotools 从源码构建，需 autoconf 全家桶。
-      - name: Install Qt build dependencies (macOS)
+      # gperf / libpq（qtbase 依赖）经 autotools 从源码构建，需 autoconf 全家桶；
+      # mono 用于运行 nuget.exe（GitHub Packages 二进制缓存，非 Windows 平台必需）。
+      - name: Install build dependencies (macOS)
         if: inputs.key == 'macos-arm64'
-        run: brew install autoconf autoconf-archive automake libtool ninja
+        run: brew install autoconf autoconf-archive automake libtool ninja mono
 
-      # 配置 → 构建 → 测试合并为单步（Windows 的 MSVC 环境注入只写一次）。
+      # 配置与构建合并为单步（Windows 的 MSVC 环境注入只写一次；测试见下方独立步骤）。
       # Windows：Ninja 预设不绑定特定 VS 版本，经 vswhere 定位最新 VS 并用 VsDevCmd 注入
       # MSVC 编译环境（PATH 里另有 MinGW 时 Ninja 默认会误选，必须显式限定）。
-      - name: Configure, build and test (Windows)
+      - name: Configure and build (Windows)
         if: inputs.key == 'win-x64'
         shell: cmd
         working-directory: ImageDiscropperCpp
@@ -120,12 +130,18 @@ jobs:
           cmake --preset ${{ inputs.preset }}
           cmake --build build/${{ inputs.preset }}
 
-      - name: Configure, build and test (Linux/macOS)
+      - name: Configure and build (Linux/macOS)
         if: inputs.key != 'win-x64'
         working-directory: ImageDiscropperCpp
         run: |
           cmake --preset ${{ inputs.preset }}
           cmake --build build/${{ inputs.preset }}
+
+      # 测试（CI Debug 跑；CD Release 不构建测试目标，run-tests=false）。
+      - name: Test
+        if: inputs.run-tests
+        working-directory: ImageDiscropperCpp
+        run: ctest --test-dir build/${{ inputs.preset }} --output-on-failure
 
       # ---- CD 产物整理（CI 不启用） ----
       - name: Prepare dist artifacts (Windows)
