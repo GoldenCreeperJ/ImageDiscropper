@@ -21,7 +21,7 @@ on:
 # 同一分支新 push 自动取消仍在运行的旧 run，避免并行重复烧配额。
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
