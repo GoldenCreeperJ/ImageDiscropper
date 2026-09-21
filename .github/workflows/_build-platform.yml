@@ -92,8 +92,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ca-certificates gnupg
-          # 公钥经 HTTPS 下载（keyserver 的 hkp:80 端口在 runner 上不通）。
-          curl -fsSL https://download.mono-project.com/repo/xamarin-public.gpg             | sudo gpg --dearmor -o /usr/share/keyrings/mono-official-archive-keyring.gpg
+          # 公钥经 hkps（443/TLS）获取——hkp:80 明文端口在 runner 上不通。
+          sudo gpg --homedir /tmp --no-default-keyring             --keyring /usr/share/keyrings/mono-official-archive-keyring.gpg             --keyserver hkps://keyserver.ubuntu.com             --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF
           echo "deb [signed-by=/usr/share/keyrings/mono-official-archive-keyring.gpg] https://download.mono-project.com/repo/ubuntu stable-focal main"             | sudo tee /etc/apt/sources.list.d/mono-official-stable.list
           sudo apt-get update
           sudo apt-get install -y mono-devel build-essential pkg-config ninja-build \
