@@ -48,35 +48,25 @@ jobs:
         with:
           ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
 
-      # Windows：优先用镜像上独立的 C:\vcpkg（VS 18 自带的捆绑版 vcpkg 构建 qtbase 会失败）；
-      # 仅当独立版不存在时才回退到 VCPKG_INSTALLATION_ROOT。
-      - name: Set up vcpkg environment (Windows)
+      # 不依赖 runner 镜像自带的 vcpkg（版本随镜像漂移、且带不可丢弃的镜像补丁）：
+      # 每次运行现场克隆清单基线 commit 的 vcpkg（blobless 浅克隆，约 20s）；
+      # vcpkg.exe 由 CMake 工具链在首次使用时自动引导下载。
+      - name: Set up vcpkg (Windows)
         if: inputs.key == 'win-x64'
+        shell: pwsh
         run: |
-          if (Test-Path "C:\vcpkg") {
-            "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
-          } else {
-            "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
-          }
+          git clone --filter=blob:none https://github.com/microsoft/vcpkg D:/vcpkg-src
+          git -C D:/vcpkg-src fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
+          git -C D:/vcpkg-src checkout --detach e6f9e70a29a3e80a1fc510d8503304315447112f
+          "VCPKG_ROOT=D:/vcpkg-src" >> $env:GITHUB_ENV
 
-      - name: Set up vcpkg environment (Linux/macOS)
-        if: inputs.key != 'win-x64'
-        run: echo "VCPKG_ROOT=${VCPKG_INSTALLATION_ROOT}" >> "$GITHUB_ENV"
-
-      # runner 镜像的 vcpkg 是旧 commit 的浅克隆且带镜像补丁，不含清单声明的基线 commit；
-      # fetch 后 reset --hard 强制对齐基线（丢弃镜像补丁），使工作区 ports/versions 数据库
-      # 与清单完全一致，版本解析不再依赖镜像里的旧状态。
-      - name: Update vcpkg to manifest baseline (Windows)
-        if: inputs.key == 'win-x64'
-        run: |
-          git -C "$env:VCPKG_ROOT" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
-          git -C "$env:VCPKG_ROOT" reset --hard e6f9e70a29a3e80a1fc510d8503304315447112f
-
-      - name: Update vcpkg to manifest baseline (Linux/macOS)
+      - name: Set up vcpkg (Linux/macOS)
         if: inputs.key != 'win-x64'
         run: |
-          git -C "$VCPKG_INSTALLATION_ROOT" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
-          git -C "$VCPKG_INSTALLATION_ROOT" reset --hard e6f9e70a29a3e80a1fc510d8503304315447112f
+          git clone --filter=blob:none https://github.com/microsoft/vcpkg "$GITHUB_WORKSPACE/vcpkg-src"
+          git -C "$GITHUB_WORKSPACE/vcpkg-src" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
+          git -C "$GITHUB_WORKSPACE/vcpkg-src" checkout --detach e6f9e70a29a3e80a1fc510d8503304315447112f
+          echo "VCPKG_ROOT=$GITHUB_WORKSPACE/vcpkg-src" >> "$GITHUB_ENV"
 
       # 二进制缓存：整树 restore（命中则 vcpkg 跳过已装包；未命中则 job 结束自动 save）。
       # 弃用原因备注：x-gha 后端已被新版 vcpkg 移除；nuget,github 在该版本下
