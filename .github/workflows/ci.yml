@@ -46,7 +46,7 @@ jobs:
             preset: macos-debug
             vcpkg-installed: build/macos-debug/vcpkg_installed
             vcpkg-downloads: vcpkg-src/downloads
-            cmake-args: '-DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON -DIDC_BUILD_GUI=OFF'
+            cmake-args: ''
     uses: ./.github/workflows/_build-platform.yml
     with:
       key: ${{ matrix.key }}
