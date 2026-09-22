@@ -1,40 +1,23 @@
-# 可复用工作流：单平台「环境准备 → 配置 → 构建 → 测试」。
-# 由 ci.yml（Debug 矩阵）与 cd.yml（Release 矩阵）调用；平台相关的所有
-# 环境魔法（vcpkg 基线对齐 / vswhere / apt·brew 清单 / 长路径 / 日志收集）
-# 集中在此一处，CI 与 CD 不再各自维护副本。
+# 可复用工作流：单平台「环境准备 → 配置 → 构建 → 测试 →（可选）产物整理」。
+# CI 与 CD 统一使用 release 预设：同树同缓存，CI 负责写入、CD 直接命中（发版分钟级）；
+# dbg-verify 用 debug 预设做低频 GUI 验证（不写缓存）。
+# 平台相关的环境魔法（vcpkg 基线对齐 / vswhere / apt·brew 清单 / 长路径 / 日志收集）
+# 集中在此一处，调用方只声明「os + preset」矩阵。
 name: _build-platform
 
 on:
   workflow_call:
     inputs:
-      key:
-        required: true
-        type: string        # win-x64 / linux-x64 / macos-arm64
       os:
         required: true
         type: string
       preset:
         required: true
         type: string        # configure 预设名（二进制目录约定为 build/<preset>）
-      run-tests:
-        required: false
-        type: boolean
-        default: true       # CD 传 false：Release 不构建测试目标
-      vcpkg-installed:
-        required: true
-        type: string        # vcpkg_installed 目录（cache 路径以仓库根为基准：Windows 为 D:/vcpkg_installed，其余为 ImageDiscropperCpp/build/<preset>/vcpkg_installed）
-      vcpkg-downloads:
-        required: false
-        type: string
-        default: ''         # vcpkg 源码下载目录（防 codeload 偶发 504；留空则不缓存下载）
       cache-deps:
         required: false
         type: boolean
-        default: true       # 整树缓存 vcpkg_installed（CI 开；CD 关以避开 10GB 池竞争，冷构建可接受）
-      cmake-args:
-        required: false
-        type: string
-        default: ''         # 附加给 cmake --preset 的参数（Core/CLI 构建：关 GUI + 关默认 feature）
+        default: true       # 整树缓存 vcpkg_installed（CI/CD 开；dbg-verify 关以避开缓存池竞争）
       prepare-dist:
         required: false
         type: boolean
@@ -53,56 +36,50 @@ jobs:
           ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
 
       # 不依赖 runner 镜像自带的 vcpkg（版本随镜像漂移、且带不可丢弃的镜像补丁）：
-      # 每次运行现场克隆清单基线 commit 的 vcpkg（blobless 浅克隆，约 20s）；
+      # 每次运行现场克隆清单基线 commit（blobless 浅克隆，约 20s）；
       # vcpkg.exe 由 CMake 工具链在首次使用时自动引导下载。
-      - name: Set up vcpkg (Windows)
-        if: inputs.key == 'win-x64'
-        shell: pwsh
+      - name: Set up vcpkg
+        shell: bash
+        env:
+          VCPKG_SRC: ${{ runner.os == 'Windows' && 'D:/vcpkg-src' || format('{0}/vcpkg-src', github.workspace) }}
         run: |
-          git clone --filter=blob:none https://github.com/microsoft/vcpkg D:/vcpkg-src
-          git -C D:/vcpkg-src fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
-          git -C D:/vcpkg-src checkout --detach e6f9e70a29a3e80a1fc510d8503304315447112f
-          "VCPKG_ROOT=D:/vcpkg-src" >> $env:GITHUB_ENV
-
-      - name: Set up vcpkg (Linux/macOS)
-        if: inputs.key != 'win-x64'
-        run: |
-          git clone --filter=blob:none https://github.com/microsoft/vcpkg "$GITHUB_WORKSPACE/vcpkg-src"
-          git -C "$GITHUB_WORKSPACE/vcpkg-src" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
-          git -C "$GITHUB_WORKSPACE/vcpkg-src" checkout --detach e6f9e70a29a3e80a1fc510d8503304315447112f
-          echo "VCPKG_ROOT=$GITHUB_WORKSPACE/vcpkg-src" >> "$GITHUB_ENV"
+          git clone --filter=blob:none https://github.com/microsoft/vcpkg "$VCPKG_SRC"
+          git -C "$VCPKG_SRC" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
+          git -C "$VCPKG_SRC" checkout --detach e6f9e70a29a3e80a1fc510d8503304315447112f
+          echo "VCPKG_ROOT=$VCPKG_SRC" >> "$GITHUB_ENV"
 
       # 源码下载缓存：codeload 偶发 504 时靠上次的归档直接复用（未命中则 job 结束自动 save）。
       - name: Restore vcpkg downloads cache
-        if: inputs.cache-deps && inputs.vcpkg-downloads != ''
+        if: inputs.cache-deps
         uses: actions/cache@v5
         with:
-          path: ${{ inputs.vcpkg-downloads }}
-          key: vcpkg-downloads-${{ inputs.key }}-baseline-e6f9e70a29
+          path: ${{ runner.os == 'Windows' && 'D:/vcpkg-src/downloads' || 'vcpkg-src/downloads' }}
+          key: vcpkg-downloads-${{ runner.os }}-baseline-e6f9e70a29
 
       # 二进制缓存：整树 restore（命中则 vcpkg 跳过已装包；未命中则 job 结束自动 save）。
       # 弃用原因备注：x-gha 后端已被新版 vcpkg 移除；nuget,github 在该版本下
       # 源解析失效且非 Windows 需 mono（runner 屏蔽 keyserver），故退回 actions/cache 整树方案。
+      # key 含 preset：CI/CD 同为 release 预设共享同一条目；Debug 树（dbg-verify）不写缓存。
       - name: Restore vcpkg binary cache
         if: inputs.cache-deps
         uses: actions/cache@v5
         with:
-          path: ${{ inputs.vcpkg-installed }}
-          key: vcpkg-${{ inputs.key }}-baseline-e6f9e70a29-${{ hashFiles('ImageDiscropperCpp/vcpkg.json') }}
+          path: ${{ runner.os == 'Windows' && 'D:/vcpkg_installed' || format('ImageDiscropperCpp/build/{0}/vcpkg_installed', inputs.preset) }}
+          key: vcpkg-${{ runner.os }}-${{ inputs.preset }}-baseline-e6f9e70a29-${{ hashFiles('ImageDiscropperCpp/vcpkg.json') }}
 
       # vcpkg 的 qtbase 构建树路径超过 260 字符 MAX_PATH（uiautomation 插件层级很深），
       # cl.exe 报 C1083 "Cannot open compiler generated file"。
       # 根治在 preset 里：VCPKG_INSTALLED_DIR=D:/vcpkg_installed 把依赖树移出深层构建目录；
       # 此处再启用长路径策略作双保险。
       - name: Enable Windows long paths
-        if: inputs.key == 'win-x64'
+        if: runner.os == 'Windows'
         shell: cmd
         run: reg add "HKLM\SYSTEM\CurrentControlSet\Control\FileSystem" /v LongPathsEnabled /t REG_DWORD /d 1 /f
 
       # qtbase 在 Linux 上构建需系统 X11/EGL/字体等开发库（vcpkg 官方 Ubuntu 完整清单）；
       # 其依赖 gperf / libpq / libxcrypt 经 autotools 从源码构建，另需 autoconf 全家桶与 libltdl。
       - name: Install build dependencies (Linux)
-        if: inputs.key == 'linux-x64'
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config ninja-build \
@@ -123,73 +100,65 @@ jobs:
 
       # gperf / libpq（qtbase 依赖）经 autotools 从源码构建，需 autoconf 全家桶。
       - name: Install build dependencies (macOS)
-        if: inputs.key == 'macos-arm64'
+        if: runner.os == 'macOS'
         run: brew install autoconf autoconf-archive automake libtool ninja
 
-      # 配置与构建合并为单步（Windows 的 MSVC 环境注入只写一次；测试见下方独立步骤）。
-      # Windows：Ninja 预设不绑定特定 VS 版本，经 vswhere 定位最新 VS 并用 VsDevCmd 注入
-      # MSVC 编译环境（PATH 里另有 MinGW 时 Ninja 默认会误选，必须显式限定）。
+      # 配置与构建（Windows 单独一步：Ninja 预设不绑定特定 VS 版本，经 vswhere 定位最新
+      # VS 并用 VsDevCmd 注入 MSVC 环境——PATH 里另有 MinGW 时 Ninja 默认会误选，必须显式限定）。
       - name: Configure and build (Windows)
-        if: inputs.key == 'win-x64'
+        if: runner.os == 'Windows'
         shell: cmd
         working-directory: ImageDiscropperCpp
         run: |
           for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
           call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64
-          cmake --preset ${{ inputs.preset }} ${{ inputs.cmake-args }}
+          cmake --preset ${{ inputs.preset }}
           cmake --build build/${{ inputs.preset }}
 
       - name: Configure and build (Linux/macOS)
-        if: inputs.key != 'win-x64'
+        if: runner.os != 'Windows'
         working-directory: ImageDiscropperCpp
         run: |
-          cmake --preset ${{ inputs.preset }} ${{ inputs.cmake-args }}
+          cmake --preset ${{ inputs.preset }}
           cmake --build build/${{ inputs.preset }}
 
-      # 测试（CI Debug 跑；CD Release 不构建测试目标，run-tests=false）。
+      # 测试：所有调用方都跑（Release 预设已默认构建测试目标——见根 CMakeLists 的
+      # IDC_BUILD_TESTS；CD 发布前同样以测试通过为门禁）。
       - name: Test
-        if: inputs.run-tests
         working-directory: ImageDiscropperCpp
         run: ctest --test-dir build/${{ inputs.preset }} --output-on-failure
 
       # ---- CD 产物整理（CI 不启用） ----
-      - name: Prepare dist artifacts (Windows)
-        if: inputs.prepare-dist && inputs.key == 'win-x64'
-        shell: pwsh
+      # Windows/Linux 直接拷贝裸可执行文件；macOS 额外校验二进制无「系统路径之外」的
+      # 动态依赖（qtbase port 在非 Windows 强制静态，此处防坏产物混入——检测到即失败）。
+      - name: Prepare dist artifacts
+        if: inputs.prepare-dist
+        shell: bash
         run: |
-          New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item "ImageDiscropperCpp\build\windows-release\bin\idc_gui.exe" "dist\idc_gui-${{ inputs.key }}.exe"
-          Copy-Item "ImageDiscropperCpp\build\windows-release\bin\idc.exe" "dist\idc-${{ inputs.key }}.exe"
-
-      - name: Prepare dist artifacts (Linux)
-        if: inputs.prepare-dist && inputs.key == 'linux-x64'
-        run: |
+          BIN="ImageDiscropperCpp/build/${{ inputs.preset }}/bin"
           mkdir -p dist
-          cp "ImageDiscropperCpp/build/linux-release/bin/idc_gui" "dist/idc_gui-${{ inputs.key }}"
-          cp "ImageDiscropperCpp/build/linux-release/bin/idc" "dist/idc-${{ inputs.key }}"
-
-      - name: Prepare dist artifacts (macOS)
-        if: inputs.prepare-dist && inputs.key == 'macos-arm64'
-        run: |
-          mkdir -p dist
-          cp "ImageDiscropperCpp/build/macos-release/bin/idc_gui" "dist/idc_gui-${{ inputs.key }}"
-          cp "ImageDiscropperCpp/build/macos-release/bin/idc" "dist/idc-${{ inputs.key }}"
-          # 守卫：qtbase port 在非 Windows 上强制静态 Qt，但此处仍校验两个二进制
-          # 均无「系统路径之外」的动态依赖（Qt6 框架 / vcpkg dylib / @rpath 等），
-          # 确保裸二进制在任何 macOS 上可运行；检测到即失败（不发坏产物）。
-          check() {
-            if otool -L "$1" | tail -n +2 | awk '{print $1}' | grep -vE "^/(usr/lib|System/Library)" | grep -q .; then
-              echo "::error::$1 存在非系统动态依赖，裸二进制不可分发；需引入 macdeployqt 打包"
-              exit 1
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp "$BIN/idc_gui.exe" "dist/idc_gui-${{ inputs.preset }}.exe"
+            cp "$BIN/idc.exe" "dist/idc-${{ inputs.preset }}.exe"
+          else
+            cp "$BIN/idc_gui" "dist/idc_gui-${{ inputs.preset }}"
+            cp "$BIN/idc" "dist/idc-${{ inputs.preset }}"
+            if [ "$RUNNER_OS" = "macOS" ]; then
+              check() {
+                if otool -L "$1" | tail -n +2 | awk '{print $1}' | grep -vE "^/(usr/lib|System/Library)" | grep -q .; then
+                  echo "::error::$1 存在非系统动态依赖，裸二进制不可分发；需引入 macdeployqt 打包"
+                  exit 1
+                fi
+              }
+              check "dist/idc_gui-${{ inputs.preset }}"
+              check "dist/idc-${{ inputs.preset }}"
             fi
-          }
-          check "dist/idc_gui-${{ inputs.key }}"
-          check "dist/idc-${{ inputs.key }}"
+          fi
 
       # Windows 的 VCPKG_INSTALLED_DIR=D:/vcpkg_installed 在工作区外，artifact 无法直接上传；
       # 失败时先把端口构建日志拷回工作区再上传。
       - name: Collect vcpkg logs on failure (Windows)
-        if: failure() && inputs.key == 'win-x64'
+        if: failure() && runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force ImageDiscropperCpp/build/vcpkg-logs | Out-Null
@@ -199,7 +168,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: vcpkg-logs-${{ inputs.key }}
+          name: vcpkg-logs-${{ inputs.preset }}
           path: |
             ImageDiscropperCpp/build/*/vcpkg-manifest-install.log
             ImageDiscropperCpp/build/*/vcpkg_installed/vcpkg/blds/**/install-*-out.log
@@ -210,6 +179,6 @@ jobs:
         if: inputs.prepare-dist && success()
         uses: actions/upload-artifact@v7
         with:
-          name: dist-${{ inputs.key }}
+          name: dist-${{ inputs.preset }}
           path: dist/*
           if-no-files-found: error

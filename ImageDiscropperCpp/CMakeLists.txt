@@ -31,18 +31,11 @@ if(DEFINED VCPKG_TARGET_TRIPLET AND VCPKG_TARGET_TRIPLET MATCHES "static")
 endif()
 
 # ---------------------------------------------------------------------------
-# 构建选项：Release 发布时只产出最终可执行程序——检测到 Release 构建类型即自动
-# 关闭测试与演示目标（Core 的 demo/unit_tests、CLI 的 cli_tests 均据此门控）。
-# 其余配置（Debug 等）默认开启，可由 -DIDC_BUILD_TESTS=OFF 覆盖。
-# 说明：Release 分支用 FORCE 写缓存，使旧版本配置遗留的缓存默认值（恒 ON）也能
-#       自动刷新为 OFF；代价是 Release 下不支持 -D 覆盖（如需在 Release 跑测试，
-#       改此处判断，或使用 Debug 构建目录）。
+# 构建选项：测试与演示目标（Core 的 demo/unit_tests、CLI 的 cli_tests 均据此门控）。
+# 所有构建类型默认开启——CI 即在 Release 下构建并运行测试（与发布产物同构）；
+# 如需关闭：-DIDC_BUILD_TESTS=OFF。
 # ---------------------------------------------------------------------------
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(IDC_BUILD_TESTS OFF CACHE BOOL "Build test and demo targets (auto-off in Release)" FORCE)
-else()
-    option(IDC_BUILD_TESTS "Build test and demo targets (auto-off in Release)" ON)
-endif()
+option(IDC_BUILD_TESTS "Build test and demo targets" ON)
 
 # 默认把可执行文件与库输出集中到构建目录下的 bin/ lib/，便于示例脚本与测试定位。
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)

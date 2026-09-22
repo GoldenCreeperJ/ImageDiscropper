@@ -90,7 +90,7 @@ ctest --test-dir build
 Binaries land in the build directory's `bin/`: `idc(.exe)`, `idc_gui(.exe)`, `demo(.exe)`.
 (CLion users can open `ImageDiscropperCpp/` directly as the CMake source directory; CLion picks up the presets.)
 
-Every push is verified by GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): the **Windows GUI build plus Core/CLI tests on all three platforms** (minute-level); full three-platform GUI builds run manually ([`.github/workflows/gui-verify.yml`](.github/workflows/gui-verify.yml)).
+Every push is verified by GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): **three-platform Release builds (GUI included, identical to the shipped artifacts) plus the full test suite** (minute-level with a warm dependency cache); Debug-configuration GUI verification on all three platforms runs manually ([`.github/workflows/dbg-verify.yml`](.github/workflows/dbg-verify.yml)).
 
 To build without a GUI (no qtbase install): `cmake --preset windows -DIDC_BUILD_GUI=OFF -DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON`.
 

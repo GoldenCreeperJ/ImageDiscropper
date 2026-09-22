@@ -1,12 +1,12 @@
 # CD：打 v* 标签或手动触发 → 三平台 Release 构建（静态 Qt 单文件）→
 # 6 个裸可执行文件（3 GUI + 3 CLI）+ SHA256SUMS 校验文件 → GitHub Release。
-# 平台级构建步骤复用 _build-platform.yml（prepare-dist=true 时整理并上传产物）。
+# 平台级构建步骤复用 _build-platform.yml（与 CI 共用 release 预设与 vcpkg 缓存）。
 #
 # 说明：
 #   · 手动触发（workflow_dispatch）填写标签名（如 v1.0.0）；标签不存在时会在
 #     当前默认分支 HEAD 上自动创建并推送（无需手工打 tag）。
-#   · Release 与 CI Debug 是不同 ABI；首次发布需完整构建 qtbase（约 1 小时），
-#     之后 x-gha 缓存按平台/三元组复用。
+#   · 依赖树缓存由 CI 写入，本工作流直接命中（发版不再冷构建 qtbase，分钟级）；
+#     若缓存被 LRU 淘汰则退化为冷构建（约 1 小时），仍可正常发布。
 #   · Linux 裸二进制依赖系统 X11 库（正常桌面环境均有）；macOS 若检测到动态 Qt
 #     链接则该平台腿直接失败（不发坏产物），届时需引入 macdeployqt 打包。
 #   · 产物未做代码签名（Windows SmartScreen 会提示），后续可加。
@@ -59,27 +59,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - key: win-x64
-            os: windows-latest
+          - os: windows-latest
             preset: windows-release
-            vcpkg-installed: D:/vcpkg_installed
-          - key: linux-x64
-            os: ubuntu-latest
+          - os: ubuntu-latest
             preset: linux-release
-            vcpkg-installed: build/linux-release/vcpkg_installed
-          - key: macos-arm64
-            os: macos-latest
+          - os: macos-latest
             preset: macos-release
-            vcpkg-installed: build/macos-release/vcpkg_installed
     uses: ./.github/workflows/_build-platform.yml
     with:
-      key: ${{ matrix.key }}
       os: ${{ matrix.os }}
       preset: ${{ matrix.preset }}
-      vcpkg-installed: ${{ matrix.vcpkg-installed }}
-      cmake-args: ''
-      cache-deps: false
-      run-tests: false
       prepare-dist: true
       # 手动触发时构建用户指定的标签，否则构建触发本次运行的标签。
       ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}

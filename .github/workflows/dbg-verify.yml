@@ -1,0 +1,29 @@
+# 三平台 Debug GUI 验证：手动触发。
+# 日常 CI 为 Release 构建（与发布产物同构），Debug 配置无自动验证；
+# 本工作流补齐 Debug 的 GUI 构建与测试（不写缓存，避免挤占 10GB 池）。
+name: Debug Verify
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: dbg-verify
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            preset: windows
+          - os: ubuntu-latest
+            preset: linux-debug
+          - os: macos-latest
+            preset: macos-debug
+    uses: ./.github/workflows/_build-platform.yml
+    with:
+      os: ${{ matrix.os }}
+      preset: ${{ matrix.preset }}
+      cache-deps: false   # 纯验证：只读不写缓存
