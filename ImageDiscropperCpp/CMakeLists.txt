@@ -44,6 +44,12 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # ---------------------------------------------------------------------------
 # 子工程引入（顺序即依赖顺序）。
 # ---------------------------------------------------------------------------
+# 顶层开启测试必须先于 add_subdirectory（add_test 只在 enable_testing 之后的
+# 目录作用域注册），否则 Core 的 unit_tests 不会被 ctest 发现。
+if(IDC_BUILD_TESTS)
+    enable_testing()
+endif()
+
 # Core：纯逻辑静态库 image_discropper_core。
 add_subdirectory(ImageDiscropperCore)
 
@@ -51,11 +57,6 @@ add_subdirectory(ImageDiscropperCore)
 # 发版时只改这里）；Core 版本由上方 add_subdirectory 经 PARENT_SCOPE 回传（库版本独立）。
 set(IDC_CLI_VERSION "${PROJECT_VERSION}")
 set(IDC_GUI_VERSION "${PROJECT_VERSION}")
-
-# 在顶层开启测试，使 ctest 能同时发现 Core 与 CLI 注册的用例。
-if(IDC_BUILD_TESTS)
-    enable_testing()
-endif()
 
 # CLI：命令行薄壳 idc。
 add_subdirectory(ImageDiscropperCli)

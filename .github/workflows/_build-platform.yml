@@ -59,13 +59,14 @@ jobs:
       # 二进制缓存：整树 restore（命中则 vcpkg 跳过已装包；未命中则 job 结束自动 save）。
       # 弃用原因备注：x-gha 后端已被新版 vcpkg 移除；nuget,github 在该版本下
       # 源解析失效且非 Windows 需 mono（runner 屏蔽 keyserver），故退回 actions/cache 整树方案。
-      # key 含 preset：CI/CD 同为 release 预设共享同一条目；Debug 树（dbg-verify）不写缓存。
+      # key 含 preset（CI/CD 同为 release 预设共享同一条目）与 triplet 哈希（改 triplet
+      # 即自动换 key）；Debug 树（dbg-verify）不写缓存。
       - name: Restore vcpkg binary cache
         if: inputs.cache-deps
         uses: actions/cache@v5
         with:
           path: ${{ runner.os == 'Windows' && 'D:/vcpkg_installed' || format('ImageDiscropperCpp/build/{0}/vcpkg_installed', inputs.preset) }}
-          key: vcpkg-${{ runner.os }}-${{ inputs.preset }}-baseline-e6f9e70a29-${{ hashFiles('ImageDiscropperCpp/vcpkg.json') }}
+          key: vcpkg-${{ runner.os }}-${{ inputs.preset }}-baseline-e6f9e70a29-${{ hashFiles('ImageDiscropperCpp/vcpkg.json', 'ImageDiscropperCpp/triplets/*.cmake') }}
 
       # vcpkg 的 qtbase 构建树路径超过 260 字符 MAX_PATH（uiautomation 插件层级很深），
       # cl.exe 报 C1083 "Cannot open compiler generated file"。

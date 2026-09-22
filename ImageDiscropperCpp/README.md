@@ -82,6 +82,7 @@ CLI 命令与规格功能的对应（详见 [`ImageDiscropperCli/README.md`](Ima
 
 工程使用 CMake（>= 3.28）+ vcpkg（`stb` / `libwebp` / `nlohmann-json` 由 Core PRIVATE 接入；`qtbase` 供 GUI 使用）。
 依赖由 `vcpkg.json` 清单自动安装（设置环境变量 `VCPKG_ROOT` 指向 vcpkg 根目录）。
+各平台经 overlay triplet（[`triplets/`](triplets/README.md)）锁定单一构建配置，避免 dbg+rel 双配置重复构建。
 **以本目录为 CMake 源目录**加载工程，推荐用 Presets：
 
 ```bash
