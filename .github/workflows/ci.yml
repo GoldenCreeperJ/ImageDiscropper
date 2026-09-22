@@ -34,7 +34,7 @@ jobs:
             preset: windows
             vcpkg-installed: D:/vcpkg_installed
             vcpkg-downloads: D:/vcpkg-src/downloads
-            cmake-args: '-DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON -DIDC_BUILD_GUI=OFF'
+            cmake-args: ''
           - key: linux-x64
             os: ubuntu-latest
             preset: linux-debug
