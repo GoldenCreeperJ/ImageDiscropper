@@ -23,11 +23,11 @@ jobs:
           - key: linux-x64
             os: ubuntu-latest
             preset: linux-debug
-            vcpkg-installed: build/linux-debug/vcpkg_installed
+            vcpkg-installed: ImageDiscropperCpp/build/linux-debug/vcpkg_installed
           - key: macos-arm64
             os: macos-latest
             preset: macos-debug
-            vcpkg-installed: build/macos-debug/vcpkg_installed
+            vcpkg-installed: ImageDiscropperCpp/build/macos-debug/vcpkg_installed
     uses: ./.github/workflows/_build-platform.yml
     with:
       key: ${{ matrix.key }}

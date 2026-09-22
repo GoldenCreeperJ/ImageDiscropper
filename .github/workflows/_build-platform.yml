@@ -22,7 +22,7 @@ on:
         default: true       # CD 传 false：Release 不构建测试目标
       vcpkg-installed:
         required: true
-        type: string        # vcpkg_installed 目录（Windows 为 D:/vcpkg_installed，其余为 build/<preset>/vcpkg_installed）
+        type: string        # vcpkg_installed 目录（cache 路径以仓库根为基准：Windows 为 D:/vcpkg_installed，其余为 ImageDiscropperCpp/build/<preset>/vcpkg_installed）
       vcpkg-downloads:
         required: false
         type: string
