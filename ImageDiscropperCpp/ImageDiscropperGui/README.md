@@ -6,7 +6,7 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 
 > 命名空间统一为 `idc::gui`。本文件由原独立文档 `USAGE.md`（用户操作手册）与 `DESIGN.md`（设计说明）合并而来：
 > 最终用户读「用户操作速览」，维护者读「关键设计决策」「布局与交互要点」与「扩展指引」。
-> 功能规格（唯一行为基线）见 [`../SPEC.md`](../../SPEC.md，贡献约定见根 [`CONTRIBUTING.md`](../../CONTRIBUTING.md)。
+> 功能规格（唯一行为基线）见 [`../SPEC.md`](../../SPEC.md)，贡献约定见根 [`CONTRIBUTING.md`](../../CONTRIBUTING.md)。
 
 ## 目录结构与职责
 

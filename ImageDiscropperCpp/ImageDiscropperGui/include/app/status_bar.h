@@ -25,13 +25,13 @@ class StatusBar : public QStatusBar {
 public:
     explicit StatusBar(QWidget* parent = nullptr);
 
-    void setCoord(int x, int y);          // 「坐标: (x, y)」
-    void setColor(int r, int g, int b);   // 「RGB(r,g,b)」
-    void clearColor();                    // 「RGB(-,-,-)」（光标移出图像）
-    void setModeTier(engine::Tier tier);  // 「模式: L1 标准提取」等（吸收原 MainWindow::modeName）
-    void setCount(int kept);              // 「保留块: N」
-    void setZoomPercent(int percent);     // 「缩放: N%」
-    void setHint(const QString& text);    // 提示标签
+    void setCoord(int x, int y) const;          // 「坐标: (x, y)」
+    void setColor(int r, int g, int b) const;   // 「RGB(r,g,b)」
+    void clearColor() const;                    // 「RGB(-,-,-)」（光标移出图像）
+    void setModeTier(engine::Tier tier) const;  // 「模式: L1 标准提取」等（吸收原 MainWindow::modeName）
+    void setCount(int kept) const;              // 「保留块: N」
+    void setZoomPercent(int percent) const;     // 「缩放: N%」
+    void setHint(const QString& text) const;    // 提示标签
     // 非模态提示：提示标签 + 状态栏限时消息（错误 8s、普通 4s），不打断用户。
     void notify(const QString& msg, bool isError);
 

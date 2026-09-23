@@ -78,13 +78,13 @@ void AnnotationCoordinator::connectSignals() {
 }
 
 // 工具面板选择：先收笔未完成的折线/画笔路径，再切换工具（setTool 内部会放弃两点预览）。
-void AnnotationCoordinator::onToolSelected(const AnnoTool tool) {
+void AnnotationCoordinator::onToolSelected(const AnnoTool tool) const {
     if (anno_->hasPathDraft()) anno_->commitPath();
     anno_->setTool(tool);
 }
 
 // 标注列表/预览变化：增量重绘画布标注层，并同步属性面板回显。
-void AnnotationCoordinator::onAnnoBridgeChanged() {
+void AnnotationCoordinator::onAnnoBridgeChanged() const {
     scene_->updateAnnotations(*anno_);
     annoPropPanel_->syncFromModel();
     // B：若「导出时烧录标注」开启，标注变化只需反映到输出预览——用缓存重渲染、不重跑 Core（切割几何不受标注影响）。
@@ -110,7 +110,7 @@ void AnnotationCoordinator::onAnnoToolChanged() const {
 }
 
 // 绘制手势起点：依当前工具分派——文字落点取文本；折线/画笔起笔；其余两点形状记起点。
-void AnnotationCoordinator::onAnnoDragStart(const QPointF& scenePos) {
+void AnnotationCoordinator::onAnnoDragStart(const QPointF& scenePos) const {
     const core::Point2D p(scenePos.x(), scenePos.y());
     switch (anno_->currentTool()) {
         case AnnoTool::TEXT: {
@@ -136,7 +136,7 @@ void AnnotationCoordinator::onAnnoDragStart(const QPointF& scenePos) {
 
 // 绘制手势拖拽（按住左键移动）：两点形状实时更新预览；画笔追加顶点；折线仅橡皮筋预览。
 // 折线为点击式：顶点已在 onAnnoDragStart（按下）落定，故拖拽中只预览、不再追加正式顶点。
-void AnnotationCoordinator::onAnnoDragMove(const QPointF& scenePos) {
+void AnnotationCoordinator::onAnnoDragMove(const QPointF& scenePos) const {
     const core::Point2D p(scenePos.x(), scenePos.y());
     switch (anno_->currentTool()) {
         case AnnoTool::BRUSH:
@@ -155,7 +155,7 @@ void AnnotationCoordinator::onAnnoDragMove(const QPointF& scenePos) {
 }
 
 // 绘制手势释放：两点形状提交；画笔收笔；折线保持草稿（待 Esc/切换工具收笔）。
-void AnnotationCoordinator::onAnnoDragEnd(const QPointF& scenePos) {
+void AnnotationCoordinator::onAnnoDragEnd(const QPointF& scenePos) const {
     Q_UNUSED(scenePos);
     switch (anno_->currentTool()) {
         case AnnoTool::BRUSH:
@@ -172,39 +172,39 @@ void AnnotationCoordinator::onAnnoDragEnd(const QPointF& scenePos) {
 }
 
 // 绘制态 Esc：有折线/画笔草稿则收笔提交，否则取消当前两点预览。
-void AnnotationCoordinator::onAnnoEscape() {
+void AnnotationCoordinator::onAnnoEscape() const {
     if (anno_->hasPathDraft()) anno_->commitPath();
     else anno_->cancelPending();
 }
 
 // 绘制态悬停（未按键移动）：折线实时预览「已落顶点 + 到光标连线」橡皮筋（不落顶点）。
 // 其余工具无悬停语义（两点形状靠拖拽预览、画笔靠按住追点），故忽略。
-void AnnotationCoordinator::onAnnoHover(const QPointF& scenePos) {
+void AnnotationCoordinator::onAnnoHover(const QPointF& scenePos) const {
     if (anno_->currentTool() != AnnoTool::POLYLINE) return;
     anno_->previewPolyline(core::Point2D(scenePos.x(), scenePos.y()));
 }
 
 // 绘制态右键：退出当前绘制手势——有折线/画笔草稿则收笔提交（折线在此结束），
 // 否则取消当前预览（与 Esc 同义，满足「右键退出多线段」的交互约定）。
-void AnnotationCoordinator::onAnnoFinish() {
+void AnnotationCoordinator::onAnnoFinish() const {
     if (anno_->hasPathDraft()) anno_->commitPath();
     else anno_->cancelPending();
 }
 
 // SELECT 工具下点中标注图元：委托 Core hitTest 选中（几何命中在 Core，CONTRIBUTING.md「分层纪律」）。
-void AnnotationCoordinator::onAnnotationSelect(const QPointF& scenePos) {
+void AnnotationCoordinator::onAnnotationSelect(const QPointF& scenePos) const {
     anno_->selectAt(core::Point2D(scenePos.x(), scenePos.y()));
 }
 
 // 拖动选中标注：委托 Core 平移其几何（下标须与当前选中项一致，防御误触）。
-void AnnotationCoordinator::onAnnotationMoved(const int index, const double dx, const double dy) {
+void AnnotationCoordinator::onAnnotationMoved(const int index, const double dx, const double dy) const {
     if (const std::optional<std::size_t> sel = anno_->selectedIndex(); !sel || static_cast<int>(*sel) != index) return;
     anno_->moveSelectedBy(dx, dy);
 }
 
 // 拖定向包围盒手柄（释放提交）：委托 Core 对选中标注施加缩放/旋转（与属性面板变换同一入口，下标防御误触）。
 void AnnotationCoordinator::onAnnotationTransformed(const int index, const double sx, const double sy,
-                                                    const double rotateDeg) {
+                                                    const double rotateDeg) const {
     if (const std::optional<std::size_t> sel = anno_->selectedIndex(); !sel || static_cast<int>(*sel) != index) return;
     anno_->transformSelected(sx, sy, rotateDeg);
     // 提交后模型发 changed → onAnnoBridgeChanged → syncFromModel 依最新累积值回显面板（忠实反映底层，不回弹）。
@@ -218,48 +218,48 @@ void AnnotationCoordinator::onAnnotationTransformPreview(const int index, const 
 }
 
 // 属性面板 → 模型（EDIT 作用选中项，DRAW 改当前默认；均触发 changed→重绘）。
-void AnnotationCoordinator::onAnnoColorPicked(const QColor& c) { anno_->setColor(toCoreColor(c)); }
-void AnnotationCoordinator::onAnnoStrokeChanged(const int width) { anno_->setStrokeWidth(width); }
-void AnnotationCoordinator::onAnnoFillChanged(const bool fill) { anno_->setFill(fill); }
-void AnnotationCoordinator::onAnnoTextChanged(const QString& text) { anno_->setText(text.toStdString()); }
-void AnnotationCoordinator::onAnnoFontSizeChanged(const double size) { anno_->setFontSize(size); }
+void AnnotationCoordinator::onAnnoColorPicked(const QColor& c) const { anno_->setColor(toCoreColor(c)); }
+void AnnotationCoordinator::onAnnoStrokeChanged(const int width) const { anno_->setStrokeWidth(width); }
+void AnnotationCoordinator::onAnnoFillChanged(const bool fill) const { anno_->setFill(fill); }
+void AnnotationCoordinator::onAnnoTextChanged(const QString& text) const { anno_->setText(text.toStdString()); }
+void AnnotationCoordinator::onAnnoFontSizeChanged(const double size) const { anno_->setFontSize(size); }
 // 属性面板「变换」：将缩放/旋转写回模型（委托 Core Shape 的非破坏性矩阵，保留类型与字形；无选中时模型内部忽略）。
-void AnnotationCoordinator::onAnnoTransformApply(const double sx, const double sy, const double rotateDeg) {
+void AnnotationCoordinator::onAnnoTransformApply(const double sx, const double sy, const double rotateDeg) const {
     anno_->transformSelected(sx, sy, rotateDeg);
 }
 
 // 图层面板 → 画布/模型（底图仅切画布可见；标注同时同步模型标志与画布图元）。
 void AnnotationCoordinator::onBaseVisibilityChanged(const bool visible) const { scene_->setBaseVisible(visible); }
 void AnnotationCoordinator::onMaskVisibilityChanged(const bool visible) const { scene_->setMasksVisible(visible); }
-void AnnotationCoordinator::onGridVisibilityChanged(const bool visible) {
+void AnnotationCoordinator::onGridVisibilityChanged(const bool visible) const {
     scene_->setGridVisible(visible);
     preview_->refreshPreview();   // 网格线依 gridVisible_ 门控重建（L3 / L2 多矩形）。
 }
-void AnnotationCoordinator::onCutLineVisibilityChanged(const bool visible) {
+void AnnotationCoordinator::onCutLineVisibilityChanged(const bool visible) const {
     scene_->setCutLinesVisible(visible);
     preview_->refreshPreview();   // L2 多矩形诱导线依 cutLinesVisible_ 门控重建（橙色切割线）。
 }
-void AnnotationCoordinator::onSelectionVisibilityChanged(const bool visible) {
+void AnnotationCoordinator::onSelectionVisibilityChanged(const bool visible) const {
     scene_->setSelectionVisible(visible);
     preview_->refreshPreview();   // L3 单元选择高亮（CellPickerItem）依 selectionVisible_ 门控重建。
 }
-void AnnotationCoordinator::onAnnotationVisibilityChanged(const bool visible) {
+void AnnotationCoordinator::onAnnotationVisibilityChanged(const bool visible) const {
     anno_->setLayerVisible(visible);
     scene_->setAnnotationsVisible(visible);
 }
-void AnnotationCoordinator::onBurnInChanged(const bool on) {
+void AnnotationCoordinator::onBurnInChanged(const bool on) const {
     anno_->setBurnIn(on);
     preview_->refreshExportPreviewFromCache();   // B：烧录开关只影响输出预览（叠加/去除标注），用缓存重渲染、不重跑 Core。
 }
 
 // 标注菜单动作：撤销/重做/删除选中/清除全部（均复用 Core AnnotationLayer）。
-void AnnotationCoordinator::onAnnoUndo() { anno_->undo(); }
-void AnnotationCoordinator::onAnnoRedo() { anno_->redo(); }
-void AnnotationCoordinator::onAnnoDeleteSelected() {
+void AnnotationCoordinator::onAnnoUndo() const { anno_->undo(); }
+void AnnotationCoordinator::onAnnoRedo() const { anno_->redo(); }
+void AnnotationCoordinator::onAnnoDeleteSelected() const {
     if (!anno_->selectedIndex()) return;
     anno_->removeSelected();
 }
-void AnnotationCoordinator::onAnnoClearAll() {
+void AnnotationCoordinator::onAnnoClearAll() const {
     if (anno_->count() == 0) return;
     const QMessageBox::StandardButton ret = QMessageBox::question(
         dialogParent_, QStringLiteral("清除全部标注"),

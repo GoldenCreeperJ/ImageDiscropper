@@ -55,10 +55,10 @@ void PreviewController::rebuildPreviewPixmap() {
         exportSrcPixmap_ = QPixmap();   // 无图像：清空输出预览小源图。
         return;
     }
-    const PreviewImage preview = makePreview(doc_->working(), previewMaxDim_);
-    const QPixmap pm = toPixmap(preview.image);
+    const auto [image, scaleX, scaleY] = makePreview(doc_->working(), previewMaxDim_);
+    const QPixmap pm = toPixmap(image);
     // 场景坐标 = 原图像素坐标；底图用放大系数把预览 pixmap 铺到原图尺寸。
-    scene_->setBaseImage(pm, preview.scaleX, preview.scaleY, doc_->width(), doc_->height());
+    scene_->setBaseImage(pm, scaleX, scaleY, doc_->width(), doc_->height());
     // 输出预览专用小源图：把底图再降到最长边 ≤ kExportSrcMaxDim，使缩略图只在小图上 blit。
     const int longest = std::max(pm.width(), pm.height());
     exportSrcPixmap_ = longest > kExportSrcMaxDim

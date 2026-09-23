@@ -25,20 +25,20 @@ StatusBar::StatusBar(QWidget* parent) : QStatusBar(parent) {
     addWidget(hintLabel_, 1); // 提示信息占据剩余空间。
 }
 
-void StatusBar::setCoord(const int x, const int y) {
+void StatusBar::setCoord(const int x, const int y) const {
     coordLabel_->setText(QStringLiteral("坐标: (%1, %2)").arg(x).arg(y));
 }
 
-void StatusBar::setColor(const int r, const int g, const int b) {
+void StatusBar::setColor(const int r, const int g, const int b) const {
     colorLabel_->setText(QStringLiteral("RGB(%1,%2,%3)").arg(r).arg(g).arg(b));
 }
 
-void StatusBar::clearColor() {
+void StatusBar::clearColor() const {
     colorLabel_->setText(QStringLiteral("RGB(-,-,-)"));
 }
 
 // 模式中文名（原 MainWindow::modeName 收拢于此）。
-void StatusBar::setModeTier(const engine::Tier tier) {
+void StatusBar::setModeTier(const engine::Tier tier) const {
     switch (tier) {
         case engine::Tier::L1: modeLabel_->setText(QStringLiteral("模式: L1 标准提取")); break;
         case engine::Tier::L2: modeLabel_->setText(QStringLiteral("模式: L2 反向剔除")); break;
@@ -47,15 +47,15 @@ void StatusBar::setModeTier(const engine::Tier tier) {
     }
 }
 
-void StatusBar::setCount(const int kept) {
+void StatusBar::setCount(const int kept) const {
     countLabel_->setText(QStringLiteral("保留块: %1").arg(kept));
 }
 
-void StatusBar::setZoomPercent(const int percent) {
+void StatusBar::setZoomPercent(const int percent) const {
     zoomLabel_->setText(QStringLiteral("缩放: %1%").arg(percent));
 }
 
-void StatusBar::setHint(const QString& text) {
+void StatusBar::setHint(const QString& text) const {
     hintLabel_->setText(text);
 }
 

@@ -36,6 +36,9 @@ endif()
 # 如需关闭：-DIDC_BUILD_TESTS=OFF。
 # ---------------------------------------------------------------------------
 option(IDC_BUILD_TESTS "Build test and demo targets" ON)
+if(IDC_BUILD_TESTS)
+    enable_testing()
+endif()
 
 # 默认把可执行文件与库输出集中到构建目录下的 bin/ lib/，便于示例脚本与测试定位。
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -44,12 +47,6 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # ---------------------------------------------------------------------------
 # 子工程引入（顺序即依赖顺序）。
 # ---------------------------------------------------------------------------
-# 顶层开启测试必须先于 add_subdirectory（add_test 只在 enable_testing 之后的
-# 目录作用域注册），否则 Core 的 unit_tests 不会被 ctest 发现。
-if(IDC_BUILD_TESTS)
-    enable_testing()
-endif()
-
 # Core：纯逻辑静态库 image_discropper_core。
 add_subdirectory(ImageDiscropperCore)
 

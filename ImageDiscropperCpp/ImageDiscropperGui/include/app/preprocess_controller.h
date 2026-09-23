@@ -49,13 +49,13 @@ public slots:
     // 色道反色：invR/invG/invB 指示反相哪些通道（未反相的通道保持不变）。
     void onInvert(bool invR, bool invG, bool invB);
     void onSplit(bool keepR, bool keepG, bool keepB); // 色道分离（保留勾选通道）。
-    void onResetPreprocess();                    // 重置预处理（恢复原图）。
+    void onResetPreprocess() const;                    // 重置预处理（恢复原图）。
 
 private:
     // 预处理公共收尾：维度变化时清除失效选区（坐标基于旧尺寸），再写回工作图（触发 imageChanged）。
-    void applyWorkingImage(core::Image next, const QString& okMsg);
+    void applyWorkingImage(core::Image next, const QString& okMsg) const;
     // 在模态忙碌对话框（不可取消、阻断其余输入）内同步执行 op：用于缩放/尺寸等可能耗时的重采样。
-    void runWithBusyDialog(const QString& text, const std::function<void()>& op);
+    void runWithBusyDialog(const QString& text, const std::function<void()>& op) const;
 
     Document* doc_{nullptr};
     AnnotationBridge* anno_{nullptr};

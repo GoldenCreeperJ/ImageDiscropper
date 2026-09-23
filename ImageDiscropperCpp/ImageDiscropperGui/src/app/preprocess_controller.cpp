@@ -42,7 +42,7 @@ void PreprocessController::connectSignals() {
 
 // 预处理公共收尾：维度变化（旋转 90/270、缩放）会使既有选区坐标越界/失配，
 // 故先清除失效选区（避免 Core 切割报错），再写回工作图（触发 imageChanged→重建预览底图+刷新）。
-void PreprocessController::applyWorkingImage(core::Image next, const QString& okMsg) {
+void PreprocessController::applyWorkingImage(core::Image next, const QString& okMsg) const {
     if (!doc_->hasImage()) return;
     if (next.empty()) { status_->notify(QStringLiteral("预处理失败：结果为空图"), true); return; }
     if (next.width() != doc_->width() || next.height() != doc_->height()) {
@@ -58,7 +58,7 @@ void PreprocessController::applyWorkingImage(core::Image next, const QString& ok
 // 在模态忙碌对话框内同步执行 op：缩放/尺寸重采样在大图上可能耗时，为避免用户误以为卡死
 // 而在处理期间再次点击，弹出不可取消、应用级模态的进度对话框（不确定进度条）阻断其余输入。
 // 同步执行下忙碌条不会动画，但 processEvents 先保证对话框绘制出来；执行完立即关闭。
-void PreprocessController::runWithBusyDialog(const QString& text, const std::function<void()>& op) {
+void PreprocessController::runWithBusyDialog(const QString& text, const std::function<void()>& op) const {
     QProgressDialog dlg(text, QString(), 0, 0, dialogParent_);
     dlg.setWindowTitle(QStringLiteral("正在处理图像"));
     dlg.setWindowModality(Qt::ApplicationModal); // 模态阻断全部其他窗口的输入。
@@ -128,7 +128,7 @@ void PreprocessController::onSplit(const bool keepR, const bool keepG, const boo
 }
 
 // 重置预处理：工作图恢复为原图。若原图与当前工作图尺寸不同（曾旋转/缩放），先清失效选区。
-void PreprocessController::onResetPreprocess() {
+void PreprocessController::onResetPreprocess() const {
     if (!doc_->hasImage() || !doc_->hasPreprocess()) return;
     if (doc_->original().width() != doc_->width() || doc_->original().height() != doc_->height()) {
         doc_->clearRect();
