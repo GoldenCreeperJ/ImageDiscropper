@@ -9,15 +9,14 @@
 
 ## 文件清单
 
-| 文件                             | 继承自                  | 构建配置    | 使用方                                            |
-|--------------------------------|----------------------|---------|------------------------------------------------|
-| `x64-windows-dbg.cmake`        | `x64-windows`（动态）    | debug   | 本地开发预设 `windows`、dbg-verify（目标 + 宿主）           |
-| `x64-windows-rel.cmake`        | `x64-windows`（动态）    | release | 预设 `windows-release` 的**宿主三元组**（工具构建）          |
-| `x64-windows-static-rel.cmake` | `x64-windows-static` | release | 预设 `windows-release` 的**目标三元组**（CI + CD，静态单文件） |
-| `x64-linux-dbg.cmake`          | `x64-linux`          | debug   | 预设 `linux-debug`、dbg-verify（目标 + 宿主）           |
-| `x64-linux-rel.cmake`          | `x64-linux`          | release | 预设 `linux-release`（目标 + 宿主，CI + CD）            |
-| `arm64-osx-dbg.cmake`          | `arm64-osx`          | debug   | 预设 `macos-debug`、dbg-verify（目标 + 宿主）           |
-| `arm64-osx-rel.cmake`          | `arm64-osx`          | release | 预设 `macos-release`（目标 + 宿主，CI + CD）            |
+| 文件                             | 继承自                  | 构建配置    | 使用方                                         |
+|--------------------------------|----------------------|---------|---------------------------------------------|
+| `x64-windows-dbg.cmake`        | `x64-windows`（动态）    | debug   | 本地开发预设 `windows`、dbg-verify（目标 + 宿主）        |
+| `x64-windows-static-rel.cmake` | `x64-windows-static` | release | 预设 `windows-release`（目标 + 宿主，CI + CD，静态单文件） |
+| `x64-linux-dbg.cmake`          | `x64-linux`          | debug   | 预设 `linux-debug`、dbg-verify（目标 + 宿主）        |
+| `x64-linux-rel.cmake`          | `x64-linux`          | release | 预设 `linux-release`（目标 + 宿主，CI + CD）         |
+| `arm64-osx-dbg.cmake`          | `arm64-osx`          | debug   | 预设 `macos-debug`、dbg-verify（目标 + 宿主）        |
+| `arm64-osx-rel.cmake`          | `arm64-osx`          | release | 预设 `macos-release`（目标 + 宿主，CI + CD）         |
 
 ## 背景（为什么必须这样做）
 
@@ -31,7 +30,9 @@
 - **宿主三元组必须同时指定**（`VCPKG_HOST_TRIPLET`）：2026 版 vcpkg 把带工具的目标包
   （如 qtbase 的 moc/rcc/uic）作为独立计划条目按宿主三元组安装。若宿主保持社区默认
   三元组，qtbase 会被**完整构建两次**（宿主双配置 + 目标单配置），构建时间与树体积双双膨胀；
-  宿主/目标同指 overlay 三元组后按名字去重，只构建一次。
+  宿主/目标同指 overlay 三元组后按名字去重，只构建一次。Windows 的宿主同样用静态
+  三元组（工具静态链接运行，与 mac/linux 一致）——若宿主拆成动态 rel，名字不同、去重
+  失效，Windows 会退回双构建（1.5 小时 + 3.5G 树）。
 
 ## 变更注意
 
