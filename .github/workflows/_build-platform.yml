@@ -48,15 +48,10 @@ jobs:
           git -C "$VCPKG_SRC" checkout --detach e6f9e70a29a3e80a1fc510d8503304315447112f
           echo "VCPKG_ROOT=$VCPKG_SRC" >> "$GITHUB_ENV"
 
-      # 源码下载缓存：codeload 偶发 504 时靠上次的归档直接复用（未命中则 job 结束自动 save）。
-      - name: Restore vcpkg downloads cache
-        if: inputs.cache-deps
-        uses: actions/cache@v5
-        with:
-          path: ${{ runner.os == 'Windows' && 'D:/vcpkg-src/downloads' || 'vcpkg-src/downloads' }}
-          key: vcpkg-downloads-${{ runner.os }}-baseline-e6f9e70a29
-
       # 二进制缓存：整树 restore（命中则 vcpkg 跳过已装包；未命中则 job 结束自动 save）。
+      # 不缓存 downloads：downloads 只在 binary 未命中的冷构建里被消费，而命中轮次里
+      # 恢复它是纯开销（白解压 ~1G）且与 binary 条目 LRU 权重相同——冷构建属低频事件，
+      # 偶发下载失败重跑即可，不需要常驻 0.9G 的保险条目。
       # 弃用原因备注：x-gha 后端已被新版 vcpkg 移除；nuget,github 在该版本下
       # 源解析失效且非 Windows 需 mono（runner 屏蔽 keyserver），故退回 actions/cache 整树方案。
       # key 含 preset（CI/CD 同为 release 预设共享同一条目）与 triplet 哈希（改 triplet
