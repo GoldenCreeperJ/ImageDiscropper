@@ -7,83 +7,75 @@
   },
   "configurePresets": [
     {
-      "name": "windows",
-      "displayName": "Windows Debug（Ninja + MSVC + vcpkg 清单模式）",
+      "name": "base",
+      "hidden": true,
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets"
+      }
+    },
+    {
+      "name": "windows",
+      "displayName": "Windows Debug（Ninja + MSVC + vcpkg 清单模式）",
+      "inherits": "base",
+      "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "VCPKG_TARGET_TRIPLET": "x64-windows-dbg",
         "VCPKG_HOST_TRIPLET": "x64-windows-dbg",
-        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets",
         "VCPKG_INSTALLED_DIR": "D:/vcpkg_installed"
       }
     },
     {
       "name": "windows-release",
       "displayName": "Windows Release（Ninja + MSVC + vcpkg 清单模式）",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/${presetName}",
+      "inherits": "base",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "CMAKE_BUILD_TYPE": "Release",
         "VCPKG_TARGET_TRIPLET": "x64-windows-static-rel",
         "VCPKG_HOST_TRIPLET": "x64-windows-static-rel",
-        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets",
         "VCPKG_INSTALLED_DIR": "D:/vcpkg_installed"
       }
     },
     {
       "name": "linux-debug",
       "displayName": "Linux Debug",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/${presetName}",
+      "inherits": "base",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "CMAKE_BUILD_TYPE": "Debug",
         "VCPKG_TARGET_TRIPLET": "x64-linux-dbg",
-        "VCPKG_HOST_TRIPLET": "x64-linux-dbg",
-        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets"
+        "VCPKG_HOST_TRIPLET": "x64-linux-dbg"
       }
     },
     {
       "name": "linux-release",
       "displayName": "Linux Release",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/${presetName}",
+      "inherits": "base",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "CMAKE_BUILD_TYPE": "Release",
         "VCPKG_TARGET_TRIPLET": "x64-linux-rel",
-        "VCPKG_HOST_TRIPLET": "x64-linux-rel",
-        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets"
+        "VCPKG_HOST_TRIPLET": "x64-linux-rel"
       }
     },
     {
       "name": "macos-debug",
       "displayName": "macOS Debug",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/${presetName}",
+      "inherits": "base",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "CMAKE_BUILD_TYPE": "Debug",
         "VCPKG_TARGET_TRIPLET": "arm64-osx-dbg",
-        "VCPKG_HOST_TRIPLET": "arm64-osx-dbg",
-        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets"
+        "VCPKG_HOST_TRIPLET": "arm64-osx-dbg"
       }
     },
     {
       "name": "macos-release",
       "displayName": "macOS Release",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/${presetName}",
+      "inherits": "base",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "CMAKE_BUILD_TYPE": "Release",
         "VCPKG_TARGET_TRIPLET": "arm64-osx-rel",
-        "VCPKG_HOST_TRIPLET": "arm64-osx-rel",
-        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets"
+        "VCPKG_HOST_TRIPLET": "arm64-osx-rel"
       }
     }
   ]

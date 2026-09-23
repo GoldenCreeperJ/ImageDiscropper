@@ -26,7 +26,7 @@ jobs:
     strategy:
       # 稳定期 true：任一平台失败即取消其余进行中的平台（止损省时）；
       # 多平台调试期可临时改 false，一轮看全三个平台的失败信息。
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
           - os: windows-latest

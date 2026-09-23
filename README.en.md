@@ -61,7 +61,7 @@ CLI ──────┘
 
 - CMake ≥ 3.28 + a C++17 compiler (MSVC / MinGW / Clang)
 - [vcpkg](https://vcpkg.io) (manifest mode installs everything automatically — no manual `vcpkg install`): point the `VCPKG_ROOT` environment variable at your vcpkg directory
-- The dependency manifest lives in [`ImageDiscropperCpp/vcpkg.json`](ImageDiscropperCpp/vcpkg.json) (`stb` / `libwebp` / `nlohmann-json`, plus `qtbase` for the GUI)
+- The dependency manifest lives in [`ImageDiscropperCpp/vcpkg.json`](ImageDiscropperCpp/vcpkg.json) (`stb` / `libwebp` / `nlohmann-json` / `qtbase`)
 
 ### Build (Windows / Linux / macOS)
 
@@ -92,7 +92,7 @@ Binaries land in the build directory's `bin/`: `idc(.exe)`, `idc_gui(.exe)`, `de
 
 Every push is verified by GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): **three-platform Release builds (GUI included, identical to the shipped artifacts) plus the full test suite** (minute-level with a warm dependency cache); Debug-configuration GUI verification on all three platforms runs manually ([`.github/workflows/dbg-verify.yml`](.github/workflows/dbg-verify.yml)).
 
-To build without a GUI (no qtbase install): `cmake --preset windows -DIDC_BUILD_GUI=OFF -DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON`.
+To skip building the GUI app: `cmake --preset windows -DIDC_BUILD_GUI=OFF` (qtbase is still installed).
 
 ### Release
 

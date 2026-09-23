@@ -60,7 +60,7 @@ CLI ──────┘
 
 - CMake ≥ 3.28 + 支持 C++17 的编译器（MSVC / MinGW / Clang）
 - [vcpkg](https://vcpkg.io)（清单模式自动安装，无需手动 `vcpkg install`）：把环境变量 `VCPKG_ROOT` 指向 vcpkg 根目录即可
-- 依赖清单见 [`ImageDiscropperCpp/vcpkg.json`](ImageDiscropperCpp/vcpkg.json)（`stb` / `libwebp` / `nlohmann-json`，GUI 另需 `qtbase`）
+- 依赖清单见 [`ImageDiscropperCpp/vcpkg.json`](ImageDiscropperCpp/vcpkg.json)（`stb` / `libwebp` / `nlohmann-json` / `qtbase`）
 
 ### 构建（Windows / Linux / macOS）
 
@@ -91,7 +91,7 @@ ctest --test-dir build
 
 每次提交由 GitHub Actions（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）自动验证：**三平台 Release 构建（含 GUI，与发布产物同构）+ 全套测试**（依赖缓存命中后分钟级）；Debug 配置的三平台 GUI 验证手动运行（[`.github/workflows/dbg-verify.yml`](.github/workflows/dbg-verify.yml)）。
 
-无需 GUI 的环境可跳过 Qt（不安装 qtbase）：`cmake --preset windows -DIDC_BUILD_GUI=OFF -DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON`。
+无需构建 GUI 应用时可跳过：`cmake --preset windows -DIDC_BUILD_GUI=OFF`（qtbase 依赖仍会安装）。
 
 ### 发布（Release）
 

@@ -7,17 +7,7 @@
   "dependencies": [
     "libwebp",
     "nlohmann-json",
+    "qtbase",
     "stb"
-  ],
-  "features": {
-    "gui": {
-      "description": "Qt 6 GUI（idc_gui）",
-      "dependencies": [
-        "qtbase"
-      ]
-    }
-  },
-  "default-features": [
-    "gui"
   ]
 }
