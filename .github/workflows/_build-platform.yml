@@ -183,3 +183,12 @@ jobs:
           name: dist-${{ inputs.preset }}
           path: dist/*
           if-no-files-found: error
+
+      # 缓存瘦身：清单模式下 buildtrees 内嵌于 vcpkg_installed/vcpkg/blds 且无法配置
+      # 迁出（VCPKG_BUILDTREES_DIR 在工具链与 vcpkg-tool 中均已无实现）。缓存前删除：
+      # 已安装状态由 vcpkg/status + vcpkg/info 记录，命中轮次不触碰 blds；
+      # 个别包需重建时 vcpkg 会现场重建其 buildtree。必须置于日志收集步骤之后。
+      - name: Trim buildtrees before cache save
+        if: inputs.cache-deps
+        shell: bash
+        run: rm -rf "${{ runner.os == 'Windows' && 'D:/vcpkg_installed' || format('ImageDiscropperCpp/build/{0}/vcpkg_installed', inputs.preset) }}/vcpkg/blds"
