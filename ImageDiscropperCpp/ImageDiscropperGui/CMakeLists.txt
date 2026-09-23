@@ -140,6 +140,17 @@ add_executable(idc_gui WIN32
     ${IDC_GUI_APP_SRC}
 )
 
+# macOS 发布形态：idc_gui 以 .app 捆绑包输出（CD 打包为 zip 分发）。
+# 非 Apple 平台忽略该属性，无需按平台分支；无自定义图标（缺省为系统默认图标，
+# 正式分发如需图标后续补 icns）。
+set_target_properties(idc_gui PROPERTIES
+    MACOSX_BUNDLE TRUE
+    MACOSX_BUNDLE_BUNDLE_NAME "ImageDiscropper"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "com.imagediscropper.gui"
+    MACOSX_BUNDLE_BUNDLE_VERSION "${IDC_GUI_VERSION}"
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "${IDC_GUI_VERSION}"
+)
+
 # include 作为包含根，使源码以 "model/document.h"、"canvas/canvas_scene.h" 形式互相引用
 # （与 Core 的 include/、CLI 的 include/ 同一约定：包含根下直接是功能分组子目录）。
 target_include_directories(idc_gui PRIVATE include)

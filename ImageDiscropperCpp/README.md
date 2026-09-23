@@ -95,10 +95,9 @@ ctest --test-dir build/windows --output-on-failure   # 同时运行 Core unit_te
 `cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake`。
 每次提交由 GitHub Actions 自动验证：三平台 Release 构建（含 GUI，与发布产物同构）+ 全套测试；Debug 配置的三平台 GUI 验证手动运行（`.github/workflows/dbg-verify.yml`）。
 
-命令行速览见根 [`README.md`](../README.md)「快速开始」；完整选项见 `idc <command> --help` 或 [`ImageDiscropperCli/README.md`](ImageDiscropperCli/README.md)。
+完整用法与示例见 [`ImageDiscropperCli/README.md`](ImageDiscropperCli/README.md)「用法速览」；行为契约（参数规则 / 退出码）见 [`SPEC.md`](../SPEC.md) §8.1。
 
-退出码：`0` 成功 · `1` 参数错误 · `2` 运行时错误 · `3` 输入文件错误 ·
-`4` 输出失败 · `5` 内部错误。
+退出码与 CLI 行为契约见 [`SPEC.md`](../SPEC.md) §8.1。
 
 ---
 

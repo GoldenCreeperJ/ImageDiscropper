@@ -96,7 +96,8 @@ ctest --test-dir build
 ### 发布（Release）
 
 打 `v*` 标签即自动发布（[`.github/workflows/cd.yml`](.github/workflows/cd.yml)）：三平台 Release 构建（**静态 Qt，单文件**）→
-上传 **6 个可执行文件**（3 平台 × GUI/CLI）+ `SHA256SUMS` 校验文件 → 自动创建 GitHub Release。
+上传 **6 个可执行文件**（3 平台 × GUI/CLI）+ **Windows 安装包**（Inno Setup，无自定义图标）+
+**macOS `.app` 压缩包** + `SHA256SUMS` 校验文件 → 自动创建 GitHub Release。
 
 ```bash
 git tag v1.0.0 && git push origin v1.0.0
@@ -104,20 +105,16 @@ git tag v1.0.0 && git push origin v1.0.0
 
 也可在 Actions 页面手动触发 CD（填写标签名即可——不存在时会自动在当前 HEAD 创建，无需 push）。
 
-> 产物未做代码签名，Windows 首次下载运行 SmartScreen 会提示；Linux 版依赖系统 X11 库（正常桌面环境均有）。
+> 产物未做代码签名（Windows SmartScreen 会提示、macOS 首次打开需右键→打开）；Linux 版依赖系统 X11 库（正常桌面环境均有）。
 
 ### 命令行速览
 
 ```bash
-idc extract --input photo.jpg --rect 100,100,300,250 --output out.png
-idc erase   --input photo.jpg --rect 100,100,300,250 --merge collapse --output out.png
-idc erase   --input photo.jpg --rect 100,100,300,250 --output-dir ./out/ --format png
-idc grid    --input photo.jpg --grid 100,100,200,150 --keep 0,0 --keep 0,2 --keep 2,0 --keep 2,2 \
-            --compose --canvas 2x2 --output result.png
-idc config  --load my-config.json --input photo.jpg --output result.png
+idc extract --input photo.jpg --rect 100,100,300,250 --output out.png   # L1：保留中心矩形
 ```
 
-完整选项见 `idc <command> --help`；GUI 操作速览见 [`ImageDiscropperGui/README.md`](ImageDiscropperCpp/ImageDiscropperGui/README.md)。
+完整示例与全部命令见 [`ImageDiscropperCli/README.md`](ImageDiscropperCpp/ImageDiscropperCli/README.md)「用法速览」；
+行为契约（参数规则 / 退出码）见 [`SPEC.md`](SPEC.md) §8.1；GUI 操作速览见 [`ImageDiscropperGui/README.md`](ImageDiscropperCpp/ImageDiscropperGui/README.md)。
 
 ## 📚 文档索引
 

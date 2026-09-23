@@ -53,42 +53,10 @@ idc grid   --input photo.jpg --grid 100,100,200,150 --keep 0,0 --keep 0,1 --keep
 idc config --load my-config.json --input photo.jpg --output result.png
 ```
 
-> **负值写法**：`--grid x0,y0,cw,ch` 的基准点**可为负**（网格从图像左上边界之外开始铺），如
-> `--grid -50,-20,100,100`；`cw/ch` 必须为正。命令行负值选项（以 `-数字` 开头）会被正常当作值解析。
-
 完整选项见 `idc <command> --help`。
 
-### 合并重排（仅 L3 `grid`）
-
-- **仅 L3 `grid --compose` 支持重排**；`erase`（L2）与 `config` 加载的非 L3 配置若指定 `rearrange` 均判**参数错误（退出码 1）**。
-- **`--canvas <cols>x<rows>` 的 cols/rows 必填且须为正**（`grid --compose` 与 `config` 的 REARRANGE 配置同此约束），不再由 Core 用默认值兜底。
-- **填充顺序与选择排序正交**：`--sort`（row-major/column-major/custom）决定保留块的先后列表；
-  `--merge-sort <row-major|column-major>`（不支持 custom）+ `--merge-decorate <none|reverse|snake|reverse-snake|snake-reverse>`
-  决定该列表铺进 cols×rows 画布的路径，映射到 Core 的 `MergeOrder{strategy,reverse,snake}`。
-
-### 全局选项
-
-`-h/--help`、`-v/--version`、`--verbose`、`--quiet`、`--config <file>`（从 JSON 读取全部参数）、
-`--save-config <file>`（把当前参数序列化为 JSON，dry-run 不执行）。
-
-### 退出码
-
-| 码 | 含义                                       |
-|---|------------------------------------------|
-| 0 | 成功                                       |
-| 1 | 参数错误（缺必填 / 格式非法 / 互斥冲突，前 5 步，早于 Core 调用） |
-| 2 | 运行时错误（Core 业务错误，如坍缩不可行）                  |
-| 3 | 输入文件错误（图像不存在 / 不可读 / 格式不支持）              |
-| 4 | 输出失败（目录不可创建 / 文件被占用 / 磁盘满）               |
-| 5 | 内部错误（未预期异常）                              |
-
-### 错误格式
-
-```
-idc: error: <简述>
-  详情: <细节>
-  提示: <可操作建议>
-```
+> **行为契约**（参数规则 / 全局选项 / 退出码 / 错误输出格式）已收编至
+> [`SPEC.md`](../../SPEC.md) §8.1，本文件不再重复维护。
 
 ## 使用的 Core API（接口确认清单）
 

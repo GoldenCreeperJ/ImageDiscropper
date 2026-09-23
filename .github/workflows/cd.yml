@@ -1,5 +1,6 @@
 # CD：打 v* 标签或手动触发 → 三平台 Release 构建（静态 Qt 单文件）→
-# 6 个裸可执行文件（3 GUI + 3 CLI）+ SHA256SUMS 校验文件 → GitHub Release。
+# 6 个可执行文件（3 GUI + 3 CLI）+ Windows 安装包（Inno Setup）+ macOS .app（zip）+
+# SHA256SUMS 校验文件 → GitHub Release。
 # 平台级构建步骤复用 _build-platform.yml（与 CI 共用 release 预设与 vcpkg 缓存）。
 #
 # 说明：

@@ -97,7 +97,8 @@ To skip building the GUI app: `cmake --preset windows -DIDC_BUILD_GUI=OFF` (qtba
 ### Release
 
 Tagging `v*` publishes automatically ([`.github/workflows/cd.yml`](.github/workflows/cd.yml)): three-platform Release builds (**static Qt, single-file executables**) →
-uploads **6 executables** (3 platforms × GUI/CLI) plus a `SHA256SUMS` checksum file → creates a GitHub Release.
+uploads **6 executables** (3 platforms × GUI/CLI) plus a **Windows installer** (Inno Setup, default icon) and a
+**macOS `.app` zip** with a `SHA256SUMS` checksum file → creates a GitHub Release.
 
 ```bash
 git tag v1.0.0 && git push origin v1.0.0
@@ -105,20 +106,17 @@ git tag v1.0.0 && git push origin v1.0.0
 
 The CD can also be triggered manually from the Actions tab — just enter a tag name (created automatically at the current HEAD if missing; no push needed).
 
-> Binaries are unsigned for now (SmartScreen may warn on Windows); Linux builds require system X11 libraries (present on any normal desktop).
+> Binaries are unsigned for now (SmartScreen may warn on Windows; macOS requires right-click → Open on first launch); Linux builds require system X11 libraries (present on any normal desktop).
 
 ### CLI quick tour
 
 ```bash
-idc extract --input photo.jpg --rect 100,100,300,250 --output out.png
-idc erase   --input photo.jpg --rect 100,100,300,250 --merge collapse --output out.png
-idc erase   --input photo.jpg --rect 100,100,300,250 --output-dir ./out/ --format png
-idc grid    --input photo.jpg --grid 100,100,200,150 --keep 0,0 --keep 0,2 --keep 2,0 --keep 2,2 \
-            --compose --canvas 2x2 --output result.png
-idc config  --load my-config.json --input photo.jpg --output result.png
+idc extract --input photo.jpg --rect 100,100,300,250 --output out.png   # L1: keep the center rect
 ```
 
-See `idc <command> --help` for all options. GUI operations are documented in [`ImageDiscropperGui/README.md`](ImageDiscropperCpp/ImageDiscropperGui/README.md) (Chinese).
+Full examples and all commands: [`ImageDiscropperCli/README.md`](ImageDiscropperCpp/ImageDiscropperCli/README.md) (Chinese);
+behavior contract (options / exit codes): [`SPEC.md`](SPEC.md) §8.1; GUI operations:
+[`ImageDiscropperGui/README.md`](ImageDiscropperCpp/ImageDiscropperGui/README.md) (Chinese).
 
 ## 📚 Documentation index
 

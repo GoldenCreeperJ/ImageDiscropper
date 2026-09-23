@@ -120,8 +120,10 @@ jobs:
         run: ctest --test-dir build/${{ inputs.preset }} --output-on-failure
 
       # ---- CD 产物整理（CI 不启用） ----
-      # Windows/Linux 直接拷贝裸可执行文件；macOS 额外校验二进制无「系统路径之外」的
-      # 动态依赖（qtbase port 在非 Windows 强制静态，此处防坏产物混入——检测到即失败）。
+      # Windows/Linux 直接拷贝裸可执行文件；macOS 的 idc_gui 以 .app 捆绑包输出
+      #（打包为 zip 分发——release job 的提平步骤只处理文件，目录会被拆散），
+      # 并额外校验二进制无「系统路径之外」的动态依赖（qtbase port 在非 Windows
+      # 强制静态，此处防坏产物混入——检测到即失败）。
       - name: Prepare dist artifacts
         if: inputs.prepare-dist
         shell: bash
@@ -131,20 +133,35 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then
             cp "$BIN/idc_gui.exe" "dist/idc_gui-${{ inputs.preset }}.exe"
             cp "$BIN/idc.exe" "dist/idc-${{ inputs.preset }}.exe"
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            cp -R "$BIN/idc_gui.app" "dist/idc_gui-${{ inputs.preset }}.app"
+            cp "$BIN/idc" "dist/idc-${{ inputs.preset }}"
+            check() {
+              if otool -L "$1" | tail -n +2 | awk '{print $1}' | grep -vE "^/(usr/lib|System/Library)" | grep -q .; then
+                echo "::error::$1 存在非系统动态依赖，裸二进制不可分发；需引入 macdeployqt 打包"
+                exit 1
+              fi
+            }
+            check "dist/idc_gui-${{ inputs.preset }}.app/Contents/MacOS/idc_gui"
+            check "dist/idc-${{ inputs.preset }}"
+            (cd dist && zip -qr "idc_gui-${{ inputs.preset }}.app.zip" "idc_gui-${{ inputs.preset }}.app" && rm -rf "idc_gui-${{ inputs.preset }}.app")
           else
             cp "$BIN/idc_gui" "dist/idc_gui-${{ inputs.preset }}"
             cp "$BIN/idc" "dist/idc-${{ inputs.preset }}"
-            if [ "$RUNNER_OS" = "macOS" ]; then
-              check() {
-                if otool -L "$1" | tail -n +2 | awk '{print $1}' | grep -vE "^/(usr/lib|System/Library)" | grep -q .; then
-                  echo "::error::$1 存在非系统动态依赖，裸二进制不可分发；需引入 macdeployqt 打包"
-                  exit 1
-                fi
-              }
-              check "dist/idc_gui-${{ inputs.preset }}"
-              check "dist/idc-${{ inputs.preset }}"
-            fi
           fi
+
+      # Windows 安装包：Inno Setup（choco 安装）把 GUI + CLI 两个 exe 打成安装器
+      #（安装/快捷方式/卸载器见 ImageDiscropperCpp/packaging/installer.iss，无自定义图标）。
+      - name: Build Windows installer (Inno Setup)
+        if: inputs.prepare-dist && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/installer | Out-Null
+          Copy-Item "ImageDiscropperCpp/build/${{ inputs.preset }}/bin/idc_gui.exe" dist/installer/idc_gui.exe
+          Copy-Item "ImageDiscropperCpp/build/${{ inputs.preset }}/bin/idc.exe" dist/installer/idc.exe
+          choco install innosetup -y --no-progress
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DSRC=$env:GITHUB_WORKSPACE\dist\installer" "/O$env:GITHUB_WORKSPACE\dist" "$env:GITHUB_WORKSPACE\ImageDiscropperCpp\packaging\installer.iss" | Out-Null
+          Move-Item "dist\ImageDiscropper-setup.exe" "dist\ImageDiscropper-setup-win-x64.exe"
 
       # Windows 的 VCPKG_INSTALLED_DIR=D:/vcpkg_installed 在工作区外，artifact 无法直接上传；
       # 失败时先把端口构建日志拷回工作区再上传。
