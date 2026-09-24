@@ -1,2 +1,5 @@
-include("${VCPKG_ROOT_DIR}/triplets/x64-windows.cmake")
+set(VCPKG_TARGET_ARCHITECTURE x64)
+set(VCPKG_CRT_LINKAGE dynamic)
+set(VCPKG_LIBRARY_LINKAGE dynamic)
+set(VCPKG_PROVIDED_FORTRAN ON)
 set(VCPKG_BUILD_TYPE debug)

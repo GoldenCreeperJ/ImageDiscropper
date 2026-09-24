@@ -3,7 +3,7 @@
 ## 职责边界
 
 本目录存放**发布打包资产**：Windows 安装包脚本与将来可能的图标、部署清单等。
-打包逻辑在 CD 工作流（`.github/workflows/_build-platform.yml` 的产物整理步骤）中执行，
+打包逻辑在发布工作流（`.github/workflows/cpp/desktop.yml` 的产物整理步骤）中执行，
 本目录只提供静态资产。
 
 ## 文件清单

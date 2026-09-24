@@ -69,9 +69,9 @@ CMake Presets are the recommended path (the first configure installs dependencie
 
 ```bash
 cd ImageDiscropperCpp
-cmake --preset windows         # Windows: Ninja + MSVC (Debug; windows-release = static Qt, single file)
-cmake --build build/windows
-ctest --test-dir build/windows --output-on-failure   # Core unit_tests + CLI cli_tests
+cmake --preset windows-debug   # Windows: Ninja + MSVC (Debug; windows-release = static Qt, single file)
+cmake --build build/windows-debug
+ctest --test-dir build/windows-debug --output-on-failure   # Core unit_tests + CLI cli_tests
 
 # Linux / macOS: single-config Ninja presets (linux-debug / linux-release / macos-debug / macos-release)
 cmake --preset linux-debug
@@ -90,21 +90,25 @@ ctest --test-dir build
 Binaries land in the build directory's `bin/`: `idc(.exe)`, `idc_gui(.exe)`, `demo(.exe)`.
 (CLion users can open `ImageDiscropperCpp/` directly as the CMake source directory; CLion picks up the presets.)
 
-Every push is verified by GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): **three-platform Release builds (GUI included, identical to the shipped artifacts) plus the full test suite** (minute-level with a warm dependency cache); Debug-configuration GUI verification on all three platforms runs manually ([`.github/workflows/dbg-verify.yml`](.github/workflows/dbg-verify.yml)).
+Every push is verified by GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): **three-platform Release builds (GUI included, identical to the shipped artifacts) plus the full test suite** (minute-level with a warm dependency cache); Full Debug-configuration verification runs manually ([`.github/workflows/cpp/dbg-verify.yml`](.github/workflows/cpp/dbg-verify.yml): three desktop platforms plus both mobile targets).
 
-To skip building the GUI app: `cmake --preset windows -DIDC_BUILD_GUI=OFF` (qtbase is still installed).
+To skip building the GUI app: `cmake --preset windows-debug -DIDC_BUILD_GUI=OFF` (qtbase is still installed).
 
 ### Release
 
-Tagging `v*` publishes automatically ([`.github/workflows/cd.yml`](.github/workflows/cd.yml)): three-platform Release builds (**static Qt, single-file executables**) →
-uploads **6 executables** (3 platforms × GUI/CLI) plus a **Windows installer** (Inno Setup, default icon) and a
-**macOS `.app` zip** with a `SHA256SUMS` checksum file → creates a GitHub Release.
+Releases go through a **single entry point** ([`.github/workflows/cd.yml`](.github/workflows/cd.yml)) routed by tag name:
+
+| Tag                                              | Artifacts                                                                                              | Release type   |
+|--------------------------------------------------|--------------------------------------------------------------------------------------------------------|----------------|
+| `v*` (e.g. `v1.0.0`)                             | Desktop, 3 platforms: 6 executables + Windows installer (Inno Setup) + macOS `.app` zip + `SHA256SUMS` | stable Release |
+| `v*-alpha*` / `v*-beta*` (e.g. `v1.0.1-alpha.1`) | Mobile: Android APK + iOS `.app` zip                                                                   | pre-release    |
 
 ```bash
-git tag v1.0.0 && git push origin v1.0.0
+git tag v1.0.0 && git push origin v1.0.0                       # stable release
+git tag v1.0.1-alpha.1 && git push origin v1.0.1-alpha.1       # mobile pre-release
 ```
 
-The CD can also be triggered manually from the Actions tab — just enter a tag name (created automatically at the current HEAD if missing; no push needed).
+Releases can also be triggered manually from the Actions tab — just enter a tag name (created automatically at the current HEAD if missing; no push needed).
 
 > Binaries are unsigned for now (SmartScreen may warn on Windows; macOS requires right-click → Open on first launch); Linux builds require system X11 libraries (present on any normal desktop).
 

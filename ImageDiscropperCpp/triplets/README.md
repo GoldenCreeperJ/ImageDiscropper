@@ -2,21 +2,32 @@
 
 ## 职责边界
 
-本目录存放 **overlay triplet**：继承 vcpkg 社区标准 triplet，追加 `VCPKG_BUILD_TYPE` 把依赖树锁定为
-**单一构建配置**（Debug 或 Release），避免 vcpkg 默认的 dbg + rel 双配置重复构建（构建量减半）。
+本目录存放 **overlay triplet**：内容照抄**钉死基线**（e6f9e70a29）的社区标准 triplet 并追加
+`VCPKG_BUILD_TYPE`，把依赖树锁定为**单一构建配置**（Debug 或 Release），避免 vcpkg 默认的
+dbg + rel 双配置重复构建（构建量减半）。
 
-本目录文件刻意保持**纯两行**（include + set，无注释），所有说明集中于此。
+**自包含写法**（不 include 社区文件）：基线钉死后社区 triplet 内容即固定，照抄即冻结语义、
+消除隐式耦合；代价是基线升级时需对照官方文件手工同步（见「变更注意」）。
+文件保持纯配置行、无注释，所有说明集中于此。
 
 ## 文件清单
 
-| 文件                             | 继承自                  | 构建配置    | 使用方                                         |
-|--------------------------------|----------------------|---------|---------------------------------------------|
-| `x64-windows-dbg.cmake`        | `x64-windows`（动态）    | debug   | 本地开发预设 `windows`、dbg-verify（目标 + 宿主）        |
-| `x64-windows-static-rel.cmake` | `x64-windows-static` | release | 预设 `windows-release`（目标 + 宿主，CI + CD，静态单文件） |
-| `x64-linux-dbg.cmake`          | `x64-linux`          | debug   | 预设 `linux-debug`、dbg-verify（目标 + 宿主）        |
-| `x64-linux-rel.cmake`          | `x64-linux`          | release | 预设 `linux-release`（目标 + 宿主，CI + CD）         |
-| `arm64-osx-dbg.cmake`          | `arm64-osx`          | debug   | 预设 `macos-debug`、dbg-verify（目标 + 宿主）        |
-| `arm64-osx-rel.cmake`          | `arm64-osx`          | release | 预设 `macos-release`（目标 + 宿主，CI + CD）         |
+| 文件                        | 照抄自（基线 e6f9e70a29）   | 构建配置    | 使用方                                            |
+|---------------------------|----------------------|---------|------------------------------------------------|
+| `x64-windows-dbg.cmake`   | `x64-windows`（动态）    | debug   | 本地开发预设 `windows-debug`、dbg-verify（目标 + 宿主）     |
+| `x64-windows-rel.cmake`   | `x64-windows-static` | release | 预设 `windows-release`（目标 + 宿主，CI + CD，静态单文件）    |
+| `x64-linux-dbg.cmake`     | `x64-linux`          | debug   | 预设 `linux-debug`、dbg-verify（目标 + 宿主）           |
+| `x64-linux-rel.cmake`     | `x64-linux`          | release | 预设 `linux-release`（目标 + 宿主，CI + CD）            |
+| `arm64-osx-dbg.cmake`     | `arm64-osx`          | debug   | 预设 `macos-debug`、dbg-verify（目标 + 宿主）           |
+| `arm64-osx-rel.cmake`     | `arm64-osx`          | release | 预设 `macos-release`（目标 + 宿主，CI + CD）            |
+| `arm64-android-rel.cmake` | `arm64-android`      | release | 预设 `android` 的**目标**（交叉编译：宿主用 `x64-linux-rel`） |
+| `arm64-android-dbg.cmake` | `arm64-android`      | debug   | 预设 `android-dbg` 的**目标**（宿主 `x64-linux-dbg`）   |
+| `arm64-ios-rel.cmake`     | vcpkg iOS 惯例自写       | release | 预设 `ios` 的**目标**（宿主 `arm64-osx-rel`）           |
+| `arm64-ios-dbg.cmake`     | vcpkg iOS 惯例自写       | debug   | 预设 `ios-dbg` 的**目标**（宿主 `arm64-osx-dbg`）       |
+
+> **移动端为何自写而非用社区三元组**：`triplets/community/` 虽有 `arm64-android-release` /
+> `arm64-ios-release`，但**无 `-debug` 变体**——为命名一致与 dbg/rel 配套（贡献者真机调试需要
+> debug 构建），统一按本目录模式自写全套，保持一致性。
 
 ## 背景（为什么必须这样做）
 
@@ -27,15 +38,23 @@
   `VCPKG_BUILD_TYPE` 在 triplet 内读到为空；
 - 因此单配置构建只能经 overlay triplet 声明字面量，由预设中的 `VCPKG_TARGET_TRIPLET` +
   `VCPKG_OVERLAY_TRIPLETS` 启用（见 `../CMakePresets.json`）。
+- 官方虽有 `x64-windows-release` 等 `-release`/`-debug` 单配置三元组，但仅覆盖动态形态、
+  且无 static+release 组合——本项目所需六种组合均无官方对应物，必须自定义。
 - **宿主三元组必须同时指定**（`VCPKG_HOST_TRIPLET`）：2026 版 vcpkg 把带工具的目标包
   （如 qtbase 的 moc/rcc/uic）作为独立计划条目按宿主三元组安装。若宿主保持社区默认
   三元组，qtbase 会被**完整构建两次**（宿主双配置 + 目标单配置），构建时间与树体积双双膨胀；
   宿主/目标同指 overlay 三元组后按名字去重，只构建一次。Windows 的宿主同样用静态
   三元组（工具静态链接运行，与 mac/linux 一致）——若宿主拆成动态 rel，名字不同、去重
   失效，Windows 会退回双构建（1.5 小时 + 3.5G 树）。
+- **交叉编译（Android/iOS）**：宿主 = 构建机原生三元组（`x64-linux-*` /
+  `arm64-osx-*`），目标 = 设备三元组（`arm64-android-*` / `arm64-ios-*`）——
+  名字必然不同、不去重（qtbase 仍会构建宿主+目标两份，符合预期）；要点是
+  **宿主也必须是单配置**（否则回到双构建陷阱）。
 
 ## 变更注意
 
 - 本目录任何文件变更 = 依赖树 ABI 变化。CI 的 binary cache key 已含本目录哈希
   （`hashFiles('ImageDiscropperCpp/triplets/*.cmake')`），变更自动换 key、旧缓存条目作废。
 - triplet 文件名同时决定 `vcpkg_installed/<triplet>/` 的目录名，重命名同样触发全量重建。
+- **基线升级时**：对照新基线 `triplets/` 下的同名社区文件，把除 `VCPKG_BUILD_TYPE`
+  之外的所有变量差异同步进来（自包含写法的唯一维护义务）。
