@@ -1,6 +1,8 @@
-# 三平台 Debug GUI 验证：手动触发。
+# C++ 实现的 Debug 全配置验证：手动触发。
 # 日常 CI 为 Release 构建（与发布产物同构），Debug 配置无自动验证；
-# 本工作流补齐 Debug 的 GUI 构建与测试（不写缓存，避免挤占 10GB 池）。
+# 本工作流补齐 Debug 配置的验证（不写缓存，避免挤占 10GB 池）：
+#   · 桌面三平台（跑 ctest）
+#   · 移动双端（只构建打包，交叉编译产物无法在构建机执行测试）
 name: Debug Verify
 
 on:
@@ -17,12 +19,16 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            preset: windows
+            preset: windows-debug
           - os: ubuntu-latest
             preset: linux-debug
           - os: macos-latest
             preset: macos-debug
-    uses: ./.github/workflows/_build-platform.yml
+          - os: ubuntu-latest
+            preset: android-dbg
+          - os: macos-latest
+            preset: ios-dbg
+    uses: ./.github/workflows/cpp/build.yml
     with:
       os: ${{ matrix.os }}
       preset: ${{ matrix.preset }}

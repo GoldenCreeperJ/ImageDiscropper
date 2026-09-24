@@ -17,7 +17,7 @@ ctest --test-dir build/windows-debug --output-on-failure    # Core unit_tests + 
 
 建议使用 CLion，直接以 `ImageDiscropperCpp/` 为 CMake 源目录打开工程（CLion 会识别 Presets）。
 Linux / macOS 用 `linux-debug` / `macos-debug` 预设。
-每次 push / PR 由 GitHub Actions（`.github/workflows/ci.yml`）在 **Windows / Linux / macOS 三平台**以 **Release 配置**自动构建（含 GUI，与发布产物同构）并跑同一套测试；Debug 配置的全量验证见 cpp/dbg-verify.yml（手动，桌面三平台 + 移动双端）。
+每次 push / PR 由 GitHub Actions（`.github/workflows/ci.yml`）在 **Windows / Linux / macOS 三平台**以 **Release 配置**自动构建（含 GUI，与发布产物同构）并跑同一套测试，同时构建 **Android / iOS** 移动产物（打包验证，交叉编译产物不跑测试）；Debug 配置的全量验证见 cpp/dbg-verify.yml（手动，桌面三平台 + 移动双端）。
 
 ## 代码规范
 

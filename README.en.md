@@ -90,7 +90,7 @@ ctest --test-dir build
 Binaries land in the build directory's `bin/`: `idc(.exe)`, `idc_gui(.exe)`, `demo(.exe)`.
 (CLion users can open `ImageDiscropperCpp/` directly as the CMake source directory; CLion picks up the presets.)
 
-Every push is verified by GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): **three-platform Release builds (GUI included, identical to the shipped artifacts) plus the full test suite** (minute-level with a warm dependency cache); Full Debug-configuration verification runs manually ([`.github/workflows/cpp/dbg-verify.yml`](.github/workflows/cpp/dbg-verify.yml): three desktop platforms plus both mobile targets).
+Every push is verified by GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): **three-platform desktop Release builds plus the full test suite plus both mobile target builds (Android / iOS packaging)** (minute-level with a warm dependency cache); Full Debug-configuration verification runs manually ([`.github/workflows/cpp/dbg-verify.yml`](.github/workflows/cpp/dbg-verify.yml): three desktop platforms plus both mobile targets).
 
 To skip building the GUI app: `cmake --preset windows-debug -DIDC_BUILD_GUI=OFF` (qtbase is still installed).
 
@@ -98,14 +98,14 @@ To skip building the GUI app: `cmake --preset windows-debug -DIDC_BUILD_GUI=OFF`
 
 Releases go through a **single entry point** ([`.github/workflows/cd.yml`](.github/workflows/cd.yml)) routed by tag name:
 
-| Tag                                              | Artifacts                                                                                              | Release type   |
-|--------------------------------------------------|--------------------------------------------------------------------------------------------------------|----------------|
-| `v*` (e.g. `v1.0.0`)                             | Desktop, 3 platforms: 6 executables + Windows installer (Inno Setup) + macOS `.app` zip + `SHA256SUMS` | stable Release |
-| `v*-alpha*` / `v*-beta*` (e.g. `v1.0.1-alpha.1`) | Mobile: Android APK + iOS `.app` zip                                                                   | pre-release    |
+| Tag                                              | Artifacts                                                                                                 | Release type   |
+|--------------------------------------------------|-----------------------------------------------------------------------------------------------------------|----------------|
+| `v*` (e.g. `v1.0.0`)                             | All platforms: 6 executables + Windows installer + macOS `.app` + Android APK + iOS `.app` + `SHA256SUMS` | stable Release |
+| `v*-alpha*` / `v*-beta*` (e.g. `v1.0.1-alpha.1`) | All platforms: desktop artifacts + mobile artifacts (Android APK / iOS `.app`)                            | pre-release    |
 
 ```bash
 git tag v1.0.0 && git push origin v1.0.0                       # stable release
-git tag v1.0.1-alpha.1 && git push origin v1.0.1-alpha.1       # mobile pre-release
+git tag v1.0.1-alpha.1 && git push origin v1.0.1-alpha.1       # all-platform pre-release
 ```
 
 Releases can also be triggered manually from the Actions tab — just enter a tag name (created automatically at the current HEAD if missing; no push needed).

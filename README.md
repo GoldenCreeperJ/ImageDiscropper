@@ -89,7 +89,7 @@ ctest --test-dir build
 产物位于构建目录 `bin/`：`idc(.exe)`、`idc_gui(.exe)`、`demo(.exe)`。
 （CLion 用户可直接以 `ImageDiscropperCpp/` 为 CMake 源目录打开工程，CLion 会识别 Presets。）
 
-每次提交由 GitHub Actions（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）自动验证：**三平台 Release 构建（含 GUI，与发布产物同构）+ 全套测试**（依赖缓存命中后分钟级）；Debug 配置的全量验证手动运行（[`.github/workflows/cpp/dbg-verify.yml`](.github/workflows/cpp/dbg-verify.yml)：桌面三平台 + 移动双端）。
+每次提交由 GitHub Actions（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）自动验证：**桌面三平台 Release 构建 + 全套测试 + 移动双端（Android / iOS）构建打包**（依赖缓存命中后分钟级）；Debug 配置的全量验证手动运行（[`.github/workflows/cpp/dbg-verify.yml`](.github/workflows/cpp/dbg-verify.yml)：桌面三平台 + 移动双端）。
 
 无需构建 GUI 应用时可跳过：`cmake --preset windows-debug -DIDC_BUILD_GUI=OFF`（qtbase 依赖仍会安装）。
 
@@ -97,14 +97,14 @@ ctest --test-dir build
 
 发布走**统一入口** [`.github/workflows/cd.yml`](.github/workflows/cd.yml)，按标签名路由：
 
-| 标签                                           | 产物                                                                        | Release 类型  |
-|----------------------------------------------|---------------------------------------------------------------------------|-------------|
-| `v*`（如 `v1.0.0`）                             | 三平台桌面：6 个可执行文件 + Windows 安装包（Inno Setup）+ macOS `.app` 压缩包 + `SHA256SUMS` | 正式 Release  |
-| `v*-alpha*` / `v*-beta*`（如 `v1.0.1-alpha.1`） | 移动端：Android APK + iOS `.app` 压缩包                                          | pre-release |
+| 标签                                           | 产物                                                                                  | Release 类型  |
+|----------------------------------------------|-------------------------------------------------------------------------------------|-------------|
+| `v*`（如 `v1.0.0`）                             | 全平台：6 个可执行文件 + Windows 安装包 + macOS `.app` + Android APK + iOS `.app` + `SHA256SUMS` | 正式 Release  |
+| `v*-alpha*` / `v*-beta*`（如 `v1.0.1-alpha.1`） | 全平台：桌面产物 + 移动产物（Android APK / iOS `.app`）                                           | pre-release |
 
 ```bash
 git tag v1.0.0 && git push origin v1.0.0                       # 正式发布
-git tag v1.0.1-alpha.1 && git push origin v1.0.1-alpha.1       # 移动端预发布
+git tag v1.0.1-alpha.1 && git push origin v1.0.1-alpha.1       # 全平台预发布
 ```
 
 也可在 Actions 页面手动触发（填写标签名即可——不存在时会自动在当前 HEAD 创建，无需 push）。

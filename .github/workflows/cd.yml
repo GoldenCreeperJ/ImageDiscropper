@@ -1,16 +1,18 @@
-# CD：打 v* 标签或手动触发 → 三平台 Release 构建（静态 Qt 单文件）→
-# 6 个可执行文件（3 GUI + 3 CLI）+ Windows 安装包（Inno Setup）+ macOS .app（zip）+
-# SHA256SUMS 校验文件 → GitHub Release。
-# 平台级构建步骤复用 _build-platform.yml（与 CI 共用 release 预设与 vcpkg 缓存）。
+# 发布统一入口：打 v* 标签或手动触发，按标签名路由：
+#   · v*-alpha* / v*-beta* → 预发布（prerelease=true → 各实现的预发布产物）
+#   · 其余 v*            → 正式发布（prerelease=false → 各实现的正式产物）
+# 本文件只持有「标签策略 + 实现选择 + 产物收集约定」；各实现的发布细节（构建矩阵、
+# 缓存、打包、移动产物）全部在各自目录（见 cpp/cd.yml）。接入新实现（tauri/wails/
+# flutter/…）= 建 <impl>/cd.yml，在此加一个 job + 一个 dispatch 布尔输入。
+# 产物收集约定：所有发布物 artifact 命名以 dist-* 开头。
+# 注意：手动触发时至少选择一个实现（全不选会产出空 Release，SHA256SUMS 步骤会失败）。
 #
 # 说明：
-#   · 手动触发（workflow_dispatch）填写标签名（如 v1.0.0）；标签不存在时会在
-#     当前默认分支 HEAD 上自动创建并推送（无需手工打 tag）。
-#   · 依赖树缓存由 CI 写入，本工作流直接命中（发版不再冷构建 qtbase，分钟级）；
-#     若缓存被 LRU 淘汰则退化为冷构建（约 1 小时），仍可正常发布。
-#   · Linux 裸二进制依赖系统 X11 库（正常桌面环境均有）；macOS 若检测到动态 Qt
-#     链接则该平台腿直接失败（不发坏产物），届时需引入 macdeployqt 打包。
-#   · 产物未做代码签名（Windows SmartScreen 会提示），后续可加。
+#   · 手动触发（workflow_dispatch）填写标签名（如 v1.0.1 / v1.0.1-alpha.1）；
+#     标签不存在时由 prepare job 在当前默认分支 HEAD 上创建并推送。
+#     推 tag 不会自触发本工作流：工作流内经 GITHUB_TOKEN 的 push 事件被 GitHub 抑制。
+#   · 先建标、后按标构建：保证 tag 精确指向所构建的提交。
+#   · 产物未做代码签名（Windows SmartScreen 会提示、macOS 首次打开需右键），后续可加。
 name: CD
 
 on:
@@ -20,15 +22,34 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: '要发布的标签（如 v1.0.0；不存在时会在当前 HEAD 自动创建）'
+        description: '发布标签（如 v1.0.1 或 v1.0.1-alpha.1；不存在时会在当前 HEAD 自动创建）'
         required: true
         type: string
+      # 产物范围覆盖：默认 all = 当前恒全平台；移动端未验收时
+      # 可手动收窄为 desktop（正式/预发布通用）。
+      scope:
+        description: '产物范围覆盖'
+        required: false
+        type: choice
+        default: all
+        options:
+          - desktop
+          - mobile
+          - all
+      # 手动发布可选实现（tag push 触发时无输入、恒为全量）。
+      # 新实现接入时按同模式追加一个 boolean 输入 + 对应 job 的 if。
+      build-cpp:
+        description: '构建并发布 C++ 实现'
+        required: false
+        type: boolean
+        default: true
+
 
 permissions:
   contents: write
 
 # 同一标签的重复触发互斥（防手滑二次触发）；不同标签的发布互不影响。
-# 注意手动触发时 github.ref 是默认分支，故用 inputs.tag 参与分组。
+# 手动触发时 github.ref 是默认分支，故用 inputs.tag 参与分组。
 concurrency:
   group: cd-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: true
@@ -53,35 +74,28 @@ jobs:
             echo "已创建标签 ${{ inputs.tag }}（指向当前 HEAD）"
           fi
 
-  build:
+  # 各实现的发布入口（新实现在此追加：job + dispatch 布尔输入）。
+  # 标签路由在下方 with 中现算：prerelease = Release 类型；scope = 产物范围。
+  #   · v* / v*-alpha* / v*-beta* → scope 默认 all（发布即全平台，移动端与桌面平权）
+  #   · 手动触发可选 scope 覆盖（如移动端未验收时收窄为 desktop）
+  #   · v*-rc*（预留）→ 桌面候选版：在 scope 表达式中加 rc 分支即得
+  cpp:
     needs: prepare
-    strategy:
-      # 发布场景：三平台各自尽力，一个失败不砍其他。
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            preset: windows-release
-          - os: ubuntu-latest
-            preset: linux-release
-          - os: macos-latest
-            preset: macos-release
-    uses: ./.github/workflows/_build-platform.yml
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build-cpp }}
+    uses: ./.github/workflows/cpp/cd.yml
     with:
-      os: ${{ matrix.os }}
-      preset: ${{ matrix.preset }}
-      prepare-dist: true
-      # 手动触发时构建用户指定的标签，否则构建触发本次运行的标签。
       ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+      prerelease: ${{ contains(github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name, '-alpha') || contains(github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name, '-beta') }}
+      scope: ${{ github.event_name != 'workflow_dispatch' && 'all' || inputs.scope }}
 
   release:
-    needs: build
+    needs: [cpp]
     runs-on: ubuntu-latest
     steps:
-      - name: Download all artifacts
+      - name: Download all release artifacts
         uses: actions/download-artifact@v8
         with:
-          pattern: dist-*
+          pattern: 'dist-*'
           merge-multiple: true
           path: dist
 
@@ -97,6 +111,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          prerelease: ${{ contains(github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name, '-alpha') || contains(github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name, '-beta') }}
+          generate_release_notes: true
           files: |
             dist/*
-          generate_release_notes: true

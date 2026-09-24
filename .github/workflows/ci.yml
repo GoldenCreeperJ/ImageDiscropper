@@ -1,7 +1,19 @@
-# CI：每 push / PR——三平台 Release 构建（静态 Qt，与发布产物同构）+ 全套测试。
-# 与 CD 共用 release 预设与 vcpkg 缓存：CI 负责写入缓存，CD 命中复用（发版分钟级）。
-# 三平台 Debug GUI 验证见 dbg-verify.yml（手动触发，不写缓存）。
-# 平台级步骤集中在 _build-platform.yml 可复用工作流中，本文件只声明矩阵与触发条件。
+# CI 通用分发入口：每 push / PR 先按变更路径定向，再把验证任务分发到对应实现。
+# 分发规则（两层，filters 是定向的单一事实来源）：
+#   · 触发层 paths = filters 的粗粒度超集——挡住纯无关 push，不产生空跑
+#     （!**/*.md 排除全部文档：文档单独改动不触发 CI；文档随代码同改时仍经 shared 全测。
+#      若需 SPEC 单独触发，在否定行之后补一行 'SPEC.md' 即可。）
+#   · changes job 的 filters 精定向：实现路径 → 只测该实现；
+#     共享契约（SPEC.md / .github/workflows/** / 根文档）→ 全实现都测（NFR-10）
+# 接入新实现（tauri / wails / flutter / …）= 在 <impl>/ 目录建同构入口（形态见
+# cpp/ci.yml：矩阵 + 可复用构建工作流），然后：
+#   1. 触发层 paths 与 filters 各加一行 <impl> 相关路径（两处同步！）
+#   2. 加一个 job：
+#        <impl>:
+#          needs: changes
+#          if: ${{ needs.changes.outputs.<impl> == 'true' || needs.changes.outputs.shared == 'true' }}
+#          uses: ./.github/workflows/<impl>/ci.yml
+# 本文件只声明触发条件与分发清单，不含任何平台细节。
 name: CI
 
 on:
@@ -9,12 +21,20 @@ on:
     # 显式限定「仅分支推送」：标签推送根本不会进入本触发（发布由 cd.yml 负责），
     # 避免 paths 与 tags-ignore 组合过滤的边界行为。
     branches:
-      - '**'
-    # 纯文档提交不触发（仅代码路径变化才触发）。
-    paths:
+      - 'master'
+    # 触发层 = filters 的粗粒度超集（挡住纯无关 push，避免空跑）；
+    # 精细定向在 changes job 的 filters——新增实现目录/共享契约文件时两处同步。
+    paths: &ci-paths
       - 'ImageDiscropperCpp/**'
-      - '.github/workflows/**'
+      - 'ImageDiscropperRust/**'
+      - '.github/**'
+      - '!**/*.md'
   pull_request:
+    paths: *ci-paths
+
+permissions:
+  contents: read
+  pull-requests: read
 
 # 同一分支新 push 自动取消仍在运行的旧 run，避免并行重复烧配额。
 concurrency:
@@ -22,20 +42,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    strategy:
-      # 稳定期 true：任一平台失败即取消其余进行中的平台（止损省时）；
-      # 多平台调试期可临时改 false，一轮看全三个平台的失败信息。
-      fail-fast: true
-      matrix:
-        include:
-          - os: windows-latest
-            preset: windows-release
-          - os: ubuntu-latest
-            preset: linux-release
-          - os: macos-latest
-            preset: macos-release
-    uses: ./.github/workflows/_build-platform.yml
-    with:
-      os: ${{ matrix.os }}
-      preset: ${{ matrix.preset }}
+  # 路径定向：输出各实现 / 共享契约的变更布尔，供下游 job 的 if 消费。
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      cpp: ${{ steps.filter.outputs.cpp }}
+      rust: ${{ steps.filter.outputs.rust }}
+      shared: ${{ steps.filter.outputs.shared }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            cpp:
+              - 'ImageDiscropperCpp/**'
+            rust:
+              - 'ImageDiscropperRust/**'
+            shared:
+              - '.github/workflows/**'
+
+  cpp:
+    needs: changes
+    if: ${{ needs.changes.outputs.cpp == 'true' || needs.changes.outputs.shared == 'true' }}
+    uses: ./.github/workflows/cpp/ci.yml

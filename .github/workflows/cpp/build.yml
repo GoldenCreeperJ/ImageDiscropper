@@ -1,9 +1,12 @@
-# 可复用工作流：单平台「环境准备 → 配置 → 构建 → 测试 →（可选）产物整理」。
-# CI 与 CD 统一使用 release 预设：同树同缓存，CI 负责写入、CD 直接命中（发版分钟级）；
-# dbg-verify 用 debug 预设做低频 GUI 验证（不写缓存）。
-# 平台相关的环境魔法（vcpkg 基线对齐 / vswhere / apt·brew 清单 / 长路径 / 日志收集）
-# 集中在此一处，调用方只声明「os + preset」矩阵。
-name: _build-platform
+# C++ 实现的可复用构建工作流：单腿「环境准备 → 配置 → 构建 →（测试）→（打包）」。
+# 桌面与移动统一于此：Linux 桌面腿与 Android 腿共享 ubuntu 环境与依赖清单，
+# macOS 桌面腿与 iOS 腿共享 macos 环境与工具链——差异点只有三处，按 preset 前缀分支：
+#   · Android SDK（android-* 腿）
+#   · 测试（交叉编译产物无法在构建机执行：android-*/ios-* 腿按 preset 前缀自动跳过）
+#   · 打包形态（desktop：dist 拷贝 + 安装包；android-*：APK；ios-*：app zip）
+# 由 cpp/ci.yml（5 腿矩阵）、cpp/cd.yml（发布路由）、cpp/dbg-verify.yml 与
+# cpp/mobile-verify.yml 调用。
+name: cpp-build
 
 on:
   workflow_call:
@@ -17,15 +20,15 @@ on:
       cache-deps:
         required: false
         type: boolean
-        default: true       # 整树缓存 vcpkg_installed（CI/CD 开；dbg-verify 关以避开缓存池竞争）
+        default: true       # 整树缓存 vcpkg_installed（ci/cd 开；dbg-verify/mobile-verify 关）
       prepare-dist:
         required: false
         type: boolean
-        default: false      # true：整理 dist 产物并上传（CD 用）
+        default: false      # true：整理 dist 产物并上传（发布用）
       ref:
         required: false
         type: string
-        default: ''         # CD 手动触发时传入标签名；空则用触发本次运行的 ref
+        default: ''         # 发布手动触发时传入标签名；空则用触发本次运行的 ref
 
 jobs:
   build:
@@ -35,18 +38,16 @@ jobs:
         with:
           ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
 
-      # 不依赖 runner 镜像自带的 vcpkg（版本随镜像漂移、且带不可丢弃的镜像补丁）：
-      # 每次运行现场克隆清单基线 commit（blobless 浅克隆，约 20s）；
-      # vcpkg.exe 由 CMake 工具链在首次使用时自动引导下载。
+      # 现场克隆钉死基线的 vcpkg（不依赖 runner 镜像自带的 vcpkg：版本随镜像漂移、
+      # 且带不可丢弃的镜像补丁）；基线 SHA 与 vcpkg.json 的 builtin-baseline 同步维护。
       - name: Set up vcpkg
         shell: bash
-        env:
-          VCPKG_SRC: ${{ runner.os == 'Windows' && 'D:/vcpkg-src' || format('{0}/vcpkg-src', github.workspace) }}
         run: |
-          git clone --filter=blob:none https://github.com/microsoft/vcpkg "$VCPKG_SRC"
-          git -C "$VCPKG_SRC" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
-          git -C "$VCPKG_SRC" checkout --detach e6f9e70a29a3e80a1fc510d8503304315447112f
-          echo "VCPKG_ROOT=$VCPKG_SRC" >> "$GITHUB_ENV"
+          DEST="${{ runner.os == 'Windows' && 'D:/vcpkg-src' || format('{0}/vcpkg-src', github.workspace) }}"
+          git clone --filter=blob:none https://github.com/microsoft/vcpkg "$DEST"
+          git -C "$DEST" fetch --depth 1 origin e6f9e70a29a3e80a1fc510d8503304315447112f
+          git -C "$DEST" checkout --detach e6f9e70a29a3e80a1fc510d8503304315447112f
+          echo "VCPKG_ROOT=$DEST" >> "$GITHUB_ENV"
 
       # 二进制缓存：整树 restore（命中则 vcpkg 跳过已装包；未命中则 job 结束自动 save）。
       # 不缓存 downloads：downloads 只在 binary 未命中的冷构建里被消费，而命中轮次里
@@ -54,8 +55,8 @@ jobs:
       # 偶发下载失败重跑即可，不需要常驻 0.9G 的保险条目。
       # 弃用原因备注：x-gha 后端已被新版 vcpkg 移除；nuget,github 在该版本下
       # 源解析失效且非 Windows 需 mono（runner 屏蔽 keyserver），故退回 actions/cache 整树方案。
-      # key 含 preset（CI/CD 同为 release 预设共享同一条目）与 triplet 哈希（改 triplet
-      # 即自动换 key）；Debug 树（dbg-verify）不写缓存。
+      # key 含 preset（ci 与 cd 同为 release 预设共享同一条目）与 triplet 哈希
+      # （改 triplet 即自动换 key）；Debug 树（dbg-verify）不写缓存。
       - name: Restore vcpkg binary cache
         if: inputs.cache-deps
         uses: actions/cache@v5
@@ -63,10 +64,14 @@ jobs:
           path: ${{ runner.os == 'Windows' && 'D:/vcpkg_installed' || format('ImageDiscropperCpp/build/{0}/vcpkg_installed', inputs.preset) }}
           key: vcpkg-${{ runner.os }}-${{ inputs.preset }}-baseline-e6f9e70a29-${{ hashFiles('ImageDiscropperCpp/vcpkg.json', 'ImageDiscropperCpp/triplets/*.cmake') }}
 
+      # Android SDK + NDK（runner 无预装完整 SDK）。ANDROID_NDK_ROOT 被 android 预设引用。
+      - name: Set up Android SDK
+        if: startsWith(inputs.preset, 'android')
+        uses: android-actions/setup-android@v3
 
       # qtbase 在 Linux 上构建需系统 X11/EGL/字体等开发库（vcpkg 官方 Ubuntu 完整清单）；
       # 其依赖 gperf / libpq / libxcrypt 经 autotools 从源码构建，另需 autoconf 全家桶与 libltdl。
-      # macOS 只需 autoconf 全家桶 + ninja。
+      # macOS 只需 autoconf 全家桶 + ninja。Android 腿跑在 ubuntu 上，共享此清单。
       - name: Install build dependencies (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
@@ -113,19 +118,20 @@ jobs:
           cmake --preset ${{ inputs.preset }}
           cmake --build build/${{ inputs.preset }}
 
-      # 测试：所有调用方都跑（Release 预设已默认构建测试目标——见根 CMakeLists 的
-      # IDC_BUILD_TESTS；CD 发布前同样以测试通过为门禁）。
+      # 测试：桌面腿跑（Release 预设已默认构建测试目标——见根 CMakeLists 的
+      # IDC_BUILD_TESTS）；移动腿按 preset 前缀自动跳过（交叉编译产物无法在构建机执行）。
       - name: Test
+        if: ${{ !startsWith(inputs.preset, 'android') && !startsWith(inputs.preset, 'ios') }}
         working-directory: ImageDiscropperCpp
         run: ctest --test-dir build/${{ inputs.preset }} --output-on-failure
 
-      # ---- CD 产物整理（CI 不启用） ----
+      # ---- 桌面发布产物（CI 不启用） ----
       # Windows/Linux 直接拷贝裸可执行文件；macOS 的 idc_gui 以 .app 捆绑包输出
       #（打包为 zip 分发——release job 的提平步骤只处理文件，目录会被拆散），
       # 并额外校验二进制无「系统路径之外」的动态依赖（qtbase port 在非 Windows
       # 强制静态，此处防坏产物混入——检测到即失败）。
       - name: Prepare dist artifacts
-        if: inputs.prepare-dist
+        if: ${{ inputs.prepare-dist && !startsWith(inputs.preset, 'android') && !startsWith(inputs.preset, 'ios') }}
         shell: bash
         run: |
           BIN="ImageDiscropperCpp/build/${{ inputs.preset }}/bin"
@@ -163,6 +169,51 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DSRC=$env:GITHUB_WORKSPACE\dist\installer" "/O$env:GITHUB_WORKSPACE\dist" "$env:GITHUB_WORKSPACE\ImageDiscropperCpp\packaging\installer.iss" | Out-Null
           Move-Item "dist\ImageDiscropper-setup.exe" "dist\ImageDiscropper-setup-win-x64.exe"
 
+      # ---- 移动打包（Android：androiddeployqt 出 APK；iOS：zip .app） ----
+      # qt_finalize_target 已生成部署设置 json；androiddeployqt 由宿主侧 vcpkg qtbase 提供
+      #（宿主三元组与预设成对：dbg 预设 → x64-linux-dbg）。
+      - name: Package APK
+        if: startsWith(inputs.preset, 'android')
+        run: |
+          HOST_TRIPLET=${{ contains(inputs.preset, '-dbg') && 'x64-linux-dbg' || 'x64-linux-rel' }}
+          mkdir -p dist
+          build/${{ inputs.preset }}/vcpkg_installed/$HOST_TRIPLET/tools/Qt6/bin/androiddeployqt \
+            --input build/${{ inputs.preset }}/android-idc_gui-deployment-settings.json \
+            --output build/${{ inputs.preset }}/android-build --gradle
+          cp build/${{ inputs.preset }}/android-build/build/outputs/apk/debug/android-build-debug.apk \
+             dist/idc_gui-android-arm64.apk
+
+      - name: Upload APK
+        if: startsWith(inputs.preset, 'android')
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist-${{ inputs.preset }}
+          path: dist/idc_gui-android-arm64.apk
+          if-no-files-found: error
+
+      - name: Package app bundle
+        if: startsWith(inputs.preset, 'ios')
+        run: |
+          mkdir -p dist
+          cp -R ImageDiscropperCpp/build/${{ inputs.preset }}/bin/idc_gui.app dist/idc_gui-ios.app
+          (cd dist && zip -qr idc_gui-ios.app.zip idc_gui-ios.app && rm -rf idc_gui-ios.app)
+
+      - name: Upload iOS app
+        if: startsWith(inputs.preset, 'ios')
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist-${{ inputs.preset }}
+          path: dist/idc_gui-ios.app.zip
+          if-no-files-found: error
+
+      - name: Upload dist artifacts
+        if: inputs.prepare-dist && success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist-${{ inputs.preset }}
+          path: dist/*
+          if-no-files-found: error
+
       # Windows 的 VCPKG_INSTALLED_DIR=D:/vcpkg_installed 在工作区外，artifact 无法直接上传；
       # 失败时先把端口构建日志拷回工作区再上传。
       - name: Collect vcpkg logs on failure (Windows)
@@ -182,14 +233,6 @@ jobs:
             ImageDiscropperCpp/build/*/vcpkg_installed/vcpkg/blds/**/install-*-out.log
             ImageDiscropperCpp/build/vcpkg-logs/
           if-no-files-found: ignore
-
-      - name: Upload dist artifacts
-        if: inputs.prepare-dist && success()
-        uses: actions/upload-artifact@v7
-        with:
-          name: dist-${{ inputs.preset }}
-          path: dist/*
-          if-no-files-found: error
 
       # 缓存瘦身：清单模式下 buildtrees 内嵌于 vcpkg_installed/vcpkg/blds 且无法配置
       # 迁出（VCPKG_BUILDTREES_DIR 在工具链与 vcpkg-tool 中均已无实现）。缓存前删除：

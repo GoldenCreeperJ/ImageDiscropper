@@ -1,0 +1,60 @@
+# C++ 实现的发布入口（由顶层 cd.yml 分发调用，本文件持有 C++ 的全部发布细节）。
+# 两个正交输入：
+#   · prerelease（Release 类型）：false = 正式，true = 预发布
+#   · scope（产物范围）：desktop = 仅桌面 / mobile = 仅移动 / all = 全部
+#     ——桌面预发布（如 v*-rc* 候选版）与混合预发布都走这里，顶层只改路由一行。
+# 产物 artifact 命名遵循发布约定 `dist-*`（顶层 cd.yml 统一收集）。
+name: cpp-cd
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        required: false
+        type: string
+        default: ''
+      prerelease:
+        required: false
+        type: boolean
+        default: false
+      scope:
+        required: false
+        type: string
+        default: desktop    # desktop / mobile / all
+
+jobs:
+  build-desktop:
+    if: ${{ inputs.scope != 'mobile' }}
+    strategy:
+      # 发布场景：三平台各自尽力，一个失败不砍其他。
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            preset: windows-release
+          - os: ubuntu-latest
+            preset: linux-release
+          - os: macos-latest
+            preset: macos-release
+    uses: ./.github/workflows/cpp/build.yml
+    with:
+      os: ${{ matrix.os }}
+      preset: ${{ matrix.preset }}
+      prepare-dist: true
+      ref: ${{ inputs.ref }}
+
+  build-mobile:
+    if: ${{ inputs.scope != 'desktop' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            preset: android
+          - os: macos-latest
+            preset: ios
+    uses: ./.github/workflows/cpp/build.yml
+    with:
+      os: ${{ matrix.os }}
+      preset: ${{ matrix.preset }}
+      ref: ${{ inputs.ref }}

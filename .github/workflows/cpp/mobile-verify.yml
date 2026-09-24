@@ -1,0 +1,26 @@
+# C++ 移动端构建验证：手动触发（GuideLine 阶段 1 的载体）。
+# 构建与打包细节见 cpp/build.yml；本文件只声明触发条件与移动矩阵。
+name: Mobile Verify
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: mobile-verify
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            preset: android
+          - os: macos-latest
+            preset: ios
+    uses: ./.github/workflows/cpp/build.yml
+    with:
+      os: ${{ matrix.os }}
+      preset: ${{ matrix.preset }}
+      cache-deps: false   # 低频验证：只读不写缓存

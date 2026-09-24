@@ -93,7 +93,7 @@ ctest --test-dir build/windows-debug --output-on-failure   # 同时运行 Core u
 
 首次配置自动安装清单依赖（qtbase 较慢）。手动方式（清单模式自动生效）：
 `cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake`。
-每次提交由 GitHub Actions 自动验证：三平台 Release 构建（含 GUI，与发布产物同构）+ 全套测试；Debug 配置的全量验证手动运行（`.github/workflows/cpp/dbg-verify.yml`：桌面三平台 + 移动双端）。
+每次提交由 GitHub Actions 自动验证：桌面三平台 Release 构建（含 GUI，与发布产物同构）+ 全套测试 + 移动双端（Android / iOS）构建打包；Debug 配置的全量验证手动运行（`.github/workflows/cpp/dbg-verify.yml`：桌面三平台 + 移动双端）。
 
 完整用法与示例见 [`ImageDiscropperCli/README.md`](ImageDiscropperCli/README.md)「用法速览」；行为契约（参数规则 / 退出码）见 [`SPEC.md`](../SPEC.md) §8.1。
 
