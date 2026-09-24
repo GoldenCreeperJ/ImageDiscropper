@@ -4,7 +4,7 @@
 ; 分块依据：单文件即整个安装逻辑（[Setup]/[Files]/[Icons]/[Run]/卸载均由框架生成）。
 ; 说明：
 ;   · 用法：发布工作流的 Windows 腿以 /DSRC=<exe 所在目录> 覆盖源目录后用 ISCC.exe 编译
-;     （见 .github/workflows/cpp/build.yml）；独立使用时把 idc_gui.exe 与
+;     （见 .github/workflows/cpp-build.yml）；独立使用时把 idc_gui.exe 与
 ;     idc.exe 放在本脚本旁即可。
 ;   · 版本号与根 CMakeLists 的 project() 同步——发版时改。
 ;   · 安装模式：向导提供「全局（所有用户）/ 仅当前用户」选择（免 UAC 时自动装到

@@ -36,7 +36,7 @@ jobs:
             preset: linux-release
           - os: macos-latest
             preset: macos-release
-    uses: ./.github/workflows/cpp/build.yml
+    uses: ./.github/workflows/cpp-build.yml
     with:
       os: ${{ matrix.os }}
       preset: ${{ matrix.preset }}
@@ -53,7 +53,7 @@ jobs:
             preset: android
           - os: macos-latest
             preset: ios
-    uses: ./.github/workflows/cpp/build.yml
+    uses: ./.github/workflows/cpp-build.yml
     with:
       os: ${{ matrix.os }}
       preset: ${{ matrix.preset }}

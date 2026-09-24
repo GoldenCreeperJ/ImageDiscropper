@@ -1,4 +1,4 @@
-# C++ 实现的 CI 入口：五腿矩阵（桌面三平台 + 移动双端）→ cpp/build.yml。
+# C++ 实现的 CI 入口：五腿矩阵（桌面三平台 + 移动双端）→ cpp-build.yml。
 # 移动腿不跑 ctest（交叉编译产物无法在构建机执行）；依赖树缓存命中后分钟级。
 # 由通用分发入口 ci.yml 调用；未来其他语言实现（rust/tauri/wails/flutter 等）
 # 在各自目录建同构入口（<impl>/ci.yml），行为契约见 SPEC §8 与 NFR-10。
@@ -25,7 +25,7 @@ jobs:
             preset: android
           - os: macos-latest
             preset: ios
-    uses: ./.github/workflows/cpp/build.yml
+    uses: ./.github/workflows/cpp-build.yml
     with:
       os: ${{ matrix.os }}
       preset: ${{ matrix.preset }}

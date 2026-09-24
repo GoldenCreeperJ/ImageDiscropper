@@ -28,7 +28,7 @@ jobs:
             preset: android-dbg
           - os: macos-latest
             preset: ios-dbg
-    uses: ./.github/workflows/cpp/build.yml
+    uses: ./.github/workflows/cpp-build.yml
     with:
       os: ${{ matrix.os }}
       preset: ${{ matrix.preset }}

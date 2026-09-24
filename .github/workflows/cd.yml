@@ -2,8 +2,8 @@
 #   · v*-alpha* / v*-beta* → 预发布（prerelease=true → 各实现的预发布产物）
 #   · 其余 v*            → 正式发布（prerelease=false → 各实现的正式产物）
 # 本文件只持有「标签策略 + 实现选择 + 产物收集约定」；各实现的发布细节（构建矩阵、
-# 缓存、打包、移动产物）全部在各自目录（见 cpp/cd.yml）。接入新实现（tauri/wails/
-# flutter/…）= 建 <impl>/cd.yml，在此加一个 job + 一个 dispatch 布尔输入。
+# 缓存、打包、移动产物）全部在各自的 <impl>-cd.yml / <impl>-build.yml（见 cpp-cd.yml）。
+# 接入新实现（tauri/wails/flutter/…）= 建 <impl>-cd.yml，在此加一个 job + 一个 dispatch 布尔输入。
 # 产物收集约定：所有发布物 artifact 命名以 dist-* 开头。
 # 注意：手动触发时至少选择一个实现（全不选会产出空 Release，SHA256SUMS 步骤会失败）。
 #
@@ -82,7 +82,7 @@ jobs:
   cpp:
     needs: prepare
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.build-cpp }}
-    uses: ./.github/workflows/cpp/cd.yml
+    uses: ./.github/workflows/cpp-cd.yml
     with:
       ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
       prerelease: ${{ contains(github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name, '-alpha') || contains(github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name, '-beta') }}

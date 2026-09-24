@@ -4,8 +4,8 @@
 #   · Android SDK（android-* 腿）
 #   · 测试（交叉编译产物无法在构建机执行：android-*/ios-* 腿按 preset 前缀自动跳过）
 #   · 打包形态（desktop：dist 拷贝 + 安装包；android-*：APK；ios-*：app zip）
-# 由 cpp/ci.yml（5 腿矩阵）、cpp/cd.yml（发布路由）、cpp/dbg-verify.yml 与
-# cpp/mobile-verify.yml 调用。
+# 由 cpp-ci.yml（5 腿矩阵）、cpp-cd.yml（发布路由）、cpp-dbg-verify.yml 与
+# cpp-mobile-verify.yml 调用。
 name: cpp-build
 
 on:

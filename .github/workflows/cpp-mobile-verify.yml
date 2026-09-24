@@ -1,5 +1,5 @@
 # C++ 移动端构建验证：手动触发（GuideLine 阶段 1 的载体）。
-# 构建与打包细节见 cpp/build.yml；本文件只声明触发条件与移动矩阵。
+# 构建与打包细节见 cpp-build.yml；本文件只声明触发条件与移动矩阵。
 name: Mobile Verify
 
 on:
@@ -19,7 +19,7 @@ jobs:
             preset: android
           - os: macos-latest
             preset: ios
-    uses: ./.github/workflows/cpp/build.yml
+    uses: ./.github/workflows/cpp-build.yml
     with:
       os: ${{ matrix.os }}
       preset: ${{ matrix.preset }}

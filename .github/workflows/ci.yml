@@ -5,14 +5,15 @@
 #      若需 SPEC 单独触发，在否定行之后补一行 'SPEC.md' 即可。）
 #   · changes job 的 filters 精定向：实现路径 → 只测该实现；
 #     共享契约（SPEC.md / .github/workflows/** / 根文档）→ 全实现都测（NFR-10）
-# 接入新实现（tauri / wails / flutter / …）= 在 <impl>/ 目录建同构入口（形态见
-# cpp/ci.yml：矩阵 + 可复用构建工作流），然后：
+# 接入新实现（tauri / wails / flutter / …）= 在本目录建同构文件（形态见 cpp-ci.yml：
+# 矩阵 + cpp-build.yml 可复用构建工作流；命名约定 <impl>-ci / <impl>-cd / <impl>-build，
+# GitHub 要求本地可复用工作流必须位于本目录顶层），然后：
 #   1. 触发层 paths 与 filters 各加一行 <impl> 相关路径（两处同步！）
 #   2. 加一个 job：
 #        <impl>:
 #          needs: changes
 #          if: ${{ needs.changes.outputs.<impl> == 'true' || needs.changes.outputs.shared == 'true' }}
-#          uses: ./.github/workflows/<impl>/ci.yml
+#          uses: ./.github/workflows/<impl>-ci.yml
 # 本文件只声明触发条件与分发清单，不含任何平台细节。
 name: CI
 
@@ -65,4 +66,4 @@ jobs:
   cpp:
     needs: changes
     if: ${{ needs.changes.outputs.cpp == 'true' || needs.changes.outputs.shared == 'true' }}
-    uses: ./.github/workflows/cpp/ci.yml
+    uses: ./.github/workflows/cpp-ci.yml
