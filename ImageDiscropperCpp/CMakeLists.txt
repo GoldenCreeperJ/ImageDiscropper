@@ -24,9 +24,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# vcpkg 静态 triplet（x64-windows-static）要求所有目标使用静态 CRT (/MT)，
-# 否则与预编译的 Qt/WebP 等库产生 RuntimeLibrary 不匹配链接错误。
-if(DEFINED VCPKG_TARGET_TRIPLET AND VCPKG_TARGET_TRIPLET MATCHES "static")
+# vcpkg 静态 triplet 要求所有目标使用静态 CRT (/MT)，否则与预编译的 Qt/WebP 等库
+# 产生 RuntimeLibrary 不匹配链接错误（LNK2019 __imp_*）。
+# Windows 静态三元组按本项目命名约定为 x64-windows-rel（内容 = 社区 x64-windows-static）。
+if(DEFINED VCPKG_TARGET_TRIPLET AND (VCPKG_TARGET_TRIPLET MATCHES "static" OR VCPKG_TARGET_TRIPLET STREQUAL "x64-windows-rel"))
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 

@@ -7,7 +7,34 @@
   "dependencies": [
     "libwebp",
     "nlohmann-json",
-    "qtbase",
-    "stb"
+    "stb",
+    {
+      "name": "qtbase",
+      "default-features": false,
+      "features": [
+        "core",
+        "gui",
+        "thread",
+        "widgets"
+      ],
+      "platform": "!(linux)"
+    },
+    {
+      "name": "qtbase",
+      "default-features": false,
+      "features": [
+        "core",
+        "gui",
+        "thread",
+        "widgets",
+        "fontconfig",
+        "xcb",
+        "xcb-sm",
+        "xcb-xlib",
+        "xrender",
+        "egl"
+      ],
+      "platform": "linux"
+    }
   ]
 }

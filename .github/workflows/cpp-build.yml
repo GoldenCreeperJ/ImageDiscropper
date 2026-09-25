@@ -65,12 +65,15 @@ jobs:
           key: vcpkg-${{ runner.os }}-${{ inputs.preset }}-baseline-e6f9e70a29-${{ hashFiles('ImageDiscropperCpp/vcpkg.json', 'ImageDiscropperCpp/triplets/*.cmake') }}
 
       # Android SDK + NDK（runner 无预装完整 SDK）。ANDROID_NDK_ROOT 被 android 预设引用。
+      # v4+：v3 起 SDK 仓库下架了 legacy tools 包，v3 默认安装 'tools' 必失败。
       - name: Set up Android SDK
         if: startsWith(inputs.preset, 'android')
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
-      # qtbase 在 Linux 上构建需系统 X11/EGL/字体等开发库（vcpkg 官方 Ubuntu 完整清单）；
-      # 其依赖 gperf / libpq / libxcrypt 经 autotools 从源码构建，另需 autoconf 全家桶与 libltdl。
+      # qtbase 显式特性清单（core/gui/thread/widgets + xcb 家族/egl/fontconfig/xrender）的系统库依赖：
+      # xcb/xkbcommon/EGL/GL 经 pkg-config 消费系统开发库（vcpkg 官方 Ubuntu 清单）；
+      # fontconfig 仍从源码经 autotools 构建（vcpkg 内用 gperf 生成器），需 autoconf 全家桶与 libltdl；
+      # dbus 已随 default-features:false 移除，不再需要 libdbus-1-dev。
       # macOS 只需 autoconf 全家桶 + ninja。Android 腿跑在 ubuntu 上，共享此清单。
       - name: Install build dependencies (Linux/macOS)
         if: runner.os != 'Windows'
@@ -91,7 +94,7 @@ jobs:
               libxcb-xv0-dev libxcb-xvmc0-dev \
               libxkbcommon-dev libxkbcommon-x11-dev libfontconfig1-dev \
               libfreetype6-dev libgl1-mesa-dev libglu1-mesa-dev libegl1-mesa-dev \
-              libdbus-1-dev libsm-dev libice-dev
+              libsm-dev libice-dev
           else
             brew install autoconf autoconf-archive automake libtool ninja
           fi
