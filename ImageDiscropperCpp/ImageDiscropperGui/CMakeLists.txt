@@ -132,23 +132,23 @@ set(IDC_GUI_APP_SRC
 
 # WIN32：按 GUI 子系统链接（MSVC /SUBSYSTEM:WINDOWS），双击启动时不弹出控制台窗口；
 # 入口点 WinMain 由下方 qt_finalize_target 链接 Qt6::EntryPointImplementation 提供。
-add_executable(idc_gui WIN32
-    ${IDC_GUI_UTIL_SRC}
-    ${IDC_GUI_MODEL_SRC}
-    ${IDC_GUI_CANVAS_SRC}
-    ${IDC_GUI_PANELS_SRC}
-    ${IDC_GUI_APP_SRC}
+qt_add_executable(idc_gui MANUAL_FINALIZATION WIN32
+        ${IDC_GUI_UTIL_SRC}
+        ${IDC_GUI_MODEL_SRC}
+        ${IDC_GUI_CANVAS_SRC}
+        ${IDC_GUI_PANELS_SRC}
+        ${IDC_GUI_APP_SRC}
 )
 
 # macOS 发布形态：idc_gui 以 .app 捆绑包输出（CD 打包为 zip 分发）。
 # 非 Apple 平台忽略该属性，无需按平台分支；无自定义图标（缺省为系统默认图标，
 # 正式分发如需图标后续补 icns）。
 set_target_properties(idc_gui PROPERTIES
-    MACOSX_BUNDLE TRUE
-    MACOSX_BUNDLE_BUNDLE_NAME "ImageDiscropper"
-    MACOSX_BUNDLE_GUI_IDENTIFIER "com.imagediscropper.gui"
-    MACOSX_BUNDLE_BUNDLE_VERSION "${IDC_GUI_VERSION}"
-    MACOSX_BUNDLE_SHORT_VERSION_STRING "${IDC_GUI_VERSION}"
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_BUNDLE_NAME "ImageDiscropper"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.imagediscropper.gui"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${IDC_GUI_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${IDC_GUI_VERSION}"
 )
 
 # include 作为包含根，使源码以 "model/document.h"、"canvas/canvas_scene.h" 形式互相引用
@@ -156,16 +156,16 @@ set_target_properties(idc_gui PROPERTIES
 target_include_directories(idc_gui PRIVATE include)
 
 target_compile_definitions(idc_gui PRIVATE
-    IDC_GUI_VERSION="${IDC_GUI_VERSION}"
-    IDC_CORE_VERSION="${IDC_CORE_VERSION}"
+        IDC_GUI_VERSION="${IDC_GUI_VERSION}"
+        IDC_CORE_VERSION="${IDC_CORE_VERSION}"
 )
 
 # 链接：Qt6 Widgets（含 Gui/Core 传递）+ Core 静态库。
 target_link_libraries(idc_gui PRIVATE
-    Qt6::Widgets
-    Qt6::Gui
-    Qt6::Core
-    image_discropper_core
+        Qt6::Widgets
+        Qt6::Gui
+        Qt6::Core
+        image_discropper_core
 )
 
 # ---------------------------------------------------------------------------
@@ -177,7 +177,7 @@ target_link_libraries(idc_gui PRIVATE
 # 故单配置生成器在配置期检查目录存在才拷贝（多配置生成器保持生成器表达式写法）。
 # ---------------------------------------------------------------------------
 if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET
-   AND NOT VCPKG_TARGET_TRIPLET MATCHES "static")
+        AND NOT VCPKG_TARGET_TRIPLET MATCHES "static")
     if(CMAKE_BUILD_TYPE AND NOT CMAKE_BUILD_TYPE STREQUAL "")
         # 单配置生成器（Ninja 预设）：构建类型配置期已知，按目录是否存在决定是否拷贝。
         if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -190,29 +190,29 @@ if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET
         set(_idc_copy_commands)
         if(EXISTS "${_idc_platforms_src}")
             list(APPEND _idc_copy_commands
-                COMMAND ${CMAKE_COMMAND} -E copy_directory
-                        "${_idc_platforms_src}" "$<TARGET_FILE_DIR:idc_gui>/platforms")
+                    COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    "${_idc_platforms_src}" "$<TARGET_FILE_DIR:idc_gui>/platforms")
         endif()
         if(EXISTS "${_idc_styles_src}")
             list(APPEND _idc_copy_commands
-                COMMAND ${CMAKE_COMMAND} -E copy_directory
-                        "${_idc_styles_src}" "$<TARGET_FILE_DIR:idc_gui>/styles")
+                    COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    "${_idc_styles_src}" "$<TARGET_FILE_DIR:idc_gui>/styles")
         endif()
         if(_idc_copy_commands)
             add_custom_command(TARGET idc_gui POST_BUILD ${_idc_copy_commands}
-                COMMENT "Copying Qt plugins (platforms/styles) next to idc_gui"
-                VERBATIM)
+                    COMMENT "Copying Qt plugins (platforms/styles) next to idc_gui"
+                    VERBATIM)
         endif()
     else()
         add_custom_command(TARGET idc_gui POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                    "$<$<CONFIG:Debug>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/platforms>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/platforms>"
-                    "$<TARGET_FILE_DIR:idc_gui>/platforms"
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                    "$<$<CONFIG:Debug>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/styles>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/styles>"
-                    "$<TARGET_FILE_DIR:idc_gui>/styles"
-            COMMENT "Copying Qt plugins (platforms/styles) next to idc_gui"
-            VERBATIM)
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "$<$<CONFIG:Debug>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/platforms>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/platforms>"
+                "$<TARGET_FILE_DIR:idc_gui>/platforms"
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "$<$<CONFIG:Debug>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/styles>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/styles>"
+                "$<TARGET_FILE_DIR:idc_gui>/styles"
+                COMMENT "Copying Qt plugins (platforms/styles) next to idc_gui"
+                VERBATIM)
     endif()
 endif()
 
