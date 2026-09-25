@@ -50,6 +50,13 @@ dbg + rel 双配置重复构建（构建量减半）。
   `arm64-osx-*`），目标 = 设备三元组（`arm64-android-*` / `arm64-ios-*`）——
   名字必然不同、不去重（qtbase 仍会构建宿主+目标两份，符合预期）；要点是
   **宿主也必须是单配置**（否则回到双构建陷阱）。
+- **宿主 qtbase 的默认特性膨胀**：vcpkg-tool 对「自动选中」的包（含全部宿主包）
+  无条件补发端口默认特性（源码 `create_install_info`）——qtbase 端口宿主条目声明的
+  `default-features: false` 因此形同虚设，宿主 qtbase 以全默认特性构建（icu/openssl/
+  libpq/sqlite3/dbus 全家桶，移动腿缓存的大头）。解法见 `../vcpkg.json`：消费者清单加
+  `{ "name": "qtbase", "host": true, "default-features": false }` 条目——顶层条目被标记为
+  用户请求，豁免默认特性补发，宿主只装基座（core，含 moc/rcc/uic/androiddeployqt 工具）。
+  该 `host` 字段消费者清单支持但未见于 vcpkg 文档；桌面腿宿主=目标同名合并，此条目零影响。
 
 ## 变更注意
 
@@ -58,3 +65,10 @@ dbg + rel 双配置重复构建（构建量减半）。
 - triplet 文件名同时决定 `vcpkg_installed/<triplet>/` 的目录名，重命名同样触发全量重建。
 - **基线升级时**：对照新基线 `triplets/` 下的同名社区文件，把除 `VCPKG_BUILD_TYPE`
   之外的所有变量差异同步进来（自包含写法的唯一维护义务）。
+- **autotools 端口的交叉编译标记（iOS 自加）**：iOS 三元组追加
+  `VCPKG_MAKE_BUILD_TRIPLET "--host=aarch64-apple-ios"`（android 官方三元组自带同款，
+  非本项目发明）。vcpkg 的 make 助手对 darwin 系目标自动推导 `--host=aarch64-apple-darwin`，
+  在 arm64 mac 构建机上与 `--build` 恰好同名 → autoconf 判定「本机构建」→ 运行测试二进制 →
+  iOS 二进制无法执行 → configure exit 77。`--host` 与 `--build` 不同名即触发交叉模式
+  （改用缓存提示、不再运行测试程序）。libb2 是 iOS 目标唯一的 autotools 端口，
+  故此前从未踩中。
