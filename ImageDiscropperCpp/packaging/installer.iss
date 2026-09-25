@@ -43,11 +43,11 @@ Name: "chinesesimp"; MessagesFile: "languages\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [CustomMessages]
-en.AdditionalTasks=Additional tasks:
-en.CreateDesktopIcon=Create a desktop icon
-en.AutoStartTask=Start with Windows
-en.RunAfterInstall=Run {#AppName}
-en.UninstallProgram=Uninstall %1
+english.AdditionalTasks=Additional tasks:
+english.CreateDesktopIcon=Create a desktop icon
+english.AutoStartTask=Start with Windows
+english.RunAfterInstall=Run {#AppName}
+english.UninstallProgram=Uninstall %1
 chinesesimp.AdditionalTasks=附加任务：
 chinesesimp.CreateDesktopIcon=创建桌面快捷方式
 chinesesimp.AutoStartTask=开机自启动
