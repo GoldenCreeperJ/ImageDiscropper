@@ -66,7 +66,10 @@ jobs:
           fetch-depth: 1
       - name: Create tag if missing
         run: |
-          if git rev-parse "refs/tags/${{ inputs.tag }}" >/dev/null 2>&1; then
+          # 存在性检查必须问远端：prepare 是浅克隆（fetch-depth 1），远端 tag
+          # 指向未拉取的提交时 rev-parse 在本地查不到，会误判为不存在并尝试
+          # 重建推送 → 远端拒绝 "already exists"。ls-remote 直接查询远端，恒准确。
+          if git ls-remote --exit-code origin "refs/tags/${{ inputs.tag }}" >/dev/null 2>&1; then
             echo "标签 ${{ inputs.tag }} 已存在，跳过创建"
           else
             git tag "${{ inputs.tag }}"
