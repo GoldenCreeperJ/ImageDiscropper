@@ -97,6 +97,12 @@ add_library(image_discropper_core STATIC
     ${IDC_ENGINE_SRC}
 )
 
+# PIC：静态库对象需可重定位——Android 上 Qt 把应用链接为共享模块（libidc_gui_*.so），
+# 无 -fPIC 的对象在 AArch64 上无法重定位（ld.lld: relocation R_AARCH64_* cannot be used...）。
+# NDK 工具链默认会开 PIC，但本工程工具链是 vcpkg.cmake（无该默认，静态库目标 PIC 默认关）。
+# 桌面平台链接进可执行文件，PIC 无额外成本；MSVC 无 -fPIC 概念，忽略该属性。
+set_target_properties(image_discropper_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 target_include_directories(image_discropper_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
