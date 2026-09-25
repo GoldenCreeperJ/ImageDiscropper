@@ -10,6 +10,9 @@
 ;   · 安装模式：向导提供「全局（所有用户）/ 仅当前用户」选择（免 UAC 时自动装到
 ;     {localappdata}\Programs）；安装目录可在向导中自定义。
 ;   · 语言：简中 / English 双语，按系统语言自动选择。
+;     中文语言文件为仓库自带（languages\ChineseSimplified.isl，6.7.1 兼容版）——
+;     Inno Setup 6.7.1 及全部已发布版本均不附带官方中文（官方中文只在 issrc main
+;     分支、尚未随发布版分发），构建机的 Inno 安装内容不可依赖。
 ;   · 可选任务：桌面快捷方式、开机自启动（HKCU Run 键，卸载时自动移除）。
 ;   · 无自定义图标：安装包与快捷方式使用目标 exe 图标/系统默认图标（图标非打包强制项）。
 ; ============================================================================
@@ -36,7 +39,7 @@ WizardStyle=modern
 UninstallDisplayIcon={app}\idc_gui.exe
 
 [Languages]
-Name: "chinesesimp"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "chinesesimp"; MessagesFile: "languages\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [CustomMessages]
