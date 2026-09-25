@@ -11,7 +11,12 @@
     {
       "name": "qtbase",
       "host": true,
-      "default-features": false
+      "default-features": false,
+      "features": [
+        "gui",
+        "thread",
+        "widgets"
+      ]
     },
     {
       "name": "qtbase",

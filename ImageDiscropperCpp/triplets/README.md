@@ -54,8 +54,13 @@ dbg + rel 双配置重复构建（构建量减半）。
   无条件补发端口默认特性（源码 `create_install_info`）——qtbase 端口宿主条目声明的
   `default-features: false` 因此形同虚设，宿主 qtbase 以全默认特性构建（icu/openssl/
   libpq/sqlite3/dbus 全家桶，移动腿缓存的大头）。解法见 `../vcpkg.json`：消费者清单加
-  `{ "name": "qtbase", "host": true, "default-features": false }` 条目——顶层条目被标记为
-  用户请求，豁免默认特性补发，宿主只装基座（core，含 moc/rcc/uic/androiddeployqt 工具）。
+  `{ "name": "qtbase", "host": true, "default-features": false, "features": [gui/thread/widgets] }`
+  条目——顶层条目被标记为用户请求，豁免默认特性补发。宿主特性需**镜像目标四件套**
+  （基座-only 已验证不可行：宿主 `thread=OFF` → UNIX 上 `process` 特性门控
+  `(thread OR NOT UNIX)` 不满足 → `wasmdeployqt` 不构建 → 目标 qtbase 的交叉
+  configure 按 `qt_require_find_tools` 规则从宿主找 `Qt6::wasmdeployqt` 失败；
+  且端口作者的基座-only 声明从未被兑现过、从未经过验证）。大头 icu/openssl/sql/dbus/
+  harfbuzz/freetype/libpng/libjpeg/brotli/zstd/libpq 仍全部砍掉。
   该 `host` 字段消费者清单支持但未见于 vcpkg 文档；桌面腿宿主=目标同名合并，此条目零影响。
 
 ## 变更注意
