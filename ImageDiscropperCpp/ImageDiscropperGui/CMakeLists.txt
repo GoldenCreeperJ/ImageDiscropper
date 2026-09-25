@@ -51,6 +51,15 @@ if(ANDROID AND NOT DEFINED ANDROID_NDK_HOST_SYSTEM_NAME)
     endif()
 endif()
 
+# NDK 统一 sysroot：Qt 安卓宏的 stdcpp-path 取 ${CMAKE_SYSROOT}/usr/lib/（Qt6AndroidMacros）。
+# CMAKE_SYSROOT 本由 NDK 工具链文件设置；CMake 官方模块检测到统一 Clang 工具链时
+# 主动跳过 sysroot 选择（改走 CMAKE_FIND_ROOT_PATH），本工程工具链又是 vcpkg.cmake——
+# 两头无人设置，stdcpp-path 写进部署 json 为空（/usr/lib//aarch64-linux-android/...），
+# androiddeployqt 找不到 libc++_shared.so 打包失败。此处按 NDK 工具链同款路径补齐。
+if(ANDROID AND NOT CMAKE_SYSROOT)
+    set(CMAKE_SYSROOT "${CMAKE_ANDROID_NDK}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_SYSTEM_NAME}/sysroot")
+endif()
+
 # ---------------------------------------------------------------------------
 # Qt 6（Widgets + QGraphicsView）。AUTOMOC 处理 Q_OBJECT 头文件的元对象编译。
 # ---------------------------------------------------------------------------
