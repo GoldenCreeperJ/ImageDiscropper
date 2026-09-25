@@ -70,7 +70,8 @@ jobs:
         if: startsWith(inputs.preset, 'android')
         uses: android-actions/setup-android@v4
 
-      # qtbase 显式特性清单（core/gui/thread/widgets + xcb 家族/egl/fontconfig/xrender）的系统库依赖：
+      # qtbase 显式特性清单（gui/thread/widgets + xcb 家族/egl/fontconfig/xrender；QtCore 为
+      # 端口基座恒构建、不可作为特性请求）的系统库依赖：
       # xcb/xkbcommon/EGL/GL 经 pkg-config 消费系统开发库（vcpkg 官方 Ubuntu 清单）；
       # fontconfig 仍从源码经 autotools 构建（vcpkg 内用 gperf 生成器），需 autoconf 全家桶与 libltdl；
       # dbus 已随 default-features:false 移除，不再需要 libdbus-1-dev。

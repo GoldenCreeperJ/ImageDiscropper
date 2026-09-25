@@ -12,7 +12,6 @@
       "name": "qtbase",
       "default-features": false,
       "features": [
-        "core",
         "gui",
         "thread",
         "widgets"
@@ -23,7 +22,6 @@
       "name": "qtbase",
       "default-features": false,
       "features": [
-        "core",
         "gui",
         "thread",
         "widgets",
