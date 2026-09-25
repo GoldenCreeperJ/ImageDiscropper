@@ -183,18 +183,17 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DSRC=$env:GITHUB_WORKSPACE\dist\installer" "/O$env:GITHUB_WORKSPACE\dist" "$env:GITHUB_WORKSPACE\ImageDiscropperCpp\packaging\installer.iss" | Out-Null
           Move-Item "dist\ImageDiscropper-setup.exe" "dist\ImageDiscropper-setup-win-x64.exe"
 
-      # ---- 移动打包（Android：androiddeployqt 出 APK；iOS：zip .app） ----
-      # qt_finalize_target 已生成部署设置 json；androiddeployqt 由宿主侧 vcpkg qtbase 提供
-      #（宿主三元组与预设成对：dbg 预设 → x64-linux-dbg）。
+      # ---- 移动打包（Android：qt_finalize_target 的 ninja 步骤已出 APK；iOS：zip .app） ----
+      # Qt 的 Android 目标在 cmake --build 末尾自动执行 androiddeployqt（ninja 规则
+      # "Creating APK"），APK 与部署设置 json 均生成在目标所在子目录
+      # build/<preset>/ImageDiscropperGui/ 下——此处只搬运改名，不再二次调用
+      # androiddeployqt（旧 gradle 路径约定已随 qt_finalize_target 方案作废）。
+      # 注意：release 构建产出未签名 APK（alpha 分发前需补签名配置，后续处理）。
       - name: Package APK
         if: startsWith(inputs.preset, 'android')
         run: |
-          HOST_TRIPLET=${{ contains(inputs.preset, '-dbg') && 'x64-linux-dbg' || 'x64-linux-rel' }}
           mkdir -p dist
-          build/${{ inputs.preset }}/vcpkg_installed/$HOST_TRIPLET/tools/Qt6/bin/androiddeployqt \
-            --input build/${{ inputs.preset }}/android-idc_gui-deployment-settings.json \
-            --output build/${{ inputs.preset }}/android-build --gradle
-          cp build/${{ inputs.preset }}/android-build/build/outputs/apk/debug/android-build-debug.apk \
+          cp ImageDiscropperCpp/build/${{ inputs.preset }}/ImageDiscropperGui/android-build/idc_gui.apk \
              dist/idc_gui-android-arm64.apk
 
       - name: Upload APK

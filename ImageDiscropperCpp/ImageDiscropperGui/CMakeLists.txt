@@ -36,6 +36,21 @@ if(NOT DEFINED IDC_CORE_VERSION)
     set(IDC_CORE_VERSION "1.0.0")
 endif()
 
+# Android NDK 宿主平台名：Qt 的安卓宏（部署设置 json 的 ndk-host 字段、prebuilt 目录探测）
+# 读 ANDROID_NDK_HOST_SYSTEM_NAME——该变量由 NDK 自带工具链文件设置，本工程工具链是
+# vcpkg.cmake 不会设置（与 ANDROID_SDK_ROOT 同类的方言缺口）。此处镜像 NDK 工具链的
+# 推导逻辑补齐；缺省时 androiddeployqt 拿空值拼路径（prebuilt//bin/llvm-readobj 不存在、
+# libc++_shared.so 找不到），APK 打包步骤失败。
+if(ANDROID AND NOT DEFINED ANDROID_NDK_HOST_SYSTEM_NAME)
+    if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+        set(ANDROID_NDK_HOST_SYSTEM_NAME "windows-x86_64")
+    elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
+        set(ANDROID_NDK_HOST_SYSTEM_NAME "darwin-x86_64")
+    elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
+        set(ANDROID_NDK_HOST_SYSTEM_NAME "linux-x86_64")
+    endif()
+endif()
+
 # ---------------------------------------------------------------------------
 # Qt 6（Widgets + QGraphicsView）。AUTOMOC 处理 Q_OBJECT 头文件的元对象编译。
 # ---------------------------------------------------------------------------
