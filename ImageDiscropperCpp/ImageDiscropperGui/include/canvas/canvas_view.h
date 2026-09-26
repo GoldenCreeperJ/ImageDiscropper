@@ -35,6 +35,9 @@ class CanvasView : public QGraphicsView {
     Q_OBJECT
 public:
     explicit CanvasView(CanvasScene* scene, QWidget* parent = nullptr);
+    // 声明于头、定义于 .cpp：input_ 是前向声明类型的 unique_ptr，若析构在头内联实例化
+    // 会因不完整类型报 sizeof 错误（mac/linux 编译器与 moc 实例化路径均会触发）。
+    ~CanvasView() override;
 
     // 缩放控制（工具栏 / 快捷键调用）。
     void zoomIn();

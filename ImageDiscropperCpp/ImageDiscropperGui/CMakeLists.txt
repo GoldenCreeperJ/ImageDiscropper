@@ -40,26 +40,33 @@ endif()
 # Android 工具链方言补齐（集中于此，勿再散落）：
 # Qt 的安卓宏默认下列变量由 NDK 自带工具链文件设置，而本工程工具链是 vcpkg.cmake
 # ——两个设置者都不在场，缺省时 androiddeployqt 拿空值拼路径、APK 打包失败。
-# 两项均镜像 NDK 工具链同款逻辑补齐，且必须在 find_package(Qt6) 之前：
+# 各项均镜像 NDK 工具链同款逻辑补齐，且必须在 find_package(Qt6) 之前：
 #   ① ANDROID_NDK_HOST_SYSTEM_NAME —— 部署设置 json 的 ndk-host 字段与 prebuilt
 #      目录探测；缺省 → prebuilt//bin/llvm-readobj 不存在、libc++_shared.so 找不到。
 #   ② CMAKE_SYSROOT —— Qt 安卓宏 stdcpp-path 取 ${CMAKE_SYSROOT}/usr/lib/；
 #      CMake 官方模块检测到统一 Clang 工具链时主动跳过 sysroot 选择
 #      （改走 CMAKE_FIND_ROOT_PATH）；缺省 → stdcpp-path 写进 json 为
 #      /usr/lib//aarch64-linux-android/...。
+#   ③ ANDROID_PLATFORM —— 唯一消费方是 Qt6CoreConfigExtras 的**加载门控**
+#      （if(ANDROID_PLATFORM) 才 include 整个 Qt6AndroidMacros），值本身无人读；
+#      按 CMAKE_SYSTEM_VERSION 回填即可——预设只保留 CMake 核心方言，不双写 API 版本。
 # ---------------------------------------------------------------------------
-if(ANDROID AND NOT DEFINED ANDROID_NDK_HOST_SYSTEM_NAME)
-    if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
-        set(ANDROID_NDK_HOST_SYSTEM_NAME "windows-x86_64")
-    elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
-        set(ANDROID_NDK_HOST_SYSTEM_NAME "darwin-x86_64")
-    elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
-        set(ANDROID_NDK_HOST_SYSTEM_NAME "linux-x86_64")
+if(ANDROID)
+    if(NOT DEFINED ANDROID_NDK_HOST_SYSTEM_NAME)
+        if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+            set(ANDROID_NDK_HOST_SYSTEM_NAME "windows-x86_64")
+        elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
+            set(ANDROID_NDK_HOST_SYSTEM_NAME "darwin-x86_64")
+        elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
+            set(ANDROID_NDK_HOST_SYSTEM_NAME "linux-x86_64")
+        endif()
+    endif ()
+    if(NOT CMAKE_SYSROOT)
+        set(CMAKE_SYSROOT "${CMAKE_ANDROID_NDK}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_SYSTEM_NAME}/sysroot")
     endif()
-endif()
-
-if(ANDROID AND NOT CMAKE_SYSROOT)
-    set(CMAKE_SYSROOT "${CMAKE_ANDROID_NDK}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_SYSTEM_NAME}/sysroot")
+    if(NOT ANDROID_PLATFORM)
+        set(ANDROID_PLATFORM "${CMAKE_SYSTEM_VERSION}")
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------

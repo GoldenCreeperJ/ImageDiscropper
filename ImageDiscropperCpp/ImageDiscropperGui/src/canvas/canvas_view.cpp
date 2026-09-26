@@ -54,6 +54,9 @@ CanvasView::CanvasView(CanvasScene* scene, QWidget* parent)
     input_->attach(*this);                                  // 适配器自注册（如 grabGesture）
 }
 
+// 析构在此定义：此翻译单元已含适配器实现头（完整类型），unique_ptr 释放安全。
+CanvasView::~CanvasView() = default;
+
 // 放大。
 void CanvasView::zoomIn() { zoomBy(1.25); }
 // 缩小。
