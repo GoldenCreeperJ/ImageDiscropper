@@ -30,10 +30,10 @@ endif()
 # 版本注入（与 CLI 同一形式）：IDC_GUI_VERSION 由根 CMakeLists 提供（产品版本单一来源）；
 # IDC_CORE_VERSION 正常由根经 PARENT_SCOPE 回传。独立配置本子目录时给出占位默认，避免空宏。
 if(NOT DEFINED IDC_GUI_VERSION)
-    set(IDC_GUI_VERSION "1.0.0")
+    set(IDC_GUI_VERSION "1.0.1")
 endif()
 if(NOT DEFINED IDC_CORE_VERSION)
-    set(IDC_CORE_VERSION "1.0.0")
+    set(IDC_CORE_VERSION "1.0.1")
 endif()
 
 # ---------------------------------------------------------------------------
@@ -108,8 +108,8 @@ set(IDC_GUI_MODEL_SRC
 )
 
 # canvas：QGraphicsView/Scene 画布，图层化渲染底图/遮罩/切割线/网格线/选区/标注矢量叠加；
-#         交互经输入适配器分层（GuideLine 阶段 2/3）：ICanvasInputAdapter 接口 + 桌面实现 DesktopInputAdapter
-#         + 触控实现 TouchInputAdapter（阶段 3，Android 构造时换装，桌面路径零改动）。
+#         交互经输入适配器分层：ICanvasInputAdapter 接口 + 桌面实现 DesktopInputAdapter
+#         + 触控实现 TouchInputAdapter（Android/iOS 构造时换装，桌面路径零改动）。
 set(IDC_GUI_CANVAS_SRC
         include/canvas/z_order.h
         include/canvas/canvas_input_adapter.h
@@ -172,7 +172,7 @@ set(IDC_GUI_APP_SRC
         src/app/status_bar.cpp
 )
 
-# mobile：移动端形态（GuideLine 阶段 3，与 app/ 并列）——MobileShell 壳 + 无键盘补偿控件；
+# mobile：移动端形态（与 app/ 并列）——MobileShell 壳 + 无键盘补偿控件；
 #         复用 model/canvas/panels 既有件，零复刻引擎/编排逻辑（SPEC §8.3 行为同构）。
 #         是否编入由 IDC_GUI_MOBILE 配置项控制（见下）。
 set(IDC_GUI_MOBILE_SRC
@@ -196,8 +196,8 @@ set(IDC_GUI_MOBILE_SRC
 #         IDC_GUI_HAS_MOBILE + IDC_GUI_FORCE_MOBILE，双击即移动骨架，无需命令行开关。
 #   · Android/iOS 构建只出**单目标 idc_gui**（移动形态是唯一形态，common+mobile 直接合体，
 #     不读 IDC_GUI_MOBILE 开关）：既有 CD/打包脚本按 idc_gui.* 文件名取物，零改动。
-#     双产物分支下 idc_gui 在 Android 上仍叫 idc_gui，阶段 1 的 APK 链无需适配。
-#   注：触控输入适配器（canvas/TouchInputAdapter）属阶段 2/3 适配器分层，始终在 common 中
+#     双产物分支下 idc_gui 在 Android 上仍叫 idc_gui，既有 APK 链无需适配。
+#   注：触控输入适配器（canvas/TouchInputAdapter）属输入适配器分层，始终在 common 中
 #   参与编译（仅 Android 运行时换装），不随本开关剔除。
 # ---------------------------------------------------------------------------
 option(IDC_GUI_MOBILE "桌面构建额外产出移动形态可执行 idc_gui_mobile（Android/iOS 不读本开关，恒为单目标移动形态）" ON)

@@ -83,16 +83,14 @@ bool fallbackToDocuments(const QString& src, const QString& fallbackPath,
 }
 
 // Android 导出发布编排（SPEC §8.3 形态差异）：Core 已把产物写在临时区（workPath 为
-// 单文件或目录），按目的地分派——相册（insertToGallery 三段式）、SAF 树
-//（createDocument）、单文档 URI（openOutputStream 直写）。msg 恒为面向用户的
+// 单文件或目录），逐文件经 MediaStore 无 pending 直插 + fd 写入发布到相册公共目录
+//（Pictures/<galleryRel>）；失败产物复制兜底到应用文档目录。msg 恒为面向用户的
 // 最终消息；返回是否整体成功。
 bool publishExport(const QString& workPath, const QString& galleryRel,
-                   const QString& publishUri, const QString& publishTree,
-                   const QString& fallbackSub, QString& msg) {
+                   const QString& fallbackSub, const QString& singleDisplay,
+                   QString& msg) {
     const QString docsRoot = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
                              + QStringLiteral("/ImageDiscropper");
-    // 排障日志追加模式：每轮导出加会话分隔（历史不覆盖，诊断完成后整体移除）。
-    markExportDiagSession();
     // 共用发布件：MediaStore 无 pending 直插 → fd 写入（多设备一致的已验证通道）。
     const auto publishToRelDir = [&](const QString& srcPath, const QString& displayName,
                                      const QString& relDir, QString& err) {
@@ -108,46 +106,20 @@ bool publishExport(const QString& workPath, const QString& galleryRel,
     if (!wi.isDir()) {
         // 合并单文件。
         const QString baseName = wi.fileName();
-        if (!publishUri.isEmpty()) {
-            QString err;
-            if (writeToContentUri(publishUri, workPath, err)) {
-                msg = QStringLiteral("导出成功：已保存到所选位置");
-                return true;
-            }
-            // 直写被拒（华为 Downloads 提供者静默拒绝 open）。占位行属 Downloads
-            // 选择器（owner=com.android.providers.downloads.ui），应用既查不到也写不进——
-            // 递进链：同目录同名插入（占位同名必拒）→ 尽力删占位文件（FUSE 授权
-            // 部分设备可行）→ 重试同名 → 仍拒则时间戳后缀名插入，保证字节落地。
-            const QString fullPath = pathFromSafUri(publishUri, err);
-            if (fullPath.isEmpty())
+        QString err;
+        QString name = singleDisplay.isEmpty() ? baseName : singleDisplay;
+        if (!publishToRelDir(workPath, name, QStringLiteral("Pictures/") + galleryRel, err)) {
+            // 同名冲突：时间戳后缀重试（保证落地，不覆盖既有文件）。
+            name = QFileInfo(name).completeBaseName()
+                   + QDateTime::currentDateTime().toString(QStringLiteral("-HHmmss"))
+                   + QLatin1Char('.') + QFileInfo(name).suffix();
+            if (!publishToRelDir(workPath, name, QStringLiteral("Pictures/") + galleryRel, err))
                 return fallbackToDocuments(workPath, docsRoot + u'/' + baseName, err, msg);
-            const QFileInfo picked(fullPath);
-            const QString relDir = QDir(QStringLiteral("/storage/emulated/0"))
-                                       .relativeFilePath(picked.absolutePath());
-            if (relDir.isEmpty() || relDir.startsWith(QStringLiteral("..")))
-                return fallbackToDocuments(workPath, docsRoot + u'/' + baseName,
-                                           QStringLiteral("所选位置超出可写范围"), msg);
-            QString finalName = picked.fileName();
-            if (!publishToRelDir(workPath, finalName, relDir, err)) {
-                QFile::remove(fullPath); // 尽力清占位（若成功同名即可用）。
-                if (!publishToRelDir(workPath, finalName, relDir, err)) {
-                    finalName = picked.completeBaseName()
-                                + QDateTime::currentDateTime().toString(QStringLiteral("-HHmmss"))
-                                + QLatin1Char('.') + picked.suffix();
-                    if (!publishToRelDir(workPath, finalName, relDir, err))
-                        return fallbackToDocuments(workPath, docsRoot + u'/' + baseName, err, msg);
-                    msg = QStringLiteral("导出成功：已保存到所选位置（同名冲突，实际文件名 %1）")
-                              .arg(finalName);
-                    return true;
-                }
-            }
-            msg = QStringLiteral("导出成功：已保存到所选位置");
+            msg = QStringLiteral("导出成功：相册 Pictures/%1/%2（同名已存在，实际文件名 %3）")
+                      .arg(galleryRel, singleDisplay, name);
             return true;
         }
-        QString err;
-        if (!publishToRelDir(workPath, baseName, QStringLiteral("Pictures/") + galleryRel, err))
-            return fallbackToDocuments(workPath, docsRoot + u'/' + baseName, err, msg);
-        msg = QStringLiteral("导出成功：相册 Pictures/%1/%2").arg(galleryRel, baseName);
+        msg = QStringLiteral("导出成功：相册 Pictures/%1/%2").arg(galleryRel, name);
         return true;
     }
     // 分离多文件：逐文件发布，失败文件单独兜底，已发布部分保留。
@@ -158,30 +130,11 @@ bool publishExport(const QString& workPath, const QString& galleryRel,
     const QString fallbackDir = docsRoot + u'/' + fallbackSub;
     for (const QFileInfo& f : files) {
         QString err;
-        bool oneOk = false;
-        if (!publishTree.isEmpty()) {
-            // 首选：所选树内 createDocument + 写入（AOSP 标准路径）。
-            QString docUri;
-            if (createDocumentInTree(publishTree, f.fileName(), mimeTypeForFileName(f.fileName()), docUri, err))
-                oneOk = writeToContentUri(docUri, f.absoluteFilePath(), err);
-            if (!oneOk) {
-                // 华为回退：树 ID 解析为目录路径 → 已存在媒体行则直写（覆盖上次结果），
-                // 否则 MediaStore 同目录插入。
-                const QString dirPath = pathFromSafUri(publishTree, err);
-                const QString relDir = dirPath.isEmpty() ? QString()
-                    : QDir(QStringLiteral("/storage/emulated/0")).relativeFilePath(dirPath);
-                if (!relDir.isEmpty() && !relDir.startsWith(QStringLiteral(".."))) {
-                    const QString existing = queryMediaUriByName(f.fileName(), relDir, err);
-                    oneOk = !existing.isEmpty()
-                                ? writeToContentUri(existing, f.absoluteFilePath(), err)
-                                : publishToRelDir(f.absoluteFilePath(), f.fileName(), relDir, err);
-                }
-            }
-        } else {
-            oneOk = publishToRelDir(f.absoluteFilePath(), f.fileName(),
-                                    QStringLiteral("Pictures/") + galleryRel, err);
+        if (publishToRelDir(f.absoluteFilePath(), f.fileName(),
+                            QStringLiteral("Pictures/") + galleryRel, err)) {
+            ++okCount;
+            continue;
         }
-        if (oneOk) { ++okCount; continue; }
         if (firstErr.isEmpty()) firstErr = err.isEmpty() ? QStringLiteral("未知错误") : err;
         // 复制而非 rename：cache 与 /sdcard 跨挂载点，rename 会失败（数据丢失实测）。
         QDir().mkpath(fallbackDir);
@@ -193,9 +146,7 @@ bool publishExport(const QString& workPath, const QString& galleryRel,
         return false;
     }
     if (okCount == files.size()) {
-        msg = publishTree.isEmpty()
-                  ? QStringLiteral("导出成功：相册 Pictures/%1（%2 张）").arg(galleryRel).arg(okCount)
-                  : QStringLiteral("导出成功：已写入所选目录（%1 个文件）").arg(okCount);
+        msg = QStringLiteral("导出成功：相册 Pictures/%1（%2 张）").arg(galleryRel).arg(okCount);
         return true;
     }
     msg = QStringLiteral("部分成功：已导出 %1/%2 个文件；失败文件已保存到应用目录：%3")
@@ -215,7 +166,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     initCore();
 }
 
-// 移动端骨架构造（GuideLine 阶段 3）：只做 QObject 挂接；标题/尺寸与部件装配、initCore
+// 移动端骨架构造：只做 QObject 挂接；标题/尺寸与部件装配、initCore
 // 均由子类 MobileShell 按触控形态自行完成（接线序列与桌面逐行共用，SPEC §8.3 行为同构）。
 MainWindow::MainWindow(MobileShellTag, QWidget* parent) : QMainWindow(parent) {}
 
@@ -431,13 +382,16 @@ void MainWindow::onExport() {
     const QString ts = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-hhmmss"));
     const QString tempBase = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
                              + QStringLiteral("/export-%1").arg(QDateTime::currentMSecsSinceEpoch());
-    QString galleryRel;   // 相册相对路径（Pictures/ 前缀由发布层补）；空=不走相册。
-    QString publishUri;   // 单文件 content URI（「浏览…」保存框）。
-    QString publishTree;  // 树 URI（「浏览…」目录选择器）。
-    QString tempRoot;     // 临时根（空=直写路径，无需发布层）。
+    QString galleryRel;     // 相册相对路径（Pictures/ 前缀由发布层补）。
+    QString galleryDisplay; // 单文件在相册中的显示名（自动名或面板自定义名）。
+    QString tempRoot;       // 临时根（空=直写路径，无需发布层）。
 #endif
     if (cfg.emitParams.mode == engine::EmitMode::SEPARATE) {
         path = doc_.outputDir();
+#ifdef Q_OS_ANDROID
+        // 手输 content://（历史遗留）在移动端无意义：视同留空走相册默认子目录。
+        if (!path.isEmpty() && path.startsWith(QStringLiteral("content://"))) path.clear();
+#endif
         if (path.isEmpty()) {
 #ifdef Q_OS_ANDROID
             // 默认：相册 Pictures/ImageDiscropper/<时间戳> 子目录。临时路径不写回 doc_
@@ -452,19 +406,13 @@ void MainWindow::onExport() {
             exportPanel_->syncFromDocument();
 #endif
         }
-#ifdef Q_OS_ANDROID
-        else if (path.startsWith(QStringLiteral("content://"))) {
-            // SAF 树 URI（面板「浏览…」所选）：Core 写临时目录，逐文件经
-            // DocumentsContract.createDocument 写入所选树根（不承诺子目录）；
-            // doc_ 保持树 URI，下次导出沿用所选目录。
-            tempRoot = tempBase;
-            path = tempRoot + u'/' + workName();
-            publishTree = doc_.outputDir();
-        }
-#endif
         // 手输绝对路径（QFile 可写）：直写，无发布层。
     } else {
         path = doc_.outputFile();
+#ifdef Q_OS_ANDROID
+        // 手输 content://（历史遗留）在移动端无意义：视同留空走相册默认。
+        if (!path.isEmpty() && path.startsWith(QStringLiteral("content://"))) path.clear();
+#endif
         if (path.isEmpty()) {
 #ifdef Q_OS_ANDROID
             // 默认：相册 Pictures/ImageDiscropper 平铺。临时文件必须带真实格式扩展名
@@ -473,6 +421,7 @@ void MainWindow::onExport() {
             QDir().mkpath(tempRoot);
             path = tempRoot + QStringLiteral("/ImageDiscropper-") + ts + u'.' + exportFormatExt(doc_.format());
             galleryRel = QStringLiteral("ImageDiscropper");
+            galleryDisplay = QFileInfo(path).fileName();
 #else
             path = QFileDialog::getSaveFileName(this, QStringLiteral("导出为"), QString(),
                                                 QStringLiteral("图像 (*.png *.jpg *.jpeg *.bmp *.webp)"));
@@ -482,13 +431,19 @@ void MainWindow::onExport() {
 #endif
         }
 #ifdef Q_OS_ANDROID
-        else if (path.startsWith(QStringLiteral("content://"))) {
-            // SAF 保存框返回的单文件 content URI：QFile 写不支持（0 字节占位同源），
-            // 发布层 openOutputStream 流式写有效。
+        else if (!QDir::isAbsolutePath(path)) {
+            // 面板输入的自定义文件名（非路径文本）：按名称处理，缺扩展名按当前
+            // 格式补全，经相册公共目录发布；绝对路径则走直写（下方不变）。
+            const QString typed = path;
             tempRoot = tempBase;
             QDir().mkpath(tempRoot);
             path = tempRoot + QStringLiteral("/merged.") + exportFormatExt(doc_.format());
-            publishUri = doc_.outputFile();
+            QString display = QFileInfo(typed).fileName().trimmed();
+            if (display.isEmpty()) display = QStringLiteral("ImageDiscropper-") + ts;
+            if (QFileInfo(display).suffix().isEmpty())
+                display += QLatin1Char('.') + exportFormatExt(doc_.format());
+            galleryDisplay = display;
+            galleryRel = QStringLiteral("ImageDiscropper");
         }
 #endif
     }
@@ -504,7 +459,7 @@ void MainWindow::onExport() {
 #ifdef Q_OS_ANDROID
         if (!tempRoot.isEmpty()) {
             QString msg;
-            const bool pubOk = publishExport(path, galleryRel, publishUri, publishTree, ts, msg);
+            const bool pubOk = publishExport(path, galleryRel, ts, galleryDisplay, msg);
             QDir(tempRoot).removeRecursively(); // 成功/失败都清临时区。
             notify(msg, !pubOk);
             return;

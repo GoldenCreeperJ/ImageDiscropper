@@ -81,12 +81,17 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     fh->addWidget(fileBtn_);
     form->addWidget(fileRow_);
 
-    // 移动端占位文案（SPEC §8.3 形态差异）：留空走相册公共目录（MainWindow::onExport 编排），
-    // 「浏览…」为 SAF 选择器（目录树 / 保存框，返回 content://，由发布层流式写入）；
-    // 输入框仍可手输绝对路径（如 /sdcard/Download/…，QFile 可写）作为高级用法。
+    // 移动端禁用「浏览…」（SPEC §8.3 形态差异）：SAF 自定义目录真机不可靠——文件管理器
+    // 建的目录 other 无权限、华为 Downloads 提供者拒绝 open/delete/查询，自定义路径无法
+    // 保证写入（详见 mobile/android_media_store 与 src/mobile README「移动端实现状态与
+    // 遗留事项」）；移动端统一导出到相册公共目录（MainWindow::onExport 编排），留空即可。
+    // 目录选择的 SAF 适配代码已整体移除（打开图像的 content:// 入缓存分支不受影响），
+    // 将来若恢复需同时补回本块。
+    // 输入框仍可手输绝对路径（应用可写目录）作为高级用法。
 #ifdef Q_OS_ANDROID
-    dirEdit_->setPlaceholderText(QStringLiteral("留空：相册 Pictures/ImageDiscropper/<时间戳>；可点「浏览…」选目录"));
-    fileEdit_->setPlaceholderText(QStringLiteral("留空：相册 Pictures/ImageDiscropper；可点「浏览…」选文件"));
+    dirBtn_->setEnabled(false);
+    fileBtn_->setEnabled(false);
+    fileEdit_->setPlaceholderText(QStringLiteral("输入文件名（留空自动命名），导出到相册 Pictures/ImageDiscropper"));
 #endif
 
     // 合并重排参数行（FR-L3.7）：仅「合并重排」模式显示。
@@ -452,7 +457,13 @@ void ExportPanel::updatePadColorSwatch() const {
 void ExportPanel::updateFieldVisibility() const {
     const int idx = modeCombo_->currentIndex();
     const bool separate = idx == 0;
+#ifdef Q_OS_ANDROID
+    // 移动端目录固定为相册公共子目录（「浏览…」已禁用），目录行无意义：隐藏，
+    // 分离模式只留命名模板行（SPEC §8.3 形态差异）。
+    dirRow_->setVisible(false);
+#else
     dirRow_->setVisible(separate);
+#endif
     namingRow_->setVisible(separate);
     fileRow_->setVisible(!separate);
     rearrangeRow_->setVisible(idx == 2); // 仅「合并重排」显示重排参数。
