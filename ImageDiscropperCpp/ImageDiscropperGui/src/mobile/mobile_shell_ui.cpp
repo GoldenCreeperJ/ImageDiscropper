@@ -6,7 +6,7 @@
 //   - 部件创建/回填与连接全在 MobileShellUi；MobileShell 构造只规定装配顺序；
 //   - 底部工具条按钮 → MainWindow 既有私有槽 / CanvasView request*/gesture* 入口，
 //     与菜单/快捷键/右键同一信号链路（行为同构）；「更多」菜单收纳低频的桌面菜单能力。
-// 说明：阶段 4：抽屉内桌面面板统一触控字号/间距（样式表限定 #mobileDrawer 子树，
+// 说明：触控细节：抽屉内桌面面板统一触控字号/间距（样式表限定 #mobileDrawer 子树，
 //       不波及画布）；竖/横屏翻转仅重排抽屉停靠区（不重建部件 → 状态无损）；
 //       预处理忙碌改全屏遮罩（SPEC §8.2）。
 //       桌面构建中本文件只属 idc_gui_mobile 目标（IDC_GUI_MOBILE=ON，默认）；Android 单目标必含。
@@ -103,7 +103,7 @@ protected:
             case QEvent::TouchBegin:
             case QEvent::TouchUpdate:
             case QEvent::TouchEnd: {
-                auto* te = dynamic_cast<QTouchEvent*>(event);
+                const auto* te = dynamic_cast<QTouchEvent*>(event);
                 if (event->type() == QEvent::TouchBegin && !te->points().isEmpty()) {
                     // 落在文本输入类控件（输入框/数字框/下拉框）上的触摸序列放行：
                     // 文字选择、拖动删除、光标定位需要 Qt 原生的合成鼠标事件，
@@ -138,7 +138,7 @@ protected:
     }
 
 private:
-    void handleTouch(QTouchEvent* event) {
+    void handleTouch(const QTouchEvent* event) {
         if (event->points().isEmpty()) return;
         const QPointF pos = event->points().first().position();
         switch (event->type()) {
@@ -174,11 +174,11 @@ private:
     // 人工点击合成：widgetAt 深查命中部件（透过条带容器直达按钮），发一对鼠标
     // press-release；只处理本滚动区子树内的目标。
     void synthesizeTap(const QPointF& viewportPos) const {
-        QWidget* vp = area_->viewport();
-        const QPointF global = QPointF(vp->mapToGlobal(viewportPos.toPoint()));
+        const QWidget* vp = area_->viewport();
+        const auto global = QPointF(vp->mapToGlobal(viewportPos.toPoint()));
         QWidget* child = QApplication::widgetAt(global.toPoint());
         if (!child || !vp->isAncestorOf(child)) return;
-        const QPointF local = QPointF(child->mapFromGlobal(global.toPoint()));
+        const auto local = QPointF(child->mapFromGlobal(global.toPoint()));
         QMouseEvent press(QEvent::MouseButtonPress, local, global,
                           Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
         QMouseEvent release(QEvent::MouseButtonRelease, local, global,
@@ -294,9 +294,9 @@ void MobileShellUi::buildStatus(MainWindow* w) {
 
 // 工具条（方向自适应）：高频能力常驻 + 「更多」低频菜单 + 「面板」开合抽屉。
 // 按钮全部接既有私有槽 / 视图 gesture* 入口（与桌面同链路，行为同构）。
-// 窄屏可达性：条带住 QScrollArea（QScroller 拖动 + 滚轮横滚，细节见
-// src/mobile/README.md「触控精度与方向」）；初始态＝竖屏单行，方向翻转由
-// applyOrientationLayout 零重建重排。
+// 窄屏可达性：条带住 QScrollArea（触控由 TouchScrollFilter 接管、桌面预览用 QScroller，
+// 另配滚轮横滚；细节见 src/mobile/README.md「触控精度与方向」）；初始态＝竖屏单行，方向
+// 翻转由 applyOrientationLayout 零重建重排。
 void MobileShellUi::buildBottomBar(MainWindow* w) {
     auto* tb = new QToolBar(QStringLiteral("触控工具条"), w);
     tb->setObjectName(QLatin1String(kToolBarName));

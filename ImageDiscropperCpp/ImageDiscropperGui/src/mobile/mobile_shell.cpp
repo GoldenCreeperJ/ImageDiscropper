@@ -33,7 +33,7 @@ namespace idc::gui {
 // 构造：装配顺序＝部件 → 抽屉 → 状态栏 → 工具条 → initCore（基类接线，顺序承重）。
 MobileShell::MobileShell(QWidget* parent) : MainWindow(MobileShellTag{}, parent) {
     setWindowTitle(QStringLiteral("ImageDiscropper GUI %1").arg(QStringLiteral(IDC_GUI_VERSION)));
-    resize(480, 960);                      // 竖屏典型比例；横屏同为合法形态（§8.3，阶段 4 双布局）。
+    resize(480, 960);                      // 竖屏典型比例；横屏同为合法形态（§8.3 双布局）。
     setStyleSheet(QLatin1String(kTouchChromeStyle));
 
     MobileShellUi::buildCentral(this);

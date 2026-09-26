@@ -21,7 +21,7 @@ namespace idc::gui {
 
 class MainWindow;
 
-// 触控 chrome 样式（GuideLine 阶段 4）：
+// 触控 chrome 样式（SPEC §8.3 可点控件下限与触控字号）：
 //   - 工具条/浮动按钮 ≥44×44pt（SPEC §8.3 可点控件下限）；
 //   - #mobileDrawer 子树：抽屉内复用的桌面面板统一放大字号/控件最小高/列表行高，
 //     选择器限定在抽屉 objectName 下，不波及画布与工具条（防误触只在面板区生效）。
