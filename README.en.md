@@ -42,7 +42,7 @@ Source → ① cut-line set → ② induced grid → ③ selection set → ④ p
 
 ```text
 ImageDiscropper/
-├── ImageDiscropperCpp/          # C++ implementation (current mainline, v1.0.0)
+├── ImageDiscropperCpp/          # C++ implementation (current mainline, v1.0.1)
 │   ├── ImageDiscropperCore/     #   Core: Grid-Selection-Emit engine + basic image processing (static library)
 │   ├── ImageDiscropperCli/      #   CLI: thin command-line shell (executable idc)
 │   └── ImageDiscropperGui/      #   GUI: Qt 6 desktop frontend (executable idc_gui)
@@ -100,11 +100,11 @@ Releases go through a **single entry point** ([`.github/workflows/cd.yml`](.gith
 
 | Tag                                              | Artifacts                                                                                                 | Release type   |
 |--------------------------------------------------|-----------------------------------------------------------------------------------------------------------|----------------|
-| `v*` (e.g. `v1.0.0`)                             | All platforms: 6 executables + Windows installer + macOS `.app` + Android APK + iOS `.app` + `SHA256SUMS` | stable Release |
+| `v*` (e.g. `v1.0.1`)                             | All platforms: 6 executables + Windows installer + macOS `.app` + Android APK + iOS `.app` + `SHA256SUMS` | stable Release |
 | `v*-alpha*` / `v*-beta*` (e.g. `v1.0.1-alpha.1`) | All platforms: desktop artifacts + mobile artifacts (Android APK / iOS `.app`)                            | pre-release    |
 
 ```bash
-git tag v1.0.0 && git push origin v1.0.0                       # stable release
+git tag v1.0.1 && git push origin v1.0.1                       # stable release
 git tag v1.0.1-alpha.1 && git push origin v1.0.1-alpha.1       # all-platform pre-release
 ```
 

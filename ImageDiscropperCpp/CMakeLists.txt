@@ -15,7 +15,7 @@
 #       由 Core 以 PRIVATE 方式接入，CLI/GUI 只经 Core 公共头间接使用，无需感知第三方库。
 # ============================================================================
 cmake_minimum_required(VERSION 3.28)
-project(ImageDiscropper LANGUAGES CXX VERSION 1.0.0)
+project(ImageDiscropper LANGUAGES CXX VERSION 1.0.1)
 
 # ---------------------------------------------------------------------------
 # 全局 C++ 约定（子工程亦各自显式设置，双保险）。

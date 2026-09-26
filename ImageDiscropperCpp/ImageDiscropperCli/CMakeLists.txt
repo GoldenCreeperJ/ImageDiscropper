@@ -29,10 +29,10 @@ endif()
 
 # 版本回退：正常由根 CMakeLists 提供；独立配置本子目录时给出占位默认，避免空宏。
 if(NOT DEFINED IDC_CLI_VERSION)
-    set(IDC_CLI_VERSION "1.0.0")
+    set(IDC_CLI_VERSION "1.0.1")
 endif()
 if(NOT DEFINED IDC_CORE_VERSION)
-    set(IDC_CORE_VERSION "1.0.0")
+    set(IDC_CORE_VERSION "1.0.1")
 endif()
 
 # ---------------------------------------------------------------------------

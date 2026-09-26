@@ -8,7 +8,7 @@
 #           preprocess / history / engine），与 include、src 目录一一对应。
 # ============================================================================
 cmake_minimum_required(VERSION 3.28)
-project(ImageDiscropperCore LANGUAGES CXX VERSION 1.0.0)
+project(ImageDiscropperCore LANGUAGES CXX VERSION 1.0.1)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

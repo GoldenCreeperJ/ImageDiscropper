@@ -17,7 +17,7 @@
 ;   · 无自定义图标：安装包与快捷方式使用目标 exe 图标/系统默认图标（图标非打包强制项）。
 ; ============================================================================
 #define AppName "ImageDiscropper"
-#define AppVersion "1.0.0"
+#define AppVersion "1.0.1"
 #define AppPublisher "GoldenCreeperJ"
 #ifndef SRC
   #define SRC "."
