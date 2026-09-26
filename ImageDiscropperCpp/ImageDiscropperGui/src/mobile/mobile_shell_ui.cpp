@@ -88,8 +88,11 @@ void installTouchScroll(QScrollArea* area) {
         QVariant::fromValue<QScrollerProperties::OvershootPolicy>(QScrollerProperties::OvershootAlwaysOff));
     props.setScrollMetric(QScrollerProperties::HorizontalOvershootPolicy,
         QVariant::fromValue<QScrollerProperties::OvershootPolicy>(QScrollerProperties::OvershootAlwaysOff));
-    props.setScrollMetric(QScrollerProperties::DragStartDistance, 0.01);
-    props.setScrollMetric(QScrollerProperties::DecelerationFactor, 0.4);
+    // 弹反彻底关死：边界过冲距离归零 + 拖拽出界阻力拉满（真机反馈仍见弹反）。
+    props.setScrollMetric(QScrollerProperties::OvershootScrollDistanceFactor, 0.0);
+    props.setScrollMetric(QScrollerProperties::OvershootDragResistanceFactor, 1.0);
+    props.setScrollMetric(QScrollerProperties::DragStartDistance, 0.004);   // 起滑阈值（0.01 真机反馈偏大）
+    props.setScrollMetric(QScrollerProperties::DecelerationFactor, 0.3);
     QScroller::scroller(area->viewport())->setScrollerProperties(props);
 #else
     QScroller::grabGesture(area->viewport(), QScroller::LeftMouseButtonGesture);

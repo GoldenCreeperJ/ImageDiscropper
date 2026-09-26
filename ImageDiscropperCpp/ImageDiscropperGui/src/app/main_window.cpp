@@ -278,23 +278,32 @@ void MainWindow::onExport() {
     } else {
         path = doc_.outputFile();
         if (path.isEmpty()) {
+#ifdef Q_OS_ANDROID
+            // SAF 保存对话框返回 content:// URI——真机实测 QFile 写入该 URI 失败
+            //（复制路径不支持）。与 SEPARATE 一致，直接写应用文档目录并通知路径
+            //（SPEC §8.3 形态差异）；文件名按当前导出格式定后缀。
+            QString ext;
+            switch (doc_.format()) {
+                case engine::ExportFormat::JPEG: ext = QStringLiteral("jpg"); break;
+                case engine::ExportFormat::BMP:  ext = QStringLiteral("bmp"); break;
+                case engine::ExportFormat::WEBP: ext = QStringLiteral("webp"); break;
+                default:                         ext = QStringLiteral("png"); break;
+            }
+            const QString dir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+                                + QStringLiteral("/ImageDiscropper");
+            QDir().mkpath(dir);
+            path = dir + QStringLiteral("/ImageDiscropper-")
+                 + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-hhmmss"))
+                 + QStringLiteral(".") + ext;
+#else
             path = QFileDialog::getSaveFileName(this, QStringLiteral("导出为"), QString(),
                                                 QStringLiteral("图像 (*.png *.jpg *.jpeg *.bmp *.webp)"));
             if (path.isEmpty()) return;
+#endif
             doc_.setOutputFile(path);
             exportPanel_->syncFromDocument();
         }
     }
-
-    // Android 单文件：SAF 保存对话框返回 content:// URI，Core 按路径写文件会失败——
-    // 先写应用缓存再经 QFile 复制进 content URI（Qt 在 Android 支持 content:// 写入）。
-    QString writePath = path;
-#ifdef Q_OS_ANDROID
-    if (path.startsWith(QStringLiteral("content://"))) {
-        writePath = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
-                    + QStringLiteral("/export-") + QString::number(QDateTime::currentMSecsSinceEpoch());
-    }
-#endif
 
     // 导出烧录（G-4）：开关开且有标注时，以当前工作图为底逐个调 Core rasterize 合成标注，
     // 再送引擎切割（标注随像素被切开，CONTRIBUTING.md「分层纪律」）；否则直接送工作图。
@@ -303,13 +312,7 @@ void MainWindow::onExport() {
         exportSrc = annoBridge_.burnIn(doc_.working());
     }
 
-    if (QString err; EngineBridge::exportResult(exportSrc, cfg, writePath, err)) {
-#ifdef Q_OS_ANDROID
-        if (writePath != path && !QFile::copy(writePath, path)) {
-            notify(QStringLiteral("导出成功但写入所选位置失败，文件在：%1").arg(writePath), true);
-            return;
-        }
-#endif
+    if (QString err; EngineBridge::exportResult(exportSrc, cfg, path, err)) {
         notify(QStringLiteral("导出成功：%1").arg(path), false);
     } else {
         notify(QStringLiteral("导出失败：%1").arg(err), true);

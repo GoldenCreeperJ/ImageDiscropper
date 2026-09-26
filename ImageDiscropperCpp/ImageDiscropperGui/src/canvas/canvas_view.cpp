@@ -203,6 +203,11 @@ void CanvasView::gestureCancelCurrent() {
         rubber_ = false;
         if (rubberBand_) rubberBand_->hide();
     }
+    // 图元拖拽：第一指按在选区框手柄/标注图元上时 QGraphicsView 已开始拖拽
+    //（场景 mouse grabber 持有）——捏合期间合成 move 会继续拖动图元、图形随之偏移。
+    // ungrabMouse 后图元不再接收移动事件，缩放不再带动图形。
+    if (scene_ && scene_->mouseGrabberItem())
+        scene_->mouseGrabberItem()->ungrabMouse();
 }
 
 // 双指平移（触控）：按视口位移量直接滚动，与 gesturePanUpdate 同一执行链路，
