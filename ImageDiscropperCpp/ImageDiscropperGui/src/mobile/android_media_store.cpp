@@ -61,7 +61,7 @@ void logAndClearException(QJniEnvironment& env) {
 
 // 排障日志：写应用文档目录 export_debug.log（shell 可读，adb 直取）。logcat 在
 // 部分设备上收不到 Qt/Java 输出（真机实测静默），文件日志不依赖任何日志通道；
-// 只追加最近一次导出会话的关键步骤与 JNI 异常状态，体量可控。
+// 追加模式：每次导出会话由 markExportDiagSession 分隔，历史记录不被覆盖。
 void diagLog(const QString& msg) {
     const QString path = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
                          + QStringLiteral("/export_debug.log");
@@ -177,7 +177,7 @@ bool createDocumentInTree(const QString& treeUri, const QString& displayName,
 }
 
 bool insertToGallery(const QString& displayName, const QString& relativePath,
-                     QString& outUri, QString& err) {
+                     QString& outUri, bool& outPending, QString& err) {
     diagLog(QStringLiteral("insert 进入 display=%1 rel=%2").arg(displayName, relativePath));
     QJniEnvironment env;
     // RELATIVE_PATH/IS_PENDING 列需 API 29+；运行时防御（装机门槛另由
@@ -197,28 +197,67 @@ bool insertToGallery(const QString& displayName, const QString& relativePath,
         err = QStringLiteral("无法获取系统媒体库");
         return false;
     }
-    // 键名即 MediaStore.MediaColumns 常量值（display_name/mime_type/relative_path/is_pending）。
-    QJniObject values("android/content/ContentValues");
-    putString(values, QStringLiteral("display_name"), displayName);
-    putString(values, QStringLiteral("mime_type"), mimeTypeForFileName(displayName));
-    putString(values, QStringLiteral("relative_path"), QStringLiteral("Pictures/") + relativePath);
-    putInt(values, QStringLiteral("is_pending"), 1);
-    const QJniObject inserted = resolver.callObjectMethod(
-        "insert", "(Landroid/net/Uri;Landroid/content/ContentValues;)Landroid/net/Uri;",
-        collection.object(), values.object());
-    // insert 失败返回 null（非异常），故须 isValid 判定。
-    const bool hadEx = env->ExceptionCheck();
-    if (hadEx) env->ExceptionDescribe();
-    diagLog(QStringLiteral("  insert 有效=%1 异常=%2")
-                .arg(inserted.isValid() ? 1 : 0).arg(hadEx ? 1 : 0));
-    env->ExceptionClear();
-    if (!inserted.isValid()) {
-        err = QStringLiteral("媒体库插入失败（格式可能不被支持）");
+    // 键名即 MediaStore.MediaColumns 常量值（注意 DISPLAY_NAME 为 _display_name，
+    // 带下划线前缀——真机曾误写 display_name 被华为 MediaProvider 拒绝）。
+    // pending 参数：标准流程用 IS_PENDING=1（写入完成前相册不可见）；部分设备
+    //（华为实测）拒绝 is_pending 列使插入静默失败——降级为无 pending 插入。
+    const auto tryInsert = [&](const bool pending) {
+        QJniObject values("android/content/ContentValues");
+        putString(values, QStringLiteral("_display_name"), displayName);
+        putString(values, QStringLiteral("mime_type"), mimeTypeForFileName(displayName));
+        putString(values, QStringLiteral("relative_path"), relativePath);
+        if (pending) putInt(values, QStringLiteral("is_pending"), 1);
+        const QJniObject inserted = resolver.callObjectMethod(
+            "insert", "(Landroid/net/Uri;Landroid/content/ContentValues;)Landroid/net/Uri;",
+            collection.object(), values.object());
+        // insert 失败返回 null（非异常），故须 isValid 判定。
+        const bool hadEx = env->ExceptionCheck();
+        if (hadEx) env->ExceptionDescribe();
+        diagLog(QStringLiteral("  insert(pending=%1) 有效=%2 异常=%3")
+                    .arg(pending ? 1 : 0).arg(inserted.isValid() ? 1 : 0).arg(hadEx ? 1 : 0));
+        env->ExceptionClear();
+        if (inserted.isValid()) {
+            outUri = inserted.toString();
+            return true;
+        }
         return false;
+    };
+    if (tryInsert(true)) { outPending = true; return true; }
+    diagLog(QStringLiteral("  pending 插入被拒，降级无 is_pending 重试"));
+    if (tryInsert(false)) { outPending = false; return true; }
+    err = QStringLiteral("媒体库插入失败（格式可能不被支持）");
+    return false;
+}
+
+QString pathFromSafUri(const QString& uriStr, const bool isTree, QString& err) {
+    QJniEnvironment env;
+    const QJniObject resolver = contentResolver();
+    const QJniObject uri = parseUri(uriStr);
+    if (!resolver.isValid() || !uri.isValid()) {
+        err = QStringLiteral("无法获取系统内容解析器");
+        return {};
     }
-    outUri = inserted.toString();
-    diagLog(QStringLiteral("  insert uri=%1").arg(outUri.left(70)));
-    return true;
+    // 文档 URI 取 getDocumentId（含文件名）；树 URI 取 getTreeDocumentId（目录）。
+    const QJniObject idObj = isTree
+        ? QJniObject::callStaticObjectMethod(
+              "android/provider/DocumentsContract", "getTreeDocumentId",
+              "(Landroid/net/Uri;)Ljava/lang/String;", uri.object())
+        : QJniObject::callStaticObjectMethod(
+              "android/provider/DocumentsContract", "getDocumentId",
+              "(Landroid/content/ContentResolver;Landroid/net/Uri;)Ljava/lang/String;",
+              resolver.object(), uri.object());
+    logAndClearException(env);
+    if (!idObj.isValid()) {
+        err = QStringLiteral("无法解析所选位置");
+        return {};
+    }
+    const QString id = idObj.toString();
+    diagLog(QStringLiteral("  saf id=%1").arg(id.left(70)));
+    if (id.startsWith(QStringLiteral("raw:"))) return id.mid(4); // 华为：文档 ID 即文件路径。
+    if (id.startsWith(QStringLiteral("primary:"))) // AOSP：主外部存储。
+        return QStringLiteral("/storage/emulated/0/") + id.mid(8);
+    err = QStringLiteral("所选位置形式不支持");
+    return {};
 }
 
 bool finalizePending(const QString& contentUri, QString& err) {
@@ -254,6 +293,10 @@ bool deleteContentUri(const QString& contentUri, QString& err) {
     return true;
 }
 
+void markExportDiagSession() {
+    diagLog(QStringLiteral("========== 新导出会话 =========="));
+}
+
 #else // !Q_OS_ANDROID
 
 // 非 Android 平台桩：mobile/ 源同样编入桌面 idc_gui_mobile 目标，
@@ -274,6 +317,7 @@ bool finalizePending(const QString&, QString& err) {
 bool deleteContentUri(const QString&, QString& err) {
     err = QStringLiteral("此功能仅支持 Android"); return false;
 }
+void markExportDiagSession() {}
 
 #endif
 

@@ -88,9 +88,21 @@ bool publishExport(const QString& workPath, const QString& galleryRel,
                    const QString& fallbackSub, QString& msg) {
     const QString docsRoot = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
                              + QStringLiteral("/ImageDiscropper");
-    // 新一轮导出的排障日志从头开始（日志文件在应用文档目录，shell 只读，应用侧负责截断）。
-    QFile(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
-          + QStringLiteral("/export_debug.log")).remove();
+    // 排障日志追加模式：每轮导出加会话分隔（历史不覆盖，诊断完成后整体移除）。
+    markExportDiagSession();
+    // 共用发布件：MediaStore 插入（标准 pending 流程，华为自动降级无 pending）→ fd 写入。
+    const auto publishToRelDir = [&](const QString& srcPath, const QString& displayName,
+                                     const QString& relDir, QString& err) {
+        QString uri;
+        bool pending = false;
+        if (!insertToGallery(displayName, relDir, uri, pending, err)
+            || !writeToContentUri(uri, srcPath, err)
+            || (pending && !finalizePending(uri, err))) {
+            if (!uri.isEmpty()) { QString e2; deleteContentUri(uri, e2); } // 清理失败行。
+            return false;
+        }
+        return true;
+    };
     const QFileInfo wi(workPath);
     if (!wi.isDir()) {
         // 合并单文件。
@@ -101,15 +113,25 @@ bool publishExport(const QString& workPath, const QString& galleryRel,
                 msg = QStringLiteral("导出成功：已保存到所选位置");
                 return true;
             }
-            return fallbackToDocuments(workPath, docsRoot + u'/' + baseName, err, msg);
+            // 直写被拒（华为 Downloads 提供者静默拒绝 open）：解析所选文件路径，
+            // 删除 0 字节占位后改走 MediaStore 同目录插入（字节内容等价落地）。
+            const QString fullPath = pathFromSafUri(publishUri, false, err);
+            if (fullPath.isEmpty())
+                return fallbackToDocuments(workPath, docsRoot + u'/' + baseName, err, msg);
+            const QString relDir = QDir(QStringLiteral("/storage/emulated/0"))
+                                       .relativeFilePath(QFileInfo(fullPath).absolutePath());
+            if (relDir.isEmpty() || relDir.startsWith(QStringLiteral("..")))
+                return fallbackToDocuments(workPath, docsRoot + u'/' + baseName,
+                                           QStringLiteral("所选位置超出可写范围"), msg);
+            { QString e2; deleteContentUri(publishUri, e2); } // 清占位（尽力而为，失败则同名自动加后缀）。
+            if (!publishToRelDir(workPath, QFileInfo(fullPath).fileName(), relDir, err))
+                return fallbackToDocuments(workPath, docsRoot + u'/' + baseName, err, msg);
+            msg = QStringLiteral("导出成功：已保存到所选位置");
+            return true;
         }
-        QString uri, err;
-        if (!insertToGallery(baseName, galleryRel, uri, err)
-            || !writeToContentUri(uri, workPath, err)
-            || !finalizePending(uri, err)) {
-            if (!uri.isEmpty()) { QString e2; deleteContentUri(uri, e2); } // 清理僵尸 pending 行。
+        QString err;
+        if (!publishToRelDir(workPath, baseName, QStringLiteral("Pictures/") + galleryRel, err))
             return fallbackToDocuments(workPath, docsRoot + u'/' + baseName, err, msg);
-        }
         msg = QStringLiteral("导出成功：相册 Pictures/%1/%2").arg(galleryRel, baseName);
         return true;
     }
@@ -120,15 +142,24 @@ bool publishExport(const QString& workPath, const QString& galleryRel,
     QString firstErr;
     const QString fallbackDir = docsRoot + u'/' + fallbackSub;
     for (const QFileInfo& f : files) {
-        QString uri, err;
+        QString err;
         bool oneOk = false;
         if (!publishTree.isEmpty()) {
+            // 首选：所选树内 createDocument + 写入（AOSP 标准路径）。
             QString docUri;
             if (createDocumentInTree(publishTree, f.fileName(), mimeTypeForFileName(f.fileName()), docUri, err))
                 oneOk = writeToContentUri(docUri, f.absoluteFilePath(), err);
-        } else if (insertToGallery(f.fileName(), galleryRel, uri, err)) {
-            if (writeToContentUri(uri, f.absoluteFilePath(), err) && finalizePending(uri, err)) oneOk = true;
-            else { QString e2; deleteContentUri(uri, e2); }
+            if (!oneOk) {
+                // 华为回退：树 ID 解析为目录路径 → MediaStore 同目录插入。
+                const QString dirPath = pathFromSafUri(publishTree, true, err);
+                const QString relDir = dirPath.isEmpty() ? QString()
+                    : QDir(QStringLiteral("/storage/emulated/0")).relativeFilePath(dirPath);
+                oneOk = !relDir.isEmpty() && !relDir.startsWith(QStringLiteral(".."))
+                        && publishToRelDir(f.absoluteFilePath(), f.fileName(), relDir, err);
+            }
+        } else {
+            oneOk = publishToRelDir(f.absoluteFilePath(), f.fileName(),
+                                    QStringLiteral("Pictures/") + galleryRel, err);
         }
         if (oneOk) { ++okCount; continue; }
         if (firstErr.isEmpty()) firstErr = err.isEmpty() ? QStringLiteral("未知错误") : err;

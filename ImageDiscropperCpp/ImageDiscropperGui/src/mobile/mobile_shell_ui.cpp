@@ -19,14 +19,18 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
+#include <QComboBox>
 #include <QDockWidget>
 #include <QGridLayout>
+#include <QLineEdit>
 #include <QMainWindow>
 #include <QMenu>
 #include <QMouseEvent>
+#include <QPlainTextEdit>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QScroller>
+#include <QSpinBox>
 #include <QTabWidget>
 #include <QToolBar>
 #include <QToolButton>
@@ -98,12 +102,39 @@ protected:
         switch (event->type()) {
             case QEvent::TouchBegin:
             case QEvent::TouchUpdate:
-            case QEvent::TouchEnd:
-                handleTouch(static_cast<QTouchEvent*>(event));
+            case QEvent::TouchEnd: {
+                auto* te = dynamic_cast<QTouchEvent*>(event);
+                if (event->type() == QEvent::TouchBegin && !te->points().isEmpty()) {
+                    // 落在文本输入类控件（输入框/数字框/下拉框）上的触摸序列放行：
+                    // 文字选择、拖动删除、光标定位需要 Qt 原生的合成鼠标事件，
+                    // 被本过滤器消费则「删除都删不了」（真机反馈）。
+                    passThrough_ = isTextEntryWidgetAt(te->points().first().position());
+                    if (passThrough_) return false;
+                }
+                if (passThrough_) {
+                    if (event->type() == QEvent::TouchEnd) passThrough_ = false;
+                    return false; // 放行整条序列，交 Qt 合成鼠标处理。
+                }
+                handleTouch(te);
                 return true; // 全程消费：点击只由本过滤器合成，绝不误投。
+            }
             default:
                 return false;
         }
+    }
+
+    // 命中点（及其祖先）是否文本输入类控件——这类控件保留原生触摸语义。
+    bool isTextEntryWidgetAt(const QPointF& viewportPos) const {
+        const QPoint gp = area_->viewport()->mapToGlobal(viewportPos.toPoint());
+        QWidget* w = QApplication::widgetAt(gp);
+        while (w) {
+            if (qobject_cast<QLineEdit*>(w) || qobject_cast<QTextEdit*>(w)
+                || qobject_cast<QPlainTextEdit*>(w) || qobject_cast<QAbstractSpinBox*>(w)
+                || qobject_cast<QComboBox*>(w))
+                return true;
+            w = w->parentWidget();
+        }
+        return false;
     }
 
 private:
@@ -158,6 +189,7 @@ private:
 
     static constexpr qreal kTapThreshold = 6.0; // 轻点抖动容忍（px）；超过即判为滑动。
     QScrollArea* area_;
+    bool passThrough_ = false; // 本序列落在文本输入控件上：放行交 Qt 原生处理。
     bool tracking_ = false;
     bool moved_ = false;
     QPointF lastPos_;
