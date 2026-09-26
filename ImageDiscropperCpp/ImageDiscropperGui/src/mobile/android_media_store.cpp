@@ -79,40 +79,42 @@ bool writeToContentUri(const QString& contentUri, const QString& srcFilePath, QS
         err = QStringLiteral("无法获取系统内容解析器");
         return false;
     }
-    const QJniObject stream = resolver.callObjectMethod(
-        "openOutputStream", "(Landroid/net/Uri;)Ljava/io/OutputStream;", uri.object());
+    // fd 直写：openFileDescriptor + getFd → QFile 经裸 fd 写入（QFSFileEngine），
+    // 绕过 Android 上 QFile 写 content:// 不支持的坏引擎，也绕开部分 OEM 对
+    // openOutputStream 的兼容问题（真机实测 openOutputStream 在相册 pending 条目
+    // 与 SAF 文档上均抛异常）。失败时 Java 异常经 logAndClearException 进 logcat。
+    const QJniObject pfd = resolver.callObjectMethod(
+        "openFileDescriptor",
+        "(Landroid/net/Uri;Ljava/lang/String;)Landroid/os/ParcelFileDescriptor;",
+        uri.object(), QJniObject::fromString(QStringLiteral("w")).object<jstring>());
     logAndClearException(env);
-    if (!stream.isValid()) {
+    if (!pfd.isValid()) {
+        err = QStringLiteral("无法打开目标位置写入");
+        qWarning() << "android_media_store: openFileDescriptor 失败（Java 异常见上方日志）:"
+                   << contentUri;
+        return false;
+    }
+    QFile out;
+    if (!out.open(pfd.callMethod<jint>("getFd"), QIODevice::WriteOnly,
+                  QFileDevice::AutoCloseHandle)) {
         err = QStringLiteral("无法打开目标位置写入");
         return false;
     }
     QFile src(srcFilePath);
     if (!src.open(QIODevice::ReadOnly)) {
-        stream.callMethod<void>("close", "()V");
         err = QStringLiteral("无法读取临时导出文件：%1").arg(srcFilePath);
         return false;
     }
     constexpr int kChunk = 64 * 1024;
+    char buf[kChunk];
     bool ok = true;
     while (!src.atEnd()) {
-        const QByteArray chunk = src.read(kChunk);
-        if (chunk.isEmpty()) break;
-        jbyteArray arr = env->NewByteArray(static_cast<jsize>(chunk.size()));
-        if (!arr) { ok = false; err = QStringLiteral("内存不足，写入中断"); break; }
-        env->SetByteArrayRegion(arr, 0, static_cast<jsize>(chunk.size()),
-                                reinterpret_cast<const jbyte*>(chunk.constData()));
-        stream.callMethod<void>("write", "([B)V", arr);
-        env->DeleteLocalRef(arr);
-        if (env->ExceptionCheck()) {
-            env->ExceptionDescribe();
-            env->ExceptionClear();
-            ok = false; err = QStringLiteral("写入目标位置失败"); break;
-        }
+        const qint64 n = src.read(buf, kChunk);
+        if (n <= 0) { ok = false; err = QStringLiteral("读取临时导出文件失败"); break; }
+        if (out.write(buf, n) != n) { ok = false; err = QStringLiteral("写入目标位置失败"); break; }
     }
-    stream.callMethod<void>("flush", "()V");
-    stream.callMethod<void>("close", "()V");
-    logAndClearException(env); // 吸收 flush/close 残留异常。
-    if (!ok && err.isEmpty()) err = QStringLiteral("写入目标位置失败");
+    src.close();
+    out.close(); // AutoCloseHandle：close 即关闭 fd 并落盘。
     return ok;
 }
 
