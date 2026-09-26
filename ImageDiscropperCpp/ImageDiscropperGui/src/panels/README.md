@@ -44,6 +44,8 @@ Document 发 `changed()` → app 层 `PreviewController` 刷新预览；反向�
   **重排项仅 L3 启用**：`refreshModeItemStates()` 依 `doc_->mode()==L3` 与 `collapsible_` 置 item 的 enabled（非 L3 时重排项置灰）。
 - 目录行 / 文件行均为**可手动键入**的 `QLineEdit`（`editingFinished` 写回 Document），并各带「浏览…」按钮
   （`getExistingDirectory` / `getSaveFileName` + 依格式的过滤器）作为等价选择方式；目录/文件/命名模板行随输出模式显隐。
+  **移动端「浏览…」禁用**：导出统一走相册公共目录 `Pictures/ImageDiscropper`，目录选择的 SAF 适配已移除
+  （见 export_panel.cpp 注释与 src/mobile README「移动端实现状态与遗留事项」）。
 - 格式 combo（PNG/JPEG/WebP/BMP）；质量 spin 仅在有损格式（JPEG/WebP）可见。
 - `setCollapsible(bool)`：存 `collapsible_` + `refreshModeItemStates()`；不可行且当前选中坍缩时按 L3-aware 回退（L3→重排，否则→分离）。
 - **合并重排**（输出模式=重排时显示 `rearrangeRow_`）：列/行/单元宽/单元高 spin（0=自动，`setSpecialValueText("自动")`）
@@ -110,5 +112,5 @@ Document 发 `changed()` → app 层 `PreviewController` 刷新预览；反向�
   `syncFromModel` 从 `model_->displayObbScaleX/Y/RotationDeg()` 读选中形状的**绝对累积变换**回显（系数×100 为百分比、含负；`blockSignals` 防回环），并把该基准存入 `curObbSx_/Sy_/Rot_`；spin 显示的就是底层真实参数（忠实反映、**不回弹**）。
   每个 spin 的 `valueChanged` **只按其单轴**把目标绝对值换算为相对基准的增量（缩放取比 `v/100/curObbSx_`、旋转取差 `v-curObbRot_`，其余两轴传恒等 `1.0`/`0.0`）再 `emit transformApplyRequested` → `AnnotationCoordinator` → `AnnotationBridge::transformSelected` → Core `Shape::applyObbTransform`（累积到 `xform_` 与带符号 OBB 参数）。因 `curObb*` 即当前底层绝对值，增量恰把该轴移到目标绝对值，故**连续编辑无漂移、且单轴改动不牵连其余两轴**（规避 % 取整误差扰动）；提交后模型发 `changed` → `syncFromModel` 依最新累积值回显（**无回弹**，所见即所得）。
   变换区仅在**有选中标注**时启用（`syncFromModel` 末尾按 `selectedIndex().has_value()` 置 `enabled`）。
-- **`setTransformPreview(sx, sy, rotateDeg)`**（阶段 B 手柄联动，收**绝对值**）：画布拖拽 OBB 手柄时，`AnnotationCoordinator` 逐帧调本方法把预览的**绝对累积**缩放/旋转回显到变换区数值（`blockSignals` 防回环、不触发 `transformApplyRequested`）；缩放 spin 范围含负，故拖手柄越过对边翻转时数值会从正连续变小、**穿过 0 进入负值**（不再被钳在下限）。释放提交后靠模型 `changed` → `syncFromModel` 回显最终累积值（**不回弹**）。
+- **`setTransformPreview(sx, sy, rotateDeg)`**（手柄联动，收**绝对值**）：画布拖拽 OBB 手柄时，`AnnotationCoordinator` 逐帧调本方法把预览的**绝对累积**缩放/旋转回显到变换区数值（`blockSignals` 防回环、不触发 `transformApplyRequested`）；缩放 spin 范围含负，故拖手柄越过对边翻转时数值会从正连续变小、**穿过 0 进入负值**（不再被钳在下限）。释放提交后靠模型 `changed` → `syncFromModel` 回显最终累积值（**不回弹**）。
   **翻转无面板按钮**：由画布 OBB 手柄拖过对边（产生负缩放系数）实现（见 `src/canvas`）。

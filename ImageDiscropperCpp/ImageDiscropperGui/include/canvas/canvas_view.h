@@ -4,7 +4,7 @@
 //       左键框选生成选区、方向键微调、右键菜单、光标坐标回报。视图只负责「把用户手势翻译成
 //       意图信号」，具体状态变更由 MainWindow 落到 Document，再由 Core 计算（CONTRIBUTING.md「分层纪律」）。
 // 分块依据：
-//   - 输入适配器分层（GuideLine 阶段 2）：原始事件的设备语义（哪个键 / 滚轮刻度 / 右键菜单 UI）
+//   - 输入适配器分层：原始事件的设备语义（哪个键 / 滚轮刻度 / 右键菜单 UI）
 //     收拢在 ICanvasInputAdapter（桌面实现 DesktopInputAdapter），本视图只保留业务手势执行面
 //     （gesture* 系列：平移 / 标注绘制 / 框选 / 缩放 / 悬停的状态机与意图信号），事件入口仅一行转发；
 //   - 键盘（Esc / 空格 / 方向键）是桌面专属通道，仍留在本视图；移动端由补偿 UI 调同一 gesture* 入口；
@@ -129,7 +129,7 @@ protected:
     void keyPressEvent(QKeyEvent* event) override;
     void keyReleaseEvent(QKeyEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
-    // 手势事件（QEvent::Gesture，阶段 3 触控 pinch 缩放）：交适配器消费，未消费则照常下发。
+    // 手势事件（QEvent::Gesture，触控 pinch 缩放）：交适配器消费，未消费则照常下发。
     bool event(QEvent* event) override;
 
 private:
@@ -142,7 +142,7 @@ private:
     void clampZoom();
 
     CanvasScene* scene_{nullptr};
-    std::unique_ptr<ICanvasInputAdapter> input_;   // 输入适配器（构造时注入桌面实现；阶段 3 换装触控实现）
+    std::unique_ptr<ICanvasInputAdapter> input_;   // 输入适配器（桌面注入桌面实现；Android/iOS 换装触控实现）
 
     bool spacePan_{false};    // 空格是否按下（进入平移预备态）
     bool panning_{false};     // 正在平移

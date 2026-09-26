@@ -37,7 +37,7 @@ public:
     void setAnnotationBridge(AnnotationBridge* anno);  // 维度变化 clearAll
     void setStatusBar(StatusBar* status);
     void setDialogParent(QWidget* parent);             // 忙碌对话框父窗口（MainWindow）
-    /// 忙碌全屏遮罩模式（SPEC §8.2 桌面对话框→移动端全屏遮罩）：GuideLine 阶段 4，
+    /// 忙碌全屏遮罩模式（SPEC §8.2 桌面对话框→移动端全屏遮罩）：
     /// 仅 MobileShell 开启；默认 false 保持桌面居中小对话框不变。
     void setBusyOverlayMode(bool overlay);
     void setImagePanel(ImagePanel* panel);

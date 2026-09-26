@@ -2,7 +2,7 @@
 // 文件：panels/left_panel.h
 // 作用：左侧面板——模式切换（L1/L2/L3）与极性开关（keep/remove）。
 //       面板是 Document 的控制器：只把用户选择写回 Document，不含任何切割/几何逻辑（CONTRIBUTING.md「分层纪律」）。
-//       「工具」「图层」分组已于第四阶段迁出为独立的 ToolPanel / LayerPanel，由主窗口左侧容器装配。
+//       「工具」「图层」分组已迁出为独立的 ToolPanel / LayerPanel，由主窗口左侧容器装配。
 // 分块依据：模式与极性两个 QButtonGroup 各自映射到 Document 的一个字段。
 // 说明：L2 反向剔除为核心特色，按钮用强调色区分；极性 keep 绿 / remove 红。
 // ============================================================================

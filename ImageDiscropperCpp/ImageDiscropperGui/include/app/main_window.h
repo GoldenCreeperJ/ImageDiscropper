@@ -8,7 +8,7 @@
 // 分块依据：
 //   - MainWindow 只做「装配 + 编排 + 转发」（CONTRIBUTING.md「分层纪律」）；装配细节在 MainWindowUi，
 //     预览/预处理/标注/历史编排分别在四个控制器（见 src/app/README.md「编排」），避免上帝文件；
-//   - 构造拆为「骨架装配 → initCore 接线」两段（GuideLine 阶段 3）：移动端 MobileShell 经保护构造
+//   - 构造拆为「骨架装配 → initCore 接线」两段：移动端 MobileShell 经保护构造
 //     换装骨架（画布为主 + 底部工具条/抽屉），接线序列与桌面逐行共用（行为同构、零分支）；
 //   - 保留在 MainWindow 的：文件/编辑动作槽、Document 信号响应、画布交互写回（均直接读写 Document）。
 // 说明：公共面不变（main.cpp 仅依赖构造与 openImageFromPath）；覆盖打开图像/缩放平移、
@@ -57,7 +57,7 @@ public:
     void openImageFromPath(const QString& path);
 
 protected:
-    // 移动端骨架标记（GuideLine 阶段 3）：跳过桌面装配与标题/尺寸预设，
+    // 移动端骨架标记：跳过桌面装配与标题/尺寸预设，
     // 由子类（mobile/ 的 MobileShell）自行回填部件后调 initCore 完成接线。
     struct MobileShellTag {};
     explicit MainWindow(MobileShellTag, QWidget* parent = nullptr);

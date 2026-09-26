@@ -9,8 +9,8 @@
 | 文件                                 | 职责                                                                                                                                                                                                                                                                                                               |
 |------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `z_order.h`                        | 各图层 z 值常量（统一层序，避免魔法数散落）                                                                                                                                                                                                                                                                                          |
-| `canvas_desktop_input_adapter.cpp` | 桌面输入适配器实现（GuideLine 阶段 2）：画布交互链路中**唯一**允许出现鼠标键角色/滚轮刻度/QMenu 的地方，把原始事件翻译为 `CanvasView::gesture*` 业务手势（映射表见头注释，行为与迁移前逐条对齐）                                                                                                                                                                                         |
-| `canvas_touch_input_adapter.cpp`   | 触控输入适配器实现（GuideLine 阶段 3，SPEC §8.3）：单指走 QPA 合成鼠标序列委托 `DesktopInputAdapter` + 叠加双击=适应窗口；双指 `Qt::PinchGesture` → 捏合缩放 / 中心位移平移；长按菜单原样复用右键路径；抓取带屏幕基准 12px（≥12pt）。仅 Android 构建实例化，桌面路径零改动                                                                                                                            |
+| `canvas_desktop_input_adapter.cpp` | 桌面输入适配器实现（输入适配器分层）：画布交互链路中**唯一**允许出现鼠标键角色/滚轮刻度/QMenu 的地方，把原始事件翻译为 `CanvasView::gesture*` 业务手势（映射表见头注释，行为与迁移前逐条对齐）                                                                                                                                                                                                |
+| `canvas_touch_input_adapter.cpp`   | 触控输入适配器实现（SPEC §8.3）：单指走 QPA 合成鼠标序列委托 `DesktopInputAdapter` + 叠加双击=适应窗口；双指 `Qt::PinchGesture` → 捏合缩放 / 中心位移平移；长按菜单原样复用右键路径；抓取带屏幕基准 12px（≥12pt）。仅 Android 构建实例化，桌面路径零改动                                                                                                                                           |
 | `canvas_scene.{h,cpp}`             | 场景：装配并刷新底图 / 遮罩 / 网格线 / 选区（含贯穿切割线延伸）/ L2 多矩形可拖拽选区 / 标注矢量叠加（增量维护），转发选区编辑与标注选中/移动/变换信号（`annotationMoved`/`annotationTransformed` 提交、`annotationTransformPreview` 拖拽逐帧回显）；并提供各图层显隐开关 `setMasksVisible`/`setGridVisible`/`setCutLinesVisible`/`setSelectionVisible`/`setBaseVisible`/`setAnnotationsVisible`（图层面板驱动） |
 | `canvas_view.{h,cpp}`              | 视图：业务手势执行面（`gesturePan*`/`gestureStroke*`/`gestureMarquee*`/`gestureStepZoom` 的平移/绘制/框选/缩放状态机与意图信号）；Qt 事件入口一行转发给输入适配器；键盘（Esc 收笔/空格平移预备/方向键微调）为桌面专属通道；标注绘制态门控下悬停移动为 `annoHover`（折线橡皮筋预览）、右键为 `annoFinish`（折线收笔）                                                                                                   |
 | `mask_layer.{h,cpp}`               | 保留(绿)/删除(红)遮罩层（见下方渲染法）                                                                                                                                                                                                                                                                                           |
@@ -32,11 +32,11 @@
 
 ## 交互（canvas_view / canvas_desktop_input_adapter）
 
-> **输入适配器分层（GuideLine 阶段 2/3）**：下述桌面手势的「设备语义→业务意图」翻译与路由全部在
+> **输入适配器分层**：下述桌面手势的「设备语义→业务意图」翻译与路由全部在
 > `DesktopInputAdapter`；`CanvasView` 只保留与输入设备无关的状态机与信号发射（`gesture*` 执行面）。
-> 触控适配器 `TouchInputAdapter`（阶段 3，已实现）：单指委托同一个 `DesktopInputAdapter` 路由（行为同构），
+> 触控适配器 `TouchInputAdapter`：单指委托同一个 `DesktopInputAdapter` 路由（行为同构），
 > 叠加双击适应/捏合缩放/双指平移/长按菜单，调同一 `gesture*` 入口，不进入桌面路径；
-> 真机验证属阶段 5（需阶段 1 移动构建链就绪）。
+> 真机验证已完成（华为 Android 12，捏合与合成鼠标冲突已修；见 src/mobile README「移动端实现状态与遗留事项」）。
 
 - **缩放**：滚轮以鼠标为锚点缩放（一格 ×1.15）；`zoomIn/zoomOut/resetZoom/fitToWindow`。
 - **平移**：按住空格 + 左键，或中键拖拽。

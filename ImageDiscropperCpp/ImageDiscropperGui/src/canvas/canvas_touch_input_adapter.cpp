@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：canvas/canvas_touch_input_adapter.cpp
-// 作用：TouchInputAdapter 实现——触控设备语义 → CanvasView 业务手势的翻译（阶段 3）。
+// 作用：TouchInputAdapter 实现——触控设备语义 → CanvasView 业务手势的翻译。
 //       设计取舍与不变式见同名头文件；本文件是「几根手指」知识唯一的存放处之一
 //       （另一处是桌面适配器的按键路由，两者产出等价业务手势，SPEC §8.3 行为同构）。
 // ============================================================================
@@ -32,7 +32,7 @@ constexpr int    kTapMovePx      = 8;     // 轻点允许的移动（超出即�
 qreal TouchInputAdapter::screenOverlayPx() const { return kTouchOverlayPx; }
 
 // 触控装配：①注册捏合手势——双指缩放/平移由此进入 onGestureEvent（单指仍走 QPA 合成鼠标序列）；
-// ②防误触（GuideLine 阶段 4）：关闭 hover 鼠标跟踪——触控无持续悬停，若不关则拖拽途中的
+// ②防误触：关闭 hover 鼠标跟踪——触控无持续悬停，若不关则拖拽途中的
 //   合成 move 会逐帧触发悬停拾取/光标切换，坐标回显抖动且易误变可交互态；按下拖拽序列不受影响。
 //   画布手势与抽屉面板滚动的分区由 widget 边界天然保证：触控事件不跨 viewport/抽屉传播，
 //   捏合也仅 view 单点 grabGesture，面板内滑动只驱动其 QScrollArea 滚动。

@@ -1,8 +1,8 @@
 // ============================================================================
 // 文件：canvas/canvas_desktop_input_adapter.cpp
 // 作用：DesktopInputAdapter 实现——桌面鼠标 / 滚轮 / 右键事件到 CanvasView 业务
-//       手势的翻译。逻辑自 canvas_view.cpp 原事件处理器逐条迁移（GuideLine 阶段 2
-//       验收基线：行为零变化），映射表见同名头文件。
+//       手势的翻译。逻辑自 canvas_view.cpp 原事件处理器逐条迁移（迁移基线：行为零变化），
+//       映射表见同名头文件。
 // 分块依据：本文件是画布交互链路中**唯一**允许出现 Qt::LeftButton / MiddleButton、
 //           滚轮刻度与 QMenu 等处方的地方；一切状态与信号发射都委托 view 的 gesture*。
 // 说明：平移中 / 绘制中 / 框选中的互斥路由靠 view 的状态查询（panning() 等）完成，

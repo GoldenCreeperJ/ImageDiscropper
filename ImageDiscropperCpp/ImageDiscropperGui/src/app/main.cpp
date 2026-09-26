@@ -5,10 +5,10 @@
 //   - 入口只负责「Qt 应用生命周期 + 顶层窗口」，不含任何业务逻辑（CONTRIBUTING.md「分层纪律」）；
 //     业务编排全在 MainWindow，Core 调用全在 EngineBridge。
 // 说明：
-//   · 设置应用/组织名，使 QSettings（后续阶段的配置持久化）有稳定归属。
+//   · 设置应用/组织名，使 QSettings（配置持久化）有稳定归属。
 //   · 高 DPI 缩放：Qt 6 默认启用像素密度感知的自动缩放，无需手动设置 AA_* 属性。
 //   · 命令行首参若为图像路径，则启动后自动打开，便于从资源管理器关联/拖放启动。
-//   · 顶层壳按平台与编译宏选择（GuideLine 阶段 3，双可执行产物）：
+//   · 顶层壳按平台与编译宏选择（双可执行产物）：
 //     Android/iOS → MobileShell（画布为主 + 底部工具条/抽屉，SPEC §8.3），单目标 idc_gui；
 //     桌面两产物（同一 common，本文件各编一份）——idc_gui 纯桌面（不含移动码、无 --mobile）；
 //     idc_gui_mobile 经 IDC_GUI_HAS_MOBILE + IDC_GUI_FORCE_MOBILE 双击即移动骨架（开发预览，

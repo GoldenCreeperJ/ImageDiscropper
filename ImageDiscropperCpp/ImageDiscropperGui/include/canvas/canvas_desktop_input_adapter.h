@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：canvas/canvas_desktop_input_adapter.h
 // 作用：DesktopInputAdapter 声明——桌面（鼠标 / 滚轮 / 右键）输入适配器，
-//       ICanvasInputAdapter 的当前唯一实现（GuideLine 阶段 2）。
+//       ICanvasInputAdapter 的桌面实现（触控单指合成序列亦复用本类作路由）。
 // 分块依据：桌面设备语义（按键角色、滚轮刻度、QMenu 右键菜单 UI）全部收拢在本类，
 //           使 CanvasView 的事件入口退化为一行转发；手势状态机与信号仍在 CanvasView。
 // 说明：手势映射表（与迁移前 canvas_view.cpp 行为逐条一致，零行为变化）：
