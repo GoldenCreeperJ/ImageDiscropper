@@ -236,9 +236,10 @@ jobs:
             unzip -q "$APK" -d "$WORK/unpacked"
             "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-all \
               "$WORK"/unpacked/lib/arm64-v8a/*.so
-            # .so 保持压缩（与 Qt androiddeployqt 原生打包行为一致——压缩率约 50%，
-            # 曾误用 -n .so 存为不压缩导致体积近乎翻倍）；-9 取最大压缩。
-            (cd "$WORK/unpacked" && zip -9qrX "$WORK/repacked.apk" .)
+            # .so 压缩（~50% 压缩率）；resources.arsc 必须保持不压缩（-n arsc：
+            # Android 11+ 安装器拒绝压缩的 arsc，报「无效安装包/与系统不兼容」——
+            # 全压缩重打包曾踩中此雷）。-9 取最大压缩。
+            (cd "$WORK/unpacked" && zip -9qrX -n arsc "$WORK/repacked.apk" .)
             ZA=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/*/zipalign 2>/dev/null | sort -V | tail -1)
             "$ZA" -f 4 "$WORK/repacked.apk" "$WORK/aligned.apk"
             if [ -n "${{ secrets.IDC_ANDROID_KEYSTORE_B64 }}" ] && [ -n "${{ secrets.IDC_ANDROID_KEYSTORE_PASS }}" ]; then

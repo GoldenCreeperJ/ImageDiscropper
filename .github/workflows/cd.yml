@@ -96,6 +96,12 @@ jobs:
     needs: [cpp]
     runs-on: ubuntu-latest
     steps:
+      # 全量历史 + 标签：release note 生成需要两次标签间的提交记录
+      #（本 job 默认无 checkout，其余步骤只处理 artifact）。
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
       - name: Download all release artifacts
         uses: actions/download-artifact@v8
         with:
@@ -111,11 +117,54 @@ jobs:
           cd dist
           sha256sum * > SHA256SUMS
 
+      # 按 conventional commit 前缀分组生成中文 release note（直推 master 的工作流
+      # 没有 PR 可解析，GitHub 原生生成器只剩一行 Full Changelog——故自产）。
+      - name: Generate release notes from commits
+        shell: bash
+        run: |
+          TAG="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+          PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+          RANGE="${PREV:+$PREV..$TAG}"
+          [ -z "$RANGE" ] && RANGE="$TAG"
+          emit() {
+            local items
+            items=$(git log --pretty=format:"%s" "$RANGE" | grep -E "^$2" || true)
+            if [ -n "$items" ]; then
+              echo "### $1" >> release-notes.md
+              echo "$items" | sed -E 's/^(feat|fix|refactor|build|ci|docs|test|chore|perf|style)(\([^)]*\))?: ?/- /' >> release-notes.md
+              echo "" >> release-notes.md
+            fi
+          }
+          : > release-notes.md
+          echo "## 变更" >> release-notes.md
+          emit "新功能" "feat"
+          emit "修复" "fix"
+          emit "重构" "refactor"
+          emit "构建与发布" "build|ci"
+          emit "文档" "docs"
+          emit "其他" "test|chore|perf|style"
+          if [ -n "$PREV" ]; then
+            echo "**Full Changelog**: https://github.com/$GITHUB_REPOSITORY/compare/${PREV}...${TAG}" >> release-notes.md
+          fi
+
+      # 同名 tag 重新发布时保留既有 notes（可能含手工编辑），仅新建 release 才
+      # 写入本次生成的变更清单。gh 在 runner 上预装且经 GITHUB_TOKEN 自动认证。
+      - name: Finalize release notes (preserve existing on re-publish)
+        shell: bash
+        run: |
+          TAG="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > release-notes-final.md 2>/dev/null \
+             && [ -s release-notes-final.md ]; then
+            echo "release 已存在：保留既有 notes"
+          else
+            cp release-notes.md release-notes-final.md
+          fi
+
       - name: Create release and upload assets
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           prerelease: ${{ contains(github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name, '-alpha') || contains(github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name, '-beta') }}
-          generate_release_notes: true
+          body_path: release-notes-final.md
           files: |
             dist/*
