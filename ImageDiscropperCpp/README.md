@@ -88,7 +88,7 @@ CLI 命令与规格功能的对应（详见 [`ImageDiscropperCli/README.md`](Ima
 ```bash
 cmake --preset windows-debug   # Windows：Ninja + MSVC；Linux/macOS 用 linux-debug / macos-debug
 cmake --build build/windows-debug    # 产出 bin/idc(.exe)、idc_gui(.exe) 与 demo(.exe)
-ctest --test-dir build/windows-debug --output-on-failure   # 同时运行 Core unit_tests 与 CLI cli_tests（IT-1~IT-18）
+ctest --test-dir build/windows-debug --output-on-failure   # 同时运行 Core unit_tests 与 CLI cli_tests（集成用例 IT-1~IT-21）
 ```
 
 首次配置自动安装清单依赖（qtbase 较慢）。手动方式（清单模式自动生效）：
