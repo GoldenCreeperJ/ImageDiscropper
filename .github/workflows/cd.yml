@@ -128,21 +128,36 @@ jobs:
           [ -z "$RANGE" ] && RANGE="$TAG"
           emit() {
             local items
-            items=$(git log --pretty=format:"%s" "$RANGE" | grep -E "^$2" || true)
+            # %s%n%b：除标题外也扫描正文中的 conventional 行（一次提交混入两个
+            # 变更时正文里会有第二个「前缀: 描述」标题）；锚定的前缀模式天然排除
+            # 正文的「- 」要点行，无噪音。兜底项（rest_items）仍只用 %s。
+            items=$(git log --pretty=format:"%s%n%b" "$RANGE" | grep -E "^$2" || true)
             if [ -n "$items" ]; then
               echo "### $1" >> release-notes.md
               echo "$items" | sed -E 's/^(feat|fix|refactor|build|ci|docs|test|chore|perf|style)(\([^)]*\))?: ?/- /' >> release-notes.md
               echo "" >> release-notes.md
             fi
           }
+          # 分组模式必须「前缀 + 冒号」锚定：裸 ^feat 会误吞 feature: 开头；
+          # 多词分支必须显式分组（^build|ci 未分组时第二分支退化为「含 ci 子串即中」，
+          # 导致跨分组重复）。
           : > release-notes.md
           echo "## 变更" >> release-notes.md
-          emit "新功能" "feat"
-          emit "修复" "fix"
-          emit "重构" "refactor"
-          emit "构建与发布" "build|ci"
-          emit "文档" "docs"
-          emit "其他" "test|chore|perf|style"
+          emit "新功能" "feat(\([^)]*\))?:"
+          emit "修复" "fix(\([^)]*\))?:"
+          emit "重构" "refactor(\([^)]*\))?:"
+          emit "构建与发布" "(build|ci)(\([^)]*\))?:"
+          emit "文档" "docs(\([^)]*\))?:"
+          emit "其他" "(test|chore|perf|style)(\([^)]*\))?:"
+          # 兜底：无任何 conventional 前缀的提交并入「其他」节（不兜底则静默消失）；
+          # 用反向排除而非正向匹配（正向会与前缀组重叠导致双列）。
+          rest_items=$(git log --pretty=format:"%s" "$RANGE" \
+              | grep -vE "^(feat|fix|refactor|build|ci|docs|test|chore|perf|style)(\([^)]*\))?:" || true)
+          if [ -n "$rest_items" ]; then
+            grep -q "^### 其他" release-notes.md || echo "### 其他" >> release-notes.md
+            echo "$rest_items" | sed -E 's/^/- /' >> release-notes.md
+            echo "" >> release-notes.md
+          fi
           if [ -n "$PREV" ]; then
             echo "**Full Changelog**: https://github.com/$GITHUB_REPOSITORY/compare/${PREV}...${TAG}" >> release-notes.md
           fi

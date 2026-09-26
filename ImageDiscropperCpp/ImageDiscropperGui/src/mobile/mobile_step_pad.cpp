@@ -43,7 +43,7 @@ StepPadWidget::StepPadWidget(QWidget* parent) : QWidget(parent) {
     stepBtn->setMinimumSize(kMinButtonPt, kMinButtonPt);
     stepBtn->setToolTip(QStringLiteral("切换步进倍率（对应桌面 Shift 大步）"));
     connect(stepBtn, &QToolButton::clicked, this, [this, stepBtn] {
-        step_ = (step_ == 1) ? 10 : 1;
+        step_ = step_ == 1 ? 10 : 1;
         stepBtn->setText(QStringLiteral("×%1").arg(step_));
     });
     grid->addWidget(stepBtn, 1, 1);

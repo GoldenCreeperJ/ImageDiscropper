@@ -3,11 +3,11 @@
 **目录作用**：`MobileShell` 装配实现与补偿控件（与 `src/app/` 并列，GuideLine 阶段 3）。
 声明边界见 [include/mobile/](../../include/mobile/README.md)。
 
-| 文件                    | 职责                                                                                                                                                                                                                                                                                                                             |
-|-----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `mobile_shell.cpp`    | `MobileShell` 壳本体：装配顺序（`buildCentral→buildDrawer→buildStatus→buildBottomBar` → `initCore()`（与桌面逐行共用的唯一接线序列）→ `enableTouchErgonomics`）与 `MobileShell::resizeEvent`（按宽高比翻转重排抽屉与工具条，竖屏底部 / 横屏右侧，只重排不重建 → 状态无损，阶段 4） |
+| 文件                    | 职责                                                                                                                                                                                                                                                     |
+|-----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `mobile_shell.cpp`    | `MobileShell` 壳本体：装配顺序（`buildCentral→buildDrawer→buildStatus→buildBottomBar` → `initCore()`（与桌面逐行共用的唯一接线序列）→ `enableTouchErgonomics`）与 `MobileShell::resizeEvent`（按宽高比翻转重排抽屉与工具条，竖屏底部 / 横屏右侧，只重排不重建 → 状态无损，阶段 4）                                       |
 | `mobile_shell_ui.cpp` | 建造者 `MobileShellUi` 实现（`MainWindow` 的 friend，与 `MainWindowUi` 同模式、同拆分纪律）：`buildCentral`（画布独占中央区）→ `buildDrawer`（桌面 7 面板原样复用入五页抽屉）→ `buildStatus`（紧凑状态栏）→ `buildBottomBar`（工具条 + 无键盘补偿）→ `enableTouchErgonomics`（忙碌全屏遮罩，SPEC §8.2）；触控样式、滚轮横滚过滤器等装配细节全在此 |
-| `mobile_step_pad.cpp` | 8 向步进盘实现：QToolButton autoRepeat 长按连发；`nudgeRequested` → 上层接 `CanvasView::requestNudge`（与方向键同信号链路）                                                                                                                                                                                                                              |
+| `mobile_step_pad.cpp` | 8 向步进盘实现：QToolButton autoRepeat 长按连发；`nudgeRequested` → 上层接 `CanvasView::requestNudge`（与方向键同信号链路）                                                                                                                                                      |
 
 ## 底部工具条 → 既有链路映射（无键盘补偿，SPEC §8.3）
 

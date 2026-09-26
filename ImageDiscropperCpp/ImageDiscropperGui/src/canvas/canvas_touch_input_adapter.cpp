@@ -106,14 +106,13 @@ void TouchInputAdapter::onContextMenu(CanvasView& view, QContextMenuEvent* event
 // 双指捏合：scaleFactor 为相对上次事件的增量 → gestureStepZoom（钳制复用桌面链路）；
 // 中心点位移差 → gesturePanDelta（SPEC §8.3 双指平移）；出现手势即作废本序列 tap 判定。
 bool TouchInputAdapter::onGestureEvent(CanvasView& view, QGestureEvent* event) {
-    auto* pinch = static_cast<QPinchGesture*>(event->gesture(Qt::PinchGesture));
+    const auto* pinch = dynamic_cast<QPinchGesture*>(event->gesture(Qt::PinchGesture));
     if (!pinch) return false;
     gestureSeen_ = true;
     if (pinch->changeFlags() & QPinchGesture::ScaleFactorChanged)
         view.gestureStepZoom(pinch->scaleFactor());
     if (pinch->changeFlags() & QPinchGesture::CenterPointChanged) {
-        const QPointF delta = pinch->centerPoint() - pinch->lastCenterPoint();
-        if (!delta.isNull())
+        if (const QPointF delta = pinch->centerPoint() - pinch->lastCenterPoint(); !delta.isNull())
             view.gesturePanDelta(QPoint(qRound(delta.x()), qRound(delta.y())));
     }
     event->accept();

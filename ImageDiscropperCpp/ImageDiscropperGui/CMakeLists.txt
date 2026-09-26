@@ -207,6 +207,10 @@ add_library(idc_gui_common OBJECT
         ${IDC_GUI_PANELS_SRC}
         ${IDC_GUI_APP_SRC}
 )
+# PIC：OBJECT 库对象会链入 Android 的共享模块（libidc_gui_*.so），无 -fPIC 的对象
+# 在 AArch64 上无法重定位（ld.lld: relocation R_AARCH64_* cannot be used...）。
+# 与 image_discropper_core 同因；桌面链接进可执行文件零成本，MSVC 忽略该属性。
+set_target_properties(idc_gui_common PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(idc_gui_common PUBLIC include)
 # 链接：Qt6 Widgets（含 Gui/Core 传递）+ Core 静态库；PUBLIC 传递给每个可执行。
 target_link_libraries(idc_gui_common PUBLIC

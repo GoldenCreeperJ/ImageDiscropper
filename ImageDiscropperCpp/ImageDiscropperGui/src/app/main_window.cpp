@@ -209,15 +209,13 @@ void MainWindow::openImageFromPath(const QString& path) {
     // 路径，此分支不触发；doc_ 与提示仍保留用户选择的原始路径。
     QString resolvedPath = path;
     if (path.startsWith(QStringLiteral("content://"))) {
-        QFile src(path);
-        if (src.open(QIODevice::ReadOnly)) {
+        if (QFile src(path); src.open(QIODevice::ReadOnly)) {
             const QByteArray data = src.readAll();
             src.close();
             const QString tmp = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
                                 + QStringLiteral("/opened-image-%1")
                                       .arg(QDateTime::currentMSecsSinceEpoch());
-            QFile out(tmp);
-            if (out.open(QIODevice::WriteOnly)) {
+            if (QFile out(tmp); out.open(QIODevice::WriteOnly)) {
                 out.write(data);
                 out.close();
                 resolvedPath = tmp;

@@ -34,7 +34,7 @@ public:
     bool isSectionExpanded(const QWidget* content) const;
 
     /// 展开 content 所在节（已展开则无副作用；状态变化会发 sectionToggled）。
-    void expandSection(QWidget* content);
+    void expandSection(const QWidget* content);
 
 signals:
     /// 某节展开/收起时发出（内容显隐已在本类处理，外部只做联动编排）。
@@ -47,7 +47,7 @@ private:
         QString title;
     };
 
-    void refreshHeaderText(Section& section, bool expanded);
+    static void refreshHeaderText(const Section& section, bool expanded);
 
     QList<Section> sections_;
     QVBoxLayout* body_{nullptr};   // 逐节堆叠，尾部常驻 stretch（新节 insert 在其前，节自身不被拉伸）。

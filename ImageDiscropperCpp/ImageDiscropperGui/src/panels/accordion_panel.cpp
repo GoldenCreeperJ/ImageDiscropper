@@ -21,7 +21,7 @@ namespace idc::gui {
 
 namespace {
 // 展开/收起指示前缀（\u25BE ▾ / \u25B8 ▸）。
-QString headerGlyph(bool expanded) {
+QString headerGlyph(const bool expanded) {
     return expanded ? QStringLiteral("\u25BE ") : QStringLiteral("\u25B8 ");
 }
 } // namespace
@@ -66,8 +66,8 @@ void AccordionPanel::addSection(QWidget* content, const QString& title) {
     refreshHeaderText(sections_.back(), true);
 
     const int index = sections_.size() - 1;
-    connect(header, &QPushButton::toggled, this, [this, index](bool expanded) {
-        Section& sec = sections_[index];
+    connect(header, &QPushButton::toggled, this, [this, index](const bool expanded) {
+        const Section& sec = sections_[index];
         sec.content->setVisible(expanded);
         refreshHeaderText(sec, expanded);
         emit sectionToggled(sec.content, expanded);
@@ -80,8 +80,8 @@ bool AccordionPanel::isSectionExpanded(const QWidget* content) const {
     return false;
 }
 
-void AccordionPanel::expandSection(QWidget* content) {
-    for (Section& s : sections_) {
+void AccordionPanel::expandSection(const QWidget* content) {
+    for (const Section& s : sections_) {
         if (s.content == content && !s.header->isChecked()) {
             s.header->setChecked(true);   // 触发 toggled → 显隐/文案/信号统一走一条链。
             return;
@@ -89,7 +89,7 @@ void AccordionPanel::expandSection(QWidget* content) {
     }
 }
 
-void AccordionPanel::refreshHeaderText(Section& section, bool expanded) {
+void AccordionPanel::refreshHeaderText(const Section& section, const bool expanded) {
     section.header->setText(headerGlyph(expanded) + section.title);
 }
 

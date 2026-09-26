@@ -129,7 +129,7 @@ void DesktopInputAdapter::onContextMenu(CanvasView& view, QContextMenuEvent* eve
     QMenu menu(view.viewport());
     const QAction* aClear = menu.addAction(QStringLiteral("清除切割线"));
     const QAction* aReset = menu.addAction(QStringLiteral("重置视图"));
-    auto* scene = static_cast<CanvasScene*>(view.scene());
+    const auto* scene = dynamic_cast<CanvasScene*>(view.scene());
     const bool masksOn = scene && scene->masksVisible();
     const QAction* aToggle = menu.addAction(masksOn ? QStringLiteral("隐藏预览遮罩")
                                               : QStringLiteral("显示预览遮罩"));

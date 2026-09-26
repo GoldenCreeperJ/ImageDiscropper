@@ -9,7 +9,7 @@
 //   · 高 DPI 缩放：Qt 6 默认启用像素密度感知的自动缩放，无需手动设置 AA_* 属性。
 //   · 命令行首参若为图像路径，则启动后自动打开，便于从资源管理器关联/拖放启动。
 //   · 顶层壳按平台与编译宏选择（GuideLine 阶段 3，双可执行产物）：
-//     Android → MobileShell（画布为主 + 底部工具条/抽屉，SPEC §8.3），单目标 idc_gui；
+//     Android/iOS → MobileShell（画布为主 + 底部工具条/抽屉，SPEC §8.3），单目标 idc_gui；
 //     桌面两产物（同一 common，本文件各编一份）——idc_gui 纯桌面（不含移动码、无 --mobile）；
 //     idc_gui_mobile 经 IDC_GUI_HAS_MOBILE + IDC_GUI_FORCE_MOBILE 双击即移动骨架（开发预览，
 //     无需命令行）。两壳共用同一套接线与业务槽（MobileShell 继承 MainWindow），入口代码形状不变。
@@ -37,8 +37,8 @@ Q_IMPORT_PLUGIN(QXcbIntegrationPlugin)
 #ifdef IDC_GUI_HAS_MOBILE
 #include "mobile/mobile_shell.h"
 #endif
-#if defined(Q_OS_ANDROID) && !defined(IDC_GUI_HAS_MOBILE)
-#error "Android 构建必须启用 IDC_GUI_MOBILE（移动形态是唯一形态）"
+#if (defined(Q_OS_ANDROID) || defined(Q_OS_IOS)) && !defined(IDC_GUI_HAS_MOBILE)
+#error "Android/iOS 构建必须启用 IDC_GUI_MOBILE（移动形态是唯一形态）"
 #endif
 
 int main(int argc, char* argv[]) {
@@ -56,28 +56,15 @@ int main(int argc, char* argv[]) {
     parser.addPositionalArgument(QStringLiteral("image"),
                                  QStringLiteral("可选：启动时自动打开的图像路径。"),
                                  QStringLiteral("[image]"));
-#ifdef IDC_GUI_HAS_MOBILE
-#ifndef IDC_GUI_FORCE_MOBILE   // idc_gui_mobile 产物恒为移动骨架，无需预览开关。
-    QCommandLineOption mobileOpt(QStringLiteral("mobile"),
-                                 QStringLiteral("开发预览：在桌面以移动端骨架（MobileShell）启动。"));
-    parser.addOption(mobileOpt);
-#endif
-#endif
     parser.process(app);
 
-    // 顶层壳：Android / idc_gui_mobile 固定移动形态；idc_gui（纯桌面）无移动码，恒为桌面形态。
-    // 两者都堆叠在 MainWindow 公共面上（openImageFromPath 同源）。
+    // 顶层壳：含移动码的构建（Android/iOS 移动构建、idc_gui_mobile 预览产物）恒为
+    // MobileShell——双产物结构下无 --mobile 运行时开关（旧单 exe 时代的开关已随
+    // 该结构废弃，删除）；纯桌面 idc_gui 无移动码，恒为桌面形态。两壳堆叠在
+    // MainWindow 公共面上（openImageFromPath 同源）。
     std::unique_ptr<idc::gui::MainWindow> window;
 #ifdef IDC_GUI_HAS_MOBILE
-    constexpr bool wantMobile =
-#if defined(Q_OS_ANDROID) || defined(IDC_GUI_FORCE_MOBILE)
-        true;
-#else
-        parser.isSet(mobileOpt);
-#endif
-    window = wantMobile
-        ? std::make_unique<idc::gui::MobileShell>()
-        : std::make_unique<idc::gui::MainWindow>();
+    window = std::make_unique<idc::gui::MobileShell>();
 #else
     window = std::make_unique<idc::gui::MainWindow>();
 #endif

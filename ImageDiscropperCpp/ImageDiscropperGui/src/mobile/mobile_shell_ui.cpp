@@ -61,7 +61,7 @@ public:
 protected:
     bool eventFilter(QObject* /*obj*/, QEvent* ev) override {
         if (ev->type() != QEvent::Wheel) return false;
-        auto* we = static_cast<QWheelEvent*>(ev);
+        const auto* we = dynamic_cast<QWheelEvent*>(ev);
         const int dx = we->angleDelta().x();
         const int dy = we->angleDelta().y();
         const int step = dx != 0 ? dx : dy;   // 横向滚轮（触控板）优先，否则竖轮横用。
@@ -193,7 +193,7 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
     // 拖拽接管：touch 序列落在按钮上时，按钮不接受 QEvent::Touch*（它们只吃合成鼠标序列），
     // touch 事件冒泡到 viewport 由 QScroller 识别横扫/惯性；未达拖拽阈值的轻点仍经
     // 合成 press-release 触发按钮 clicked——点击与滑动共存。桌面用鼠标协调器模式预览。
-#ifdef Q_OS_ANDROID
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
     QScroller::grabGesture(scroller->viewport(), QScroller::TouchGesture);
 #else
     QScroller::grabGesture(scroller->viewport(), QScroller::LeftMouseButtonGesture);
@@ -213,13 +213,13 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
     };
     // 便捷：把一个动作接到主窗口槽上并加入条带（context 统一为 w，随窗口销毁）。
     auto addAct = [w, addButton](const QString& text, void (MainWindow::*slot)()) {
-        QAction* a = new QAction(text, w);
+        const auto a = new QAction(text, w);
         QObject::connect(a, &QAction::triggered, w, slot);
         addButton(a);
         return a;
     };
     auto addLambda = [w, addButton](const QString& text, std::function<void()> fn) {
-        QAction* a = new QAction(text, w);
+        const auto a = new QAction(text, w);
         QObject::connect(a, &QAction::triggered, w, [fn = std::move(fn)] { fn(); });
         addButton(a);
         return a;
@@ -279,7 +279,7 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
     auto* padAction = new QWidgetAction(padMenu);
     auto* pad = new StepPadWidget(padMenu);
     QObject::connect(pad, &StepPadWidget::nudgeRequested, w,
-                     [w](int dx, int dy) { w->view_->requestNudge(dx, dy); });
+                     [w](const int dx, const int dy) { w->view_->requestNudge(dx, dy); });
     padAction->setDefaultWidget(pad);
     padMenu->addAction(padAction);
     padButton->setMenu(padMenu);
@@ -290,11 +290,11 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
     moreButton->setText(QStringLiteral("更多"));
     moreButton->setPopupMode(QToolButton::InstantPopup);
     auto* moreMenu = new QMenu(moreButton);
-    QAction* aLoad = moreMenu->addAction(QStringLiteral("加载配置…"));
+    const QAction* aLoad = moreMenu->addAction(QStringLiteral("加载配置…"));
     QObject::connect(aLoad, &QAction::triggered, w, &MainWindow::onLoadConfig);
-    QAction* aSave = moreMenu->addAction(QStringLiteral("保存配置…"));
+    const QAction* aSave = moreMenu->addAction(QStringLiteral("保存配置…"));
     QObject::connect(aSave, &QAction::triggered, w, &MainWindow::onSaveConfig);
-    QAction* aAnnoClear = moreMenu->addAction(QStringLiteral("清除全部标注"));
+    const QAction* aAnnoClear = moreMenu->addAction(QStringLiteral("清除全部标注"));
     QObject::connect(aAnnoClear, &QAction::triggered, w, [w] { w->annotation_->onAnnoClearAll(); });
     moreButton->setMenu(moreMenu);
     lay->addWidget(moreButton, 0, stripIndex++);
@@ -316,7 +316,7 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
 
 // 忙碌全屏遮罩：预处理耗时操作的桌面居中小对话框→移动端铺满屏幕（SPEC §8.2）；
 // preprocess_ 在 initCore 才创建，故本方法由 MobileShell 构造在 initCore 后调用。
-void MobileShellUi::enableTouchErgonomics(MainWindow* w) {
+void MobileShellUi::enableTouchErgonomics(const MainWindow* w) {
     w->preprocess_->setBusyOverlayMode(true);
 }
 

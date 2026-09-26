@@ -58,7 +58,7 @@ void MobileShell::resizeEvent(QResizeEvent* event) {
 // ② 工具条换边 + 条带重排（竖＝底部单行 / 横＝右侧单列：横屏底部纵向空间珍贵，
 //    改右侧边栏后工具条宽自适应最宽按钮，高度不够靠既有的拖动/默认竖滚触达）。
 void MobileShell::applyOrientationLayout() {
-    QDockWidget* drawer = findChild<QDockWidget*>(QLatin1String(kDrawerName));
+    auto* drawer = findChild<QDockWidget*>(QLatin1String(kDrawerName));
     if (!drawer) return;   // 首次 show 前 buildDrawer 已按竖屏底部停靠，此处只响应翻转。
     const Orientation next = width() > height() ? Orientation::Landscape : Orientation::Portrait;
     if (next == orientation_) return;
@@ -82,7 +82,7 @@ void MobileShell::applyOrientationLayout() {
 
     // 先重排内容、后迁移停靠区（顺序承重：先迁移则网格仍是旧形态单行 → 侧栏宽度爆炸）。
     // 条带重排：同一批 QToolButton 改网格坐标：行 0 ↔ 列 0。
-    auto* host = scroller->widget();
+    const auto* host = scroller->widget();
     auto* grid = host ? qobject_cast<QGridLayout*>(host->layout()) : nullptr;
     if (grid) {
         // 仅直接子级：步进盘/菜单里若有嵌套按钮不得入重排（child 列表序＝添加序）。
