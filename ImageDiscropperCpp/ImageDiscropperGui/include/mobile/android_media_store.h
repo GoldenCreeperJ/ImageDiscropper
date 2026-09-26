@@ -38,7 +38,8 @@ bool insertToGallery(const QString& displayName, const QString& relativePath,
 
 // 从 SAF 文档/树 URI 提取目标文件系统路径：华为 raw: 形式直接取路径，
 // AOSP primary: 形式映射到 /storage/emulated/0/…；其他形式返回空并置 err。
-QString pathFromSafUri(const QString& uri, bool isTree, QString& err);
+//（纯字符串解析，不调用提供者——华为 Downloads 提供者连 getDocumentId 也拒绝。）
+QString pathFromSafUri(const QString& uri, QString& err);
 
 // 完成 MediaStore pending 条目（IS_PENDING=0），使其在相册中可见。
 bool finalizePending(const QString& contentUri, QString& err);

@@ -115,7 +115,7 @@ bool publishExport(const QString& workPath, const QString& galleryRel,
             }
             // 直写被拒（华为 Downloads 提供者静默拒绝 open）：解析所选文件路径，
             // 删除 0 字节占位后改走 MediaStore 同目录插入（字节内容等价落地）。
-            const QString fullPath = pathFromSafUri(publishUri, false, err);
+            const QString fullPath = pathFromSafUri(publishUri, err);
             if (fullPath.isEmpty())
                 return fallbackToDocuments(workPath, docsRoot + u'/' + baseName, err, msg);
             const QString relDir = QDir(QStringLiteral("/storage/emulated/0"))
@@ -151,7 +151,7 @@ bool publishExport(const QString& workPath, const QString& galleryRel,
                 oneOk = writeToContentUri(docUri, f.absoluteFilePath(), err);
             if (!oneOk) {
                 // 华为回退：树 ID 解析为目录路径 → MediaStore 同目录插入。
-                const QString dirPath = pathFromSafUri(publishTree, true, err);
+                const QString dirPath = pathFromSafUri(publishTree, err);
                 const QString relDir = dirPath.isEmpty() ? QString()
                     : QDir(QStringLiteral("/storage/emulated/0")).relativeFilePath(dirPath);
                 oneOk = !relDir.isEmpty() && !relDir.startsWith(QStringLiteral(".."))

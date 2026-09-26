@@ -18,6 +18,7 @@
 #include <QJniEnvironment>
 #include <QJniObject>
 #include <QStandardPaths>
+#include <QUrl>
 #endif
 
 namespace idc::gui {
@@ -118,7 +119,10 @@ bool writeToContentUri(const QString& contentUri, const QString& srcFilePath, QS
     const jint fd = pfd.callMethod<jint>("getFd");
     diagLog(QStringLiteral("  getFd=%1").arg(fd));
     QFile out;
-    const bool opened = out.open(fd, QIODevice::WriteOnly, QFileDevice::AutoCloseHandle);
+    // 注意 DontCloseHandle：fd 属 ParcelFileDescriptor 所有（fdsan 标记），裸 close()
+    // 会触发 fdsan abort（真机 SIGABRT：'expected to be unowned, actually owned by
+    // ParcelFileDescriptor'）——写完由 Java 侧 pfd.close() 正确释放。
+    const bool opened = out.open(fd, QIODevice::WriteOnly, QFileDevice::DontCloseHandle);
     diagLog(QStringLiteral("  QFile::open(fd)=%1 error=%2")
                 .arg(opened ? 1 : 0).arg(out.errorString()));
     if (!opened) {
@@ -141,7 +145,8 @@ bool writeToContentUri(const QString& contentUri, const QString& srcFilePath, QS
         if (out.write(buf, n) != n) { ok = false; err = QStringLiteral("写入目标位置失败"); break; }
     }
     src.close();
-    out.close(); // AutoCloseHandle：close 即关闭 fd 并落盘。
+    out.close();                         // 只关 QFile 缓冲，fd 保持打开（DontCloseHandle）。
+    pfd.callMethod<void>("close", "()V"); // Java 侧关闭：fdsan 所有权正确释放（裸 close 会 abort）。
     diagLog(QStringLiteral("  write 结果=%1 err=%2").arg(ok ? 1 : 0).arg(err));
     return ok;
 }
@@ -229,29 +234,16 @@ bool insertToGallery(const QString& displayName, const QString& relativePath,
     return false;
 }
 
-QString pathFromSafUri(const QString& uriStr, const bool isTree, QString& err) {
-    QJniEnvironment env;
-    const QJniObject resolver = contentResolver();
-    const QJniObject uri = parseUri(uriStr);
-    if (!resolver.isValid() || !uri.isValid()) {
-        err = QStringLiteral("无法获取系统内容解析器");
-        return {};
-    }
-    // 文档 URI 取 getDocumentId（含文件名）；树 URI 取 getTreeDocumentId（目录）。
-    const QJniObject idObj = isTree
-        ? QJniObject::callStaticObjectMethod(
-              "android/provider/DocumentsContract", "getTreeDocumentId",
-              "(Landroid/net/Uri;)Ljava/lang/String;", uri.object())
-        : QJniObject::callStaticObjectMethod(
-              "android/provider/DocumentsContract", "getDocumentId",
-              "(Landroid/content/ContentResolver;Landroid/net/Uri;)Ljava/lang/String;",
-              resolver.object(), uri.object());
-    logAndClearException(env);
-    if (!idObj.isValid()) {
+QString pathFromSafUri(const QString& uriStr, QString& err) {
+    // 纯字符串解析（不调提供者——华为 Downloads 提供者连 getDocumentId 也拒绝）：
+    // SAF URI 的最后一段即文档/树 ID（URL 编码）——华为 raw: 形式直接是文件路径，
+    // AOSP primary: 形式映射到主外部存储。
+    const QStringList parts = uriStr.split(QLatin1Char('/'));
+    if (parts.size() < 4) {
         err = QStringLiteral("无法解析所选位置");
         return {};
     }
-    const QString id = idObj.toString();
+    const QString id = QUrl::fromPercentEncoding(parts.last().toUtf8());
     diagLog(QStringLiteral("  saf id=%1").arg(id.left(70)));
     if (id.startsWith(QStringLiteral("raw:"))) return id.mid(4); // 华为：文档 ID 即文件路径。
     if (id.startsWith(QStringLiteral("primary:"))) // AOSP：主外部存储。
