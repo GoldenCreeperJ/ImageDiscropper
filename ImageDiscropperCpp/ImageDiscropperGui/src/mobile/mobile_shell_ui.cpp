@@ -88,10 +88,16 @@ void installTouchScroll(QScrollArea* area) {
         QVariant::fromValue<QScrollerProperties::OvershootPolicy>(QScrollerProperties::OvershootAlwaysOff));
     props.setScrollMetric(QScrollerProperties::HorizontalOvershootPolicy,
         QVariant::fromValue<QScrollerProperties::OvershootPolicy>(QScrollerProperties::OvershootAlwaysOff));
-    // 弹反彻底关死：边界过冲距离归零 + 拖拽出界阻力拉满（真机反馈仍见弹反）。
+    // 弹反彻底关死：边界过冲距离/时间归零 + 拖拽出界阻力拉满（真机反馈仍见回滑）。
     props.setScrollMetric(QScrollerProperties::OvershootScrollDistanceFactor, 0.0);
+    props.setScrollMetric(QScrollerProperties::OvershootScrollTime, 0.0);
     props.setScrollMetric(QScrollerProperties::OvershootDragResistanceFactor, 1.0);
     props.setScrollMetric(QScrollerProperties::DragStartDistance, 0.004);   // 起滑阈值（0.01 真机反馈偏大）
+    // 误触按钮防护：释放时速度超过该值的拖拽不投递点击（滑动结尾不触发按钮）——
+    // 「滑动时误按取消/导出」的元凶，也间接导致选区被清、导出总报「请先创建选区」。
+    props.setScrollMetric(QScrollerProperties::MaximumClickThroughVelocity, 0.2);
+    props.setScrollMetric(QScrollerProperties::MaximumVelocity, 0.3);
+    props.setScrollMetric(QScrollerProperties::DragVelocitySmoothingFactor, 0.3);
     props.setScrollMetric(QScrollerProperties::DecelerationFactor, 0.3);
     QScroller::scroller(area->viewport())->setScrollerProperties(props);
 #else

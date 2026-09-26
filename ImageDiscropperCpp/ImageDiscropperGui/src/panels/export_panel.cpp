@@ -81,6 +81,14 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     fh->addWidget(fileBtn_);
     form->addWidget(fileRow_);
 
+    // 移动端占位文案（SPEC §8.3 形态差异）：留空走相册公共目录（MainWindow::onExport 编排），
+    // 「浏览…」为 SAF 选择器（目录树 / 保存框，返回 content://，由发布层流式写入）；
+    // 输入框仍可手输绝对路径（如 /sdcard/Download/…，QFile 可写）作为高级用法。
+#ifdef Q_OS_ANDROID
+    dirEdit_->setPlaceholderText(QStringLiteral("留空：相册 Pictures/ImageDiscropper/<时间戳>；可点「浏览…」选目录"));
+    fileEdit_->setPlaceholderText(QStringLiteral("留空：相册 Pictures/ImageDiscropper；可点「浏览…」选文件"));
+#endif
+
     // 合并重排参数行（FR-L3.7）：仅「合并重排」模式显示。
     // 列/行/单元尺寸以 0 表示「自动」（setSpecialValueText 显示为“自动”），交 Core compose 推导。
     rearrangeRow_ = new QWidget(box);

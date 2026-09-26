@@ -20,6 +20,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
+#include <QFileInfo>
+#include <QInputDialog>
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QMessageBox>
@@ -33,6 +35,7 @@
 #include "app/status_bar.h"
 #include "canvas/canvas_scene.h"
 #include "canvas/canvas_view.h"
+#include "mobile/android_media_store.h"
 #include "model/engine_bridge.h"
 #include "panels/export_panel.h"
 #include "panels/image_panel.h"
@@ -49,6 +52,103 @@
 #endif
 
 namespace idc::gui {
+
+namespace {
+
+#ifdef Q_OS_ANDROID
+// 导出格式 → 文件扩展名（Core 按扩展名选择编码器，临时文件必须真实后缀）。
+QString exportFormatExt(const engine::ExportFormat fmt) {
+    switch (fmt) {
+        case engine::ExportFormat::JPEG: return QStringLiteral("jpg");
+        case engine::ExportFormat::BMP:  return QStringLiteral("bmp");
+        case engine::ExportFormat::WEBP: return QStringLiteral("webp");
+        default:                         return QStringLiteral("png");
+    }
+}
+
+// 发布失败兜底：把产物移到应用文档目录（Android 11+ 受限、文件管理器读不到但数据不丢），
+// 组装含原因与兜底路径的警告消息；返回 false（发布整体按失败处理）。
+bool fallbackToDocuments(const QString& src, const QString& fallbackPath,
+                         const QString& reason, QString& msg) {
+    QDir().mkpath(QFileInfo(fallbackPath).dir().absolutePath());
+    if (!QDir().rename(src, fallbackPath)) {
+        msg = QStringLiteral("导出失败：%1（且兜底保存失败，临时文件：%2）").arg(reason, src);
+        return false;
+    }
+    msg = QStringLiteral("导出到相册/所选位置失败（%1），已保存到应用目录：%2").arg(reason, fallbackPath);
+    return false;
+}
+
+// Android 导出发布编排（SPEC §8.3 形态差异）：Core 已把产物写在临时区（workPath 为
+// 单文件或目录），按目的地分派——相册（insertToGallery 三段式）、SAF 树
+//（createDocument）、单文档 URI（openOutputStream 直写）。msg 恒为面向用户的
+// 最终消息；返回是否整体成功。
+bool publishExport(const QString& workPath, const QString& galleryRel,
+                   const QString& publishUri, const QString& publishTree,
+                   const QString& fallbackSub, QString& msg) {
+    const QString docsRoot = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+                             + QStringLiteral("/ImageDiscropper");
+    const QFileInfo wi(workPath);
+    if (!wi.isDir()) {
+        // 合并单文件。
+        const QString baseName = wi.fileName();
+        if (!publishUri.isEmpty()) {
+            QString err;
+            if (writeToContentUri(publishUri, workPath, err)) {
+                msg = QStringLiteral("导出成功：已保存到所选位置");
+                return true;
+            }
+            return fallbackToDocuments(workPath, docsRoot + u'/' + baseName, err, msg);
+        }
+        QString uri, err;
+        if (!insertToGallery(baseName, galleryRel, uri, err)
+            || !writeToContentUri(uri, workPath, err)
+            || !finalizePending(uri, err)) {
+            if (!uri.isEmpty()) { QString e2; deleteContentUri(uri, e2); } // 清理僵尸 pending 行。
+            return fallbackToDocuments(workPath, docsRoot + u'/' + baseName, err, msg);
+        }
+        msg = QStringLiteral("导出成功：相册 Pictures/%1/%2").arg(galleryRel, baseName);
+        return true;
+    }
+    // 分离多文件：逐文件发布，失败文件单独兜底，已发布部分保留。
+    const QFileInfoList files = QDir(workPath).entryInfoList(QDir::Files, QDir::Name);
+    if (files.isEmpty()) { msg = QStringLiteral("导出失败：没有产生输出文件"); return false; }
+    int okCount = 0;
+    QString firstErr;
+    const QString fallbackDir = docsRoot + u'/' + fallbackSub;
+    for (const QFileInfo& f : files) {
+        QString uri, err;
+        bool oneOk = false;
+        if (!publishTree.isEmpty()) {
+            QString docUri;
+            if (createDocumentInTree(publishTree, f.fileName(), mimeTypeForFileName(f.fileName()), docUri, err))
+                oneOk = writeToContentUri(docUri, f.absoluteFilePath(), err);
+        } else if (insertToGallery(f.fileName(), galleryRel, uri, err)) {
+            if (writeToContentUri(uri, f.absoluteFilePath(), err) && finalizePending(uri, err)) oneOk = true;
+            else { QString e2; deleteContentUri(uri, e2); }
+        }
+        if (oneOk) { ++okCount; continue; }
+        if (firstErr.isEmpty()) firstErr = err.isEmpty() ? QStringLiteral("未知错误") : err;
+        QDir().mkpath(fallbackDir);
+        QDir().rename(f.absoluteFilePath(), fallbackDir + u'/' + f.fileName()); // 尽力而为。
+    }
+    if (okCount == 0) {
+        msg = QStringLiteral("导出失败（%1），文件已保存到应用目录：%2").arg(firstErr, fallbackDir);
+        return false;
+    }
+    if (okCount == files.size()) {
+        msg = publishTree.isEmpty()
+                  ? QStringLiteral("导出成功：相册 Pictures/%1（%2 张）").arg(galleryRel).arg(okCount)
+                  : QStringLiteral("导出成功：已写入所选目录（%1 个文件）").arg(okCount);
+        return true;
+    }
+    msg = QStringLiteral("部分成功：已导出 %1/%2 个文件；失败文件已保存到应用目录：%3")
+              .arg(okCount).arg(files.size()).arg(fallbackDir);
+    return false;
+}
+#endif
+
+} // namespace
 
 // 构造（桌面）：装配全部部件 + 接线（顺序承重，见 src/app/README.md「编排」——connectAll 必须先于 history_->reset()，
 // 否则首次 availabilityChanged 丢失、撤销/重做动作不会在启动时置灰）。
@@ -242,7 +342,12 @@ void MainWindow::openImageFromPath(const QString& path) {
 // 导出（委托 EngineBridge → Core runEngine + exportImage）。
 void MainWindow::onExport() {
     if (!doc_.hasImage()) { notify(QStringLiteral("无图像可导出，请先打开一张图像（Ctrl+O）。"), true); return; }
-    if (!doc_.hasRect()) { notify(QStringLiteral("请先在画布创建选区"), true); return; }
+    // 选区形态随模式不同（SPEC §8.3 行为同构、零形态分支的唯一必要分派）：
+    // L1/L2 = 矩形选区（含 L2 多矩形）；L3 = 显式单元选择集（rect 恒空）。
+    const bool hasSelection = doc_.mode() == engine::Tier::L3
+        ? !doc_.selectedCells().empty()
+        : doc_.hasRect();
+    if (!hasSelection) { notify(QStringLiteral("请先在画布创建选区"), true); return; }
 
     const engine::EngineConfig cfg = doc_.buildEngineConfig();
 
@@ -257,52 +362,79 @@ void MainWindow::onExport() {
     }
 
     QString path;
+#ifdef Q_OS_ANDROID
+    // Android 发布编排（SPEC §8.3 形态差异）：Core 只写真实路径，故先导出到缓存临时区，
+    // 再经发布层（mobile/android_media_store.h）流式写入最终目的地；桌面分支不变。
+    // 临时工作目录以原图基名命名：Core 的 {name} 占位取自输出目录的文件夹名
+    //（export.cpp），否则产物名会变成 export-<msecs>_000.png。
+    const auto workName = [&]() {
+        const QString base = QFileInfo(doc_.imagePath()).completeBaseName();
+        return !base.isEmpty() && !doc_.imagePath().startsWith(QStringLiteral("content://"))
+                   ? base : QStringLiteral("image");
+    };
+    const QString ts = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-hhmmss"));
+    const QString tempBase = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
+                             + QStringLiteral("/export-%1").arg(QDateTime::currentMSecsSinceEpoch());
+    QString galleryRel;   // 相册相对路径（Pictures/ 前缀由发布层补）；空=不走相册。
+    QString publishUri;   // 单文件 content URI（「浏览…」保存框）。
+    QString publishTree;  // 树 URI（「浏览…」目录选择器）。
+    QString tempRoot;     // 临时根（空=直写路径，无需发布层）。
+#endif
     if (cfg.emitParams.mode == engine::EmitMode::SEPARATE) {
         path = doc_.outputDir();
         if (path.isEmpty()) {
 #ifdef Q_OS_ANDROID
-            // Android SAF 目录选择器返回 content:// 树 URI，Core 按路径写多文件会失败
-            // （SPEC §8.3 形态差异）：改为应用文档目录下按时间戳建子目录——可写、
-            // 路径可经状态栏通知用户。
-            path = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
-                   + QStringLiteral("/ImageDiscropper/")
-                   + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-hhmmss"));
-            QDir().mkpath(path);
+            // 默认：相册 Pictures/ImageDiscropper/<时间戳> 子目录。临时路径不写回 doc_
+            //（不可复用直写）；doc_ 留空让下次导出重新走本默认分支。
+            tempRoot = tempBase;
+            path = tempRoot + u'/' + workName(); // Core 建目录并应用命名模板。
+            galleryRel = QStringLiteral("ImageDiscropper/") + ts;
 #else
             path = QFileDialog::getExistingDirectory(this, QStringLiteral("选择输出目录"));
             if (path.isEmpty()) return;
-#endif
             doc_.setOutputDir(path);
             exportPanel_->syncFromDocument();
+#endif
         }
+#ifdef Q_OS_ANDROID
+        else if (path.startsWith(QStringLiteral("content://"))) {
+            // SAF 树 URI（面板「浏览…」所选）：Core 写临时目录，逐文件经
+            // DocumentsContract.createDocument 写入所选树根（不承诺子目录）；
+            // doc_ 保持树 URI，下次导出沿用所选目录。
+            tempRoot = tempBase;
+            path = tempRoot + u'/' + workName();
+            publishTree = doc_.outputDir();
+        }
+#endif
+        // 手输绝对路径（QFile 可写）：直写，无发布层。
     } else {
         path = doc_.outputFile();
         if (path.isEmpty()) {
 #ifdef Q_OS_ANDROID
-            // SAF 保存对话框返回 content:// URI——真机实测 QFile 写入该 URI 失败
-            //（复制路径不支持）。与 SEPARATE 一致，直接写应用文档目录并通知路径
-            //（SPEC §8.3 形态差异）；文件名按当前导出格式定后缀。
-            QString ext;
-            switch (doc_.format()) {
-                case engine::ExportFormat::JPEG: ext = QStringLiteral("jpg"); break;
-                case engine::ExportFormat::BMP:  ext = QStringLiteral("bmp"); break;
-                case engine::ExportFormat::WEBP: ext = QStringLiteral("webp"); break;
-                default:                         ext = QStringLiteral("png"); break;
-            }
-            const QString dir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
-                                + QStringLiteral("/ImageDiscropper");
-            QDir().mkpath(dir);
-            path = dir + QStringLiteral("/ImageDiscropper-")
-                 + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-hhmmss"))
-                 + QStringLiteral(".") + ext;
+            // 默认：相册 Pictures/ImageDiscropper 平铺。临时文件必须带真实格式扩展名
+            //（Core 按扩展名选择编码器）；临时路径不写回 doc_（同上）。
+            tempRoot = tempBase;
+            QDir().mkpath(tempRoot);
+            path = tempRoot + QStringLiteral("/ImageDiscropper-") + ts + u'.' + exportFormatExt(doc_.format());
+            galleryRel = QStringLiteral("ImageDiscropper");
 #else
             path = QFileDialog::getSaveFileName(this, QStringLiteral("导出为"), QString(),
                                                 QStringLiteral("图像 (*.png *.jpg *.jpeg *.bmp *.webp)"));
             if (path.isEmpty()) return;
-#endif
             doc_.setOutputFile(path);
             exportPanel_->syncFromDocument();
+#endif
         }
+#ifdef Q_OS_ANDROID
+        else if (path.startsWith(QStringLiteral("content://"))) {
+            // SAF 保存框返回的单文件 content URI：QFile 写不支持（0 字节占位同源），
+            // 发布层 openOutputStream 流式写有效。
+            tempRoot = tempBase;
+            QDir().mkpath(tempRoot);
+            path = tempRoot + QStringLiteral("/merged.") + exportFormatExt(doc_.format());
+            publishUri = doc_.outputFile();
+        }
+#endif
     }
 
     // 导出烧录（G-4）：开关开且有标注时，以当前工作图为底逐个调 Core rasterize 合成标注，
@@ -313,8 +445,20 @@ void MainWindow::onExport() {
     }
 
     if (QString err; EngineBridge::exportResult(exportSrc, cfg, path, err)) {
+#ifdef Q_OS_ANDROID
+        if (!tempRoot.isEmpty()) {
+            QString msg;
+            const bool pubOk = publishExport(path, galleryRel, publishUri, publishTree, ts, msg);
+            QDir(tempRoot).removeRecursively(); // 成功/失败都清临时区。
+            notify(msg, !pubOk);
+            return;
+        }
+#endif
         notify(QStringLiteral("导出成功：%1").arg(path), false);
     } else {
+#ifdef Q_OS_ANDROID
+        if (!tempRoot.isEmpty()) QDir(tempRoot).removeRecursively();
+#endif
         notify(QStringLiteral("导出失败：%1").arg(err), true);
     }
 }
@@ -465,9 +609,20 @@ void MainWindow::onPolarityShortcut(const bool remove) {
 
 // 保存配置：把当前作业配置写为 SPEC §7 schema 的 JSON 文件（委托 EngineBridge → Core）。
 void MainWindow::onSaveConfig() {
+#ifdef Q_OS_ANDROID
+    // 移动端免对话框：SAF 保存框返回 content:// 不可写，且系统选择器进不了应用目录。
+    // 配置为应用自用数据，存固定目录（onLoadConfig 列表选择读取，SPEC §8.3 形态差异）。
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+                        + QStringLiteral("/ImageDiscropper/Config");
+    QDir().mkpath(dir);
+    const QString path = dir + QStringLiteral("/config_")
+                         + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-hhmmss"))
+                         + QStringLiteral(".json");
+#else
     const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("保存配置"), QString(),
         QStringLiteral("ImageDiscropper 配置 (*.json);;所有文件 (*)"));
     if (path.isEmpty()) return;
+#endif
     if (QString err; EngineBridge::saveConfig(path, doc_.buildEngineConfig(), err))
         notify(QStringLiteral("配置已保存：%1").arg(path), false);
     else
@@ -476,9 +631,23 @@ void MainWindow::onSaveConfig() {
 
 // 加载配置：读 JSON → DocHistory::recordConfigLoad（抑制采集地应用 + 压栈，载入本身可一步撤销）。
 void MainWindow::onLoadConfig() {
+#ifdef Q_OS_ANDROID
+    // 移动端列表选择（系统选择器进不了应用目录）：枚举 Config 目录，时间戳命名新在前。
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+                        + QStringLiteral("/ImageDiscropper/Config");
+    const QStringList files = QDir(dir).entryList({QStringLiteral("*.json")}, QDir::Files,
+                                                  QDir::Name | QDir::Reversed);
+    if (files.isEmpty()) { notify(QStringLiteral("没有已保存的配置，请先在「更多」中保存配置。"), true); return; }
+    bool ok = false;
+    const QString name = QInputDialog::getItem(this, QStringLiteral("加载配置"),
+                                               QStringLiteral("选择配置"), files, 0, false, &ok);
+    if (!ok || name.isEmpty()) return;
+    const QString path = dir + u'/' + name;
+#else
     const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("加载配置"), QString(),
         QStringLiteral("ImageDiscropper 配置 (*.json);;所有文件 (*)"));
     if (path.isEmpty()) return;
+#endif
     engine::EngineConfig cfg;
     if (QString err; !EngineBridge::loadConfig(path, cfg, err)) { notify(QStringLiteral("加载配置失败：%1").arg(err), true); return; }
     history_->recordConfigLoad(cfg);

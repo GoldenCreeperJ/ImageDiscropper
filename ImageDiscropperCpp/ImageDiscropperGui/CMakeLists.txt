@@ -176,9 +176,11 @@ set(IDC_GUI_APP_SRC
 #         复用 model/canvas/panels 既有件，零复刻引擎/编排逻辑（SPEC §8.3 行为同构）。
 #         是否编入由 IDC_GUI_MOBILE 配置项控制（见下）。
 set(IDC_GUI_MOBILE_SRC
+        include/mobile/android_media_store.h
         include/mobile/mobile_shell.h
         include/mobile/mobile_shell_ui.h
         include/mobile/mobile_step_pad.h
+        src/mobile/android_media_store.cpp
         src/mobile/mobile_shell.cpp
         src/mobile/mobile_shell_ui.cpp
         src/mobile/mobile_step_pad.cpp
@@ -241,6 +243,10 @@ if(ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
     set_target_properties(idc_gui PROPERTIES
         QT_ANDROID_APP_NAME "ImageDiscropper"
         QT_ANDROID_PACKAGE_NAME "com.imagediscropper.gui"
+        # min API 29：媒体库导出依赖 RELATIVE_PATH/IS_PENDING 列（API 29+）。
+        # 仅升此属性+preset 的 CMAKE_SYSTEM_VERSION 29；vcpkg triplet 保持 28
+        #（改 triplet 会重建整个 Android Qt；app 编 29 + Qt 库链 28 ABI 安全）。
+        QT_ANDROID_MIN_SDK_VERSION 29
     )
 else()
     # WIN32：按 GUI 子系统链接（MSVC /SUBSYSTEM:WINDOWS），双击启动时不弹出控制台窗口；
