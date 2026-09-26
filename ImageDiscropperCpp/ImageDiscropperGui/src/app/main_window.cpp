@@ -91,12 +91,16 @@ bool publishExport(const QString& workPath, const QString& galleryRel,
                    QString& msg) {
     const QString docsRoot = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
                              + QStringLiteral("/ImageDiscropper");
-    // 共用发布件：MediaStore 无 pending 直插 → fd 写入（多设备一致的已验证通道）。
+    // 共用发布件：MediaStore 插入（标准 pending 流程，个别设备自动降级无 pending）
+    // → fd 写入 → pending 则 finalize。pending 行不参与媒体扫描，避免「插入即
+    // 0 字节被扫描删行」的真机竞态（相册行随机丢失、文件管理器文件齐全）。
     const auto publishToRelDir = [&](const QString& srcPath, const QString& displayName,
                                      const QString& relDir, QString& err) {
         QString uri;
-        if (!insertToGallery(displayName, relDir, uri, err)
-            || !writeToContentUri(uri, srcPath, err)) {
+        bool pending = false;
+        if (!insertToGallery(displayName, relDir, uri, pending, err)
+            || !writeToContentUri(uri, srcPath, err)
+            || (pending && !finalizePending(uri, err))) {
             if (!uri.isEmpty()) { QString e2; deleteContentUri(uri, e2); } // 清理失败行。
             return false;
         }

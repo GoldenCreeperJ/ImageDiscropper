@@ -3,12 +3,12 @@
 **目录作用**：`MobileShell` 装配实现与补偿控件（与 `src/app/` 并列）。
 声明边界见 [include/mobile/](../../include/mobile/README.md)。
 
-| 文件                        | 职责                                                                                                                                                                                                                                                     |
-|---------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `mobile_shell.cpp`        | `MobileShell` 壳本体：装配顺序（`buildCentral→buildDrawer→buildStatus→buildBottomBar` → `initCore()`（与桌面逐行共用的唯一接线序列）→ `enableTouchErgonomics`）与 `MobileShell::resizeEvent`（按宽高比翻转重排抽屉与工具条，竖屏底部 / 横屏右侧，只重排不重建 → 状态无损）                                            |
-| `mobile_shell_ui.cpp`     | 建造者 `MobileShellUi` 实现（`MainWindow` 的 friend，与 `MainWindowUi` 同模式、同拆分纪律）：`buildCentral`（画布独占中央区）→ `buildDrawer`（桌面 7 面板原样复用入五页抽屉）→ `buildStatus`（紧凑状态栏）→ `buildBottomBar`（工具条 + 无键盘补偿）→ `enableTouchErgonomics`（忙碌全屏遮罩，SPEC §8.2）；触控样式、滚轮横滚过滤器等装配细节全在此 |
-| `mobile_step_pad.cpp`     | 8 向步进盘实现：QToolButton autoRepeat 长按连发；`nudgeRequested` → 上层接 `CanvasView::requestNudge`（与方向键同信号链路）                                                                                                                                                      |
-| `android_media_store.cpp` | 发布层 JNI 实现（QJniObject，仅 Q_OS_ANDROID）：`insertToGallery`（无 pending 直插，`_display_name`/`relative_path` 列）、`writeToContentUri`（openFileDescriptor + fd 直写，fd 由 Java 侧关闭防 fdsan abort）、`deleteContentUri`、`mimeTypeForFileName`；桌面构建无 JNI 头、无调用者，不编 JNI 部分 |
+| 文件                        | 职责                                                                                                                                                                                                                                                                                            |
+|---------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `mobile_shell.cpp`        | `MobileShell` 壳本体：装配顺序（`buildCentral→buildDrawer→buildStatus→buildBottomBar` → `initCore()`（与桌面逐行共用的唯一接线序列）→ `enableTouchErgonomics`）与 `MobileShell::resizeEvent`（按宽高比翻转重排抽屉与工具条，竖屏底部 / 横屏右侧，只重排不重建 → 状态无损）                                                                                   |
+| `mobile_shell_ui.cpp`     | 建造者 `MobileShellUi` 实现（`MainWindow` 的 friend，与 `MainWindowUi` 同模式、同拆分纪律）：`buildCentral`（画布独占中央区）→ `buildDrawer`（桌面 7 面板原样复用入五页抽屉）→ `buildStatus`（紧凑状态栏）→ `buildBottomBar`（工具条 + 无键盘补偿）→ `enableTouchErgonomics`（忙碌全屏遮罩，SPEC §8.2）；触控样式、滚轮横滚过滤器等装配细节全在此                                        |
+| `mobile_step_pad.cpp`     | 8 向步进盘实现：QToolButton autoRepeat 长按连发；`nudgeRequested` → 上层接 `CanvasView::requestNudge`（与方向键同信号链路）                                                                                                                                                                                             |
+| `android_media_store.cpp` | 发布层 JNI 实现（QJniObject，仅 Q_OS_ANDROID）：`insertToGallery`（IS_PENDING 三段式，拒绝该列的设备降级无 pending；`_display_name`/`relative_path` 列）、`writeToContentUri`（openFileDescriptor + fd 直写，fd 由 Java 侧关闭防 fdsan abort）、`finalizePending`、`deleteContentUri`、`mimeTypeForFileName`；桌面构建无 JNI 头、无调用者，不编 JNI 部分 |
 
 ## 底部工具条 → 既有链路映射（无键盘补偿，SPEC §8.3）
 
@@ -71,7 +71,7 @@
 **已实现并真机验证（华为 Android 12）**：移动骨架（`MobileShell`/`MobileShellUi`/`StepPadWidget`）安装启动与日常操作；
 触控适配器（`TouchInputAdapter`：双击适应 / 长按菜单 / 捏合缩放，捏合与合成鼠标的冲突已由首次 pinch
 `gestureCancelCurrent()` 作废进行中手势修复）；滚动区 `TouchScrollFilter`（无过冲回弹、滑动不误触按钮、
-文本输入放行原生触摸）；导出写相册公共目录 `Pictures/ImageDiscropper`（MediaStore 无 pending 直插 + fd 写入，
+文本输入放行原生触摸）；导出写相册公共目录 `Pictures/ImageDiscropper`（MediaStore IS_PENDING 三段式 + fd 写入，
 Java 侧关 fd 防 fdsan；文件名可自定义、留空自动命名、同名加时间戳后缀；失败兜底复制到应用文档目录；
 SAF 自定义目录已整体移除，「浏览…」移动端禁用）；min API 29；CI 移动腿与 APK alpha 签名链全绿。
 

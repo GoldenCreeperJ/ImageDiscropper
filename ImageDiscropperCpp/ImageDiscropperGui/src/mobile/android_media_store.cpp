@@ -40,6 +40,13 @@ void putString(const QJniObject& values, const QString& key, const QString& valu
                             QJniObject::fromString(key).object<jstring>(),
                             QJniObject::fromString(value).object<jstring>());
 }
+
+// ContentValues.put(String, Integer)。
+void putInt(const QJniObject& values, const QString& key, const int value) {
+    values.callMethod<void>("put", "(Ljava/lang/String;Ljava/lang/Integer;)V",
+                            QJniObject::fromString(key).object<jstring>(),
+                            QJniObject("java/lang/Integer", "(I)V", jint(value)).object());
+}
 #endif
 
 } // namespace
@@ -106,7 +113,7 @@ bool writeToContentUri(const QString& contentUri, const QString& srcFilePath, QS
 }
 
 bool insertToGallery(const QString& displayName, const QString& relativePath,
-                     QString& outUri, QString& err) {
+                     QString& outUri, bool& outPending, QString& err) {
     QJniEnvironment env;
     // RELATIVE_PATH 列需 API 29+；运行时防御（装机门槛另由
     // QT_ANDROID_MIN_SDK_VERSION 29 保证）。
@@ -125,22 +132,48 @@ bool insertToGallery(const QString& displayName, const QString& relativePath,
     }
     // 键名即 MediaStore.MediaColumns 常量值（注意 DISPLAY_NAME 为 _display_name，
     // 带下划线前缀——真机曾误写 display_name 被华为 MediaProvider 拒绝）。
-    // 无 IS_PENDING 直插（见头文件说明：pending 三段式真机多设备不兼容）。
+    // 首选 IS_PENDING=1（见头文件说明：无 pending 直插会被扫描竞态随机删行）；
+    // 拒绝该列的设备降级无 pending。
+    const auto tryInsert = [&](const bool pending) {
+        QJniObject values("android/content/ContentValues");
+        putString(values, QStringLiteral("_display_name"), displayName);
+        putString(values, QStringLiteral("mime_type"), mimeTypeForFileName(displayName));
+        putString(values, QStringLiteral("relative_path"), relativePath);
+        if (pending) putInt(values, QStringLiteral("is_pending"), 1);
+        const QJniObject inserted = resolver.callObjectMethod(
+            "insert", "(Landroid/net/Uri;Landroid/content/ContentValues;)Landroid/net/Uri;",
+            collection.object(), values.object());
+        // insert 失败返回 null（非异常），故须 isValid 判定。
+        if (env->ExceptionCheck()) env->ExceptionDescribe();
+        env->ExceptionClear();
+        if (inserted.isValid()) {
+            outUri = inserted.toString();
+            return true;
+        }
+        return false;
+    };
+    if (tryInsert(true)) { outPending = true; return true; }
+    if (tryInsert(false)) { outPending = false; return true; }
+    err = QStringLiteral("媒体库插入失败（格式可能不被支持）");
+    return false;
+}
+
+bool finalizePending(const QString& contentUri, QString& err) {
+    QJniEnvironment env;
+    const QJniObject resolver = contentResolver();
+    const QJniObject uri = parseUri(contentUri);
     QJniObject values("android/content/ContentValues");
-    putString(values, QStringLiteral("_display_name"), displayName);
-    putString(values, QStringLiteral("mime_type"), mimeTypeForFileName(displayName));
-    putString(values, QStringLiteral("relative_path"), relativePath);
-    const QJniObject inserted = resolver.callObjectMethod(
-        "insert", "(Landroid/net/Uri;Landroid/content/ContentValues;)Landroid/net/Uri;",
-        collection.object(), values.object());
-    // insert 失败返回 null（非异常），故须 isValid 判定。
+    putInt(values, QStringLiteral("is_pending"), 0);
+    const jint rows = resolver.callMethod<jint>(
+        "update",
+        "(Landroid/net/Uri;Landroid/content/ContentValues;Ljava/lang/String;[Ljava/lang/String;)I",
+        uri.object(), values.object(), nullptr, nullptr);
     if (env->ExceptionCheck()) env->ExceptionDescribe();
     env->ExceptionClear();
-    if (!inserted.isValid()) {
-        err = QStringLiteral("媒体库插入失败（格式可能不被支持）");
+    if (rows == 0) { // rows==0：行已消失或被提供者拒绝。
+        err = QStringLiteral("媒体库条目完成失败");
         return false;
     }
-    outUri = inserted.toString();
     return true;
 }
 

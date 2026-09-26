@@ -9,8 +9,9 @@
 //     而桌面 Qt 构建无 JNI 头——QJniObject 依赖全部隔离在 .cpp 的
 //     #if defined(Q_OS_ANDROID) 内；本层函数无桌面调用者，非 Android 编译单元
 //     不含实现亦无链接引用。
-// 说明：MediaStore 无 IS_PENDING 直插（真机实测 pending 三段式多设备不兼容）；
-//       RELATIVE_PATH 列需 API 29+（装机门槛由 QT_ANDROID_MIN_SDK_VERSION 保证）。
+// 说明：首选 IS_PENDING 三段式（真机实测无 pending 直插会被提供者扫描竞态随机删行）；
+//       拒绝 is_pending 列的设备自动降级无 pending。RELATIVE_PATH 列需 API 29+
+//       （装机门槛由 QT_ANDROID_MIN_SDK_VERSION 保证）。
 // ============================================================================
 #pragma once
 
@@ -23,10 +24,16 @@ namespace idc::gui {
 bool writeToContentUri(const QString& contentUri, const QString& srcFilePath, QString& err);
 
 // 向系统相册 MediaStore 插入条目。relativePath = RELATIVE_PATH 列值（相对外部存储，
-// 如 "Pictures/ImageDiscropper"，不含前导斜杠）。无 IS_PENDING 直插。失败（含
-// API<29）返回 false。
+// 如 "Pictures/ImageDiscropper"，不含前导斜杠）。首选标准 IS_PENDING=1 流程
+//（outPending=true，写入完成后须调 finalizePending；pending 行不参与媒体扫描，
+// 避免「插入即 0 字节被提供者扫描删行、字节后写、文件在行已丢」的真机竞态）；
+// 个别拒绝 is_pending 列的设备自动降级为无 pending 直插（outPending=false）。
+// 失败（含 API<29）返回 false。
 bool insertToGallery(const QString& displayName, const QString& relativePath,
-                     QString& outUri, QString& err);
+                     QString& outUri, bool& outPending, QString& err);
+
+// 完成 MediaStore pending 条目（IS_PENDING=0），使其在相册中可见。
+bool finalizePending(const QString& contentUri, QString& err);
 
 // 删除 content URI 对应条目（发布失败时清理失败行）。
 bool deleteContentUri(const QString& contentUri, QString& err);
