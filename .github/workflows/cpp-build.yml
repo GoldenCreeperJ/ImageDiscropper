@@ -148,26 +148,47 @@ jobs:
         if: ${{ inputs.prepare-dist && !startsWith(inputs.preset, 'android') && !startsWith(inputs.preset, 'ios') }}
         shell: bash
         run: |
+          # 产物名带发布标签：GUI 用产品全名 ImageDiscropper，CLI 保持 idc 短名。
+          # ref 仅 CD 传入（tag 名或 refs/tags/<tag>）；本步骤只有 CD 会进入，故恒有标签。
+          TAG="${{ inputs.ref }}"
+          TAG="${TAG#refs/tags/}"
+          [ -n "$TAG" ] || TAG="release"
           BIN="ImageDiscropperCpp/build/${{ inputs.preset }}/bin"
           mkdir -p dist
           if [ "$RUNNER_OS" = "Windows" ]; then
-            cp "$BIN/idc_gui.exe" "dist/idc_gui-${{ inputs.preset }}.exe"
-            cp "$BIN/idc.exe" "dist/idc-${{ inputs.preset }}.exe"
+            cp "$BIN/idc_gui.exe" "dist/ImageDiscropper-windows-${TAG}.exe"
+            cp "$BIN/idc.exe" "dist/idc-windows-${TAG}.exe"
           elif [ "$RUNNER_OS" = "macOS" ]; then
-            cp -R "$BIN/idc_gui.app" "dist/idc_gui-${{ inputs.preset }}.app"
-            cp "$BIN/idc" "dist/idc-${{ inputs.preset }}"
+            # DMG 分发（mac 用户标准形态）：.app + Applications 符号链接（拖拽安装惯例），
+            # 单文件产物无需 zip 容器；未签名状态与 zip 分发相同（Gatekeeper 同提示）。
+            DMG_SRC=$(mktemp -d)
+            cp -R "$BIN/idc_gui.app" "$DMG_SRC/ImageDiscropper.app"
+            cp "$BIN/idc" "dist/idc-macos-${TAG}"
+            # 去符号：vcpkg 的 qtbase 以 force_debug_info 构建，静态链入的 Qt 符号
+            # 显著抬升二进制体积；strip 会连带破坏链接器默认加的 ad-hoc 签名——
+            # 而 arm64 macOS 内核要求原生代码至少 ad-hoc 签名（否则 Killed: 9），
+            # 故 strip 后必须补免费 ad-hoc 重签（codesign --sign -，无需账号）。
+            strip "$DMG_SRC/ImageDiscropper.app/Contents/MacOS/idc_gui"
+            strip "dist/idc-macos-${TAG}"
+            codesign --force --sign - "$DMG_SRC/ImageDiscropper.app/Contents/MacOS/idc_gui"
+            codesign --force --sign - "dist/idc-macos-${TAG}"
             check() {
               if otool -L "$1" | tail -n +2 | awk '{print $1}' | grep -vE "^/(usr/lib|System/Library)" | grep -q .; then
                 echo "::error::$1 存在非系统动态依赖，裸二进制不可分发；需引入 macdeployqt 打包"
                 exit 1
               fi
             }
-            check "dist/idc_gui-${{ inputs.preset }}.app/Contents/MacOS/idc_gui"
-            check "dist/idc-${{ inputs.preset }}"
-            (cd dist && zip -qr "idc_gui-${{ inputs.preset }}.app.zip" "idc_gui-${{ inputs.preset }}.app" && rm -rf "idc_gui-${{ inputs.preset }}.app")
+            check "$DMG_SRC/ImageDiscropper.app/Contents/MacOS/idc_gui"
+            check "dist/idc-macos-${TAG}"
+            ln -s /Applications "$DMG_SRC/Applications"
+            hdiutil create -volname "ImageDiscropper" -srcfolder "$DMG_SRC" -ov -format UDZO \
+              "dist/ImageDiscropper-macos-${TAG}.dmg"
+            rm -rf "$DMG_SRC"
           else
-            cp "$BIN/idc_gui" "dist/idc_gui-${{ inputs.preset }}"
-            cp "$BIN/idc" "dist/idc-${{ inputs.preset }}"
+            cp "$BIN/idc_gui" "dist/ImageDiscropper-linux-${TAG}"
+            cp "$BIN/idc" "dist/idc-linux-${TAG}"
+            # 去符号（同上：Qt 静态链接带入的调试符号）。
+            strip "dist/ImageDiscropper-linux-${TAG}" "dist/idc-linux-${TAG}"
           fi
 
       # Windows 安装包：Inno Setup（choco 安装）把 GUI + CLI 两个 exe 打成安装器
@@ -181,7 +202,12 @@ jobs:
           Copy-Item "ImageDiscropperCpp/build/${{ inputs.preset }}/bin/idc.exe" dist/installer/idc.exe
           choco install innosetup -y --no-progress
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DSRC=$env:GITHUB_WORKSPACE\dist\installer" "/O$env:GITHUB_WORKSPACE\dist" "$env:GITHUB_WORKSPACE\ImageDiscropperCpp\packaging\installer.iss" | Out-Null
-          Move-Item "dist\ImageDiscropper-setup.exe" "dist\ImageDiscropper-setup-win-x64.exe"
+          $TAG = "${{ inputs.ref }}" -replace '^refs/tags/', ''
+          if (-not $TAG) { $TAG = 'release' }
+          Move-Item "dist\ImageDiscropper-setup.exe" "dist\ImageDiscropper-setup-win-x64-$TAG.exe"
+          # 清理 ISCC 暂存目录：否则 dist/installer 里的裸 exe 会被 artifact 提平
+          # 步骤捞到顶层，混入发布资产（与正式命名的 exe 完全重复）。
+          Remove-Item -Recurse -Force dist/installer
 
       # ---- 移动打包（Android：qt_finalize_target 的 ninja 步骤已出 APK；iOS：zip .app） ----
       # Qt 的 Android 目标在 cmake --build 末尾自动执行 androiddeployqt（ninja 规则
@@ -192,31 +218,66 @@ jobs:
       - name: Package APK
         if: startsWith(inputs.preset, 'android')
         run: |
+          TAG="${{ inputs.ref }}"
+          TAG="${TAG#refs/tags/}"
+          [ -n "$TAG" ] || TAG="release"
           mkdir -p dist
-          cp ImageDiscropperCpp/build/${{ inputs.preset }}/ImageDiscropperGui/android-build/idc_gui.apk \
-             dist/idc_gui-android-arm64.apk
+          APK="ImageDiscropperCpp/build/${{ inputs.preset }}/ImageDiscropperGui/android-build/idc_gui.apk"
+          if [[ "${{ inputs.preset }}" == *-dbg* ]]; then
+            # debug 构建的 APK 已带调试签名，重打包会破坏签名 → 原样发布。
+            cp "$APK" "dist/ImageDiscropper-android-arm64-${TAG}.apk"
+          else
+            # 瘦身 + 签名（release）：strip .so（Qt 三件套是大头）→ 重打包
+            #（.so 保持 stored 不压缩，与原 APK 行为一致）→ zipalign → apksigner。
+            # 签名密钥来自仓库 secrets（base64 keystore + 密码，别名约定 idc、
+            # store/key 密码相同）；secrets 未配置时降级为未签名 APK 并告警
+            #（仅可 adb 侧载，无密钥环境仍可跑通）。
+            WORK=$(mktemp -d)
+            unzip -q "$APK" -d "$WORK/unpacked"
+            "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-all \
+              "$WORK"/unpacked/lib/arm64-v8a/*.so
+            (cd "$WORK/unpacked" && zip -qrX -n .so "$WORK/repacked.apk" .)
+            ZA=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/*/zipalign 2>/dev/null | sort -V | tail -1)
+            "$ZA" -f 4 "$WORK/repacked.apk" "$WORK/aligned.apk"
+            if [ -n "${{ secrets.IDC_ANDROID_KEYSTORE_B64 }}" ] && [ -n "${{ secrets.IDC_ANDROID_KEYSTORE_PASS }}" ]; then
+              echo "${{ secrets.IDC_ANDROID_KEYSTORE_B64 }}" | base64 -d > "$WORK/idc-release.keystore"
+              APS=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+              "$APS" sign --ks "$WORK/idc-release.keystore" \
+                --ks-pass "pass:${{ secrets.IDC_ANDROID_KEYSTORE_PASS }}" \
+                --key-pass "pass:${{ secrets.IDC_ANDROID_KEYSTORE_PASS }}" \
+                --key-alias key1 \
+                --out "dist/ImageDiscropper-android-arm64-${TAG}.apk" "$WORK/aligned.apk"
+            else
+              echo "::warning::未配置 Android 签名 secrets（IDC_ANDROID_KEYSTORE_B64 / IDC_ANDROID_KEYSTORE_PASS），发布未签名 APK"
+              cp "$WORK/aligned.apk" "dist/ImageDiscropper-android-arm64-${TAG}.apk"
+            fi
+            rm -rf "$WORK"
+          fi
 
       - name: Upload APK
         if: startsWith(inputs.preset, 'android')
         uses: actions/upload-artifact@v7
         with:
           name: dist-${{ inputs.preset }}
-          path: dist/idc_gui-android-arm64.apk
+          path: dist/ImageDiscropper-android-arm64-*.apk
           if-no-files-found: error
 
       - name: Package app bundle
         if: startsWith(inputs.preset, 'ios')
         run: |
+          TAG="${{ inputs.ref }}"
+          TAG="${TAG#refs/tags/}"
+          [ -n "$TAG" ] || TAG="release"
           mkdir -p dist
-          cp -R ImageDiscropperCpp/build/${{ inputs.preset }}/bin/idc_gui.app dist/idc_gui-ios.app
-          (cd dist && zip -qr idc_gui-ios.app.zip idc_gui-ios.app && rm -rf idc_gui-ios.app)
+          cp -R ImageDiscropperCpp/build/${{ inputs.preset }}/bin/idc_gui.app "dist/ImageDiscropper-ios-${TAG}.app"
+          (cd dist && zip -qr "ImageDiscropper-ios-${TAG}.app.zip" "ImageDiscropper-ios-${TAG}.app" && rm -rf "ImageDiscropper-ios-${TAG}.app")
 
       - name: Upload iOS app
         if: startsWith(inputs.preset, 'ios')
         uses: actions/upload-artifact@v7
         with:
           name: dist-${{ inputs.preset }}
-          path: dist/idc_gui-ios.app.zip
+          path: dist/ImageDiscropper-ios-*.app.zip
           if-no-files-found: error
 
       - name: Upload dist artifacts

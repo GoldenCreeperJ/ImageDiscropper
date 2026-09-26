@@ -54,6 +54,7 @@ jobs:
           - os: macos-latest
             preset: ios
     uses: ./.github/workflows/cpp-build.yml
+    secrets: inherit   # Android 签名密钥（由顶层 cd.yml 继承而来，再传给构建腿）
     with:
       os: ${{ matrix.os }}
       preset: ${{ matrix.preset }}
