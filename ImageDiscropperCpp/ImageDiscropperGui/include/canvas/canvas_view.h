@@ -66,6 +66,9 @@ public:
     void gesturePanBegin(const QPoint& viewportPos);
     void gesturePanUpdate(const QPoint& viewportPos);
     void gesturePanEnd();
+    // 取消进行中的框选/平移（触控捏合开始前调用：第一指合成鼠标事件可能在手势
+    // 识别前已启动框选——不取消则缩放与框选冲突）。标注绘制态不在此取消。
+    void gestureCancelCurrent();
     // 双指平移（触控）：按视口位移量直接滚动，与 gesturePanUpdate 同一执行链路。
     void gesturePanDelta(const QPoint& deltaViewport) const;
     // 标注绘制手势：起笔 / 拖拽 / 悬停（未按键）/ 释放 / 收笔（右键或等效）。

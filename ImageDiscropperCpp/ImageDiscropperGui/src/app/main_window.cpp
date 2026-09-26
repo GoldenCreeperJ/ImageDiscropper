@@ -17,6 +17,7 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QDateTime>
+#include <QDir>
 #include <QFile>
 #include <QFileDialog>
 #include <QKeyEvent>
@@ -259,8 +260,18 @@ void MainWindow::onExport() {
     if (cfg.emitParams.mode == engine::EmitMode::SEPARATE) {
         path = doc_.outputDir();
         if (path.isEmpty()) {
+#ifdef Q_OS_ANDROID
+            // Android SAF 目录选择器返回 content:// 树 URI，Core 按路径写多文件会失败
+            // （SPEC §8.3 形态差异）：改为应用文档目录下按时间戳建子目录——可写、
+            // 路径可经状态栏通知用户。
+            path = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+                   + QStringLiteral("/ImageDiscropper/")
+                   + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-hhmmss"));
+            QDir().mkpath(path);
+#else
             path = QFileDialog::getExistingDirectory(this, QStringLiteral("选择输出目录"));
             if (path.isEmpty()) return;
+#endif
             doc_.setOutputDir(path);
             exportPanel_->syncFromDocument();
         }
@@ -275,6 +286,16 @@ void MainWindow::onExport() {
         }
     }
 
+    // Android 单文件：SAF 保存对话框返回 content:// URI，Core 按路径写文件会失败——
+    // 先写应用缓存再经 QFile 复制进 content URI（Qt 在 Android 支持 content:// 写入）。
+    QString writePath = path;
+#ifdef Q_OS_ANDROID
+    if (path.startsWith(QStringLiteral("content://"))) {
+        writePath = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
+                    + QStringLiteral("/export-") + QString::number(QDateTime::currentMSecsSinceEpoch());
+    }
+#endif
+
     // 导出烧录（G-4）：开关开且有标注时，以当前工作图为底逐个调 Core rasterize 合成标注，
     // 再送引擎切割（标注随像素被切开，CONTRIBUTING.md「分层纪律」）；否则直接送工作图。
     core::Image exportSrc = doc_.working();
@@ -282,7 +303,13 @@ void MainWindow::onExport() {
         exportSrc = annoBridge_.burnIn(doc_.working());
     }
 
-    if (QString err; EngineBridge::exportResult(exportSrc, cfg, path, err)) {
+    if (QString err; EngineBridge::exportResult(exportSrc, cfg, writePath, err)) {
+#ifdef Q_OS_ANDROID
+        if (writePath != path && !QFile::copy(writePath, path)) {
+            notify(QStringLiteral("导出成功但写入所选位置失败，文件在：%1").arg(writePath), true);
+            return;
+        }
+#endif
         notify(QStringLiteral("导出成功：%1").arg(path), false);
     } else {
         notify(QStringLiteral("导出失败：%1").arg(err), true);

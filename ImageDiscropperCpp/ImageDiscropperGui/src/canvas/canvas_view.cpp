@@ -195,6 +195,16 @@ void CanvasView::gesturePanEnd() {
     viewport()->unsetCursor();
 }
 
+// 取消进行中的框选/平移（见头文件声明）：捏合开始前由触控适配器调用，
+// 避免第一指合成鼠标事件已启动的橡皮筋/平移与双指缩放并存。
+void CanvasView::gestureCancelCurrent() {
+    if (panning_) gesturePanEnd();
+    if (rubber_) {
+        rubber_ = false;
+        if (rubberBand_) rubberBand_->hide();
+    }
+}
+
 // 双指平移（触控）：按视口位移量直接滚动，与 gesturePanUpdate 同一执行链路，
 // 不进入 panning_ 态（不依赖上一坐标，也不改光标）。
 void CanvasView::gesturePanDelta(const QPoint& deltaViewport) const {

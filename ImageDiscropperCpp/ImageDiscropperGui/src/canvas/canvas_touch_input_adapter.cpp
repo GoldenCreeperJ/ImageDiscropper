@@ -108,7 +108,12 @@ void TouchInputAdapter::onContextMenu(CanvasView& view, QContextMenuEvent* event
 bool TouchInputAdapter::onGestureEvent(CanvasView& view, QGestureEvent* event) {
     const auto* pinch = dynamic_cast<QPinchGesture*>(event->gesture(Qt::PinchGesture));
     if (!pinch) return false;
-    gestureSeen_ = true;
+    if (!gestureSeen_) {
+        gestureSeen_ = true;
+        // 捏合开始：取消第一指可能已启动的框选/平移（QPA 在识别手势前已把第一指
+        // 合成鼠标事件进入桌面路由——不取消则缩放时橡皮筋/画布跟着动）。
+        view.gestureCancelCurrent();
+    }
     if (pinch->changeFlags() & QPinchGesture::ScaleFactorChanged)
         view.gestureStepZoom(pinch->scaleFactor());
     if (pinch->changeFlags() & QPinchGesture::CenterPointChanged) {

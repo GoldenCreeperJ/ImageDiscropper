@@ -30,6 +30,8 @@ inline constexpr auto kTouchChromeStyle =
     "QToolBar { spacing: 4px; padding: 2px; }"
     "#mobileDrawer { font-size: 14px; }"
     "#mobileDrawer QPushButton, #mobileDrawer QCheckBox { min-height: 36px; }"
+    "#mobileDrawer QCheckBox::indicator { width: 28px; height: 28px; }"
+    "#mobileDrawer QCheckBox { spacing: 8px; }"
     "#mobileDrawer QComboBox, #mobileDrawer QLineEdit, #mobileDrawer QSpinBox { min-height: 32px; }"
     "#mobileDrawer QTabBar::tab { min-height: 36px; padding: 6px 14px; }"
     "#mobileDrawer QListWidget::item { min-height: 40px; }"

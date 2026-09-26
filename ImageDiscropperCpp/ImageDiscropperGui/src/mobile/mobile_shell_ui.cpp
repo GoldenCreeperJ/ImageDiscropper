@@ -75,6 +75,26 @@ protected:
 private:
     QScrollBar* target_;
 };
+
+// 触控滚动接管：QScrollArea 默认不响应触摸滑动（只能拖实体滚动条）——经 QScroller
+// TouchGesture 接管 viewport（移动端）；桌面预览保持鼠标协调器模式。
+// 属性统一调优：关掉纵向过冲（定高条带上「能上下滑动」的错觉来源）、
+// 加大起滑距离（轻点按钮不误判为拖拽）、惯性减速率贴近原生手感。
+void installTouchScroll(QScrollArea* area) {
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    QScroller::grabGesture(area->viewport(), QScroller::TouchGesture);
+    QScrollerProperties props;
+    props.setScrollMetric(QScrollerProperties::VerticalOvershootPolicy,
+        QVariant::fromValue<QScrollerProperties::OvershootPolicy>(QScrollerProperties::OvershootAlwaysOff));
+    props.setScrollMetric(QScrollerProperties::HorizontalOvershootPolicy,
+        QVariant::fromValue<QScrollerProperties::OvershootPolicy>(QScrollerProperties::OvershootAlwaysOff));
+    props.setScrollMetric(QScrollerProperties::DragStartDistance, 0.01);
+    props.setScrollMetric(QScrollerProperties::DecelerationFactor, 0.4);
+    QScroller::scroller(area->viewport())->setScrollerProperties(props);
+#else
+    QScroller::grabGesture(area->viewport(), QScroller::LeftMouseButtonGesture);
+#endif
+}
 } // namespace
 
 // 中央区＝画布本体（「画布为主」）；面板创建与注入逐行对齐桌面 buildCentral（同一套类，零改动）。
@@ -122,6 +142,7 @@ void MobileShellUi::buildDrawer(MainWindow* w) {
     groupScroll->setWidgetResizable(true);
     groupScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     groupScroll->setWidget(groupContainer);
+    installTouchScroll(groupScroll);
     tabs->addTab(groupScroll, QStringLiteral("模式"));
 
     // 每页套纵向 QScrollArea：高度不够时页内上下滚动（参数/导出页天然比抽屉高）；
@@ -134,6 +155,7 @@ void MobileShellUi::buildDrawer(MainWindow* w) {
         sa->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         sa->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         sa->setWidget(content);
+        installTouchScroll(sa);
         return sa;
     };
 
@@ -192,12 +214,8 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
 
     // 拖拽接管：touch 序列落在按钮上时，按钮不接受 QEvent::Touch*（它们只吃合成鼠标序列），
     // touch 事件冒泡到 viewport 由 QScroller 识别横扫/惯性；未达拖拽阈值的轻点仍经
-    // 合成 press-release 触发按钮 clicked——点击与滑动共存。桌面用鼠标协调器模式预览。
-#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
-    QScroller::grabGesture(scroller->viewport(), QScroller::TouchGesture);
-#else
-    QScroller::grabGesture(scroller->viewport(), QScroller::LeftMouseButtonGesture);
-#endif
+    // 合成 press-release 触发按钮 clicked——点击与滑动共存。属性调优见 installTouchScroll。
+    installTouchScroll(scroller);
     // 滚轮→横滚（桌面预览补齐拖拽之外的第二条滚动路径，也消除默认竖滚错乱）。
     scroller->viewport()->installEventFilter(
         new WheelToHScrollFilter(scroller->horizontalScrollBar(), scroller));
