@@ -123,7 +123,14 @@ jobs:
         shell: bash
         run: |
           TAG="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
-          PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+          # 稳定版：PREV 取上一个**非预发布** tag（排除 alpha/beta），notes 涵盖
+          # 自上一正式版以来的全部变更（alpha 阶段的提交才不会被「上一 alpha」
+          # 截断）；预发布版保持增量口径（上一个任意 tag）。
+          if [[ "$TAG" == *-alpha* || "$TAG" == *-beta* ]]; then
+            PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+          else
+            PREV=$(git describe --tags --abbrev=0 --exclude='*-alpha*' --exclude='*-beta*' "${TAG}^" 2>/dev/null || true)
+          fi
           RANGE="${PREV:+$PREV..$TAG}"
           [ -z "$RANGE" ] && RANGE="$TAG"
           emit() {
