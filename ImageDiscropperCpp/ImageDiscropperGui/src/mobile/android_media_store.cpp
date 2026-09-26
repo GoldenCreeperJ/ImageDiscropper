@@ -49,6 +49,13 @@ void putInt(const QJniObject& values, const QString& key, const int value) {
                             QJniObject::fromString(key).object<jstring>(),
                             QJniObject("java/lang/Integer", "(I)V", jint(value)).object());
 }
+
+// 挂起异常详情经 ExceptionDescribe 进 logcat（System.err）后清除——真机排障可见
+// 异常类与消息（否则静默吞掉只剩泛化错误文案）；无挂起异常时为零开销空操作。
+void logAndClearException(QJniEnvironment& env) {
+    if (env->ExceptionCheck()) env->ExceptionDescribe();
+    env->ExceptionClear();
+}
 #endif
 
 } // namespace
@@ -74,7 +81,8 @@ bool writeToContentUri(const QString& contentUri, const QString& srcFilePath, QS
     }
     const QJniObject stream = resolver.callObjectMethod(
         "openOutputStream", "(Landroid/net/Uri;)Ljava/io/OutputStream;", uri.object());
-    if (!stream.isValid() || env.checkAndClearExceptions()) {
+    logAndClearException(env);
+    if (!stream.isValid()) {
         err = QStringLiteral("无法打开目标位置写入");
         return false;
     }
@@ -95,13 +103,15 @@ bool writeToContentUri(const QString& contentUri, const QString& srcFilePath, QS
                                 reinterpret_cast<const jbyte*>(chunk.constData()));
         stream.callMethod<void>("write", "([B)V", arr);
         env->DeleteLocalRef(arr);
-        if (env.checkAndClearExceptions()) {
+        if (env->ExceptionCheck()) {
+            env->ExceptionDescribe();
+            env->ExceptionClear();
             ok = false; err = QStringLiteral("写入目标位置失败"); break;
         }
     }
     stream.callMethod<void>("flush", "()V");
     stream.callMethod<void>("close", "()V");
-    env.checkAndClearExceptions(); // 吸收 flush/close 残留异常。
+    logAndClearException(env); // 吸收 flush/close 残留异常。
     if (!ok && err.isEmpty()) err = QStringLiteral("写入目标位置失败");
     return ok;
 }
@@ -121,7 +131,8 @@ bool createDocumentInTree(const QString& treeUri, const QString& displayName,
         resolver.object(), tree.object(),
         QJniObject::fromString(mimeType).object<jstring>(),
         QJniObject::fromString(displayName).object<jstring>());
-    if (!doc.isValid() || env.checkAndClearExceptions()) {
+    logAndClearException(env);
+    if (!doc.isValid()) {
         err = QStringLiteral("在所选目录创建文件失败（该目录可能不允许写入）");
         return false;
     }
@@ -156,7 +167,8 @@ bool insertToGallery(const QString& displayName, const QString& relativePath,
         "insert", "(Landroid/net/Uri;Landroid/content/ContentValues;)Landroid/net/Uri;",
         collection.object(), values.object());
     // insert 失败返回 null（非异常），故须 isValid 判定。
-    if (!inserted.isValid() || env.checkAndClearExceptions()) {
+    logAndClearException(env);
+    if (!inserted.isValid()) {
         err = QStringLiteral("媒体库插入失败（格式可能不被支持）");
         return false;
     }
@@ -174,7 +186,8 @@ bool finalizePending(const QString& contentUri, QString& err) {
         "update",
         "(Landroid/net/Uri;Landroid/content/ContentValues;Ljava/lang/String;[Ljava/lang/String;)I",
         uri.object(), values.object(), nullptr, nullptr);
-    if (env.checkAndClearExceptions() || rows == 0) { // rows==0：行已消失。
+    logAndClearException(env);
+    if (rows == 0) { // rows==0：行已消失。
         err = QStringLiteral("媒体库条目完成失败");
         return false;
     }
@@ -188,7 +201,8 @@ bool deleteContentUri(const QString& contentUri, QString& err) {
     const jint rows = resolver.callMethod<jint>(
         "delete", "(Landroid/net/Uri;Ljava/lang/String;[Ljava/lang/String;)I",
         uri.object(), nullptr, nullptr);
-    if (env.checkAndClearExceptions() || rows == 0) {
+    logAndClearException(env);
+    if (rows == 0) {
         err = QStringLiteral("清理未完成条目失败");
         return false;
     }

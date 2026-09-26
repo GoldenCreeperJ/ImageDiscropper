@@ -18,16 +18,19 @@
 
 #include <QAction>
 #include <QActionGroup>
+#include <QApplication>
 #include <QDockWidget>
 #include <QGridLayout>
 #include <QMainWindow>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QScroller>
 #include <QTabWidget>
 #include <QToolBar>
 #include <QToolButton>
+#include <QTouchEvent>
 #include <QVBoxLayout>
 #include <QWidgetAction>
 #include <QWheelEvent>
@@ -76,30 +79,96 @@ private:
     QScrollBar* target_;
 };
 
-// 触控滚动接管：QScrollArea 默认不响应触摸滑动（只能拖实体滚动条）——经 QScroller
-// TouchGesture 接管 viewport（移动端）；桌面预览保持鼠标协调器模式。
-// 属性统一调优：关掉纵向过冲（定高条带上「能上下滑动」的错觉来源）、
-// 加大起滑距离（轻点按钮不误判为拖拽）、惯性减速率贴近原生手感。
+// 触控滚动接管（QScroller 替代）：QScroller 在 Android 上的属性通道不完整——
+// 过冲属性经 QPA 不生效（回弹关不干净），且其 click-through 合成会在拖拽释放时
+// 向条带按钮投递点击（「滑动时按下按钮」的元凶——MaxClickThroughVelocity 只挡
+// 快速甩动，慢速收尾照样投递）。自定义过滤器替代：全程消费触摸事件（合成鼠标
+// 无从干扰），累计位移超阈值（kTapThreshold）即按增量滚动——滚动条自身钳制，
+// 无过冲无回弹；未超阈值（真轻点）在释放时人工合成一次 press-release 触发子部件点击。
+class TouchScrollFilter : public QObject {
+public:
+    explicit TouchScrollFilter(QScrollArea* area, QObject* parent = nullptr)
+        : QObject(parent), area_(area) {
+        area_->viewport()->installEventFilter(this);
+        area_->viewport()->setAttribute(Qt::WA_AcceptTouchEvents);
+    }
+
+protected:
+    bool eventFilter(QObject* /*watched*/, QEvent* event) override {
+        switch (event->type()) {
+            case QEvent::TouchBegin:
+            case QEvent::TouchUpdate:
+            case QEvent::TouchEnd:
+                handleTouch(static_cast<QTouchEvent*>(event));
+                return true; // 全程消费：点击只由本过滤器合成，绝不误投。
+            default:
+                return false;
+        }
+    }
+
+private:
+    void handleTouch(QTouchEvent* event) {
+        if (event->points().isEmpty()) return;
+        const QPointF pos = event->points().first().position();
+        switch (event->type()) {
+            case QEvent::TouchBegin:
+                tracking_ = true;
+                moved_ = false;
+                lastPos_ = pos;
+                total_ = QPointF();
+                break;
+            case QEvent::TouchUpdate: {
+                if (!tracking_) break;
+                const QPointF delta = pos - lastPos_;
+                lastPos_ = pos;
+                total_ += delta;
+                if (!moved_ && total_.manhattanLength() < kTapThreshold) break; // 轻点抖动容忍区内。
+                moved_ = true;
+                // 内容跟手：手指位移反作用于滚动条值（上/左滑 → 值增大）。
+                area_->horizontalScrollBar()->setValue(
+                    area_->horizontalScrollBar()->value() + qRound(-delta.x()));
+                area_->verticalScrollBar()->setValue(
+                    area_->verticalScrollBar()->value() + qRound(-delta.y()));
+                break;
+            }
+            case QEvent::TouchEnd:
+                if (tracking_ && !moved_) synthesizeTap(pos);
+                tracking_ = false;
+                break;
+            default:
+                break;
+        }
+    }
+
+    // 人工点击合成：widgetAt 深查命中部件（透过条带容器直达按钮），发一对鼠标
+    // press-release；只处理本滚动区子树内的目标。
+    void synthesizeTap(const QPointF& viewportPos) const {
+        QWidget* vp = area_->viewport();
+        const QPointF global = QPointF(vp->mapToGlobal(viewportPos.toPoint()));
+        QWidget* child = QApplication::widgetAt(global.toPoint());
+        if (!child || !vp->isAncestorOf(child)) return;
+        const QPointF local = QPointF(child->mapFromGlobal(global.toPoint()));
+        QMouseEvent press(QEvent::MouseButtonPress, local, global,
+                          Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QMouseEvent release(QEvent::MouseButtonRelease, local, global,
+                            Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(child, &press);
+        QApplication::sendEvent(child, &release);
+    }
+
+    static constexpr qreal kTapThreshold = 6.0; // 轻点抖动容忍（px）；超过即判为滑动。
+    QScrollArea* area_;
+    bool tracking_ = false;
+    bool moved_ = false;
+    QPointF lastPos_;
+    QPointF total_;
+};
+
+// 移动端全部滚动区（抽屉页/分组/底部条带）统一换装上述过滤器；
+// 桌面预览保持 QScroller 鼠标协调器模式（无触摸事件，不受影响）。
 void installTouchScroll(QScrollArea* area) {
 #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
-    QScroller::grabGesture(area->viewport(), QScroller::TouchGesture);
-    QScrollerProperties props;
-    props.setScrollMetric(QScrollerProperties::VerticalOvershootPolicy,
-        QVariant::fromValue<QScrollerProperties::OvershootPolicy>(QScrollerProperties::OvershootAlwaysOff));
-    props.setScrollMetric(QScrollerProperties::HorizontalOvershootPolicy,
-        QVariant::fromValue<QScrollerProperties::OvershootPolicy>(QScrollerProperties::OvershootAlwaysOff));
-    // 弹反彻底关死：边界过冲距离/时间归零 + 拖拽出界阻力拉满（真机反馈仍见回滑）。
-    props.setScrollMetric(QScrollerProperties::OvershootScrollDistanceFactor, 0.0);
-    props.setScrollMetric(QScrollerProperties::OvershootScrollTime, 0.0);
-    props.setScrollMetric(QScrollerProperties::OvershootDragResistanceFactor, 1.0);
-    props.setScrollMetric(QScrollerProperties::DragStartDistance, 0.004);   // 起滑阈值（0.01 真机反馈偏大）
-    // 误触按钮防护：释放时速度超过该值的拖拽不投递点击（滑动结尾不触发按钮）——
-    // 「滑动时误按取消/导出」的元凶，也间接导致选区被清、导出总报「请先创建选区」。
-    props.setScrollMetric(QScrollerProperties::MaximumClickThroughVelocity, 0.2);
-    props.setScrollMetric(QScrollerProperties::MaximumVelocity, 0.3);
-    props.setScrollMetric(QScrollerProperties::DragVelocitySmoothingFactor, 0.3);
-    props.setScrollMetric(QScrollerProperties::DecelerationFactor, 0.3);
-    QScroller::scroller(area->viewport())->setScrollerProperties(props);
+    new TouchScrollFilter(area, area); // 父对象持有生命周期，随滚动区销毁。
 #else
     QScroller::grabGesture(area->viewport(), QScroller::LeftMouseButtonGesture);
 #endif
@@ -222,8 +291,8 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
     tb->addWidget(scroller);
 
     // 拖拽接管：touch 序列落在按钮上时，按钮不接受 QEvent::Touch*（它们只吃合成鼠标序列），
-    // touch 事件冒泡到 viewport 由 QScroller 识别横扫/惯性；未达拖拽阈值的轻点仍经
-    // 合成 press-release 触发按钮 clicked——点击与滑动共存。属性调优见 installTouchScroll。
+    // touch 事件冒泡到 viewport 由 TouchScrollFilter 全程消费——位移超阈值滚动、未超阈值
+    // 轻点人工合成 press-release 触发 clicked（点击与滑动互斥共存，见 installTouchScroll）。
     installTouchScroll(scroller);
     // 滚轮→横滚（桌面预览补齐拖拽之外的第二条滚动路径，也消除默认竖滚错乱）。
     scroller->viewport()->installEventFilter(
