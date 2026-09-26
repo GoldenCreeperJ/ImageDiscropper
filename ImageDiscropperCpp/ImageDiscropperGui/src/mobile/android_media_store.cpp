@@ -65,6 +65,7 @@ QString mimeTypeForFileName(const QString& fileName) {
 #if defined(Q_OS_ANDROID)
 
 bool writeToContentUri(const QString& contentUri, const QString& srcFilePath, QString& err) {
+    QJniEnvironment env;
     const QJniObject resolver = contentResolver();
     const QJniObject uri = parseUri(contentUri);
     if (!resolver.isValid() || !uri.isValid()) {
@@ -73,7 +74,7 @@ bool writeToContentUri(const QString& contentUri, const QString& srcFilePath, QS
     }
     const QJniObject stream = resolver.callObjectMethod(
         "openOutputStream", "(Landroid/net/Uri;)Ljava/io/OutputStream;", uri.object());
-    if (!stream.isValid() || QJniEnvironment::checkAndClearExceptions()) {
+    if (!stream.isValid() || env.checkAndClearExceptions()) {
         err = QStringLiteral("无法打开目标位置写入");
         return false;
     }
@@ -83,7 +84,6 @@ bool writeToContentUri(const QString& contentUri, const QString& srcFilePath, QS
         err = QStringLiteral("无法读取临时导出文件：%1").arg(srcFilePath);
         return false;
     }
-    QJniEnvironment env;
     constexpr int kChunk = 64 * 1024;
     bool ok = true;
     while (!src.atEnd()) {
@@ -95,19 +95,20 @@ bool writeToContentUri(const QString& contentUri, const QString& srcFilePath, QS
                                 reinterpret_cast<const jbyte*>(chunk.constData()));
         stream.callMethod<void>("write", "([B)V", arr);
         env->DeleteLocalRef(arr);
-        if (QJniEnvironment::checkAndClearExceptions()) {
+        if (env.checkAndClearExceptions()) {
             ok = false; err = QStringLiteral("写入目标位置失败"); break;
         }
     }
     stream.callMethod<void>("flush", "()V");
     stream.callMethod<void>("close", "()V");
-    QJniEnvironment::checkAndClearExceptions(); // 吸收 flush/close 残留异常。
+    env.checkAndClearExceptions(); // 吸收 flush/close 残留异常。
     if (!ok && err.isEmpty()) err = QStringLiteral("写入目标位置失败");
     return ok;
 }
 
 bool createDocumentInTree(const QString& treeUri, const QString& displayName,
                           const QString& mimeType, QString& outUri, QString& err) {
+    QJniEnvironment env;
     const QJniObject resolver = contentResolver();
     const QJniObject tree = parseUri(treeUri);
     if (!resolver.isValid() || !tree.isValid()) {
@@ -120,7 +121,7 @@ bool createDocumentInTree(const QString& treeUri, const QString& displayName,
         resolver.object(), tree.object(),
         QJniObject::fromString(mimeType).object<jstring>(),
         QJniObject::fromString(displayName).object<jstring>());
-    if (!doc.isValid() || QJniEnvironment::checkAndClearExceptions()) {
+    if (!doc.isValid() || env.checkAndClearExceptions()) {
         err = QStringLiteral("在所选目录创建文件失败（该目录可能不允许写入）");
         return false;
     }
@@ -130,7 +131,10 @@ bool createDocumentInTree(const QString& treeUri, const QString& displayName,
 
 bool insertToGallery(const QString& displayName, const QString& relativePath,
                      QString& outUri, QString& err) {
-    if (QNativeInterface::QAndroidApplication::sdkInt() < 29) {
+    QJniEnvironment env;
+    // RELATIVE_PATH/IS_PENDING 列需 API 29+；运行时防御（装机门槛另由
+    // QT_ANDROID_MIN_SDK_VERSION 29 保证）。
+    if (QJniObject::getStaticField<jint>("android/os/Build$VERSION", "SDK_INT") < 29) {
         err = QStringLiteral("相册发布需要 Android 10（API 29）及以上");
         return false;
     }
@@ -152,7 +156,7 @@ bool insertToGallery(const QString& displayName, const QString& relativePath,
         "insert", "(Landroid/net/Uri;Landroid/content/ContentValues;)Landroid/net/Uri;",
         collection.object(), values.object());
     // insert 失败返回 null（非异常），故须 isValid 判定。
-    if (!inserted.isValid() || QJniEnvironment::checkAndClearExceptions()) {
+    if (!inserted.isValid() || env.checkAndClearExceptions()) {
         err = QStringLiteral("媒体库插入失败（格式可能不被支持）");
         return false;
     }
@@ -161,6 +165,7 @@ bool insertToGallery(const QString& displayName, const QString& relativePath,
 }
 
 bool finalizePending(const QString& contentUri, QString& err) {
+    QJniEnvironment env;
     const QJniObject resolver = contentResolver();
     const QJniObject uri = parseUri(contentUri);
     QJniObject values("android/content/ContentValues");
@@ -169,7 +174,7 @@ bool finalizePending(const QString& contentUri, QString& err) {
         "update",
         "(Landroid/net/Uri;Landroid/content/ContentValues;Ljava/lang/String;[Ljava/lang/String;)I",
         uri.object(), values.object(), nullptr, nullptr);
-    if (QJniEnvironment::checkAndClearExceptions() || rows == 0) { // rows==0：行已消失。
+    if (env.checkAndClearExceptions() || rows == 0) { // rows==0：行已消失。
         err = QStringLiteral("媒体库条目完成失败");
         return false;
     }
@@ -177,12 +182,13 @@ bool finalizePending(const QString& contentUri, QString& err) {
 }
 
 bool deleteContentUri(const QString& contentUri, QString& err) {
+    QJniEnvironment env;
     const QJniObject resolver = contentResolver();
     const QJniObject uri = parseUri(contentUri);
     const jint rows = resolver.callMethod<jint>(
         "delete", "(Landroid/net/Uri;Ljava/lang/String;[Ljava/lang/String;)I",
         uri.object(), nullptr, nullptr);
-    if (QJniEnvironment::checkAndClearExceptions() || rows == 0) {
+    if (env.checkAndClearExceptions() || rows == 0) {
         err = QStringLiteral("清理未完成条目失败");
         return false;
     }
