@@ -88,6 +88,9 @@ bool publishExport(const QString& workPath, const QString& galleryRel,
                    const QString& fallbackSub, QString& msg) {
     const QString docsRoot = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
                              + QStringLiteral("/ImageDiscropper");
+    // 新一轮导出的排障日志从头开始（日志文件在应用文档目录，shell 只读，应用侧负责截断）。
+    QFile(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+          + QStringLiteral("/export_debug.log")).remove();
     const QFileInfo wi(workPath);
     if (!wi.isDir()) {
         // 合并单文件。

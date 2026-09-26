@@ -13,9 +13,11 @@
 
 #if defined(Q_OS_ANDROID)
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QFile>
 #include <QJniEnvironment>
 #include <QJniObject>
+#include <QStandardPaths>
 #endif
 
 namespace idc::gui {
@@ -56,6 +58,21 @@ void logAndClearException(QJniEnvironment& env) {
     if (env->ExceptionCheck()) env->ExceptionDescribe();
     env->ExceptionClear();
 }
+
+// 排障日志：写应用文档目录 export_debug.log（shell 可读，adb 直取）。logcat 在
+// 部分设备上收不到 Qt/Java 输出（真机实测静默），文件日志不依赖任何日志通道；
+// 只追加最近一次导出会话的关键步骤与 JNI 异常状态，体量可控。
+void diagLog(const QString& msg) {
+    const QString path = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+                         + QStringLiteral("/export_debug.log");
+    QFile f(path);
+    if (f.open(QIODevice::Append | QIODevice::Text)) {
+        f.write(QDateTime::currentDateTime().toString(QStringLiteral("hh:mm:ss.zzz")).toUtf8());
+        f.write(" ");
+        f.write(msg.toUtf8());
+        f.write("\n");
+    }
+}
 #endif
 
 } // namespace
@@ -72,9 +89,11 @@ QString mimeTypeForFileName(const QString& fileName) {
 #if defined(Q_OS_ANDROID)
 
 bool writeToContentUri(const QString& contentUri, const QString& srcFilePath, QString& err) {
+    diagLog(QStringLiteral("write 进入 uri=%1").arg(contentUri.left(70)));
     QJniEnvironment env;
     const QJniObject resolver = contentResolver();
     const QJniObject uri = parseUri(contentUri);
+    diagLog(QStringLiteral("  resolver有效=%1 uri有效=%2").arg(resolver.isValid() ? 1 : 0).arg(uri.isValid() ? 1 : 0));
     if (!resolver.isValid() || !uri.isValid()) {
         err = QStringLiteral("无法获取系统内容解析器");
         return false;
@@ -82,26 +101,34 @@ bool writeToContentUri(const QString& contentUri, const QString& srcFilePath, QS
     // fd 直写：openFileDescriptor + getFd → QFile 经裸 fd 写入（QFSFileEngine），
     // 绕过 Android 上 QFile 写 content:// 不支持的坏引擎，也绕开部分 OEM 对
     // openOutputStream 的兼容问题（真机实测 openOutputStream 在相册 pending 条目
-    // 与 SAF 文档上均抛异常）。失败时 Java 异常经 logAndClearException 进 logcat。
+    // 与 SAF 文档上均静默返回 null）。
     const QJniObject pfd = resolver.callObjectMethod(
         "openFileDescriptor",
         "(Landroid/net/Uri;Ljava/lang/String;)Landroid/os/ParcelFileDescriptor;",
         uri.object(), QJniObject::fromString(QStringLiteral("w")).object<jstring>());
-    logAndClearException(env);
+    const bool hadEx = env->ExceptionCheck();
+    if (hadEx) env->ExceptionDescribe();
+    diagLog(QStringLiteral("  openFileDescriptor 有效=%1 异常=%2")
+                .arg(pfd.isValid() ? 1 : 0).arg(hadEx ? 1 : 0));
+    env->ExceptionClear();
     if (!pfd.isValid()) {
         err = QStringLiteral("无法打开目标位置写入");
-        qWarning() << "android_media_store: openFileDescriptor 失败（Java 异常见上方日志）:"
-                   << contentUri;
         return false;
     }
+    const jint fd = pfd.callMethod<jint>("getFd");
+    diagLog(QStringLiteral("  getFd=%1").arg(fd));
     QFile out;
-    if (!out.open(pfd.callMethod<jint>("getFd"), QIODevice::WriteOnly,
-                  QFileDevice::AutoCloseHandle)) {
+    const bool opened = out.open(fd, QIODevice::WriteOnly, QFileDevice::AutoCloseHandle);
+    diagLog(QStringLiteral("  QFile::open(fd)=%1 error=%2")
+                .arg(opened ? 1 : 0).arg(out.errorString()));
+    if (!opened) {
         err = QStringLiteral("无法打开目标位置写入");
         return false;
     }
     QFile src(srcFilePath);
-    if (!src.open(QIODevice::ReadOnly)) {
+    const bool srcOk = src.open(QIODevice::ReadOnly);
+    diagLog(QStringLiteral("  src open=%1 size=%2").arg(srcOk ? 1 : 0).arg(src.size()));
+    if (!srcOk) {
         err = QStringLiteral("无法读取临时导出文件：%1").arg(srcFilePath);
         return false;
     }
@@ -115,11 +142,13 @@ bool writeToContentUri(const QString& contentUri, const QString& srcFilePath, QS
     }
     src.close();
     out.close(); // AutoCloseHandle：close 即关闭 fd 并落盘。
+    diagLog(QStringLiteral("  write 结果=%1 err=%2").arg(ok ? 1 : 0).arg(err));
     return ok;
 }
 
 bool createDocumentInTree(const QString& treeUri, const QString& displayName,
                           const QString& mimeType, QString& outUri, QString& err) {
+    diagLog(QStringLiteral("createDocument 进入 tree=%1 name=%2").arg(treeUri.left(50), displayName));
     QJniEnvironment env;
     const QJniObject resolver = contentResolver();
     const QJniObject tree = parseUri(treeUri);
@@ -133,21 +162,29 @@ bool createDocumentInTree(const QString& treeUri, const QString& displayName,
         resolver.object(), tree.object(),
         QJniObject::fromString(mimeType).object<jstring>(),
         QJniObject::fromString(displayName).object<jstring>());
-    logAndClearException(env);
+    const bool hadEx = env->ExceptionCheck();
+    if (hadEx) env->ExceptionDescribe();
+    diagLog(QStringLiteral("  createDocument 有效=%1 异常=%2")
+                .arg(doc.isValid() ? 1 : 0).arg(hadEx ? 1 : 0));
+    env->ExceptionClear();
     if (!doc.isValid()) {
         err = QStringLiteral("在所选目录创建文件失败（该目录可能不允许写入）");
         return false;
     }
     outUri = doc.toString();
+    diagLog(QStringLiteral("  doc uri=%1").arg(outUri.left(70)));
     return true;
 }
 
 bool insertToGallery(const QString& displayName, const QString& relativePath,
                      QString& outUri, QString& err) {
+    diagLog(QStringLiteral("insert 进入 display=%1 rel=%2").arg(displayName, relativePath));
     QJniEnvironment env;
     // RELATIVE_PATH/IS_PENDING 列需 API 29+；运行时防御（装机门槛另由
     // QT_ANDROID_MIN_SDK_VERSION 29 保证）。
-    if (QJniObject::getStaticField<jint>("android/os/Build$VERSION", "SDK_INT") < 29) {
+    const jint sdk = QJniObject::getStaticField<jint>("android/os/Build$VERSION", "SDK_INT");
+    diagLog(QStringLiteral("  sdkInt=%1").arg(sdk));
+    if (sdk < 29) {
         err = QStringLiteral("相册发布需要 Android 10（API 29）及以上");
         return false;
     }
@@ -156,6 +193,7 @@ bool insertToGallery(const QString& displayName, const QString& relativePath,
         "android/provider/MediaStore$Images$Media", "EXTERNAL_CONTENT_URI",
         "Landroid/net/Uri;");
     if (!resolver.isValid() || !collection.isValid()) {
+        diagLog(QStringLiteral("  resolver/collection 无效"));
         err = QStringLiteral("无法获取系统媒体库");
         return false;
     }
@@ -169,12 +207,17 @@ bool insertToGallery(const QString& displayName, const QString& relativePath,
         "insert", "(Landroid/net/Uri;Landroid/content/ContentValues;)Landroid/net/Uri;",
         collection.object(), values.object());
     // insert 失败返回 null（非异常），故须 isValid 判定。
-    logAndClearException(env);
+    const bool hadEx = env->ExceptionCheck();
+    if (hadEx) env->ExceptionDescribe();
+    diagLog(QStringLiteral("  insert 有效=%1 异常=%2")
+                .arg(inserted.isValid() ? 1 : 0).arg(hadEx ? 1 : 0));
+    env->ExceptionClear();
     if (!inserted.isValid()) {
         err = QStringLiteral("媒体库插入失败（格式可能不被支持）");
         return false;
     }
     outUri = inserted.toString();
+    diagLog(QStringLiteral("  insert uri=%1").arg(outUri.left(70)));
     return true;
 }
 
