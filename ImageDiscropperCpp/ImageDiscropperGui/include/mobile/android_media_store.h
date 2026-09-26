@@ -29,22 +29,23 @@ bool createDocumentInTree(const QString& treeUri, const QString& displayName,
                           const QString& mimeType, QString& outUri, QString& err);
 
 // 向系统相册 MediaStore 插入条目。relativePath = RELATIVE_PATH 列值（相对外部存储，
-// 如 "Pictures/ImageDiscropper" 或 "Download/xx"，不含前导斜杠）。首选标准
-// IS_PENDING=1 流程（outPending=true，写完后须调 finalizePending）；部分设备
-//（华为实测）拒绝 is_pending 列导致插入静默失败——自动降级为无 pending 直接插入
-//（outPending=false）。失败（含 API<29）返回 false。
+// 如 "Pictures/ImageDiscropper" 或 "Download/xx"，不含前导斜杠）。
+// 无 IS_PENDING 直插（真机实测：pending 三段式在部分设备上插入被拒/收尾 update
+// 失效——直插+立即写入在所有设备一致可用，仅相册瞬间可见 0 字节条目，可忽略）。
+// 失败（含 API<29）返回 false。
 bool insertToGallery(const QString& displayName, const QString& relativePath,
-                     QString& outUri, bool& outPending, QString& err);
+                     QString& outUri, QString& err);
 
 // 从 SAF 文档/树 URI 提取目标文件系统路径：华为 raw: 形式直接取路径，
 // AOSP primary: 形式映射到 /storage/emulated/0/…；其他形式返回空并置 err。
 //（纯字符串解析，不调用提供者——华为 Downloads 提供者连 getDocumentId 也拒绝。）
 QString pathFromSafUri(const QString& uri, QString& err);
 
-// 完成 MediaStore pending 条目（IS_PENDING=0），使其在相册中可见。
-bool finalizePending(const QString& contentUri, QString& err);
+// 按显示名+相对路径（尾斜杠）查现有媒体行的媒体 URI（保存框占位行即此情形，
+// 属主为本应用、可直接写入）；无匹配返回空并置 err。
+QString queryMediaUriByName(const QString& displayName, const QString& relPath, QString& err);
 
-// 删除 content URI 对应条目（发布失败时清理僵尸 pending 行 / 0 字节占位文档）。
+// 删除 content URI 对应条目（发布失败时清理僵尸行 / 0 字节占位文档）。
 bool deleteContentUri(const QString& contentUri, QString& err);
 
 // 文件名 → MIME（png/jpg/jpeg/bmp/webp → image/*；未知返回 application/octet-stream）。

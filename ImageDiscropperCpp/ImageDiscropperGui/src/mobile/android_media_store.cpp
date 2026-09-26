@@ -46,13 +46,6 @@ void putString(const QJniObject& values, const QString& key, const QString& valu
                             QJniObject::fromString(value).object<jstring>());
 }
 
-// ContentValues.put(String, Integer)。
-void putInt(const QJniObject& values, const QString& key, const int value) {
-    values.callMethod<void>("put", "(Ljava/lang/String;Ljava/lang/Integer;)V",
-                            QJniObject::fromString(key).object<jstring>(),
-                            QJniObject("java/lang/Integer", "(I)V", jint(value)).object());
-}
-
 // 挂起异常详情经 ExceptionDescribe 进 logcat（System.err）后清除——真机排障可见
 // 异常类与消息（否则静默吞掉只剩泛化错误文案）；无挂起异常时为零开销空操作。
 void logAndClearException(QJniEnvironment& env) {
@@ -182,10 +175,10 @@ bool createDocumentInTree(const QString& treeUri, const QString& displayName,
 }
 
 bool insertToGallery(const QString& displayName, const QString& relativePath,
-                     QString& outUri, bool& outPending, QString& err) {
+                     QString& outUri, QString& err) {
     diagLog(QStringLiteral("insert 进入 display=%1 rel=%2").arg(displayName, relativePath));
     QJniEnvironment env;
-    // RELATIVE_PATH/IS_PENDING 列需 API 29+；运行时防御（装机门槛另由
+    // RELATIVE_PATH 列需 API 29+；运行时防御（装机门槛另由
     // QT_ANDROID_MIN_SDK_VERSION 29 保证）。
     const jint sdk = QJniObject::getStaticField<jint>("android/os/Build$VERSION", "SDK_INT");
     diagLog(QStringLiteral("  sdkInt=%1").arg(sdk));
@@ -204,34 +197,26 @@ bool insertToGallery(const QString& displayName, const QString& relativePath,
     }
     // 键名即 MediaStore.MediaColumns 常量值（注意 DISPLAY_NAME 为 _display_name，
     // 带下划线前缀——真机曾误写 display_name 被华为 MediaProvider 拒绝）。
-    // pending 参数：标准流程用 IS_PENDING=1（写入完成前相册不可见）；部分设备
-    //（华为实测）拒绝 is_pending 列使插入静默失败——降级为无 pending 插入。
-    const auto tryInsert = [&](const bool pending) {
-        QJniObject values("android/content/ContentValues");
-        putString(values, QStringLiteral("_display_name"), displayName);
-        putString(values, QStringLiteral("mime_type"), mimeTypeForFileName(displayName));
-        putString(values, QStringLiteral("relative_path"), relativePath);
-        if (pending) putInt(values, QStringLiteral("is_pending"), 1);
-        const QJniObject inserted = resolver.callObjectMethod(
-            "insert", "(Landroid/net/Uri;Landroid/content/ContentValues;)Landroid/net/Uri;",
-            collection.object(), values.object());
-        // insert 失败返回 null（非异常），故须 isValid 判定。
-        const bool hadEx = env->ExceptionCheck();
-        if (hadEx) env->ExceptionDescribe();
-        diagLog(QStringLiteral("  insert(pending=%1) 有效=%2 异常=%3")
-                    .arg(pending ? 1 : 0).arg(inserted.isValid() ? 1 : 0).arg(hadEx ? 1 : 0));
-        env->ExceptionClear();
-        if (inserted.isValid()) {
-            outUri = inserted.toString();
-            return true;
-        }
+    // 无 IS_PENDING 直插（见头文件说明：pending 三段式真机多设备不兼容）。
+    QJniObject values("android/content/ContentValues");
+    putString(values, QStringLiteral("_display_name"), displayName);
+    putString(values, QStringLiteral("mime_type"), mimeTypeForFileName(displayName));
+    putString(values, QStringLiteral("relative_path"), relativePath);
+    const QJniObject inserted = resolver.callObjectMethod(
+        "insert", "(Landroid/net/Uri;Landroid/content/ContentValues;)Landroid/net/Uri;",
+        collection.object(), values.object());
+    // insert 失败返回 null（非异常），故须 isValid 判定。
+    const bool hadEx = env->ExceptionCheck();
+    if (hadEx) env->ExceptionDescribe();
+    diagLog(QStringLiteral("  insert 有效=%1 异常=%2")
+                .arg(inserted.isValid() ? 1 : 0).arg(hadEx ? 1 : 0));
+    env->ExceptionClear();
+    if (!inserted.isValid()) {
+        err = QStringLiteral("媒体库插入失败（格式可能不被支持）");
         return false;
-    };
-    if (tryInsert(true)) { outPending = true; return true; }
-    diagLog(QStringLiteral("  pending 插入被拒，降级无 is_pending 重试"));
-    if (tryInsert(false)) { outPending = false; return true; }
-    err = QStringLiteral("媒体库插入失败（格式可能不被支持）");
-    return false;
+    }
+    outUri = inserted.toString();
+    return true;
 }
 
 QString pathFromSafUri(const QString& uriStr, QString& err) {
@@ -252,32 +237,74 @@ QString pathFromSafUri(const QString& uriStr, QString& err) {
     return {};
 }
 
-bool finalizePending(const QString& contentUri, QString& err) {
+QString queryMediaUriByName(const QString& displayName, const QString& relPath, QString& err) {
+    // 按显示名+相对路径查现有媒体行（保存框占位文件即此情形——华为不允许删占位、
+    // 也不允许同名再插入），返回其媒体 URI 供直接写入（OWNER_PACKAGE_NAME 为本应用，
+    // 走与相册同一已验证通道）；无匹配返回空。
+    diagLog(QStringLiteral("queryByName 进入 name=%1 rel=%2").arg(displayName, relPath));
     QJniEnvironment env;
     const QJniObject resolver = contentResolver();
-    const QJniObject uri = parseUri(contentUri);
-    QJniObject values("android/content/ContentValues");
-    putInt(values, QStringLiteral("is_pending"), 0);
-    const jint rows = resolver.callMethod<jint>(
-        "update",
-        "(Landroid/net/Uri;Landroid/content/ContentValues;Ljava/lang/String;[Ljava/lang/String;)I",
-        uri.object(), values.object(), nullptr, nullptr);
-    logAndClearException(env);
-    if (rows == 0) { // rows==0：行已消失。
-        err = QStringLiteral("媒体库条目完成失败");
-        return false;
+    const QJniObject collection = QJniObject::getStaticObjectField(
+        "android/provider/MediaStore$Images$Media", "EXTERNAL_CONTENT_URI",
+        "Landroid/net/Uri;");
+    if (!resolver.isValid() || !collection.isValid()) {
+        err = QStringLiteral("无法获取系统媒体库");
+        return {};
     }
-    return true;
+    const jclass strCls = env->FindClass("java/lang/String");
+    jobjectArray proj = env->NewObjectArray(1, strCls, nullptr);
+    jstring idCol = env->NewStringUTF("_id");
+    env->SetObjectArrayElement(proj, 0, idCol);
+    env->DeleteLocalRef(idCol);
+    const QString relWithSlash = relPath.endsWith(QLatin1Char('/')) ? relPath : relPath + QLatin1Char('/');
+    jobjectArray args = env->NewObjectArray(2, strCls, nullptr);
+    jstring a0 = env->NewStringUTF(displayName.toUtf8().constData());
+    jstring a1 = env->NewStringUTF(relWithSlash.toUtf8().constData());
+    env->SetObjectArrayElement(args, 0, a0);
+    env->SetObjectArrayElement(args, 1, a1);
+    env->DeleteLocalRef(a0);
+    env->DeleteLocalRef(a1);
+    const QJniObject sel = QJniObject::fromString(
+        QStringLiteral("_display_name=? AND relative_path=?"));
+    const QJniObject cursor = resolver.callObjectMethod(
+        "query",
+        "(Landroid/net/Uri;[Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;)Landroid/database/Cursor;",
+        collection.object(), proj, sel.object<jstring>(), args, nullptr);
+    env->DeleteLocalRef(proj);
+    env->DeleteLocalRef(args);
+    logAndClearException(env);
+    if (!cursor.isValid()) {
+        err = QStringLiteral("查询媒体库失败");
+        return {};
+    }
+    QString result;
+    if (cursor.callMethod<jboolean>("moveToFirst", "()Z")) {
+        const jlong rowId = cursor.callMethod<jlong>("getLong", "(I)J", jint(0));
+        result = QStringLiteral("content://media/external/images/media/") + QString::number(rowId);
+    }
+    cursor.callMethod<void>("close", "()V");
+    logAndClearException(env);
+    diagLog(QStringLiteral("  queryByName 命中=%1 uri=%2")
+                .arg(result.isEmpty() ? 0 : 1).arg(result.left(60)));
+    if (result.isEmpty()) {
+        err = QStringLiteral("未找到目标文件记录");
+        return {};
+    }
+    return result;
 }
 
 bool deleteContentUri(const QString& contentUri, QString& err) {
+    diagLog(QStringLiteral("delete 进入 uri=%1").arg(contentUri.left(60)));
     QJniEnvironment env;
     const QJniObject resolver = contentResolver();
     const QJniObject uri = parseUri(contentUri);
     const jint rows = resolver.callMethod<jint>(
         "delete", "(Landroid/net/Uri;Ljava/lang/String;[Ljava/lang/String;)I",
         uri.object(), nullptr, nullptr);
-    logAndClearException(env);
+    const bool hadEx = env->ExceptionCheck();
+    if (hadEx) env->ExceptionDescribe();
+    diagLog(QStringLiteral("  delete rows=%1 异常=%2").arg(rows).arg(hadEx ? 1 : 0));
+    env->ExceptionClear();
     if (rows == 0) {
         err = QStringLiteral("清理未完成条目失败");
         return false;
@@ -301,9 +328,6 @@ bool createDocumentInTree(const QString&, const QString&, const QString&,
     err = QStringLiteral("此功能仅支持 Android"); return false;
 }
 bool insertToGallery(const QString&, const QString&, QString&, QString& err) {
-    err = QStringLiteral("此功能仅支持 Android"); return false;
-}
-bool finalizePending(const QString&, QString& err) {
     err = QStringLiteral("此功能仅支持 Android"); return false;
 }
 bool deleteContentUri(const QString&, QString& err) {

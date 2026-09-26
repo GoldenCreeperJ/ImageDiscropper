@@ -66,15 +66,18 @@ QString exportFormatExt(const engine::ExportFormat fmt) {
     }
 }
 
-// 发布失败兜底：把产物移到应用文档目录（Android 11+ 受限、文件管理器读不到但数据不丢），
+// 发布失败兜底：把产物复制到应用文档目录（Android 11+ 受限、文件管理器读不到但数据不丢），
 // 组装含原因与兜底路径的警告消息；返回 false（发布整体按失败处理）。
+// 注意用复制而非 rename：cache 与 /sdcard 跨挂载点，rename 会失败（真机实测文件
+// 随临时区清空丢失），复制成功后删源。
 bool fallbackToDocuments(const QString& src, const QString& fallbackPath,
                          const QString& reason, QString& msg) {
     QDir().mkpath(QFileInfo(fallbackPath).dir().absolutePath());
-    if (!QDir().rename(src, fallbackPath)) {
+    if (!QFile::copy(src, fallbackPath)) {
         msg = QStringLiteral("导出失败：%1（且兜底保存失败，临时文件：%2）").arg(reason, src);
         return false;
     }
+    QFile::remove(src);
     msg = QStringLiteral("导出到相册/所选位置失败（%1），已保存到应用目录：%2").arg(reason, fallbackPath);
     return false;
 }
@@ -90,14 +93,12 @@ bool publishExport(const QString& workPath, const QString& galleryRel,
                              + QStringLiteral("/ImageDiscropper");
     // 排障日志追加模式：每轮导出加会话分隔（历史不覆盖，诊断完成后整体移除）。
     markExportDiagSession();
-    // 共用发布件：MediaStore 插入（标准 pending 流程，华为自动降级无 pending）→ fd 写入。
+    // 共用发布件：MediaStore 无 pending 直插 → fd 写入（多设备一致的已验证通道）。
     const auto publishToRelDir = [&](const QString& srcPath, const QString& displayName,
                                      const QString& relDir, QString& err) {
         QString uri;
-        bool pending = false;
-        if (!insertToGallery(displayName, relDir, uri, pending, err)
-            || !writeToContentUri(uri, srcPath, err)
-            || (pending && !finalizePending(uri, err))) {
+        if (!insertToGallery(displayName, relDir, uri, err)
+            || !writeToContentUri(uri, srcPath, err)) {
             if (!uri.isEmpty()) { QString e2; deleteContentUri(uri, e2); } // 清理失败行。
             return false;
         }
@@ -114,17 +115,19 @@ bool publishExport(const QString& workPath, const QString& galleryRel,
                 return true;
             }
             // 直写被拒（华为 Downloads 提供者静默拒绝 open）：解析所选文件路径，
-            // 删除 0 字节占位后改走 MediaStore 同目录插入（字节内容等价落地）。
+            // 查保存框已建的占位媒体行（属主为本应用）直接写入——华为不允许删占位、
+            // 也不允许同名再插入，写行是与相册同一条已验证通道。
             const QString fullPath = pathFromSafUri(publishUri, err);
             if (fullPath.isEmpty())
                 return fallbackToDocuments(workPath, docsRoot + u'/' + baseName, err, msg);
+            const QFileInfo picked(fullPath);
             const QString relDir = QDir(QStringLiteral("/storage/emulated/0"))
-                                       .relativeFilePath(QFileInfo(fullPath).absolutePath());
+                                       .relativeFilePath(picked.absolutePath());
             if (relDir.isEmpty() || relDir.startsWith(QStringLiteral("..")))
                 return fallbackToDocuments(workPath, docsRoot + u'/' + baseName,
                                            QStringLiteral("所选位置超出可写范围"), msg);
-            { QString e2; deleteContentUri(publishUri, e2); } // 清占位（尽力而为，失败则同名自动加后缀）。
-            if (!publishToRelDir(workPath, QFileInfo(fullPath).fileName(), relDir, err))
+            const QString mediaUri = queryMediaUriByName(picked.fileName(), relDir, err);
+            if (mediaUri.isEmpty() || !writeToContentUri(mediaUri, workPath, err))
                 return fallbackToDocuments(workPath, docsRoot + u'/' + baseName, err, msg);
             msg = QStringLiteral("导出成功：已保存到所选位置");
             return true;
@@ -150,12 +153,17 @@ bool publishExport(const QString& workPath, const QString& galleryRel,
             if (createDocumentInTree(publishTree, f.fileName(), mimeTypeForFileName(f.fileName()), docUri, err))
                 oneOk = writeToContentUri(docUri, f.absoluteFilePath(), err);
             if (!oneOk) {
-                // 华为回退：树 ID 解析为目录路径 → MediaStore 同目录插入。
+                // 华为回退：树 ID 解析为目录路径 → 已存在媒体行则直写（覆盖上次结果），
+                // 否则 MediaStore 同目录插入。
                 const QString dirPath = pathFromSafUri(publishTree, err);
                 const QString relDir = dirPath.isEmpty() ? QString()
                     : QDir(QStringLiteral("/storage/emulated/0")).relativeFilePath(dirPath);
-                oneOk = !relDir.isEmpty() && !relDir.startsWith(QStringLiteral(".."))
-                        && publishToRelDir(f.absoluteFilePath(), f.fileName(), relDir, err);
+                if (!relDir.isEmpty() && !relDir.startsWith(QStringLiteral(".."))) {
+                    const QString existing = queryMediaUriByName(f.fileName(), relDir, err);
+                    oneOk = !existing.isEmpty()
+                                ? writeToContentUri(existing, f.absoluteFilePath(), err)
+                                : publishToRelDir(f.absoluteFilePath(), f.fileName(), relDir, err);
+                }
             }
         } else {
             oneOk = publishToRelDir(f.absoluteFilePath(), f.fileName(),
@@ -163,8 +171,10 @@ bool publishExport(const QString& workPath, const QString& galleryRel,
         }
         if (oneOk) { ++okCount; continue; }
         if (firstErr.isEmpty()) firstErr = err.isEmpty() ? QStringLiteral("未知错误") : err;
+        // 复制而非 rename：cache 与 /sdcard 跨挂载点，rename 会失败（数据丢失实测）。
         QDir().mkpath(fallbackDir);
-        QDir().rename(f.absoluteFilePath(), fallbackDir + u'/' + f.fileName()); // 尽力而为。
+        if (QFile::copy(f.absoluteFilePath(), fallbackDir + u'/' + f.fileName()))
+            QFile::remove(f.absoluteFilePath());
     }
     if (okCount == 0) {
         msg = QStringLiteral("导出失败（%1），文件已保存到应用目录：%2").arg(firstErr, fallbackDir);
