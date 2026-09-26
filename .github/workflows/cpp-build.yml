@@ -245,7 +245,7 @@ jobs:
               "$APS" sign --ks "$WORK/idc-release.keystore" \
                 --ks-pass "pass:${{ secrets.IDC_ANDROID_KEYSTORE_PASS }}" \
                 --key-pass "pass:${{ secrets.IDC_ANDROID_KEYSTORE_PASS }}" \
-                --key-alias key1 \
+                --ks-key-alias key1 \
                 --out "dist/ImageDiscropper-android-arm64-${TAG}.apk" "$WORK/aligned.apk"
             else
               echo "::warning::未配置 Android 签名 secrets（IDC_ANDROID_KEYSTORE_B64 / IDC_ANDROID_KEYSTORE_PASS），发布未签名 APK"

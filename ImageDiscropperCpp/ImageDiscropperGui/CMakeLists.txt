@@ -196,47 +196,55 @@ target_link_libraries(idc_gui PRIVATE
 # Qt 运行时插件部署（仅动态链接时需要）：vcpkg 的 VCPKG_APPLOCAL_DEPS 只把 Qt 的 DLL 复制到 exe 旁，
 # 不复制 Qt 插件目录。缺 platforms 插件时应用启动即报
 # “no Qt platform plugin could be initialized”，故构建后把插件复制到 exe 旁。
-# 静态链接时（VCPKG_TARGET_TRIPLET 含 "static"）插件已编译进 exe，无需复制。
+# 静态链接时插件已编译进 exe，无需复制。守卫**按目录内容判断**：动态构建的
+# Qt6/plugins/platforms 含共享库（.so/.dylib/.dll），静态构建只有 .a 与
+# objects-Release/*.cpp.o（静态插件初始化对象）——后者若拷进 .app 会被 codesign
+# 拒绝（"code object is not signed at all"）。不依赖 triplet 名（本项目三元组名
+# 已无 static 字样，名字匹配不可靠）。
 # 注意：Linux 的 vcpkg qtbase 即使使用动态 triplet 也构建为静态，无 styles 插件目录，
 # 故单配置生成器在配置期检查目录存在才拷贝（多配置生成器保持生成器表达式写法）。
 # ---------------------------------------------------------------------------
-if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET
-        AND NOT VCPKG_TARGET_TRIPLET MATCHES "static")
-    if(CMAKE_BUILD_TYPE AND NOT CMAKE_BUILD_TYPE STREQUAL "")
-        # 单配置生成器（Ninja 预设）：构建类型配置期已知，按目录是否存在决定是否拷贝。
-        if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-            set(_idc_platforms_src "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/platforms")
-            set(_idc_styles_src "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/styles")
+if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+    file(GLOB _idc_platform_dyn
+        "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/platforms/*${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/platforms/*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+    if(_idc_platform_dyn)
+        if(CMAKE_BUILD_TYPE AND NOT CMAKE_BUILD_TYPE STREQUAL "")
+            # 单配置生成器（Ninja 预设）：构建类型配置期已知，按目录是否存在决定是否拷贝。
+            if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+                set(_idc_platforms_src "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/platforms")
+                set(_idc_styles_src "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/styles")
+            else()
+                set(_idc_platforms_src "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/platforms")
+                set(_idc_styles_src "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/styles")
+            endif()
+            set(_idc_copy_commands)
+            if(EXISTS "${_idc_platforms_src}")
+                list(APPEND _idc_copy_commands
+                        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                        "${_idc_platforms_src}" "$<TARGET_FILE_DIR:idc_gui>/platforms")
+            endif()
+            if(EXISTS "${_idc_styles_src}")
+                list(APPEND _idc_copy_commands
+                        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                        "${_idc_styles_src}" "$<TARGET_FILE_DIR:idc_gui>/styles")
+            endif()
+            if(_idc_copy_commands)
+                add_custom_command(TARGET idc_gui POST_BUILD ${_idc_copy_commands}
+                        COMMENT "Copying Qt plugins (platforms/styles) next to idc_gui"
+                        VERBATIM)
+            endif()
         else()
-            set(_idc_platforms_src "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/platforms")
-            set(_idc_styles_src "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/styles")
-        endif()
-        set(_idc_copy_commands)
-        if(EXISTS "${_idc_platforms_src}")
-            list(APPEND _idc_copy_commands
+            add_custom_command(TARGET idc_gui POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy_directory
-                    "${_idc_platforms_src}" "$<TARGET_FILE_DIR:idc_gui>/platforms")
-        endif()
-        if(EXISTS "${_idc_styles_src}")
-            list(APPEND _idc_copy_commands
+                    "$<$<CONFIG:Debug>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/platforms>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/platforms>"
+                    "$<TARGET_FILE_DIR:idc_gui>/platforms"
                     COMMAND ${CMAKE_COMMAND} -E copy_directory
-                    "${_idc_styles_src}" "$<TARGET_FILE_DIR:idc_gui>/styles")
-        endif()
-        if(_idc_copy_commands)
-            add_custom_command(TARGET idc_gui POST_BUILD ${_idc_copy_commands}
+                    "$<$<CONFIG:Debug>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/styles>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/styles>"
+                    "$<TARGET_FILE_DIR:idc_gui>/styles"
                     COMMENT "Copying Qt plugins (platforms/styles) next to idc_gui"
                     VERBATIM)
         endif()
-    else()
-        add_custom_command(TARGET idc_gui POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "$<$<CONFIG:Debug>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/platforms>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/platforms>"
-                "$<TARGET_FILE_DIR:idc_gui>/platforms"
-                COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "$<$<CONFIG:Debug>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/styles>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/styles>"
-                "$<TARGET_FILE_DIR:idc_gui>/styles"
-                COMMENT "Copying Qt plugins (platforms/styles) next to idc_gui"
-                VERBATIM)
     endif()
 endif()
 
