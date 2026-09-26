@@ -114,9 +114,10 @@ bool publishExport(const QString& workPath, const QString& galleryRel,
                 msg = QStringLiteral("导出成功：已保存到所选位置");
                 return true;
             }
-            // 直写被拒（华为 Downloads 提供者静默拒绝 open）：解析所选文件路径，
-            // 查保存框已建的占位媒体行（属主为本应用）直接写入——华为不允许删占位、
-            // 也不允许同名再插入，写行是与相册同一条已验证通道。
+            // 直写被拒（华为 Downloads 提供者静默拒绝 open）。占位行属 Downloads
+            // 选择器（owner=com.android.providers.downloads.ui），应用既查不到也写不进——
+            // 递进链：同目录同名插入（占位同名必拒）→ 尽力删占位文件（FUSE 授权
+            // 部分设备可行）→ 重试同名 → 仍拒则时间戳后缀名插入，保证字节落地。
             const QString fullPath = pathFromSafUri(publishUri, err);
             if (fullPath.isEmpty())
                 return fallbackToDocuments(workPath, docsRoot + u'/' + baseName, err, msg);
@@ -126,9 +127,20 @@ bool publishExport(const QString& workPath, const QString& galleryRel,
             if (relDir.isEmpty() || relDir.startsWith(QStringLiteral("..")))
                 return fallbackToDocuments(workPath, docsRoot + u'/' + baseName,
                                            QStringLiteral("所选位置超出可写范围"), msg);
-            const QString mediaUri = queryMediaUriByName(picked.fileName(), relDir, err);
-            if (mediaUri.isEmpty() || !writeToContentUri(mediaUri, workPath, err))
-                return fallbackToDocuments(workPath, docsRoot + u'/' + baseName, err, msg);
+            QString finalName = picked.fileName();
+            if (!publishToRelDir(workPath, finalName, relDir, err)) {
+                QFile::remove(fullPath); // 尽力清占位（若成功同名即可用）。
+                if (!publishToRelDir(workPath, finalName, relDir, err)) {
+                    finalName = picked.completeBaseName()
+                                + QDateTime::currentDateTime().toString(QStringLiteral("-HHmmss"))
+                                + QLatin1Char('.') + picked.suffix();
+                    if (!publishToRelDir(workPath, finalName, relDir, err))
+                        return fallbackToDocuments(workPath, docsRoot + u'/' + baseName, err, msg);
+                    msg = QStringLiteral("导出成功：已保存到所选位置（同名冲突，实际文件名 %1）")
+                              .arg(finalName);
+                    return true;
+                }
+            }
             msg = QStringLiteral("导出成功：已保存到所选位置");
             return true;
         }
