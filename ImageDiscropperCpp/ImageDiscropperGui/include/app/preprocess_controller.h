@@ -37,18 +37,21 @@ public:
     void setAnnotationBridge(AnnotationBridge* anno);  // 维度变化 clearAll
     void setStatusBar(StatusBar* status);
     void setDialogParent(QWidget* parent);             // 忙碌对话框父窗口（MainWindow）
+    /// 忙碌全屏遮罩模式（SPEC §8.2 桌面对话框→移动端全屏遮罩）：GuideLine 阶段 4，
+    /// 仅 MobileShell 开启；默认 false 保持桌面居中小对话框不变。
+    void setBusyOverlayMode(bool overlay);
     void setImagePanel(ImagePanel* panel);
     void connectSignals();                             // ImagePanel 8 信号 → 8 槽
 
 public slots:
-    void onRotate(int angleDeg);                 // 旋转 90 的整数倍（-90/90/180）。
-    void onFlip(bool horizontal);                // 水平/垂直翻转。
+    void onRotate(int angleDeg) const;                 // 旋转 90 的整数倍（-90/90/180）。
+    void onFlip(bool horizontal) const;                // 水平/垂直翻转。
     void onScale(double factor);                 // 按比例缩放。
     void onResize(int newWidth, int newHeight);  // 目标尺寸缩放。
-    void onGray();                               // 黑白（灰度）。
+    void onGray() const;                               // 黑白（灰度）。
     // 色道反色：invR/invG/invB 指示反相哪些通道（未反相的通道保持不变）。
-    void onInvert(bool invR, bool invG, bool invB);
-    void onSplit(bool keepR, bool keepG, bool keepB); // 色道分离（保留勾选通道）。
+    void onInvert(bool invR, bool invG, bool invB) const;
+    void onSplit(bool keepR, bool keepG, bool keepB) const; // 色道分离（保留勾选通道）。
     void onResetPreprocess() const;                    // 重置预处理（恢复原图）。
 
 private:
@@ -64,6 +67,7 @@ private:
     ImagePanel* imagePanel_{nullptr};
     // 重采样（缩放/尺寸）进行中标志：防止模态对话框期间的重入（如快捷键再次触发）。
     bool busyResample_{false};
+    bool busyOverlay_{false};             // 忙碌全屏遮罩模式（MobileShell 开启；SPEC §8.2）
 };
 
 } // namespace idc::gui

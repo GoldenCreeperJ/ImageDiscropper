@@ -16,10 +16,13 @@
 #include <QAction>
 #include <QApplication>
 #include <QComboBox>
+#include <QDateTime>
+#include <QFile>
 #include <QFileDialog>
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QStandardPaths>
 
 #include "app/annotation_coordinator.h"
 #include "app/doc_history.h"
@@ -46,17 +49,29 @@
 
 namespace idc::gui {
 
-// 构造：装配全部部件（顺序承重，见 src/app/README.md「编排」——connectAll 必须先于 history_->reset()，
+// 构造（桌面）：装配全部部件 + 接线（顺序承重，见 src/app/README.md「编排」——connectAll 必须先于 history_->reset()，
 // 否则首次 availabilityChanged 丢失、撤销/重做动作不会在启动时置灰）。
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle(QStringLiteral("ImageDiscropper GUI %1").arg(QStringLiteral(IDC_GUI_VERSION)));
     resize(1280, 800);
+    buildDesktopUi();
+    initCore();
+}
 
+// 移动端骨架构造（GuideLine 阶段 3）：只做 QObject 挂接；标题/尺寸与部件装配、initCore
+// 均由子类 MobileShell 按触控形态自行完成（接线序列与桌面逐行共用，SPEC §8.3 行为同构）。
+MainWindow::MainWindow(MobileShellTag, QWidget* parent) : QMainWindow(parent) {}
+
+// 桌面骨架装配：三栏中央区 + 菜单 + 顶部工具栏 + 状态栏（逐行原迁自原构造）。
+void MainWindow::buildDesktopUi() {
     MainWindowUi::buildCentral(this);   // scene_/view_/7 面板/rightTabs_
     MainWindowUi::buildMenus(this);     // aUndo_/aRedo_ + 菜单动作连接
     MainWindowUi::buildToolbar(this);   // modeActionL1_/L2_/L3_
     MainWindowUi::buildStatus(this);    // status_
+}
 
+// 控制器接线与初始同步（桌面/移动共用的唯一接线序列）。
+void MainWindow::initCore() {
     preview_ = new PreviewController(this);
     preview_->setDocument(&doc_);
     preview_->setScene(scene_);
@@ -65,7 +80,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     preview_->setParamPanel(param_);
     preview_->setStatusBar(status_);
     preview_->setAnnotationBridge(&annoBridge_);
-    preview_->setTabWidget(rightTabs_);
+    preview_->setMultiPageContainer(rightTabs_);
     preview_->connectSignals();
 
     preprocess_ = new PreprocessController(this);
@@ -188,8 +203,34 @@ void MainWindow::onOpen() {
 void MainWindow::openImageFromPath(const QString& path) {
     if (path.isEmpty()) return;
 
+    // Android SAF：文件选择器返回 content:// URI（内容提供者地址，非文件路径），
+    // 而 Core 的 stb 按 C 接口读文件路径——先把内容复制到缓存目录转为真实路径
+    //（stb 按内容嗅探格式，临时文件名无需扩展名）。桌面平台文件对话框返回本地
+    // 路径，此分支不触发；doc_ 与提示仍保留用户选择的原始路径。
+    QString resolvedPath = path;
+    if (path.startsWith(QStringLiteral("content://"))) {
+        QFile src(path);
+        if (src.open(QIODevice::ReadOnly)) {
+            const QByteArray data = src.readAll();
+            src.close();
+            const QString tmp = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
+                                + QStringLiteral("/opened-image-%1")
+                                      .arg(QDateTime::currentMSecsSinceEpoch());
+            QFile out(tmp);
+            if (out.open(QIODevice::WriteOnly)) {
+                out.write(data);
+                out.close();
+                resolvedPath = tmp;
+            }
+        }
+        if (resolvedPath == path) {
+            notify(QStringLiteral("打开失败：无法读取该内容提供者地址"), true);
+            return;
+        }
+    }
+
     core::Image img;
-    if (QString err; !EngineBridge::loadImage(path, img, err)) {
+    if (QString err; !EngineBridge::loadImage(resolvedPath, img, err)) {
         notify(QStringLiteral("打开失败：%1").arg(err), true); // 非模态。
         return;
     }

@@ -8,6 +8,8 @@
 // 分块依据：
 //   - MainWindow 只做「装配 + 编排 + 转发」（CONTRIBUTING.md「分层纪律」）；装配细节在 MainWindowUi，
 //     预览/预处理/标注/历史编排分别在四个控制器（见 src/app/README.md「编排」），避免上帝文件；
+//   - 构造拆为「骨架装配 → initCore 接线」两段（GuideLine 阶段 3）：移动端 MobileShell 经保护构造
+//     换装骨架（画布为主 + 底部工具条/抽屉），接线序列与桌面逐行共用（行为同构、零分支）；
 //   - 保留在 MainWindow 的：文件/编辑动作槽、Document 信号响应、画布交互写回（均直接读写 Document）。
 // 说明：公共面不变（main.cpp 仅依赖构造与 openImageFromPath）；覆盖打开图像/缩放平移、
 //       三种模式的切割遮罩与选区/单元交互、分离/坍缩/重排导出、预处理、标注工具与图层管理、
@@ -55,6 +57,15 @@ public:
     void openImageFromPath(const QString& path);
 
 protected:
+    // 移动端骨架标记（GuideLine 阶段 3）：跳过桌面装配与标题/尺寸预设，
+    // 由子类（mobile/ 的 MobileShell）自行回填部件后调 initCore 完成接线。
+    struct MobileShellTag {};
+    explicit MainWindow(MobileShellTag, QWidget* parent = nullptr);
+
+    // 控制器接线与初始同步（构造后半段逐行原迁）：须在全部部件回填完毕后调用；
+    // 顺序不变式维持：connectAll 先于 history_->reset()（见 .cpp 注释）。
+    void initCore();
+
     // 单键快捷键（1/2/3 切模式、K/R 切极性、Delete/Backspace 删标注）在此处理，而非用 QShortcut：
     // 只有当焦点控件（如坐标 QSpinBox）不消费该键时才冒泡到主窗口，故数值输入时天然不触发，
     // 避免 QShortcut 抢先拦截数字键导致坐标无法直接键入、只能点增减按钮（NFR-5）。
@@ -92,8 +103,10 @@ private slots:
 
 private:
     friend class MainWindowUi;  // 装配建造者直接回填部件指针并连接私有槽。
+    friend class MobileShellUi; // 移动端骨架建造者（mobile/）同样直接回填 + 连私有槽（§8.3 行为同构）。
 
-    void connectAll();       // 剩余跨件串联（Document/画布交互/历史启用态；其余连接在各控制器内）。
+    void buildDesktopUi();     // 桌面骨架装配（MainWindowUi 四步，逐行原迁自原构造）。
+    void connectAll();         // 剩余跨件串联（Document/画布交互/历史启用态；其余连接在各控制器内）。
     // 同步左侧面板与右侧「参数/导出/图像」页到 Document（blockSignals 防回环）。
     void syncPanels() const;
     // 非模态提示（状态栏 + 提示标签），错误不打断用户。
@@ -121,7 +134,8 @@ private:
     ToolPanel* toolPanel_{nullptr};             // 左侧「标注工具」组（G-4）。
     LayerPanel* layerPanel_{nullptr};           // 左侧「图层」组（G-5）。
     AnnotationPropPanel* annoPropPanel_{nullptr}; // 右侧「标注」属性页（G-4）。
-    QTabWidget* rightTabs_{nullptr};    // 右侧选项卡容器（参数/导出/图像/标注），供菜单定位到某页。
+    QWidget* rightTabs_{nullptr};       // 右侧多页容器：桌面＝AccordionPanel 折叠式（多节可同开+整栏滚动）/
+                                        // 移动端＝QTabWidget 选择式；跨形态访问经双型分发。
     StatusBar* status_{nullptr};
 
     // 工具栏模式动作（与左侧面板同步）。

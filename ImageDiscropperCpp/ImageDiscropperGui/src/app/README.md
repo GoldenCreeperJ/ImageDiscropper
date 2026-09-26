@@ -4,26 +4,28 @@
 Core 调用集中在 `EngineBridge`，状态集中在 `Document`。为避免 `main_window.cpp` 成为上帝文件，
 编排按域拆到四个控制器，纯 UI 装配拆到 `MainWindowUi`，状态栏拆为 `StatusBar` 组件。
 
-| 文件                               | 职责                                                                                                        |
-|----------------------------------|-----------------------------------------------------------------------------------------------------------|
-| `main_window.{h,cpp}`            | 装配壳：装配 + 实例化/注入控制器 + 剩余信号槽串联（Document 信号 / 画布交互写回 / 历史启用态回灌）+ 文件/编辑动作 + 单键快捷键                             |
-| `main_window_ui.{h,cpp}`         | `MainWindowUi` 静态建造者（MainWindow 的 friend）：buildCentral/buildMenus/buildToolbar/buildStatus 纯 UI 装配，回填部件指针 |
-| `status_bar.{h,cpp}`             | `StatusBar`：六标签（坐标/RGB/模式/保留块/缩放/提示）+ 非模态 `notify`                                                        |
-| `doc_history.{h,cpp}`            | `DocHistory`：文档参数态撤销/重做（防抖采集/抑制守卫/载入配置冲刷压栈/上下文判定/启用态信号）                                                   |
-| `preview_controller.{h,cpp}`     | `PreviewController`：refreshPreview 五分支状态机 + 导出输出预览缓存与按需渲染（A/B 规则）                                         |
-| `preprocess_controller.{h,cpp}`  | `PreprocessController`：预处理 8 槽 + 维度失效清理 + 忙碌对话框                                                           |
-| `annotation_coordinator.{h,cpp}` | `AnnotationCoordinator`：标注 33 槽 + 手势分派状态机 + 图层显隐/烧录联动                                                     |
-| `main.cpp`                       | 程序入口：`QApplication` + 显示 MainWindow + 事件循环                                                                |
+| 文件                               | 职责                                                                                                                                                                            |
+|----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `main_window.{h,cpp}`            | 装配壳：装配 + 实例化/注入控制器 + 剩余信号槽串联（Document 信号 / 画布交互写回 / 历史启用态回灌）+ 文件/编辑动作 + 单键快捷键；构造拆为「骨架装配 → `initCore()` 接线」两段，`initCore` 为桌面/移动（mobile/MobileShell）逐行共用的唯一接线序列（GuideLine 阶段 3） |
+| `main_window_ui.{h,cpp}`         | `MainWindowUi` 静态建造者（MainWindow 的 friend）：buildCentral/buildMenus/buildToolbar/buildStatus 纯 UI 装配，回填部件指针                                                                     |
+| `status_bar.{h,cpp}`             | `StatusBar`：六标签（坐标/RGB/模式/保留块/缩放/提示）+ 非模态 `notify`；`setCompactMode` 供移动端只留模式/块数/缩放（SPEC §8.3）                                                                                 |
+| `doc_history.{h,cpp}`            | `DocHistory`：文档参数态撤销/重做（防抖采集/抑制守卫/载入配置冲刷压栈/上下文判定/启用态信号）                                                                                                                       |
+| `preview_controller.{h,cpp}`     | `PreviewController`：refreshPreview 五分支状态机 + 导出输出预览缓存与按需渲染（A/B 规则）                                                                                                             |
+| `preprocess_controller.{h,cpp}`  | `PreprocessController`：预处理 8 槽 + 维度失效清理 + 忙碌对话框；`setBusyOverlayMode` 供移动端改全屏遮罩（SPEC §8.2，阶段 4）                                                                                |
+| `annotation_coordinator.{h,cpp}` | `AnnotationCoordinator`：标注 33 槽 + 手势分派状态机 + 图层显隐/烧录联动                                                                                                                         |
+| `main.cpp`                       | 程序入口（双产物各编一份：`idc_gui` 纯桌面 / `idc_gui_mobile` 经宏恒选移动壳；Android 单目标），含 `QApplication` + 事件循环                                                                                    |
 
 ## 布局
 
-`QSplitter` 水平三分：**左侧可滚动容器（QScrollArea 竖排 LeftPanel + ToolPanel + LayerPanel）** | **中央画布（CanvasView）** | **右侧 QTabWidget（参数页 / 导出页 / 图像页 / 标注页）**。装配细节在 `MainWindowUi::buildCentral`（创建顺序、`setDocument`/`setModel` 注入、初始分割 {340,860,300}）。
+`QSplitter` 水平三分：**左侧可滚动容器（QScrollArea 竖排 LeftPanel + ToolPanel + LayerPanel）** | **中央画布（CanvasView）** | **右侧 QScrollArea 包裹的 AccordionPanel（参数页 / 导出页 / 图像页 / 标注页，多节可同开）**。装配细节在 `MainWindowUi::buildCentral`（创建顺序、`setDocument`/`setModel` 注入、初始分割 {340,860,300}）。
 
 ## 编排（连接住在属主旁）
 
-构造顺序（承重，不可重排）：`MainWindowUi` 装配部件 → 依次实例化并注入四个控制器（各自 `connectSignals()`）→
+构造顺序（承重，不可重排）：骨架装配（桌面 `MainWindowUi` 四步；移动 `MobileShellUi` 同模式）→ `MainWindow::initCore()`：
+依次实例化并注入四个控制器（各自 `connectSignals()`）→
 `DocHistory::start()` → `MainWindow::connectAll()` → `syncPanels` → `refreshPreview` → `history_->reset()`（发
 `availabilityChanged` → 撤销/重做动作置灰，故 **connectAll 必须先于 reset**）→ 欢迎提示。
+**本序列桌面/移动逐行共用**（SPEC §8.3 行为同构的结构性保证；差异只在骨架装配）。
 
 **MainWindow::connectAll（剩余跨件串联）**：
 

@@ -27,6 +27,7 @@
 #include "app/status_bar.h"
 #include "canvas/canvas_scene.h"
 #include "canvas/canvas_view.h"
+#include "panels/accordion_panel.h"
 #include "panels/annotation_prop_panel.h"
 #include "panels/export_panel.h"
 #include "panels/image_panel.h"
@@ -45,7 +46,16 @@
 
 namespace idc::gui {
 
-// 装配中央区：左面板 | 画布 | 右侧选项卡（参数 / 导出 / 图像 / 标注）。
+namespace {
+// 在右侧多页容器内定位并展开目标面板（双型分发）：桌面 AccordionPanel 折叠式 /
+// 移动端 QTabWidget 选择式——菜单「定位到某页」与控制器共用语义。
+void selectRightPage(QWidget* container, QWidget* page) {
+    if (auto* acc = qobject_cast<AccordionPanel*>(container)) acc->expandSection(page);
+    else if (auto* tabs = qobject_cast<QTabWidget*>(container)) tabs->setCurrentWidget(page);
+}
+} // namespace
+
+// 装配中央区：左面板 | 画布 | 右侧折叠面板（参数 / 导出 / 图像 / 标注）。
 void MainWindowUi::buildCentral(MainWindow* w) {
     w->scene_ = new CanvasScene(w);
     w->view_ = new CanvasView(w->scene_, w);
@@ -65,13 +75,21 @@ void MainWindowUi::buildCentral(MainWindow* w) {
     w->layerPanel_->setModel(&w->annoBridge_);
     w->annoPropPanel_->setModel(&w->annoBridge_);
 
-    // 右侧用 QTabWidget 分组，避免面板过长（布局约束见本目录 README「布局结构与响应式规则」）。
-    w->rightTabs_ = new QTabWidget(w);
-    w->rightTabs_->addTab(w->param_, QStringLiteral("参数"));
-    w->rightTabs_->addTab(w->exportPanel_, QStringLiteral("导出"));
-    w->rightTabs_->addTab(w->imagePanel_, QStringLiteral("图像"));
-    w->rightTabs_->addTab(w->annoPropPanel_, QStringLiteral("标注"));
-    w->rightTabs_->setMinimumWidth(240); // 可拖拽调宽；设下限避免控件被挤到不可用。
+    // 右侧 AccordionPanel 折叠式：多节**可同时展开**，整栏外套 QScrollArea 滚动触达；
+    // 页面即面板本体（栏内布局自适应宽度，横向不出滚动条）。
+    // 移动端抽屉另用 QTabWidget 选择式（见 mobile/mobile_shell.cpp）。
+    auto* accordion = new AccordionPanel(w);
+    accordion->addSection(w->param_, QStringLiteral("参数"));
+    accordion->addSection(w->exportPanel_, QStringLiteral("导出"));
+    accordion->addSection(w->imagePanel_, QStringLiteral("图像"));
+    accordion->addSection(w->annoPropPanel_, QStringLiteral("标注"));
+    w->rightTabs_ = accordion;   // 控制器/菜单经双型分发访问（成员多态 QWidget*）。
+    auto* rightScroll = new QScrollArea(w);
+    rightScroll->setWidgetResizable(true);
+    rightScroll->setFrameShape(QFrame::NoFrame);
+    rightScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    rightScroll->setWidget(accordion);
+    rightScroll->setMinimumWidth(340); // 可拖拽调宽；下限对齐初始宽度，避免坐标行/按钮被挤到错位。
 
     // 左侧容器：模式/极性(LeftPanel) + 标注工具(ToolPanel) + 图层(LayerPanel) 竖排，可滚动避免拥挤。
     auto* leftContainer = new QWidget(w);
@@ -92,7 +110,7 @@ void MainWindowUi::buildCentral(MainWindow* w) {
     auto* split = new QSplitter(Qt::Horizontal, w);
     split->addWidget(leftScroll);
     split->addWidget(w->view_);
-    split->addWidget(w->rightTabs_);
+    split->addWidget(rightScroll);
     split->setStretchFactor(0, 0);   // 左面板：窗口整体缩放时不抢空间
     split->setStretchFactor(1, 1);   // 画布：占据剩余空间
     split->setStretchFactor(2, 0);   // 右面板：窗口整体缩放时不抢空间
@@ -162,7 +180,7 @@ void MainWindowUi::buildMenus(MainWindow* w) {
     QObject::connect(aResetPre, &QAction::triggered, w, [w] { w->preprocess_->onResetPreprocess(); });
     const QAction* aImagePanel = mImage->addAction(QStringLiteral("图像处理面板（缩放/尺寸/色道）…"));
     QObject::connect(aImagePanel, &QAction::triggered, w, [w] {
-        if (w->rightTabs_ && w->imagePanel_) w->rightTabs_->setCurrentWidget(w->imagePanel_);
+        if (w->rightTabs_ && w->imagePanel_) selectRightPage(w->rightTabs_, w->imagePanel_);
     });
 
     // ---- 标注（第四阶段 G-4/G-5）：撤销/重做/删除选中/清除全部/属性定位 ----
@@ -182,7 +200,7 @@ void MainWindowUi::buildMenus(MainWindow* w) {
     mAnno->addSeparator();
     const QAction* aAnnoProp = mAnno->addAction(QStringLiteral("标注属性…"));
     QObject::connect(aAnnoProp, &QAction::triggered, w, [w] {
-        if (w->rightTabs_ && w->annoPropPanel_) w->rightTabs_->setCurrentWidget(w->annoPropPanel_);
+        if (w->rightTabs_ && w->annoPropPanel_) selectRightPage(w->rightTabs_, w->annoPropPanel_);
     });
 
     // ---- 视图 ----

@@ -6,9 +6,11 @@
 // 分块依据：每个模式一页，页内控件与该模式的一两个 Document 字段对应；坍缩提示由 MainWindow
 //           依 Core 的 isCollapsible 结果回灌（面板不自算可行性）。
 // 说明：坐标 spinbox 关闭 keyboardTracking，避免逐键触发预览；提交（回车/失焦/箭头）才写回。
+//       堆叠容器高度只随「当前可见页」变化（PageSizedStack 关 heightForWidth + reflowStack 钳 min=max，见 cpp）。
 // ============================================================================
 #pragma once
 
+#include <QPointer>
 #include <QWidget>
 
 #include "engine/engine.h"
@@ -18,6 +20,7 @@ class QSpinBox;
 class QLabel;
 class QCheckBox;
 class QPushButton;
+class QResizeEvent;
 class QStackedWidget;
 class QListWidget;
 
@@ -71,6 +74,14 @@ private slots:
     void onInvertCells() const;               // 反选。
     void onClearCells() const;                // 清空选择集。
 
+    // 把堆叠容器高度钳到当前可见页所需高度（切页/宽度变化时重算）；公有槽供 currentChanged 直连。
+public slots:
+    void reflowStack() const;
+
+protected:
+    // 宽度变化（分隔条拖拽）时重钳当前页高度（wordWrap 换行高依赖宽度）。
+    void resizeEvent(QResizeEvent* ev) override;
+
 private:
     // 构建 L1 / L2 / L3 三页并加入 stack_。
     QWidget* buildL1Page();
@@ -81,6 +92,7 @@ private:
 
     Document* doc_{nullptr};
     QStackedWidget* stack_{nullptr};
+    QPointer<QWidget> pages_[3];   // L1/L2/L3 页（构造时按序加入 stack_）。
 
     // L1 控件。
     QComboBox* l1Shape_{nullptr};

@@ -12,6 +12,8 @@
 
 #include <QTabWidget>
 
+#include "panels/accordion_panel.h"
+
 #include "app/status_bar.h"
 #include "canvas/canvas_scene.h"
 #include "canvas/canvas_view.h"
@@ -32,6 +34,22 @@ namespace idc::gui {
 constexpr int kExportSrcMaxDim = 512;
 constexpr int kExportPreviewMaxDim = 192;
 
+// 「导出」页是否正在展示（多页容器双型分发）：
+//   · 桌面 AccordionPanel——折叠式多节可同开，「展示」＝该节展开；
+//   · 移动端 QTabWidget——页面外套 QScrollArea，页面 widget 不再是 exportPanel_
+//     本身而是其祖先容器，故相等比较放宽为「位于当前页内」（面板即直接页面时等价）。
+bool showingExportPage(QWidget* container, const QWidget* exportPanel) {
+    if (!container || !exportPanel) return false;
+    if (const auto* acc = qobject_cast<AccordionPanel*>(container)) return acc->isSectionExpanded(exportPanel);
+    if (const auto* tabs = qobject_cast<QTabWidget*>(container)) {
+        const QWidget* page = tabs->currentWidget();
+        if (!page) return false;
+        for (const QWidget* x = exportPanel; x; x = x->parentWidget())
+            if (x == page) return true;
+    }
+    return false;
+}
+
 PreviewController::PreviewController(QObject* parent) : QObject(parent) {}
 
 void PreviewController::setDocument(Document* doc) { doc_ = doc; }
@@ -41,11 +59,15 @@ void PreviewController::setExportPanel(ExportPanel* panel) { exportPanel_ = pane
 void PreviewController::setParamPanel(ParamPanel* panel) { param_ = panel; }
 void PreviewController::setStatusBar(StatusBar* status) { status_ = status; }
 void PreviewController::setAnnotationBridge(AnnotationBridge* anno) { anno_ = anno; }
-void PreviewController::setTabWidget(QTabWidget* tabs) { rightTabs_ = tabs; }
+void PreviewController::setMultiPageContainer(QWidget* tabs) { rightTabs_ = tabs; }
 
 // 切到「导出」页时补渲染输出预览（A：不可见时不渲染，切回时若已脏则重算）。
+// 双型分发：桌面 AccordionPanel::sectionToggled / 移动端 QTabWidget::currentChanged 各自接线。
 void PreviewController::connectSignals() {
-    connect(rightTabs_, &QTabWidget::currentChanged, this, &PreviewController::onRightTabChanged);
+    if (const auto* acc = qobject_cast<AccordionPanel*>(rightTabs_))
+        connect(acc, &AccordionPanel::sectionToggled, this, &PreviewController::onRightTabChanged);
+    else if (const auto* tabs = qobject_cast<QTabWidget*>(rightTabs_))
+        connect(tabs, &QTabWidget::currentChanged, this, &PreviewController::onRightTabChanged);
 }
 
 // 依工作图重建降采样预览底图（NFR-3）。
@@ -225,7 +247,7 @@ void PreviewController::updateExportPreview(const engine::EngineResult& res) {
 // 用缓存的 lastComposition_/lastExportResOk_ 重渲染输出预览（不重跑 Core）。
 // A：导出选项卡不可见时只置脏标志，切回该页由 onRightTabChanged 调本函数补渲染，省去后台无谓开销。
 void PreviewController::refreshExportPreviewFromCache() {
-    if (rightTabs_ && rightTabs_->currentWidget() != exportPanel_) { exportPreviewDirty_ = true; return; }
+    if (rightTabs_ && !showingExportPage(rightTabs_, exportPanel_)) { exportPreviewDirty_ = true; return; }
     exportPreviewDirty_ = false;
     if (!lastExportResOk_) { exportPanel_->setPreviewPixmap(QPixmap()); return; }
     exportPanel_->setPreviewPixmap(composeOutputThumbnail(
@@ -235,7 +257,7 @@ void PreviewController::refreshExportPreviewFromCache() {
 
 // 右侧选项卡切换：切到「导出」页且预览已脏时用缓存补渲染一次（不重跑 Core）。
 void PreviewController::onRightTabChanged() {
-    if (rightTabs_ && rightTabs_->currentWidget() == exportPanel_ && exportPreviewDirty_) refreshExportPreviewFromCache();
+    if (rightTabs_ && showingExportPage(rightTabs_, exportPanel_) && exportPreviewDirty_) refreshExportPreviewFromCache();
 }
 
 // 输出预览的源图（B）：默认用未烧录的小源图；若「导出时烧录标注」开启且有标注，则委托 util::bakeAnnotationsInto

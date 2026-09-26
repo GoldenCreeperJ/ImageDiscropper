@@ -10,6 +10,7 @@
 
 #include <QApplication>
 #include <QProgressDialog>
+#include <QScreen>
 #include <QString>
 
 #include "app/status_bar.h"
@@ -26,6 +27,9 @@ void PreprocessController::setDocument(Document* doc) { doc_ = doc; }
 void PreprocessController::setAnnotationBridge(AnnotationBridge* anno) { anno_ = anno; }
 void PreprocessController::setStatusBar(StatusBar* status) { status_ = status; }
 void PreprocessController::setDialogParent(QWidget* parent) { dialogParent_ = parent; }
+
+// 忙碌全屏遮罩模式：仅 MobileShell 开启（SPEC §8.2 行为同构的唯一例外之一，形态适配）。
+void PreprocessController::setBusyOverlayMode(const bool overlay) { busyOverlay_ = overlay; }
 void PreprocessController::setImagePanel(ImagePanel* panel) { imagePanel_ = panel; }
 
 // 图像处理面板（预处理）：各意图信号→对应槽（经 EngineBridge 调 Core pixel_ops）。
@@ -66,20 +70,25 @@ void PreprocessController::runWithBusyDialog(const QString& text, const std::fun
     dlg.setMinimumDuration(0);                   // 立即显示，不等阈值。
     dlg.setRange(0, 0);                          // 不确定进度（忙碌滚动样式）。
     dlg.show();
+    if (busyOverlay_ && dialogParent_) {
+        // 移动端全屏遮罩（SPEC §8.2）：忙碌对话框铺满屏幕替代桌面居中小对话框，
+        // 模态阻断语义不变，仅形态差异；遮罩期间拖动/点按均被吞，避免误操作叠加。
+        dlg.setGeometry(QApplication::primaryScreen()->geometry());
+    }
     QApplication::processEvents();               // 先让对话框绘制出来，再进入耗时处理。
     op();
     dlg.close();
 }
 
 // 旋转（90 的整数倍；-90=左转、90=右转、180）。
-void PreprocessController::onRotate(const int angleDeg) {
+void PreprocessController::onRotate(const int angleDeg) const {
     if (!doc_->hasImage()) return;
     applyWorkingImage(EngineBridge::rotateImage(doc_->working(), angleDeg),
                       QStringLiteral("已旋转 %1°").arg(angleDeg));
 }
 
 // 翻转（水平/垂直）。
-void PreprocessController::onFlip(const bool horizontal) {
+void PreprocessController::onFlip(const bool horizontal) const {
     if (!doc_->hasImage()) return;
     applyWorkingImage(EngineBridge::flipImage(doc_->working(), horizontal),
                       horizontal ? QStringLiteral("已水平翻转") : QStringLiteral("已垂直翻转"));
@@ -108,20 +117,20 @@ void PreprocessController::onResize(const int newWidth, const int newHeight) {
 }
 
 // 黑白（灰度）。
-void PreprocessController::onGray() {
+void PreprocessController::onGray() const {
     if (!doc_->hasImage()) return;
     applyWorkingImage(EngineBridge::toGrayImage(doc_->working()), QStringLiteral("已转为黑白"));
 }
 
 // 色道反色：依勾选的 R/G/B 拼出长度 3 的反相掩码（'1' 反相、'0' 保持）；灰度图 Core 忽略掩码、整体反相。
-void PreprocessController::onInvert(const bool invR, const bool invG, const bool invB) {
+void PreprocessController::onInvert(const bool invR, const bool invG, const bool invB) const {
     if (!doc_->hasImage()) return;
     const std::string mask = std::string(invR ? "1" : "0") + (invG ? "1" : "0") + (invB ? "1" : "0");
     applyWorkingImage(EngineBridge::invertImage(doc_->working(), mask), QStringLiteral("已按通道反色"));
 }
 
 // 色道分离：依勾选的 R/G/B 拼出长度 3 的保留掩码（'1' 保留、'0' 置零）。
-void PreprocessController::onSplit(const bool keepR, const bool keepG, const bool keepB) {
+void PreprocessController::onSplit(const bool keepR, const bool keepG, const bool keepB) const {
     if (!doc_->hasImage()) return;
     const std::string mask = std::string(keepR ? "1" : "0") + (keepG ? "1" : "0") + (keepB ? "1" : "0");
     applyWorkingImage(EngineBridge::splitImage(doc_->working(), mask), QStringLiteral("已按通道分离"));

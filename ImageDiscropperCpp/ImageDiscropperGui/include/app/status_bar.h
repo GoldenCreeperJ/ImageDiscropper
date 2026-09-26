@@ -32,6 +32,9 @@ public:
     void setCount(int kept) const;              // 「保留块: N」
     void setZoomPercent(int percent) const;     // 「缩放: N%」
     void setHint(const QString& text) const;    // 提示标签
+    // 紧凑模式（移动端，SPEC §8.3 布局）：只保留模式/保留块数/缩放三项，
+    // 坐标、RGB 与提示标签隐藏（详情入抽屉）；桌面默认关闭，行为零变化。
+    void setCompactMode(bool compact) const;
     // 非模态提示：提示标签 + 状态栏限时消息（错误 8s、普通 4s），不打断用户。
     void notify(const QString& msg, bool isError);
 

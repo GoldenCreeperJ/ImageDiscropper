@@ -15,14 +15,29 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
+#include <QPointer>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QSpinBox>
+#include <QStackedLayout>
 #include <QStackedWidget>
 
 #include "model/document.h"
 
 namespace idc::gui {
 namespace {
+
+// 高度由 ParamPanel::reflowStack 显式钳制的堆叠容器。QStackedLayout 在 SizeAll 下会按
+// 所有页取最大定高（widget 级 sizeHint/heightForWidth 覆写会被父布局的 totalHeightForWidth
+// 直接绕过 QStackedLayout 而失效），故这里只关掉对外的 heightForWidth 声明，使父面板
+// 按 widget 的 sizeHint（=当前页高度，已由 min/max 钳定）而非隐藏页高度排版。
+class PageSizedStack : public QStackedWidget {
+public:
+    using QStackedWidget::QStackedWidget;
+    bool hasHeightForWidth() const override { return false; }   // 高度由 min/max 显控制，不向外报 HFW。
+};
+
+} // namespace
 
 // 创建坐标输入框：范围 [0,100000]，关闭逐键跟踪（提交才触发），回车即生效（NFR-5）。
 QSpinBox* makeCoordSpin(QWidget* parent) {
@@ -33,17 +48,50 @@ QSpinBox* makeCoordSpin(QWidget* parent) {
     return s;
 }
 
-} // namespace
-
 // 构建面板：一个 QStackedWidget 承载 L1/L2/L3 三页。
 ParamPanel::ParamPanel(QWidget* parent) : QWidget(parent) {
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(8, 8, 8, 8);
-    stack_ = new QStackedWidget(this);
-    stack_->addWidget(buildL1Page()); // index 0
-    stack_->addWidget(buildL2Page()); // index 1
-    stack_->addWidget(buildL3Page()); // index 2
+    stack_ = new PageSizedStack(this);
+    pages_[0] = buildL1Page();
+    pages_[1] = buildL2Page();
+    pages_[2] = buildL3Page();
+    for (QWidget* page : { pages_[0].data(), pages_[1].data(), pages_[2].data() }) {
+        stack_->addWidget(page);   // 参加顺序即 L1/L2/L3（index 0/1/2）。
+    }
+    // 切页时重钳当前页高度（reflowStack 为公有槽，供 currentChanged 直连）。
+    connect(qobject_cast<QStackedLayout*>(stack_->layout()), &QStackedLayout::currentChanged,
+            this, &ParamPanel::reflowStack);
+    // 垂直保持 Preferred：高度由 reflowStack 显式钳 min=max 定住（见 PageSizedStack）。
+    stack_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     root->addWidget(stack_);
+    // 尾部 stretch：tab 页（移动端 QTabWidget）比钳定后的 stack 高时，QWidgetItem 会把
+    // max 受限的 widget 在格子里**居中**；加 stretch 吸收剩余空间保证顶部对齐。
+    root->addStretch(1);
+    reflowStack();   // 初始按当前页钳一次高（宽度未定时用 sizeHint 宽，后续 resizeEvent 会校准）。
+}
+
+// 把堆叠容器高度硬钳到「当前页在当前宽度下所需高度」。因 hasHeightForWidth 已关，
+// 父布局会按 widget 的 sizeHint 排版；而 sizeHint 仍为最高页——故直接设 min=max 高度绕开。
+// 高度取自 heightForWidth(当前宽)，保证 wordWrap 换行后不裁切。宽度变化（分栏拖拽）时重算。
+void ParamPanel::reflowStack() const {
+    if (!stack_) return;
+    if (const QWidget* cur = stack_->currentWidget()) {
+        const int w = stack_->width() > 0 ? stack_->width() : cur->sizeHint().width();
+        const int h = cur->hasHeightForWidth() ? cur->heightForWidth(w) : cur->sizeHint().height();
+        stack_->setMinimumHeight(h);
+        stack_->setMaximumHeight(h);
+    } else {
+        stack_->setMinimumHeight(0);
+        stack_->setMaximumHeight(QWIDGETSIZE_MAX);
+    }
+    stack_->updateGeometry();
+}
+
+// 面板宽度变化（分隔条拖拽）时，当前页 wordWrap 换行高度会变 → 重钳 stack 高度。
+void ParamPanel::resizeEvent(QResizeEvent* ev) {
+    QWidget::resizeEvent(ev);
+    reflowStack();
 }
 
 // L1 页：形状 + 坐标。
@@ -344,6 +392,8 @@ void ParamPanel::syncFromDocument() {
     }
 
     setMode(doc_->mode());
+    // 显隐 l2MultiBox_ 可能在未切页时改变当前页高度（currentChanged 不触发），补重报一次。
+    reflowStack();
 }
 
 // 切换到某模式对应的页。

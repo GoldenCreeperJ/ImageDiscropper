@@ -43,7 +43,7 @@ public:
     void setParamPanel(ParamPanel* panel);             // setCollapseHint
     void setStatusBar(StatusBar* status);
     void setAnnotationBridge(AnnotationBridge* anno);  // 导出预览源图烧录判定
-    void setTabWidget(QTabWidget* tabs);               // A 规则：导出页可见性
+    void setMultiPageContainer(QWidget* tabs);       // A 规则：导出页可见性（AccordionPanel 或 QTabWidget）
     void connectSignals();                             // rightTabs currentChanged → onRightTabChanged
 
     void rebuildPreviewPixmap();         // 依工作图重建降采样预览底图 + 导出预览小源图
@@ -64,7 +64,7 @@ private:
     ParamPanel* param_{nullptr};
     StatusBar* status_{nullptr};
     AnnotationBridge* anno_{nullptr};
-    QTabWidget* rightTabs_{nullptr};
+    QWidget* rightTabs_{nullptr};      // 拥有者 MainWindow 的右侧多页容器（桌面 QToolBox / 移动 QTabWidget）
 
     // 输出预览（导出前预览）专用的小源图：由 rebuildPreviewPixmap 把底图再降到最长边 ≤ 512，
     // 缩略图只在这张小图上 blit——即便原图 8000×8000 也能快速出预览（像素少、速度快）。
