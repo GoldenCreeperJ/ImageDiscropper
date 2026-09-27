@@ -35,6 +35,7 @@ const ToolEntry kTools[] = {
     {AnnoTool::CIRCLE,         "圆形",        "起点为圆心，拖拽绘制圆形"},
     {AnnoTool::ELLIPSE,        "椭圆",        "拖拽出外接矩形绘制椭圆"},
     {AnnoTool::ROUNDRECT,      "圆角矩形",    "两点拖拽绘制圆角矩形"},
+    {AnnoTool::ROUNDSQUARE,    "圆角正方形",  "两点拖拽绘制圆角正方形（取短边为边长）"},
     {AnnoTool::ISOS_TRI,       "等腰三角形",  "起点为底边中点，拖拽绘制等腰三角形"},
     {AnnoTool::EQU_TRI,        "等边三角形",  "起点到当前点作为一条边，绘制等边三角形"},
     {AnnoTool::RECT_TRI,       "直角三角形",  "两点拖拽绘制直角三角形（两点为斜边两端）"},

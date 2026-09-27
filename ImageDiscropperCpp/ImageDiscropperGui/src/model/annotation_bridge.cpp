@@ -32,6 +32,7 @@ geometry::ShapeType shapeTypeForTool(const AnnoTool tool) {
         case AnnoTool::CIRCLE:        return ShapeType::CIRCLE;
         case AnnoTool::ELLIPSE:       return ShapeType::ELLIPSE;
         case AnnoTool::ROUNDRECT:     return ShapeType::ROUNDRECTANGLE;
+        case AnnoTool::ROUNDSQUARE:   return ShapeType::ROUNDSQUARE;
         case AnnoTool::ISOS_TRI:      return ShapeType::ISOS_TRIANGLE;
         case AnnoTool::EQU_TRI:       return ShapeType::EQU_TRIANGLE;
         case AnnoTool::RECT_TRI:      return ShapeType::RECT_TRIANGLE;

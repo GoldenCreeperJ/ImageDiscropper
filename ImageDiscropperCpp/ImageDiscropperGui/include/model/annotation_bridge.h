@@ -46,6 +46,7 @@ enum class AnnoTool {
     CIRCLE,          // 圆形
     ELLIPSE,         // 椭圆
     ROUNDRECT,       // 圆角矩形
+    ROUNDSQUARE,     // 圆角正方形
     ISOS_TRI,        // 等腰三角形
     EQU_TRI,         // 等边三角形
     RECT_TRI,        // 直角三角形
