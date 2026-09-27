@@ -104,8 +104,8 @@ static void testGeometry() {
     // 转角圆角（倒角）：半径>0 时 toPath 含二次贝塞尔段；AABB 与直角时一致（bounds 取控制点=原顶点）。
     // 注：先将 toPath() 存为命名 Path 再遍历（直接 x.toPath().segments() 会使临时量悬挂）。
     auto hasQuadSeg = [](const Path& p) {
-        for (const auto& seg : p.segments()) {
-            if (seg.type == PathSegmentType::QUAD_TO) return true;
+        for (const auto&[type, coords] : p.segments()) {
+            if (type == PathSegmentType::QUAD_TO) return true;
         }
         return false;
     };

@@ -52,7 +52,7 @@ public:
     // 直线 / 折线虽为 PolygonShape，但开放链首末端无夹角，倒角只作用内部顶点。
     // 其余形状（椭圆 / 画笔 / 文字）无转角概念：默认读回 0、写为空操作。
     virtual double cornerRadius() const { return 0.0; }
-    virtual void setCornerRadius(double r) { (void)r; }
+    virtual void setCornerRadius(const double r) { (void)r; }
 
     // ---- 非破坏性变换（缩放 / 拉伸 / 旋转 / 翻转）----
     // 变换以矩阵 xform_ 累积存储，**不改动子类的参数化几何**（故类型 / 文字字形永不退化）；

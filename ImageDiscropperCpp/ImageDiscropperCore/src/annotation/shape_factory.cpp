@@ -20,17 +20,17 @@ namespace {
 // 从路径草稿抽取有序顶点（各段终点），供折线转 PolygonShape 表达。
 std::vector<core::Point2D> pathVertices(const geometry::Path& path) {
     std::vector<core::Point2D> pts;
-    for (const geometry::PathSegment& seg : path.segments()) {
-        switch (seg.type) {
+    for (const auto&[type, coords] : path.segments()) {
+        switch (type) {
             case geometry::PathSegmentType::MOVE_TO:
             case geometry::PathSegmentType::LINE_TO:
-                pts.emplace_back(seg.coords[0], seg.coords[1]);
+                pts.emplace_back(coords[0], coords[1]);
                 break;
             case geometry::PathSegmentType::QUAD_TO:
-                pts.emplace_back(seg.coords[2], seg.coords[3]);
+                pts.emplace_back(coords[2], coords[3]);
                 break;
             case geometry::PathSegmentType::CUBIC_TO:
-                pts.emplace_back(seg.coords[4], seg.coords[5]);
+                pts.emplace_back(coords[4], coords[5]);
                 break;
             case geometry::PathSegmentType::CLOSE:
                 break;
