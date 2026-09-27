@@ -6,6 +6,7 @@
 #include "annotation/shape_factory.h"
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 // MSVC 默认不定义 M_PI，这里统一给出常量。
@@ -84,11 +85,14 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
         }
 
         case ShapeType::ELLIPSE: {
-            // 两点确定外接矩形
-            const double minX = std::min(x1, x2);
-            const double minY = std::min(y1, y2);
+            // 落点为中心，|dx|、|dy| 为两半轴。
+            const double a = std::abs(dx);
+            const double b = std::abs(dy);
+            if (a < 1e-3 && b < 1e-3) {
+                return degenerateLine(x1, y1, x1, y1);
+            }
             return std::make_unique<geometry::EllipseShape>(
-                minX, minY, std::abs(dx), std::abs(dy), ShapeType::ELLIPSE);
+                x1 - a, y1 - b, 2 * a, 2 * b, ShapeType::ELLIPSE);
         }
 
         case ShapeType::RECTANGLE: {
@@ -105,15 +109,18 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
         }
 
         case ShapeType::SQUARE: {
-            // 以 (p1 → p2) 向量为一条边，构造正方形
-            if (distance < 1e-3) {
+            // 落点为正方形的一个顶点，边长取 max(|dx|,|dy|)，轴对齐、朝光标所在象限生长（不随拖动旋转）。
+            const double side = std::max(std::abs(dx), std::abs(dy));
+            if (side < 1e-3) {
                 return degenerateLine(x1, y1, x1, y1);
             }
+            const double gx = dx >= 0 ? 1.0 : -1.0;
+            const double gy = dy >= 0 ? 1.0 : -1.0;
             std::vector<core::Point2D> pts = {
-                {x1 + dx, y1 + dy},
-                {x1 - dy, y1 + dx},
-                {x1 - dx, y1 - dy},
-                {x1 + dy, y1 - dx},
+                {x1, y1},
+                {x1 + gx * side, y1},
+                {x1 + gx * side, y1 + gy * side},
+                {x1, y1 + gy * side},
             };
             return std::make_unique<geometry::PolygonShape>(
                 std::move(pts), ShapeType::SQUARE, true, req.cornerRadius);
@@ -154,38 +161,47 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
         }
 
         case ShapeType::EQU_TRIANGLE: {
-            // 起点到当前点为一条边，构造等边三角形
-            if (distance < 1.0) {
+            // 等边三角形：参照等腰——落点为底边中点，底边水平，顶角朝光标竖向生长（不随拖动旋转）。
+            // 等边只有一个自由度：取 |dx|（半底边）与 |dy|/√3（由高反推的半底边）较大者，使形状跟随光标主方向放大。
+            const double halfBase = std::max(std::abs(dx), std::abs(dy) / std::sqrt(3.0));
+            if (halfBase < 1e-3) {
                 return degenerateLine(x1, y1, x1, y1);
             }
-            const double half = 2.0 / std::sqrt(3.0) * distance / 2.0;
-            const double perpX = -dy / distance;
-            const double perpY = dx / distance;
+            const double height = std::sqrt(3.0) * halfBase;             // 等边高 = √3/2·边长 = √3·半底边
+            const double signY = y2 >= y1 ? -1.0 : 1.0;                 // 与等腰一致：顶角朝光标方向生长
             std::vector<core::Point2D> pts = {
-                {x1 + perpX * half, y1 + perpY * half},
-                {x1 - perpX * half, y1 - perpY * half},
-                {x2, y2},
+                {x1 - halfBase, y1},
+                {x1 + halfBase, y1},
+                {x1, y1 - signY * height},
             };
             return std::make_unique<geometry::PolygonShape>(
                 std::move(pts), ShapeType::EQU_TRIANGLE, true, req.cornerRadius);
         }
 
         case ShapeType::RECT_TRIANGLE: {
-            // 直角三角形：p1、p2、(x1, y2) 三点
+            // 直角三角形：落点为直角顶点，两直角边分别沿轴取 dx、dy（不再用斜边点 p2）。
+            if (std::abs(dx) < 1e-3 && std::abs(dy) < 1e-3) {
+                return degenerateLine(x1, y1, x1, y1);
+            }
             std::vector<core::Point2D> pts = {
-                {x1, y1}, {x2, y2}, {x1, y2},
+                {x1, y1}, {x2, y1}, {x1, y2},
             };
             return std::make_unique<geometry::PolygonShape>(
                 std::move(pts), ShapeType::RECT_TRIANGLE, true, req.cornerRadius);
         }
 
         case ShapeType::EQU_RECT_TRIANGLE: {
-            // 等腰直角三角形：p1、p2、(x1 - dy, y1 + dx)
-            if (std::abs(dx) + std::abs(dy) < 1e-3) {
+            // 等腰直角三角形：落点为直角顶点，两直角边等长 = max(|dx|,|dy|)，沿轴朝光标象限（不随拖动旋转）。
+            const double leg = std::max(std::abs(dx), std::abs(dy));
+            if (leg < 1e-3) {
                 return degenerateLine(x1, y1, x1, y1);
             }
+            const double gx = dx >= 0 ? 1.0 : -1.0;
+            const double gy = dy >= 0 ? 1.0 : -1.0;
             std::vector<core::Point2D> pts = {
-                {x1, y1}, {x2, y2}, {x1 - dy, y1 + dx},
+                {x1, y1},
+                {x1 + gx * leg, y1},
+                {x1, y1 + gy * leg},
             };
             return std::make_unique<geometry::PolygonShape>(
                 std::move(pts), ShapeType::EQU_RECT_TRIANGLE, true, req.cornerRadius);

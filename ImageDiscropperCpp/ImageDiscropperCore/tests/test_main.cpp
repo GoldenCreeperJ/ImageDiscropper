@@ -364,13 +364,15 @@ static void testAnnotation() {
     CHECK(std::abs(t1.x - t0.x + 3.0) < 1e-6);
     CHECK(std::abs(t1.y - t0.y - 4.0) < 1e-6);
 
-    // 多边形（正方形）：平移后仍为 SQUARE，逐顶点偏移。
+    // 多边形（正方形）：落点为顶点、边长 max(dx,dy) 轴对齐；平移后仍为 SQUARE、逐顶点偏移。
     annotation::ShapeRequest r6;
     r6.type = geometry::ShapeType::SQUARE;
     r6.p1 = {0, 0};
-    r6.p2 = {10, 0};
+    r6.p2 = {10, 6};   // dx=10、dy=6 → 边长 max = 10
     auto sq = annotation::buildShape(r6);
     const geometry::BoundingBox s0 = sq->bounds();
+    // 轴对齐正方形：包围盒应为 10×10（边长取 max(dx,dy)，不随拖动倾斜）。
+    CHECK(std::abs(s0.width - 10.0) < 1e-6 && std::abs(s0.height - 10.0) < 1e-6);
     sq->translate(2, 2);
     const geometry::BoundingBox s1 = sq->bounds();
     CHECK(sq->type() == geometry::ShapeType::SQUARE);
