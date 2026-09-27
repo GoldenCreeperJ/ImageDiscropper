@@ -12,18 +12,18 @@ dbg + rel 双配置重复构建（构建量减半）。
 
 ## 文件清单
 
-| 文件                        | 照抄自（基线 e6f9e70a29）   | 构建配置    | 使用方                                            |
-|---------------------------|----------------------|---------|------------------------------------------------|
-| `x64-windows-dbg.cmake`   | `x64-windows`（动态）    | debug   | 本地开发预设 `windows-debug`、dbg-verify（目标 + 宿主）     |
-| `x64-windows-rel.cmake`   | `x64-windows-static` | release | 预设 `windows-release`（目标 + 宿主，CI + CD，静态单文件）    |
-| `x64-linux-dbg.cmake`     | `x64-linux`          | debug   | 预设 `linux-debug`、dbg-verify（目标 + 宿主）           |
-| `x64-linux-rel.cmake`     | `x64-linux`          | release | 预设 `linux-release`（目标 + 宿主，CI + CD）            |
-| `arm64-osx-dbg.cmake`     | `arm64-osx`          | debug   | 预设 `macos-debug`、dbg-verify（目标 + 宿主）           |
-| `arm64-osx-rel.cmake`     | `arm64-osx`          | release | 预设 `macos-release`（目标 + 宿主，CI + CD）            |
-| `arm64-android-rel.cmake` | `arm64-android`      | release | 预设 `android` 的**目标**（交叉编译：宿主用 `x64-linux-rel`） |
-| `arm64-android-dbg.cmake` | `arm64-android`      | debug   | 预设 `android-dbg` 的**目标**（宿主 `x64-linux-dbg`）   |
-| `arm64-ios-rel.cmake`     | vcpkg iOS 惯例自写       | release | 预设 `ios` 的**目标**（宿主 `arm64-osx-rel`）           |
-| `arm64-ios-dbg.cmake`     | vcpkg iOS 惯例自写       | debug   | 预设 `ios-dbg` 的**目标**（宿主 `arm64-osx-dbg`）       |
+| 文件                        | 照抄自（基线 e6f9e70a29）   | 构建配置    | 使用方                                                    |
+|---------------------------|----------------------|---------|--------------------------------------------------------|
+| `x64-windows-dbg.cmake`   | `x64-windows`（动态）    | debug   | 本地开发预设 `windows-debug`、cpp-verify debug-all（目标 + 宿主）   |
+| `x64-windows-rel.cmake`   | `x64-windows-static` | release | 预设 `windows-release`（目标 + 宿主，CI + CD，静态单文件）            |
+| `x64-linux-dbg.cmake`     | `x64-linux`          | debug   | 预设 `linux-debug`、cpp-verify debug-all（目标 + 宿主）         |
+| `x64-linux-rel.cmake`     | `x64-linux`          | release | 预设 `linux-release`（目标 + 宿主，CI + CD）                    |
+| `arm64-osx-dbg.cmake`     | `arm64-osx`          | debug   | 预设 `macos-debug`、cpp-verify debug-all（目标 + 宿主）         |
+| `arm64-osx-rel.cmake`     | `arm64-osx`          | release | 预设 `macos-release`（目标 + 宿主，CI + CD）                    |
+| `arm64-android-rel.cmake` | `arm64-android`      | release | 预设 `android-release` 的**目标**（交叉编译：宿主用 `x64-linux-rel`） |
+| `arm64-android-dbg.cmake` | `arm64-android`      | debug   | 预设 `android-debug` 的**目标**（宿主 `x64-linux-dbg`）         |
+| `arm64-ios-rel.cmake`     | vcpkg iOS 惯例自写       | release | 预设 `ios-release` 的**目标**（宿主 `arm64-osx-rel`）           |
+| `arm64-ios-dbg.cmake`     | vcpkg iOS 惯例自写       | debug   | 预设 `ios-debug` 的**目标**（宿主 `arm64-osx-dbg`）             |
 
 > **移动端为何自写而非用社区三元组**：`triplets/community/` 虽有 `arm64-android-release` /
 > `arm64-ios-release`，但**无 `-debug` 变体**——为命名一致与 dbg/rel 配套（贡献者真机调试需要

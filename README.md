@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/GoldenCreeperJ/ImageDiscropper/actions/workflows/ci.yml/badge.svg)](https://github.com/GoldenCreeperJ/ImageDiscropper/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](.github/workflows/ci.yml)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20iOS-lightgrey)](.github/workflows/ci.yml)
 
 **图像区域提取、反向剔除与网格分割工具** | [English](README.en.md)
 
@@ -89,7 +89,7 @@ ctest --test-dir build
 产物位于构建目录 `bin/`：`idc(.exe)`、`idc_gui(.exe)`、`demo(.exe)`。
 （CLion 用户可直接以 `ImageDiscropperCpp/` 为 CMake 源目录打开工程，CLion 会识别 Presets。）
 
-每次提交由 GitHub Actions（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）自动验证：**桌面三平台 Release 构建 + 全套测试 + 移动双端（Android / iOS）构建打包**（依赖缓存命中后分钟级）；Debug 配置的全量验证手动运行（[`.github/workflows/cpp-dbg-verify.yml`](.github/workflows/cpp-dbg-verify.yml)：桌面三平台 + 移动双端）。
+每次提交由 GitHub Actions（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）自动验证：**桌面三平台 Release 构建 + 全套测试 + 移动双端（Android / iOS）构建打包**（依赖缓存命中后分钟级）；其余验证手动运行（[`.github/workflows/cpp-verify.yml`](.github/workflows/cpp-verify.yml)，scope 选 `debug-all`：桌面三平台 Debug + 移动双端 Debug；选 `mobile-release`：移动双端 Release 产物，供真机安装验证）。
 
 无需构建 GUI 应用时可跳过：`cmake --preset windows-debug -DIDC_BUILD_GUI=OFF`（qtbase 依赖仍会安装）。
 

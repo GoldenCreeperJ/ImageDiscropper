@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/GoldenCreeperJ/ImageDiscropper/actions/workflows/ci.yml/badge.svg)](https://github.com/GoldenCreeperJ/ImageDiscropper/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](.github/workflows/ci.yml)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20iOS-lightgrey)](.github/workflows/ci.yml)
 
 **Image region extraction, reverse erasing & grid splitting tool** | [中文](README.md)
 
@@ -90,7 +90,7 @@ ctest --test-dir build
 Binaries land in the build directory's `bin/`: `idc(.exe)`, `idc_gui(.exe)`, `demo(.exe)`.
 (CLion users can open `ImageDiscropperCpp/` directly as the CMake source directory; CLion picks up the presets.)
 
-Every push is verified by GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): **three-platform desktop Release builds plus the full test suite plus both mobile target builds (Android / iOS packaging)** (minute-level with a warm dependency cache); Full Debug-configuration verification runs manually ([`.github/workflows/cpp-dbg-verify.yml`](.github/workflows/cpp-dbg-verify.yml): three desktop platforms plus both mobile targets).
+Every push is verified by GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): **three-platform desktop Release builds plus the full test suite plus both mobile target builds (Android / iOS packaging)** (minute-level with a warm dependency cache); other verification runs manually ([`.github/workflows/cpp-verify.yml`](.github/workflows/cpp-verify.yml) — scope `debug-all`: three desktop Debug builds + both mobile Debug targets; scope `mobile-release`: both mobile Release targets for on-device install).
 
 To skip building the GUI app: `cmake --preset windows-debug -DIDC_BUILD_GUI=OFF` (qtbase is still installed).
 

@@ -79,7 +79,7 @@
       }
     },
     {
-      "name": "android",
+      "name": "android-release",
       "displayName": "Android (arm64-v8a, Release)",
       "inherits": "base",
       "cacheVariables": {
@@ -94,7 +94,7 @@
       }
     },
     {
-      "name": "android-dbg",
+      "name": "android-debug",
       "displayName": "Android (arm64-v8a, Debug)",
       "inherits": "base",
       "cacheVariables": {
@@ -109,7 +109,7 @@
       }
     },
     {
-      "name": "ios",
+      "name": "ios-release",
       "displayName": "iOS (arm64, Release)",
       "inherits": "base",
       "cacheVariables": {
@@ -122,7 +122,7 @@
       }
     },
     {
-      "name": "ios-dbg",
+      "name": "ios-debug",
       "displayName": "iOS (arm64, Debug)",
       "inherits": "base",
       "cacheVariables": {

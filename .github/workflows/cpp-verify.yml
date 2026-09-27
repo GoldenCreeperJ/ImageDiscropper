@@ -1,0 +1,36 @@
+# C++ 手动验证入口（原 cpp-dbg-verify.yml 与 cpp-mobile-verify.yml 合并）。
+# 日常 CI 只跑 Release（与发布产物同构），本工作流按需补齐其余验证，scope 选择范围：
+#   · debug-all：桌面三平台 Debug（跑 ctest）+ 移动双端 Debug（只构建打包，
+#     交叉编译产物无法在构建机执行测试）；不写缓存（避免挤占 10GB 池）
+#   · mobile-release：移动双端 Release——真机安装用 APK / iOS 产物
+# 构建与打包细节见 cpp-build.yml；本文件只声明触发条件与矩阵。
+name: C++ Verify
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: cpp-verify
+  cancel-in-progress: true
+
+jobs:
+  debug-all:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            preset: windows-debug
+          - os: ubuntu-latest
+            preset: linux-debug
+          - os: macos-latest
+            preset: macos-debug
+          - os: ubuntu-latest
+            preset: android-debug
+          - os: macos-latest
+            preset: ios-debug
+    uses: ./.github/workflows/cpp-build.yml
+    with:
+      os: ${{ matrix.os }}
+      preset: ${{ matrix.preset }}
+      cache-deps: false   # 纯验证：只读不写缓存

@@ -4,8 +4,8 @@
 #   · Android SDK（android-* 腿）
 #   · 测试（交叉编译产物无法在构建机执行：android-*/ios-* 腿按 preset 前缀自动跳过）
 #   · 打包形态（desktop：dist 拷贝 + 安装包；android-*：APK；ios-*：app zip）
-# 由 cpp-ci.yml（5 腿矩阵）、cpp-cd.yml（发布路由）、cpp-dbg-verify.yml 与
-# cpp-mobile-verify.yml 调用。
+# 由 cpp-ci.yml（5 腿矩阵）、cpp-cd.yml（发布路由）
+# 与 cpp-verify.yml（手动验证）调用。
 name: cpp-build
 
 on:
@@ -20,7 +20,7 @@ on:
       cache-deps:
         required: false
         type: boolean
-        default: true       # 整树缓存 vcpkg_installed（ci/cd 开；dbg-verify/mobile-verify 关）
+        default: true       # 整树缓存 vcpkg_installed（ci/cd 开；cpp-verify 关）
       prepare-dist:
         required: false
         type: boolean
@@ -56,7 +56,7 @@ jobs:
       # 弃用原因备注：x-gha 后端已被新版 vcpkg 移除；nuget,github 在该版本下
       # 源解析失效且非 Windows 需 mono（runner 屏蔽 keyserver），故退回 actions/cache 整树方案。
       # key 含 preset（ci 与 cd 同为 release 预设共享同一条目）与 triplet 哈希
-      # （改 triplet 即自动换 key）；Debug 树（dbg-verify）不写缓存。
+      # （改 triplet 即自动换 key）；Debug 树（cpp-verify debug-all）不写缓存。
       - name: Restore vcpkg binary cache
         if: inputs.cache-deps
         uses: actions/cache@v5

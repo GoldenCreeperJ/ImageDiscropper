@@ -22,9 +22,9 @@ jobs:
           - os: macos-latest
             preset: macos-release
           - os: ubuntu-latest
-            preset: android
+            preset: android-release
           - os: macos-latest
-            preset: ios
+            preset: ios-release
     uses: ./.github/workflows/cpp-build.yml
     with:
       os: ${{ matrix.os }}
