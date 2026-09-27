@@ -17,6 +17,78 @@
 
 namespace idc::geometry {
 
+namespace {
+
+// 对折线 / 多边形顶点做角度自适应圆角（fillet）：每个参与倒角的顶点以二次贝塞尔替换，
+// 控制点取原顶点，两个切点分别落在相邻两边上、距顶点 ri = min(r, 半相邻边长) 处；
+// 半径自动夹到相邻两边各半以避免自交。开放折线跳过首末两端，闭合则处理全部顶点。
+// r<=0 或顶点不足（<3）时退化为直角折线（等同原有 moveTo/lineTo/closePath 构造）。
+Path buildFilletPath(const std::vector<core::Point2D>& pts, const bool closed, const double r) {
+    const std::size_t n = pts.size();
+    if (r <= 0.0 || n < 3) {
+        Path p;
+        if (n == 0) return p;
+        p.moveTo(pts[0].x, pts[0].y);
+        for (std::size_t i = 1; i < n; ++i) p.lineTo(pts[i].x, pts[i].y);
+        if (closed) p.closePath();
+        return p;
+    }
+
+    // 由顶点 V 指向 to 的单位向量，并通过 len 回传边长（零长边返回零向量）。
+    auto unitTo = [](const core::Point2D& from, const core::Point2D& to, double& len) {
+        const double dx = to.x - from.x;
+        const double dy = to.y - from.y;
+        len = std::hypot(dx, dy);
+        if (len <= 1e-12) return core::Point2D{0.0, 0.0};
+        return core::Point2D{dx / len, dy / len};
+    };
+
+    // 计算顶点 idx 的入边切点 A 与出边切点 B（闭合按取模取前后顶点；开放由调用方仅对内部顶点调用）。
+    auto tangents = [&](const std::size_t idx, core::Point2D& A, core::Point2D& B) {
+        const core::Point2D& V = pts[idx];
+        const std::size_t pi = closed ? (idx + n - 1) % n : idx - 1;
+        const std::size_t ni = closed ? (idx + 1) % n : idx + 1;
+        double lenPrev = 0.0;
+        double lenNext = 0.0;
+        const core::Point2D uPrev = unitTo(V, pts[pi], lenPrev);   // 指向前驱
+        const core::Point2D uNext = unitTo(V, pts[ni], lenNext);   // 指向后继
+        const double ri = std::max(0.0, std::min({r, lenPrev * 0.5, lenNext * 0.5}));
+        A = {V.x + uPrev.x * ri, V.y + uPrev.y * ri};
+        B = {V.x + uNext.x * ri, V.y + uNext.y * ri};
+    };
+
+    Path p;
+    if (closed) {
+        core::Point2D a0{};
+        core::Point2D b0{};
+        tangents(0, a0, b0);
+        p.moveTo(b0.x, b0.y);                         // 起于顶点 0 出边切点
+        for (std::size_t i = 1; i < n; ++i) {
+            core::Point2D A{};
+            core::Point2D B{};
+            tangents(i, A, B);
+            p.lineTo(A.x, A.y);                        // 直线连到入边切点
+            p.quadTo(pts[i].x, pts[i].y, B.x, B.y);    // 二次贝塞尔绕过顶点
+        }
+        p.lineTo(a0.x, a0.y);                          // 收尾回到顶点 0 入边切点
+        p.quadTo(pts[0].x, pts[0].y, b0.x, b0.y);
+        p.closePath();
+    } else {
+        p.moveTo(pts[0].x, pts[0].y);                  // 首端点保持锐角
+        for (std::size_t i = 1; i + 1 < n; ++i) {       // 仅内部顶点倒角
+            core::Point2D A{};
+            core::Point2D B{};
+            tangents(i, A, B);
+            p.lineTo(A.x, A.y);
+            p.quadTo(pts[i].x, pts[i].y, B.x, B.y);
+        }
+        p.lineTo(pts[n - 1].x, pts[n - 1].y);          // 末端点保持锐角
+    }
+    return p;
+}
+
+} // namespace
+
 // ---------------------------------------------------------------------------
 // shape_type.h 中的枚举转字符串
 // ---------------------------------------------------------------------------
@@ -26,8 +98,6 @@ const char* shapeTypeName(const ShapeType t) {
         case ShapeType::RECTANGLE: return "RECTANGLE";
         case ShapeType::SQUARE: return "SQUARE";
         case ShapeType::RHOMBUS: return "RHOMBUS";
-        case ShapeType::ROUNDRECTANGLE: return "ROUNDRECTANGLE";
-        case ShapeType::ROUNDSQUARE: return "ROUNDSQUARE";
         case ShapeType::ELLIPSE: return "ELLIPSE";
         case ShapeType::CIRCLE: return "CIRCLE";
         case ShapeType::POLYLINE: return "POLYLINE";
@@ -39,152 +109,6 @@ const char* shapeTypeName(const ShapeType t) {
         case ShapeType::EQU_RECT_TRIANGLE: return "EQU_RECT_TRIANGLE";
     }
     return "UNKNOWN";
-}
-
-// ===========================================================================
-// LineShape
-// ===========================================================================
-
-// 构造：由两个端点确定一条直线段。
-LineShape::LineShape(const double x1, const double y1, const double x2, const double y2)
-    : x1_(x1), y1_(y1), x2_(x2), y2_(y2) {}
-
-// 转为路径：moveTo → lineTo。
-Path LineShape::toPath() const {
-    Path p;
-    p.moveTo(x1_, y1_);
-    p.lineTo(x2_, y2_);
-    return p;
-}
-
-// 包围盒：两端点确定的最小矩形，宽高至少为 0。
-BoundingBox LineShape::bounds() const {
-    const double minX = std::min(x1_, x2_);
-    const double minY = std::min(y1_, y2_);
-    return {minX, minY, std::abs(x2_ - x1_), std::abs(y2_ - y1_)};
-}
-
-// 直线不含内部，恒返回 false（命中检测请使用 distanceToSegment）。
-bool LineShape::contains(const core::Point2D&) const { return false; }
-
-// 深拷贝。
-std::unique_ptr<Shape> LineShape::clone() const {
-    auto s = std::make_unique<LineShape>(x1_, y1_, x2_, y2_);
-    copyXformTo(*s);   // 保留非破坏性变换（缩放/旋转/翻转），避免深拷贝丢失。
-    return s;
-}
-
-// 平移：两个端点各偏移 (dx, dy)。
-void LineShape::translate(const double dx, const double dy) {
-    x1_ += dx; y1_ += dy;
-    x2_ += dx; y2_ += dy;
-}
-
-// 控制点：两个端点。
-std::vector<core::Point2D> LineShape::controlPoints() const {
-    return {{x1_, y1_}, {x2_, y2_}};
-}
-
-// 计算点到线段的最短距离，用于命中检测。
-double LineShape::distanceToSegment(const core::Point2D& p) const {
-    const double dx = x2_ - x1_;
-    const double dy = y2_ - y1_;
-    const double lenSq = dx * dx + dy * dy;
-    if (lenSq <= 1e-12) return std::hypot(p.x - x1_, p.y - y1_);
-    double t = ((p.x - x1_) * dx + (p.y - y1_) * dy) / lenSq;
-    t = std::clamp(t, 0.0, 1.0);
-    return std::hypot(p.x - (x1_ + t * dx), p.y - (y1_ + t * dy));
-}
-
-// ===========================================================================
-// RectShape
-// ===========================================================================
-
-// 构造：由左上角坐标与宽高定义。
-RectShape::RectShape(const double x, const double y, const double w, const double h)
-    : x_(x), y_(y), w_(w), h_(h) {}
-
-// 转为路径：四条边 + closePath。
-Path RectShape::toPath() const {
-    Path p;
-    p.moveTo(x_, y_);
-    p.lineTo(x_ + w_, y_);
-    p.lineTo(x_ + w_, y_ + h_);
-    p.lineTo(x_, y_ + h_);
-    p.closePath();
-    return p;
-}
-
-BoundingBox RectShape::bounds() const { return {x_, y_, w_, h_}; }
-
-// 内部判定：直接比较包围盒即可。
-bool RectShape::contains(const core::Point2D& p) const {
-    return p.x >= x_ && p.x <= x_ + w_ && p.y >= y_ && p.y <= y_ + h_;
-}
-
-std::unique_ptr<Shape> RectShape::clone() const {
-    auto s = std::make_unique<RectShape>(x_, y_, w_, h_);
-    copyXformTo(*s);   // 保留非破坏性变换。
-    return s;
-}
-
-// 平移：左上角偏移 (dx, dy)，宽高不变。
-void RectShape::translate(const double dx, const double dy) { x_ += dx; y_ += dy; }
-
-// 控制点：四个角点。
-std::vector<core::Point2D> RectShape::controlPoints() const {
-    return {{x_, y_}, {x_ + w_, y_}, {x_ + w_, y_ + h_}, {x_, y_ + h_}};
-}
-
-// ===========================================================================
-// RoundRectShape
-// ===========================================================================
-
-// 构造：矩形 + 圆角弧度宽高，可选类型（用于区分 ROUNDRECTANGLE / ROUNDSQUARE）。
-RoundRectShape::RoundRectShape(const double x, const double y, const double w, const double h,
-                               const double arcW, const double arcH, const ShapeType type)
-    : x_(x), y_(y), w_(w), h_(h), arcW_(arcW), arcH_(arcH), type_(type) {}
-
-// 转为路径：使用四段三次贝塞尔近似圆角，kappa ≈ 0.5523。
-Path RoundRectShape::toPath() const {
-    const double aw = std::min(arcW_, w_ / 2.0);
-    const double ah = std::min(arcH_, h_ / 2.0);
-    const double kx = aw * 0.5523;
-    const double ky = ah * 0.5523;
-
-    Path p;
-    p.moveTo(x_ + aw, y_);
-    p.lineTo(x_ + w_ - aw, y_);
-    p.cubicTo(x_ + w_ - aw + kx, y_, x_ + w_, y_ + ah - ky, x_ + w_, y_ + ah);
-    p.lineTo(x_ + w_, y_ + h_ - ah);
-    p.cubicTo(x_ + w_, y_ + h_ - ah + ky, x_ + w_ - aw + kx, y_ + h_, x_ + w_ - aw, y_ + h_);
-    p.lineTo(x_ + aw, y_ + h_);
-    p.cubicTo(x_ + aw - kx, y_ + h_, x_, y_ + h_ - ah + ky, x_, y_ + h_ - ah);
-    p.lineTo(x_, y_ + ah);
-    p.cubicTo(x_, y_ + ah - ky, x_ + aw - kx, y_, x_ + aw, y_);
-    p.closePath();
-    return p;
-}
-
-BoundingBox RoundRectShape::bounds() const { return {x_, y_, w_, h_}; }
-
-// 内部判定：使用扁平化后的路径扫描线判定，保证圆角处判定准确。
-bool RoundRectShape::contains(const core::Point2D& p) const {
-    return toPath().contains(p.x, p.y);
-}
-
-std::unique_ptr<Shape> RoundRectShape::clone() const {
-    auto s = std::make_unique<RoundRectShape>(x_, y_, w_, h_, arcW_, arcH_, type_);
-    copyXformTo(*s);   // 保留非破坏性变换。
-    return s;
-}
-
-// 平移：左上角偏移 (dx, dy)，宽高与圆角不变。
-void RoundRectShape::translate(const double dx, const double dy) { x_ += dx; y_ += dy; }
-
-// 控制点：四个角点，圆角不额外提供控制点。
-std::vector<core::Point2D> RoundRectShape::controlPoints() const {
-    return {{x_, y_}, {x_ + w_, y_}, {x_ + w_, y_ + h_}, {x_, y_ + h_}};
 }
 
 // ===========================================================================
@@ -246,12 +170,15 @@ std::vector<core::Point2D> EllipseShape::controlPoints() const {
 // PolygonShape
 // ===========================================================================
 
-// 构造：顶点列表 + 类型 + 是否闭合。
-PolygonShape::PolygonShape(std::vector<core::Point2D> points, const ShapeType type, const bool closed)
-    : points_(std::move(points)), type_(type), closed_(closed) {}
+// 构造：顶点列表 + 类型 + 是否闭合 + 转角圆角半径（px，0＝直角）。
+PolygonShape::PolygonShape(std::vector<core::Point2D> points, const ShapeType type, const bool closed,
+                           const double cornerRadius)
+    : points_(std::move(points)), type_(type), closed_(closed),
+      cornerRadius_(cornerRadius < 0.0 ? 0.0 : cornerRadius) {}
 
-// 转为路径：moveTo → 若干 lineTo →（可选）closePath。
+// 转为路径：无圆角时 moveTo → 若干 lineTo →（可选）closePath；半径>0 时各顶点二次贝塞尔倒角。
 Path PolygonShape::toPath() const {
+    if (cornerRadius_ > 0.0) return buildFilletPath(points_, closed_, cornerRadius_);
     Path p;
     if (points_.empty()) return p;
     p.moveTo(points_[0].x, points_[0].y);
@@ -271,7 +198,7 @@ bool PolygonShape::contains(const core::Point2D& p) const {
 }
 
 std::unique_ptr<Shape> PolygonShape::clone() const {
-    auto s = std::make_unique<PolygonShape>(points_, type_, closed_);
+    auto s = std::make_unique<PolygonShape>(points_, type_, closed_, cornerRadius_);
     copyXformTo(*s);   // 保留非破坏性变换。
     return s;
 }
@@ -285,10 +212,10 @@ void PolygonShape::translate(const double dx, const double dy) {
 std::vector<core::Point2D> PolygonShape::controlPoints() const { return points_; }
 
 // ===========================================================================
-// PathShape
+// PathShape（仅画笔自由路径）
 // ===========================================================================
 
-// 构造：直接持有一条 Path。
+// 构造：直接持有一条 Path + 类型（toPath 已内联返回原路径，无倒角）。
 PathShape::PathShape(Path path, const ShapeType type)
     : path_(std::move(path)), type_(type) {}
 

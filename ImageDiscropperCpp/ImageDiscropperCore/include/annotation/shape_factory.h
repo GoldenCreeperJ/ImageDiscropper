@@ -21,6 +21,7 @@ struct ShapeRequest {
     geometry::ShapeType type{geometry::ShapeType::LINE}; // 形状类型
     std::string text{"A"};        // TEXT 类型时使用的文本
     double fontSize{200.0};       // TEXT 类型时的字号
+    double cornerRadius{0.0};     // 转角圆角半径（px，0＝直角）：多边形 / 折线顶点倒角
     geometry::Path path;          // POLYLINE / PATH 类型时使用的既有路径
 };
 

@@ -104,10 +104,11 @@ Document 发 `changed()` → app 层 `PreviewController` 刷新预览；反向�
 
 右侧「标注」属性页。面板只采集属性意图并发信号，`AnnotationCoordinator` 写回 `AnnotationBridge`（EDIT 作用选中项、DRAW 作下一次绘制默认）。
 
-- `QFormLayout` 排五行：颜色色块按钮（`QColorDialog` 取色，**开启 `ShowAlphaChannel`**；标注颜色含 alpha，Core `Color` 有 a 分量、rasterizer 已做 src-over 混合；色块以 rgba 背景 + RGBA 文案回显）/ 粗细 spin（1..200）/ 填充开关 / 文字内容 / 字号 spin（1..2000）。
-- 信号：`colorPicked(QColor)`/`strokeChanged(int)`/`fillChanged(bool)`/`textChanged(QString)`/`fontSizeChanged(double)`。
-- `syncFromModel()`：颜色/粗细/填充取 `displayXxx`（选中项属性，否则当前默认）、文字/字号取 `currentXxx`（`blockSignals` 防回环）。
-- **Core `Annotation` 只有单一 color + fill 布尔（填充复用同一颜色），故本面板不提供独立填充色**。
+- `QFormLayout` 逐行排布：**边框色**色块按钮（`QColorDialog` 取色，**开启 `ShowAlphaChannel`**；标注颜色含 alpha，Core `Color` 有 a 分量、rasterizer 已做 src-over 混合；色块以 rgba 背景 + RGBA 文案回显）/ **填充色**独立色块按钮 / 粗细 spin（1..200）/ 填充开关 / 转角圆角半径 spin（0＝直角）/ 文字内容 / 字号 spin（1..2000）。
+- 信号：`colorPicked(QColor)`/`fillColorPicked(QColor)`/`strokeChanged(int)`/`fillChanged(bool)`/`cornerRadiusChanged(double)`/`textChanged(QString)`/`fontSizeChanged(double)`。
+- `syncFromModel()`：边框色 / 填充色 / 粗细 / 填充 / 圆角半径取 `displayXxx`（选中项属性，否则当前默认）、文字 / 字号取 `currentXxx`（`blockSignals` 防回环）。
+- **Core `Annotation` 区分边框色 `color` 与填充色 `fillColor`，故面板提供两个独立取色按钮**；新建标注的填充色默认跟随边框色，显式改过后断开联动。
+- **能力置灰**（`syncFromModel` 末尾按形状类型自动执行）：选中 / 绘制的形状不可填充（仅直线 / 文字）或未勾选填充时，禁用填充色按钮；无转角形状（直线 / 圆 / 椭圆 / 文字）时禁用圆角 spin。SELECT 且无选中时一律可用（此时编辑的是下一次绘制的默认值，不受上一工具残值错禁）；判定均由 `AnnotationBridge::contextSupportsFill/contextSupportsCornerRadius` 提供，面板只据此 `setEnabled`。
 - **变换区**（`transformGroup_`，非破坏性变换，方案 A；**绝对累积值语义、改动即生效**）：`scaleXSpin_`/`scaleYSpin_`（**-100000..100000 %**，默认 100；含负=翻转）+ `rotateSpin_`（**-36000..36000 °**，默认 0；容纳多次旋转的累积角），三 spin 均 `keyboardTracking(false)`（键入不逐字符触发，回车/失焦或点箭头才更新）。**无「应用变换」按钮**——改动任一 spin 即直接下发。
   `syncFromModel` 从 `model_->displayObbScaleX/Y/RotationDeg()` 读选中形状的**绝对累积变换**回显（系数×100 为百分比、含负；`blockSignals` 防回环），并把该基准存入 `curObbSx_/Sy_/Rot_`；spin 显示的就是底层真实参数（忠实反映、**不回弹**）。
   每个 spin 的 `valueChanged` **只按其单轴**把目标绝对值换算为相对基准的增量（缩放取比 `v/100/curObbSx_`、旋转取差 `v-curObbRot_`，其余两轴传恒等 `1.0`/`0.0`）再 `emit transformApplyRequested` → `AnnotationCoordinator` → `AnnotationBridge::transformSelected` → Core `Shape::applyObbTransform`（累积到 `xform_` 与带符号 OBB 参数）。因 `curObb*` 即当前底层绝对值，增量恰把该轴移到目标绝对值，故**连续编辑无漂移、且单轴改动不牵连其余两轴**（规避 % 取整误差扰动）；提交后模型发 `changed` → `syncFromModel` 依最新累积值回显（**无回弹**，所见即所得）。

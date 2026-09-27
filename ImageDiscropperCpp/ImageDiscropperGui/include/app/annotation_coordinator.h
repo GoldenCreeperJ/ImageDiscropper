@@ -64,11 +64,13 @@ public slots:
     void onAnnotationMoved(int index, double dx, double dy) const; // 拖动选中标注：Core 平移几何。
     void onAnnotationTransformed(int index, double sx, double sy, double rotateDeg) const; // 拖定向包围盒手柄：Core 缩放/旋转。
     void onAnnotationTransformPreview(int index, double sx, double sy, double rotateDeg) const; // 手柄拖拽中：预览值实时回显到属性面板。
-    void onAnnoColorPicked(const QColor& c) const;         // 属性面板：颜色。
+    void onAnnoColorPicked(const QColor& c) const;         // 属性面板：边框 / 描边颜色。
+    void onAnnoFillColorPicked(const QColor& c) const;     // 属性面板：填充颜色。
     void onAnnoStrokeChanged(int width) const;             // 属性面板：描边粗细。
     void onAnnoFillChanged(bool fill) const;               // 属性面板：填充开关。
     void onAnnoTextChanged(const QString& text) const;     // 属性面板：文字内容。
     void onAnnoFontSizeChanged(double size) const;         // 属性面板：字号。
+    void onAnnoCornerRadiusChanged(double radius) const;   // 属性面板：转角圆角半径。
     void onAnnoTransformApply(double sx, double sy, double rotateDeg) const; // 属性面板：缩放/旋转选中标注（Core 非破坏性变换）。
     void onBaseVisibilityChanged(bool visible) const;      // 图层面板：底图显隐（切画布 base 图元）。
     void onMaskVisibilityChanged(bool visible) const;      // 图层面板：遮罩（保留/删除预览）显隐。

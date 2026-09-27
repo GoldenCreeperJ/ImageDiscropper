@@ -9,14 +9,15 @@
 
 **分块依据**：
 1. `shape_factory.h` —— 只负责「给定两个锚点 + `ShapeType`，构造 `Shape`」。
-2. `rasterizer.h` —— 只负责「把 `Shape` 画到 `Image` 上」：描边、填充、Alpha 混合、抗锯齿。
-3. `annotation_layer.h` —— 管理标注集合、编辑模式、颜色/线宽/填充属性，删除指定项（`removeAnnotation`），撤销重做复用 `history::HistoryManager<Annotation>`；
+2. `rasterizer.h` —— 只负责「把 `Shape` 画到 `Image` 上」：`PaintStyle` 区分**描边色 `color` 与填充色 `fillColor`**；
+   当 `fill` 为真且形状非 LINE 时先用 `fillColor` 填充内部（折线 / 画笔按首尾隐式闭合），随后始终按 `color` 描边（填充形状因此也带边框）；支持 Alpha 混合与抗锯齿。
+3. `annotation_layer.h` —— 管理标注集合、编辑模式、边框色 / **独立填充色** / 线宽 / 填充开关 / **转角圆角半径**属性（新建标注的填充色默认跟随边框色，显式改过后断开联动），删除指定项（`removeAnnotation`），撤销重做复用 `history::HistoryManager<Annotation>`；
    `burnIn()` 把底图与全部标注合成为一张图像（即「烧录」）。
 4. `view_transform.h` —— 屏幕坐标 ↔ 逻辑坐标换算、以指定点缩放、图像适配视口；Core 提供的 Qt 无关视口工具，当前由 examples/tests 使用（GUI 改用 QGraphicsView 自带变换，未直接用本类）。
 
-| 文件                   | 职责                                             |
-|----------------------|------------------------------------------------|
-| `shape_factory.h`    | 依据 `ShapeType` 与锚点构造 `Shape`（`buildShape`）     |
-| `rasterizer.h`       | 光栅化：填充、描边、Alpha 混合（`rasterize` / `PaintStyle`） |
-| `annotation_layer.h` | 标注会话状态机 `AnnotationLayer` 与标注记录 `Annotation`   |
-| `view_transform.h`   | 视图坐标变换 `ViewTransform`                         |
+| 文件                   | 职责                                                         |
+|----------------------|------------------------------------------------------------|
+| `shape_factory.h`    | 依据 `ShapeType` 与锚点构造 `Shape`（`buildShape`）                 |
+| `rasterizer.h`       | 光栅化：边框色 / 填充色分离、描边、填充、Alpha 混合（`rasterize` / `PaintStyle`） |
+| `annotation_layer.h` | 标注会话状态机 `AnnotationLayer` 与标注记录 `Annotation`               |
+| `view_transform.h`   | 视图坐标变换 `ViewTransform`                                     |

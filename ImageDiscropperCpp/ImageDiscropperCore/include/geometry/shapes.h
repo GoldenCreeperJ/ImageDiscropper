@@ -1,8 +1,9 @@
 // ============================================================================
 // 文件：include/geometry/shapes.h
-// 作用：定义具体形状类型（LineShape / RectShape / EllipseShape /
-//       RoundRectShape / PolygonShape / PathShape / TextShape），提供统一的
-//       Shape 抽象接口。
+// 作用：定义具体形状类型（EllipseShape / PolygonShape / PathShape / TextShape），
+//       提供统一的 Shape 抽象接口。
+//       直线 / 折线 / 矩形类（含原圆角矩形 / 圆角正方形）均已并入 PolygonShape，
+//       靠 cornerRadius 统一表达转角圆角；PathShape 仅承载画笔自由路径。
 // ============================================================================
 #pragma once
 
@@ -46,6 +47,12 @@ public:
     // 从而**保留具体类型与参数化身份**——避免标注移动后类型退化为通用 PATH
     // （退化会导致 TEXT 丢失字形渲染、参数化元数据与控制点语义丢失）。
     virtual void translate(double dx, double dy) = 0;
+
+    // 转角圆角半径（px，0＝直角）。仅顶点型形状（PolygonShape）实现真实倒角；
+    // 直线 / 折线虽为 PolygonShape，但开放链首末端无夹角，倒角只作用内部顶点。
+    // 其余形状（椭圆 / 画笔 / 文字）无转角概念：默认读回 0、写为空操作。
+    virtual double cornerRadius() const { return 0.0; }
+    virtual void setCornerRadius(double r) { (void)r; }
 
     // ---- 非破坏性变换（缩放 / 拉伸 / 旋转 / 翻转）----
     // 变换以矩阵 xform_ 累积存储，**不改动子类的参数化几何**（故类型 / 文字字形永不退化）；
@@ -139,77 +146,6 @@ protected:
 };
 
 // ---------------------------------------------------------------------------
-// LineShape：直线段
-// ---------------------------------------------------------------------------
-class LineShape : public Shape {
-public:
-    LineShape(double x1, double y1, double x2, double y2);
-
-    ShapeType type() const override { return ShapeType::LINE; }
-    Path toPath() const override;
-    BoundingBox bounds() const override;
-    bool contains(const core::Point2D& p) const override; // 直线不含内部，恒 false
-    std::unique_ptr<Shape> clone() const override;
-    std::vector<core::Point2D> controlPoints() const override;
-    void translate(double dx, double dy) override;
-
-    // 端点访问。
-    core::Point2D p1() const { return {x1_, y1_}; }
-    core::Point2D p2() const { return {x2_, y2_}; }
-
-    // 计算点到线段的最短距离，用于命中检测。
-    double distanceToSegment(const core::Point2D& p) const;
-
-private:
-    double x1_, y1_, x2_, y2_;
-};
-
-// ---------------------------------------------------------------------------
-// RectShape：矩形
-// ---------------------------------------------------------------------------
-class RectShape : public Shape {
-public:
-    RectShape(double x, double y, double w, double h);
-
-    ShapeType type() const override { return ShapeType::RECTANGLE; }
-    Path toPath() const override;
-    BoundingBox bounds() const override;
-    bool contains(const core::Point2D& p) const override;
-    std::unique_ptr<Shape> clone() const override;
-    std::vector<core::Point2D> controlPoints() const override;
-    void translate(double dx, double dy) override;
-
-    double x() const { return x_; }
-    double y() const { return y_; }
-    double width() const { return w_; }
-    double height() const { return h_; }
-
-private:
-    double x_, y_, w_, h_;
-};
-
-// ---------------------------------------------------------------------------
-// RoundRectShape：圆角矩形
-// ---------------------------------------------------------------------------
-class RoundRectShape : public Shape {
-public:
-    RoundRectShape(double x, double y, double w, double h, double arcW, double arcH,
-                   ShapeType type = ShapeType::ROUNDRECTANGLE);
-
-    ShapeType type() const override { return type_; }
-    Path toPath() const override;
-    BoundingBox bounds() const override;
-    bool contains(const core::Point2D& p) const override;
-    std::unique_ptr<Shape> clone() const override;
-    std::vector<core::Point2D> controlPoints() const override;
-    void translate(double dx, double dy) override;
-
-private:
-    double x_, y_, w_, h_, arcW_, arcH_;
-    ShapeType type_;
-};
-
-// ---------------------------------------------------------------------------
 // EllipseShape：椭圆 / 圆
 // ---------------------------------------------------------------------------
 class EllipseShape : public Shape {
@@ -236,12 +172,14 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// PolygonShape：任意多边形 / 折线
-// 用途：RHOMBUS / SQUARE / 各类三角形 / POLYLINE 等由顶点列表描述的形状。
+// PolygonShape：任意多边形 / 折线 / 直线
+// 用途：RECTANGLE / SQUARE / RHOMBUS / 各类三角形 / POLYLINE / LINE 等由顶点列表描述的形状。
+//       直线＝2 顶点开放多边形，折线＝多顶点开放多边形，闭合与否由 closed_ 决定。
 // ---------------------------------------------------------------------------
 class PolygonShape : public Shape {
 public:
-    PolygonShape(std::vector<core::Point2D> points, ShapeType type, bool closed);
+    PolygonShape(std::vector<core::Point2D> points, ShapeType type, bool closed,
+                 double cornerRadius = 0.0);
 
     ShapeType type() const override { return type_; }
     Path toPath() const override;
@@ -251,6 +189,10 @@ public:
     std::vector<core::Point2D> controlPoints() const override;
     void translate(double dx, double dy) override;
 
+    // 转角圆角：半径>0 时各顶点以二次贝塞尔倒角（见 toPath）。
+    double cornerRadius() const override { return cornerRadius_; }
+    void setCornerRadius(const double r) override { cornerRadius_ = r < 0.0 ? 0.0 : r; }
+
     // 顶点访问，主要用于序列化与调试。
     const std::vector<core::Point2D>& points() const { return points_; }
     bool closed() const { return closed_; }
@@ -259,11 +201,13 @@ private:
     std::vector<core::Point2D> points_;
     ShapeType type_;
     bool closed_;
+    double cornerRadius_{0.0};
 };
 
 // ---------------------------------------------------------------------------
-// PathShape：自由路径
+// PathShape：自由路径（仅画笔）
 //           直接持有一条 Path（对应 FR-1.3 的画笔 / 自由路径标注）。
+//           直线 / 折线已改由 PolygonShape 表达，本类无转角倒角概念。
 // ---------------------------------------------------------------------------
 class PathShape : public Shape {
 public:

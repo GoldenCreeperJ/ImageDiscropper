@@ -13,8 +13,6 @@ enum class ShapeType {
     RECTANGLE,          // 矩形
     SQUARE,             // 正方形（以起点到当前点的向量为一条边）
     RHOMBUS,            // 菱形（起点为中心，dx/dy 为半对角线）
-    ROUNDRECTANGLE,     // 圆角矩形
-    ROUNDSQUARE,        // 圆角正方形
     ELLIPSE,            // 椭圆（两点确定外接矩形）
     CIRCLE,             // 圆形（起点为圆心，两点距离为半径）
     POLYLINE,           // 多线段（拖动连续追加）

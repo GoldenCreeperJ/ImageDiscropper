@@ -23,6 +23,7 @@ namespace idc::annotation {
 Annotation::Annotation(const Annotation& o)
     : shape(o.shape ? o.shape->clone() : nullptr),
       color(o.color),
+      fillColor(o.fillColor),
       strokeWidth(o.strokeWidth),
       fillType(o.fillType),
       shapeType(o.shapeType) {}
@@ -32,6 +33,7 @@ Annotation& Annotation::operator=(const Annotation& o) {
     if (this != &o) {
         shape = o.shape ? o.shape->clone() : nullptr;
         color = o.color;
+        fillColor = o.fillColor;
         strokeWidth = o.strokeWidth;
         fillType = o.fillType;
         shapeType = o.shapeType;
@@ -83,12 +85,24 @@ void AnnotationLayer::setEditType(const EditType t) {
 
 // ------ 属性修改 ------
 
-// 修改颜色：EDIT 模式下作用到选中形状；否则修改当前工具颜色。
+// 修改颜色（边框 / 描边色）：EDIT 模式下作用到选中形状；否则修改当前工具颜色。
+// 若当前填充色仍与边框色联动（未显式改过填充色），则同步更新默认填充色，使新标注填充保持旧观感。
 void AnnotationLayer::changeColor(const core::Color& c) {
     if (editType_ == EditType::EDIT && selectedIndex_ && *selectedIndex_ < history_.undoStack().size()) {
         history_.undoStack()[*selectedIndex_].color = c;
     } else {
         currentColor_ = c;
+        if (fillColorLinked_) currentFillColor_ = c;
+    }
+}
+
+// 修改填充色：EDIT 作用选中项的 fillColor；DRAW 改当前默认填充色并断开与边框色的联动。
+void AnnotationLayer::changeFillColor(const core::Color& c) {
+    if (editType_ == EditType::EDIT && selectedIndex_ && *selectedIndex_ < history_.undoStack().size()) {
+        history_.undoStack()[*selectedIndex_].fillColor = c;
+    } else {
+        currentFillColor_ = c;
+        fillColorLinked_ = false;   // 用户显式指定填充色后不再跟随边框色
     }
 }
 
@@ -116,6 +130,17 @@ void AnnotationLayer::changeText(const std::string& text) { currentText_ = text;
 // 修改当前字号（TEXT 类型使用）。
 void AnnotationLayer::changeFontSize(const double size) { currentFontSize_ = std::max(1.0, size); }
 
+// 修改转角圆角半径：EDIT 模式下就地写到选中形状的几何（无转角概念的形状为空调用），
+// 否则记为下一次绘制的默认圆角半径。与颜色/填充的事后编辑一致：不推历史快照（可撤销的仍是 add/remove）。
+void AnnotationLayer::changeCornerRadius(const double r) {
+    const double radius = r < 0.0 ? 0.0 : r;
+    if (editType_ == EditType::EDIT && selectedIndex_ && *selectedIndex_ < history_.undoStack().size()) {
+        if (const Annotation& a = history_.undoStack()[*selectedIndex_]; a.shape) a.shape->setCornerRadius(radius);
+    } else {
+        currentCornerRadius_ = radius;
+    }
+}
+
 // ------ 形状提交与命中 ------
 
 // 提交一个新形状：封装为 Annotation 后推入撤销重做主栈（HistoryManager::push，
@@ -125,6 +150,7 @@ void AnnotationLayer::addAnnotation(std::unique_ptr<geometry::Shape> shape) {
     Annotation ps;
     ps.shapeType = shape->type();
     ps.color = currentColor_;
+    ps.fillColor = currentFillColor_;
     ps.strokeWidth = currentStrokeWidth_;
     ps.fillType = currentFill_;
     ps.shape = std::move(shape);
@@ -217,6 +243,7 @@ core::Image AnnotationLayer::burnIn() const {
         if (!ps.shape) continue;
         PaintStyle style;
         style.color = ps.color;
+        style.fillColor = ps.fillColor;
         style.strokeWidth = ps.strokeWidth;
         style.fill = ps.fillType;
         style.antialias = true;

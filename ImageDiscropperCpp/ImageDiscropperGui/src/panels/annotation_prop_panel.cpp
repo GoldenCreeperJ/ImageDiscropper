@@ -1,13 +1,14 @@
 // ============================================================================
 // 文件：src/panels/annotation_prop_panel.cpp
 // 作用：实现标注属性页的构建、取色器与模型回显（见同名头文件说明）。
-// 分块依据：QFormLayout 排布「颜色 / 粗细 / 填充 / 文字 / 字号」五行；控件变更转发为信号，
+// 分块依据：QFormLayout 排布「边框颜色 / 粗细 / 填充 / 填充颜色 / 文字 / 字号 / 圆角」等行；控件变更转发为信号，
 //           取色器为纯 UI 关注点（QColorDialog）；槽内无任何几何 / 光栅化逻辑（CONTRIBUTING.md「分层纪律」）。
 // ============================================================================
 #include "panels/annotation_prop_panel.h"
 
 #include <QCheckBox>
 #include <QColorDialog>
+#include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QLineEdit>
@@ -19,6 +20,51 @@
 
 namespace idc::gui {
 
+namespace {
+
+// 依颜色刷新色块按钮背景（含 Alpha：rgba 背景 + 文案标注不透明度；浅色用深字、深色用浅字，保证可读）。
+// 用 rgba() 而非 name()（后者丢弃 alpha），使色块能预览半透明。
+void applySwatch(QPushButton* btn, const QColor& c) {
+    const QString fg = c.lightness() < 128 ? QStringLiteral("#fff") : QStringLiteral("#000");
+    const QString bg = QStringLiteral("rgba(%1,%2,%3,%4)")
+                           .arg(c.red()).arg(c.green()).arg(c.blue()).arg(c.alpha());
+    btn->setStyleSheet(QStringLiteral("QPushButton{background:%1;color:%2;border:1px solid #999;"
+                                            "border-radius:4px;padding:4px;}"
+                                            // :disabled 分支必需：色块背景由样式表接管，Qt 默认置灰不会生效，
+                                            // 不补禁用态外观则「填充色被禁用」几乎看不出（与灰色默认按钮无差异）。
+                                            "QPushButton:disabled{background:#dcdcdc;color:#9a9a9a;"
+                                            "border:1px solid #bdbdbd;}")
+                                 .arg(bg, fg));
+    btn->setText(QStringLiteral("颜色(%1,%2,%3,%4)")
+                     .arg(c.red()).arg(c.green()).arg(c.blue()).arg(c.alpha()));
+}
+
+// 通用取色：弹出带 Alpha 的非原生 QColorDialog；确认且颜色有效则写回 inout 并返回 true。
+// 说明：标注颜色支持 alpha（Core Color 含 a 分量、rasterizer 已做 src-over 混合），故开启 ShowAlphaChannel。
+//       因需 Alpha 通道，Qt 在 Windows 无法用原生取色框而回退到自带固定尺寸对话框（min==max）；若不显式
+//       设定初始 geometry，会被 Windows 夹到默认最小尺寸而反复刷 setGeometry 噪声告警。故以顶层窗口为父 +
+//       DontUseNativeDialog，并在 exec 前显式给定 >= 最小尺寸的初始 geometry（取自 sizeHint、居中到父窗口）。
+bool pickColorWithAlpha(QWidget* dlgParent, QColor& inout, const QString& title) {
+    QColorDialog dlg(inout, dlgParent);
+    dlg.setWindowTitle(title);
+    dlg.setOption(QColorDialog::ShowAlphaChannel, true);
+    dlg.setOption(QColorDialog::DontUseNativeDialog, true);
+    const QSize dlgSz = dlg.minimumSizeHint().expandedTo(dlg.sizeHint());
+    QPoint pos(80, 80);
+    if (const QWidget* pw = dlg.parentWidget()) {
+        const QRect pg = pw->window()->geometry();
+        pos = pg.center() - QPoint(dlgSz.width() / 2, dlgSz.height() / 2);
+    }
+    dlg.setGeometry(pos.x(), pos.y(), dlgSz.width(), dlgSz.height());
+    if (dlg.exec() != QDialog::Accepted) return false;
+    const QColor c = dlg.currentColor();
+    if (!c.isValid()) return false;
+    inout = c;
+    return true;
+}
+
+} // namespace
+
 // 构建属性页表单。
 AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     auto* root = new QVBoxLayout(this);
@@ -28,10 +74,10 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     auto* form = new QFormLayout();
     form->setSpacing(6);
 
-    // 颜色：色块按钮，点击打开取色器（描边与填充共用同一颜色）。
+    // 边框 / 描边颜色：色块按钮，点击打开取色器（填充色为下方独立控件）。
     colorBtn_ = new QPushButton(QStringLiteral("选择颜色…"), this);
-    colorBtn_->setToolTip(QStringLiteral("标注描边 / 填充颜色（按钮文字依次为红、绿、蓝、透明度）"));
-    form->addRow(QStringLiteral("颜色"), colorBtn_);
+    colorBtn_->setToolTip(QStringLiteral("标注的边框 / 描边颜色（按钮文字依次为红、绿、蓝、透明度）"));
+    form->addRow(QStringLiteral("边框颜色"), colorBtn_);
 
     // 描边粗细。
     strokeSpin_ = new QSpinBox(this);
@@ -43,8 +89,13 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
 
     // 填充开关。
     fillCheck_ = new QCheckBox(QStringLiteral("填充内部"), this);
-    fillCheck_->setToolTip(QStringLiteral("闭合形状是否填充（填充色同描边色；直线无效）"));
+    fillCheck_->setToolTip(QStringLiteral("形状是否填充内部（折线 / 画笔按首尾隐式闭合填充；直线 / 文字不可填充，此时本复选框置灰）；填充色见下行独立控件"));
     form->addRow(QStringLiteral("填充"), fillCheck_);
+
+    // 填充颜色：独立于边框色的取色按钮（仅填充开启时可见效果）。
+    fillColorBtn_ = new QPushButton(QStringLiteral("选择颜色…"), this);
+    fillColorBtn_->setToolTip(QStringLiteral("标注的填充颜色（与边框色独立；仅当形状可填充且已勾选填充时可用；按钮文字依次为红、绿、蓝、透明度）"));
+    form->addRow(QStringLiteral("填充颜色"), fillColorBtn_);
 
     // 文字内容。
     textEdit_ = new QLineEdit(this);
@@ -58,6 +109,17 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     fontSpin_->setValue(200);
     fontSpin_->setToolTip(QStringLiteral("文字标注的字号（像素）"));
     form->addRow(QStringLiteral("字号"), fontSpin_);
+
+    // 转角圆角半径（多边形 / 折线顶点倒角；直线 / 圆 / 文字无转角，设置无效）。
+    cornerSpin_ = new QDoubleSpinBox(this);
+    cornerSpin_->setRange(0.0, 500.0);
+    cornerSpin_->setDecimals(1);
+    cornerSpin_->setSingleStep(1.0);
+    cornerSpin_->setValue(0.0);
+    cornerSpin_->setSuffix(QStringLiteral(" px"));
+    cornerSpin_->setKeyboardTracking(false);
+    cornerSpin_->setToolTip(QStringLiteral("转角圆角半径（0＝直角）；仅作用于多边形 / 折线顶点，直线 / 圆 / 椭圆 / 文字无转角（控件会自动置灰）。EDIT 模式改选中项，否则为下次绘制默认"));
+    form->addRow(QStringLiteral("圆角"), cornerSpin_);
 
     root->addLayout(form);
 
@@ -95,12 +157,15 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
 
     // 控件变更 → 面板意图信号。
     connect(colorBtn_, &QPushButton::clicked, this, &AnnotationPropPanel::onPickColor);
+    connect(fillColorBtn_, &QPushButton::clicked, this, &AnnotationPropPanel::onPickFillColor);
     connect(strokeSpin_, &QSpinBox::valueChanged, this, &AnnotationPropPanel::strokeChanged);
     connect(fillCheck_, &QCheckBox::toggled, this, &AnnotationPropPanel::fillChanged);
     connect(textEdit_, &QLineEdit::editingFinished,
             this, [this] { emit textChanged(textEdit_->text()); });
     connect(fontSpin_, &QSpinBox::valueChanged,
             this, [this](const int v) { emit fontSizeChanged(v); });
+    connect(cornerSpin_, &QDoubleSpinBox::valueChanged,
+            this, &AnnotationPropPanel::cornerRadiusChanged);
     // 变换区改动即生效（无「应用」按钮）：面板显示**绝对累积值**，故每个 spin 按其单轴把目标绝对值
     // 换算为相对基准 curObb* 的增量（缩放取比、旋转取差，其余两轴传恒等 1.0/0.0）再下发——只动本轴、
     // 不牵连其余两轴（避免 % 取整误差扰动）。因 curObb* 即当前底层绝对值，增量恰把该轴移到 spin 指定的
@@ -118,6 +183,7 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     });
 
     updateSwatch();
+    updateFillSwatch();
 }
 
 void AnnotationPropPanel::setModel(AnnotationBridge* model) {
@@ -131,6 +197,9 @@ void AnnotationPropPanel::syncFromModel() {
 
     color_ = toQColor(model_->displayColor());
     updateSwatch();
+
+    fillColor_ = toQColor(model_->displayFillColor());
+    updateFillSwatch();
 
     strokeSpin_->blockSignals(true);
     strokeSpin_->setValue(model_->displayStrokeWidth());
@@ -147,6 +216,17 @@ void AnnotationPropPanel::syncFromModel() {
     fontSpin_->blockSignals(true);
     fontSpin_->setValue(static_cast<int>(model_->currentFontSize()));
     fontSpin_->blockSignals(false);
+
+    cornerSpin_->blockSignals(true);
+    cornerSpin_->setValue(model_->displayCornerRadius());
+    cornerSpin_->blockSignals(false);
+
+    // 依当前形状类型的能力置灰不适用控件：无转角的类型（直线 / 圆 / 椭圆 / 文字）禁用圆角数值；
+    // 「不可填充」改由「填充」复选框置灰承载（勾选框禁用态显眼；色块按钮自带彩色背景、禁用态难辨），
+    // 填充色按钮仍仅在可填充且已勾选时可用（其禁用态由 applySwatch 的 :disabled 样式保证可见）。
+    cornerSpin_->setEnabled(model_->contextSupportsCornerRadius());
+    fillCheck_->setEnabled(model_->contextSupportsFill());
+    fillColorBtn_->setEnabled(model_->contextSupportsFill() && fillCheck_->isChecked());
 
     // 变换区仅在有选中标注时可用（无选中时变换无作用对象）；数值回显选中形状的**绝对累积变换**（忠实反映底层）。
     const bool hasSel = model_->selectedIndex().has_value();
@@ -179,47 +259,24 @@ void AnnotationPropPanel::setTransformPreview(const double sx, const double sy, 
     rotateSpin_->blockSignals(false);
 }
 
-// 打开取色器（带 Alpha 通道）；确认后刷新色块并发 colorPicked。
-// 说明：标注颜色支持 alpha（Core Color 含 a 分量、rasterizer 已做 src-over 混合），故取色器
-//       开启 ShowAlphaChannel。因需 Alpha 通道，Qt 在 Windows 无法用原生取色框而回退到自带的
-//       固定尺寸对话框 QColorDialogClassWindow（min==max）。若不显式设定初始 geometry，Qt 会以
-//       一个默认小尺寸（如 180x45）初始化，show 时被 Windows 强制夹到该固定最小尺寸，从而反复刷
-//       "QWindowsWindow::setGeometry: Unable to set geometry" 噪声告警（告警良性但噪声大）。
-//       故：以顶层窗口为父 + DontUseNativeDialog，并在 exec 前**显式给定一个 >= 对话框最小尺寸的
-//       初始 geometry**（尺寸取自对话框自身 sizeHint，随 DPI 自适应、居中到父窗口），从源头规避该告警。
-//       （与导出面板填充色取色框同一处理方式。）
+// 打开边框色取色器；确认后刷新色块并发 colorPicked。
 void AnnotationPropPanel::onPickColor() {
-    QColorDialog dlg(color_, window());                 // 以顶层窗口为父，便于居中且不以窄面板推导初始位置。
-    dlg.setWindowTitle(QStringLiteral("选择标注颜色"));
-    dlg.setOption(QColorDialog::ShowAlphaChannel, true);
-    dlg.setOption(QColorDialog::DontUseNativeDialog, true); // Alpha 需求下本就走非原生，显式声明意图。
-    // 关键：显式设定初始 geometry（>= 固定最小尺寸、居中到父窗口），避免默认小尺寸被 Windows 夹取而刷 setGeometry 告警。
-    const QSize dlgSz = dlg.minimumSizeHint().expandedTo(dlg.sizeHint());
-    QPoint dlgPos(80, 80);
-    if (const QWidget* pw = dlg.parentWidget()) {
-        const QRect pg = pw->window()->geometry();       // 顶层窗口 geometry 为全局屏幕坐标。
-        dlgPos = pg.center() - QPoint(dlgSz.width() / 2, dlgSz.height() / 2);
-    }
-    dlg.setGeometry(dlgPos.x(), dlgPos.y(), dlgSz.width(), dlgSz.height());
-    if (dlg.exec() != QDialog::Accepted) return;        // 用户取消。
-    const QColor c = dlg.currentColor();
-    if (!c.isValid()) return;
-    color_ = c;
+    if (!pickColorWithAlpha(window(), color_, QStringLiteral("选择边框颜色"))) return;
     updateSwatch();
-    emit colorPicked(c);
+    emit colorPicked(color_);
 }
 
-// 依当前颜色刷新色块按钮背景（含 Alpha：rgba 背景 + 文案标注不透明度；浅色用深字、深色用浅字，保证可读）。
-void AnnotationPropPanel::updateSwatch() const {
-    const QString fg = color_.lightness() < 128 ? QStringLiteral("#fff") : QStringLiteral("#000");
-    // 用 rgba() 而非 name()（后者丢弃 alpha），使色块能预览半透明；文案回显颜色分量。
-    const QString bg = QStringLiteral("rgba(%1,%2,%3,%4)")
-                           .arg(color_.red()).arg(color_.green()).arg(color_.blue()).arg(color_.alpha());
-    colorBtn_->setStyleSheet(QStringLiteral("QPushButton{background:%1;color:%2;border:1px solid #999;"
-                                            "border-radius:4px;padding:4px;}")
-                                 .arg(bg, fg));
-    colorBtn_->setText(QStringLiteral("颜色(%1,%2,%3,%4)")
-                           .arg(color_.red()).arg(color_.green()).arg(color_.blue()).arg(color_.alpha()));
+// 打开填充色取色器；确认后刷新色块并发 fillColorPicked。
+void AnnotationPropPanel::onPickFillColor() {
+    if (!pickColorWithAlpha(window(), fillColor_, QStringLiteral("选择填充颜色"))) return;
+    updateFillSwatch();
+    emit fillColorPicked(fillColor_);
 }
+
+// 刷新边框色块按钮背景。
+void AnnotationPropPanel::updateSwatch() const { applySwatch(colorBtn_, color_); }
+
+// 刷新填充色块按钮背景。
+void AnnotationPropPanel::updateFillSwatch() const { applySwatch(fillColorBtn_, fillColor_); }
 
 } // namespace idc::gui

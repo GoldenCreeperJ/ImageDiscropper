@@ -65,8 +65,8 @@ static void testGeometry() {
     using namespace idc;
     using namespace idc::geometry;
 
-    // 矩形包围盒
-    const RectShape rect(10, 20, 30, 40);
+    // 矩形（已并入 PolygonShape：四点闭合多边形）包围盒 / 内部判定 / 控制点
+    const PolygonShape rect({{10, 20}, {40, 20}, {40, 60}, {10, 60}}, ShapeType::RECTANGLE, true);
     const auto [x, y, width, height] = rect.bounds();
     CHECK(x == 10 && y == 20 && width == 30 && height == 40);
     CHECK(rect.contains(core::Point2D{25, 40}));
@@ -100,6 +100,35 @@ static void testGeometry() {
     const TextShape mixedText("中a", 0, 0, 10);
     const auto [mx, my, mw, mh] = mixedText.bounds();
     CHECK(mw == 15.0);                       // 1.0 + 0.5 = 1.5 × 10
+
+    // 转角圆角（倒角）：半径>0 时 toPath 含二次贝塞尔段；AABB 与直角时一致（bounds 取控制点=原顶点）。
+    // 注：先将 toPath() 存为命名 Path 再遍历（直接 x.toPath().segments() 会使临时量悬挂）。
+    auto hasQuadSeg = [](const Path& p) {
+        for (const auto& seg : p.segments()) {
+            if (seg.type == PathSegmentType::QUAD_TO) return true;
+        }
+        return false;
+    };
+    const PolygonShape rrect({{0, 0}, {100, 0}, {100, 100}, {0, 100}}, ShapeType::RECTANGLE, true, 20.0);
+    const Path rrectPath = rrect.toPath();
+    CHECK(hasQuadSeg(rrectPath));
+    const auto [rx, ry, rw, rh] = rrect.bounds();
+    CHECK(rx == 0 && ry == 0 && rw == 100 && rh == 100);
+    CHECK(rrect.cornerRadius() == 20.0);
+
+    // setter 往返 + 负值钳为 0；clone 保留圆角半径。
+    PolygonShape mut({{0, 0}, {10, 0}, {10, 10}}, ShapeType::ISOS_TRIANGLE, true);
+    mut.setCornerRadius(5.0);
+    CHECK(mut.cornerRadius() == 5.0);
+    mut.setCornerRadius(-3.0);
+    CHECK(mut.cornerRadius() == 0.0);
+    mut.setCornerRadius(7.0);
+    CHECK(mut.clone()->cornerRadius() == 7.0);
+
+    // 开放折线：内部顶点倒角（含 QUAD）；现由 PolygonShape 直接表达（不再走 PathShape）。
+    const PolygonShape openLine({{0, 0}, {50, 0}, {50, 50}, {100, 50}}, ShapeType::POLYLINE, false, 10.0);
+    const Path openPath = openLine.toPath();
+    CHECK(hasQuadSeg(openPath));
 
     std::cout << "[geometry] OK\n";
 }
@@ -246,17 +275,21 @@ static void testAnnotation() {
     CHECK(circle != nullptr);
     CHECK(circle->type() == geometry::ShapeType::CIRCLE);
 
-    // Rasterizer：在 200x200 白底上画红色矩形
+    // Rasterizer：200x200 白底上画填充矩形，验证填充色与边框色分离（rect 为 (10,10)-(50,40)）
     core::Image canvas(200, 200, core::ImageFormat::RGBA);
     canvas.fill(core::kWhite);
     annotation::PaintStyle style;
-    style.color = core::kRed;
+    style.color = core::kBlue;         // 边框 / 描边色
+    style.fillColor = core::kRed;      // 填充色
     style.strokeWidth = 2;
     style.fill = true;
     annotation::rasterize(canvas, *rect, style);
-    // 矩形内部 (30, 25) 应被染红
+    // 矩形内部 (30, 25) 应为填充色（红）
     core::Color inside = canvas.getPixel(30, 25);
     CHECK(inside.r > 200 && inside.g < 50 && inside.b < 50);
+    // 顶边 (25, 10) 应为边框色（蓝）——描边晚于填充绘制，故边框像素为蓝色
+    core::Color edge = canvas.getPixel(25, 10);
+    CHECK(edge.b > 200 && edge.r < 50);
 
     // AnnotationLayer：提交形状 + 撤销 + 重做 + 清除
     annotation::AnnotationLayer panel;

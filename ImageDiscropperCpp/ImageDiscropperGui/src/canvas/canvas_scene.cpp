@@ -326,6 +326,7 @@ void CanvasScene::updatePendingAnnotation(const AnnotationBridge& model) {
         annotation::Annotation tmp;
         tmp.shape = ps->clone();
         tmp.color = model.currentColor();
+        tmp.fillColor = model.currentFillColor();
         tmp.strokeWidth = model.currentStrokeWidth();
         tmp.fillType = model.currentFill();
         tmp.shapeType = ps->type();

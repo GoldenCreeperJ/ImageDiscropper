@@ -61,7 +61,8 @@ L3 网格参数 `GridParams`（默认单元 100×100，避免 `GridParams` 默�
 `annotation::AnnotationLayer` 的类，把画布/面板意图翻译成对 Core 标注 API 的调用，**自身不含任何几何/光栅化**。
 
 - `enum class AnnoTool`：SELECT + 各形状 + POLYLINE + TEXT + BRUSH；`shapeTypeForTool()` 映射到 Core `geometry::ShapeType`（**无箭头**：Core `ShapeType` 无 ARROW）。
-- **工具/属性**：`setTool`（SELECT→Core EDIT 模式、其余→DRAW）、`setColor/setStrokeWidth/setFill/setText/setFontSize`（委托 Core `change*`：EDIT 作用选中项、DRAW 改下一次绘制默认）。
+- **工具/属性**：`setTool`（SELECT→Core EDIT 模式、其余→DRAW）、`setColor`（边框色）/`setFillColor`（独立填充色）/`setStrokeWidth`/`setFill`/`setCornerRadius`（转角圆角半径）/`setText`/`setFontSize`（委托 Core `change*`：EDIT 作用选中项、DRAW 改下一次绘制默认）。回显走 `displayColor/displayFillColor/displayStrokeWidth/displayFill/displayCornerRadius`（有选中取选中项、否则当前默认）。
+- **能力查询**（供属性面板置灰不适用控件，判定均在 GUI 桥层、不改 Core）：`contextSupportsFill()`（仅直线 / 文字不可填充，折线 / 画笔隐式闭合可填充）、`contextSupportsCornerRadius()`（仅顶点型多边形 / 折线可倒角）；有选中按选中形状类型、绘制工具按工具类型、SELECT 无选中一律可用（避免上一工具残值错禁默认值编辑）。
 - **绘制流程**：两点形状 `beginShape/updateShape/commitShape/cancelPending`；画笔 `beginPath/appendPathPoint/commitPath`（按住连续追点）；**折线点击式** `beginPath`（首次落顶点）/`appendPathPoint`（左键再落顶点）/`previewPolyline`（悬停时以草稿+到光标临时连线构造橡皮筋预览、**不落草稿**）/`commitPath`（右键/Esc 收笔，依 `pathDraft_` 正式顶点重建、丢弃橡皮筋临时段）/`hasPathDraft`；文字 `addText`。几何均走 Core `buildShape`。
 - **选择/移动/删除**：`selectAt`（Core `hitTest`+`selectAnnotation`）、`moveSelectedBy`（委托 Core `Shape::translateWorld` 世界系平移—内部把世界位移换算到局部系再偏移参数，**保留具体类型**不退化为 PATH、且旋转/缩放后拖动方向仍跟随光标）、`removeSelected`（Core `removeAnnotation`）。
 - **变换（缩放/旋转/翻转）**：`transformSelected(sx,sy,rotateDeg)` 委托 Core `Shape::applyObbTransform`（非破坏性仿射：绕局部盒中心沿自身轴缩放 + 绕世界中心刚性旋转，保留具体类型与字形不退化）；sx/sy 为**增量系数**（1.0=不变、负即翻转）、rotateDeg 为增量角。`displayObbScaleX/Y/RotationDeg()` 读出 Core 累积的**绝对带符号值**供属性面板忠实回显（变换语义与累积参数机制见 `include/geometry`）。属性面板与画布手柄**共用此入口**；无选中或增量恒等（1,1,0）则忽略。

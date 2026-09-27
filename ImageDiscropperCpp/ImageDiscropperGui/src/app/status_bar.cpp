@@ -17,11 +17,11 @@ StatusBar::StatusBar(QWidget* parent) : QStatusBar(parent) {
     countLabel_ = new QLabel(QStringLiteral("保留块: 0"), this);
     zoomLabel_ = new QLabel(QStringLiteral("缩放: 100%"), this);
     hintLabel_ = new QLabel(QStringLiteral("就绪"), this);
-    addWidget(coordLabel_);
-    addWidget(colorLabel_);
     addWidget(modeLabel_);
     addWidget(countLabel_);
     addWidget(zoomLabel_);
+    addWidget(coordLabel_);
+    addWidget(colorLabel_);
     addWidget(hintLabel_, 1); // 提示信息占据剩余空间。
 }
 

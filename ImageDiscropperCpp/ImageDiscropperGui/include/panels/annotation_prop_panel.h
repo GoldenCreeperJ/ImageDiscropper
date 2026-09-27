@@ -1,11 +1,11 @@
 // ============================================================================
 // 文件：panels/annotation_prop_panel.h
 // 作用：右侧「标注」属性页——颜色选择器、描边粗细、填充开关、
-//       文字内容与字号。面板只采集属性意图并发信号，MainWindow 写回 AnnotationBridge
+//       文字内容与字号、转角圆角半径。面板只采集属性意图并发信号，MainWindow 写回 AnnotationBridge
 //       （EDIT 模式作用选中项，DRAW 模式作为下一次绘制默认）；面板不含几何 / 光栅化（CONTRIBUTING.md「分层纪律」）。
 // 分块依据：每个属性控件对应一个信号，参数即最小信息（QColor / int / bool / QString / double）；
 //           syncFromModel 从模型回显（选中项属性，否则当前默认），blockSignals 防回环。
-// 说明：Core Annotation 只有单一 color + fill 布尔（填充复用同一颜色），故本面板不提供独立填充色。
+// 说明：Core Annotation 区分边框色 color 与填充色 fillColor，故面板提供两个独立取色按钮（边框 / 填充）。
 // ============================================================================
 #pragma once
 
@@ -16,6 +16,7 @@
 
 class QPushButton;
 class QSpinBox;
+class QDoubleSpinBox;
 class QCheckBox;
 class QLineEdit;
 class QGroupBox;
@@ -40,28 +41,35 @@ public:
     void setTransformPreview(double sx, double sy, double rotateDeg) const;
 
 signals:
-    void colorPicked(const QColor& c);   // 颜色（描边 + 填充共用）
+    void colorPicked(const QColor& c);   // 边框 / 描边颜色
+    void fillColorPicked(const QColor& c); // 填充颜色（独立于边框色）
     void strokeChanged(int width);       // 描边粗细（像素）
     void fillChanged(bool fill);         // 是否填充
     void textChanged(const QString& text);   // 文字内容
     void fontSizeChanged(double size);   // 字号
+    void cornerRadiusChanged(double radius); // 转角圆角半径（px，0＝直角）
     // 变换意图（仅作用于当前选中标注）：sx/sy 为缩放增量系数（1.0=不变）、rotateDeg 为旋转角增量（度）。
     // 由变换区 spin 改动直接触发（无「应用」按钮）；翻转无面板按钮（由画布包围盒手柄拖拽越过对边实现）。
     void transformApplyRequested(double sx, double sy, double rotateDeg);
 
 private slots:
-    void onPickColor();   // 打开取色器
+    void onPickColor();       // 打开边框色取色器
+    void onPickFillColor();   // 打开填充色取色器
 
 private:
-    void updateSwatch() const;  // 依当前颜色刷新色块按钮背景
+    void updateSwatch() const;      // 刷新边框色块
+    void updateFillSwatch() const;  // 刷新填充色块
 
     AnnotationBridge* model_{nullptr};
-    QColor color_{Qt::black};        // 当前编辑中的颜色（色块显示用）
+    QColor color_{Qt::black};        // 当前边框 / 描边色
     QPushButton* colorBtn_{nullptr};
+    QColor fillColor_{Qt::black};    // 当前填充色
+    QPushButton* fillColorBtn_{nullptr};
     QSpinBox* strokeSpin_{nullptr};
     QCheckBox* fillCheck_{nullptr};
     QLineEdit* textEdit_{nullptr};
     QSpinBox* fontSpin_{nullptr};
+    QDoubleSpinBox* cornerSpin_{nullptr};   // 转角圆角半径（px，0＝直角）
     // ---- 变换区（仅对选中标注生效，无选中时置灰；显示**绝对累积值**、忠实反映底层变换）----
     // 无「应用」按钮：任一 spin 改动即按其单轴换算增量下发（keyboardTracking 关闭，避免逐键触发）。
     QGroupBox* transformGroup_{nullptr};

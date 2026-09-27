@@ -38,7 +38,7 @@ GUI 侧的**视图关注点**工具：Core 类型↔Qt 类型适配、大图降�
 标注绘制的**唯一公共实现**（消除画布图元与导出预览两处重复）：`void paintAnnotation(QPainter&, const Annotation&, const QPainterPath& worldDrawPath, const AffineTransform& textXf)`。
 调用方先把 painter 变换设为「世界（原图）坐标 → 设备」；本函数只按标注样式发绘制指令：
 
-- 非文字：用 `worldDrawPath`（普通态＝`Shape::worldPath()`、拖拽预览态＝`xf.applyToPath(toPath())`）按 `color`/`strokeWidth` 描边（RoundJoin/RoundCap），`fillType` 时同色填充。
+- 非文字：用 `worldDrawPath`（普通态＝`Shape::worldPath()`、拖拽预览态＝`xf.applyToPath(toPath())`）以**笔＝`color`**按 `strokeWidth` 描边（RoundJoin/RoundCap）、**刷＝`fillColor`**（`fillType` 为真时填充内部，否则 `NoBrush`）——笔刷分色与 Core `rasterize` 一致；折线 / 画笔等开放路径由 `fillPath` 首尾隐式闭合后填充。
 - 文字（TEXT）：以 `textXf`（局部→世界）临时叠加到 painter 后绘真实字形（字号 `fontSize`，基线偏移 `0.8*高`）——Core `TextShape::toPath` 仅给矩形边界，字形属渲染关注点。
 - **不**绘选中高亮 / OBB 手柄（图元专属交互，留在 `AnnotationItem`）。
 

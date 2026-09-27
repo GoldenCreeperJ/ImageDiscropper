@@ -185,14 +185,12 @@ void rasterize(core::Image& image, const geometry::Shape& shape, const PaintStyl
     const bool isLine = shape.type() == geometry::ShapeType::LINE;
     const int strokeW = std::max(1, style.strokeWidth);
 
-    // 2. 填充（LINE 不填充）
+    // 2. 填充（LINE 不填充；用独立 fillColor 填内部）
     if (style.fill && !isLine) {
-        fillPolygon(image, polys, style.color);
-        // 填充模式下不再描边，避免边缘过深；如需同时描边可在此追加
-        return;
+        fillPolygon(image, polys, style.fillColor);
     }
 
-    // 3. 描边
+    // 3. 描边（始终按 color 绘制边框；填充形状因此也带边框色，与画布预览一致）
     strokePolylines(image, polys, style.color, strokeW, style.antialias);
 }
 

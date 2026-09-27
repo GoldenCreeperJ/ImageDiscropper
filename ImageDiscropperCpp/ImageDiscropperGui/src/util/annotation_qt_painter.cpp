@@ -22,7 +22,8 @@ void paintAnnotation(QPainter& painter,
                      const geometry::AffineTransform& textXf) {
     if (!ann.shape) return;
     painter.setRenderHint(QPainter::Antialiasing, true);
-    const QColor color = toQColor(ann.color);
+    const QColor color = toQColor(ann.color);         // 边框 / 描边色（文字亦用此色）
+    const QColor fillColor = toQColor(ann.fillColor);  // 填充色（仅 fillType 为真时作刷）
 
     // 文字：Core TextShape 的 toPath 仅给矩形边界，这里直接绘真实字形（渲染关注点）。
     if (ann.shapeType == geometry::ShapeType::TEXT) {
@@ -49,7 +50,7 @@ void paintAnnotation(QPainter& painter,
     pen.setJoinStyle(Qt::RoundJoin);
     pen.setCapStyle(Qt::RoundCap);
     painter.setPen(pen);
-    painter.setBrush(ann.fillType ? QBrush(color) : Qt::NoBrush);
+    painter.setBrush(ann.fillType ? QBrush(fillColor) : Qt::NoBrush);
     painter.drawPath(worldDrawPath);
 }
 

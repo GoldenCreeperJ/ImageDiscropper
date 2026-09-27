@@ -31,8 +31,6 @@ geometry::ShapeType shapeTypeForTool(const AnnoTool tool) {
         case AnnoTool::RHOMBUS:       return ShapeType::RHOMBUS;
         case AnnoTool::CIRCLE:        return ShapeType::CIRCLE;
         case AnnoTool::ELLIPSE:       return ShapeType::ELLIPSE;
-        case AnnoTool::ROUNDRECT:     return ShapeType::ROUNDRECTANGLE;
-        case AnnoTool::ROUNDSQUARE:   return ShapeType::ROUNDSQUARE;
         case AnnoTool::ISOS_TRI:      return ShapeType::ISOS_TRIANGLE;
         case AnnoTool::EQU_TRI:       return ShapeType::EQU_TRIANGLE;
         case AnnoTool::RECT_TRI:      return ShapeType::RECT_TRIANGLE;
@@ -81,10 +79,12 @@ void AnnotationBridge::setTool(const AnnoTool tool) {
 // 3. 属性写回（委托 Core change*；EDIT 作用选中项，DRAW 改当前默认）
 // ===========================================================================
 void AnnotationBridge::setColor(const core::Color& c) { layer_.changeColor(c); emit changed(); }
+void AnnotationBridge::setFillColor(const core::Color& c) { layer_.changeFillColor(c); emit changed(); }
 void AnnotationBridge::setStrokeWidth(const int w) { layer_.changeStrokeWidth(w); emit changed(); }
 void AnnotationBridge::setFill(const bool fill) { layer_.changeFill(fill); emit changed(); }
 void AnnotationBridge::setText(const std::string& text) { layer_.changeText(text); emit changed(); }
 void AnnotationBridge::setFontSize(const double size) { layer_.changeFontSize(size); emit changed(); }
+void AnnotationBridge::setCornerRadius(const double r) { layer_.changeCornerRadius(r); emit changed(); }
 
 // ===========================================================================
 // 4. 绘制流程
@@ -96,6 +96,7 @@ void AnnotationBridge::rebuildPending(const core::Point2D current) {
     req.type = shapeTypeForTool(tool_);
     req.text = layer_.currentText();
     req.fontSize = layer_.currentFontSize();
+    req.cornerRadius = layer_.currentCornerRadius();
     if (tool_ == AnnoTool::POLYLINE || tool_ == AnnoTool::BRUSH) {
         req.path = pathDraft_;                 // buildShape 将 path 封装为 PathShape
     } else {
@@ -150,6 +151,7 @@ void AnnotationBridge::previewPolyline(const core::Point2D cursor) {
     if (tool_ != AnnoTool::POLYLINE || pathDraft_.empty()) return;
     annotation::ShapeRequest req;
     req.type = geometry::ShapeType::POLYLINE;
+    req.cornerRadius = layer_.currentCornerRadius();
     req.path = pathDraft_;                     // 拷贝草稿（含已落顶点）
     req.path.lineTo(cursor.x, cursor.y);       // 追加橡皮筋临时段（仅预览）
     pending_ = idc::annotation::buildShape(req);
@@ -166,6 +168,7 @@ void AnnotationBridge::commitPath() {
     // previewPolyline 追加了橡皮筋临时段的预览形状，收笔时须丢弃该临时段，只保留已落顶点。
     annotation::ShapeRequest req;
     req.type = shapeTypeForTool(tool_);        // POLYLINE→POLYLINE，BRUSH→PATH
+    req.cornerRadius = layer_.currentCornerRadius();
     req.path = pathDraft_;
     layer_.addAnnotation(idc::annotation::buildShape(req));
     pending_.reset();
@@ -258,6 +261,7 @@ core::Image AnnotationBridge::burnIn(const core::Image& base) const {
         if (!a.shape) continue;
         annotation::PaintStyle style;
         style.color = a.color;
+        style.fillColor = a.fillColor;
         style.strokeWidth = a.strokeWidth;
         style.fill = a.fillType;
         style.antialias = true;
@@ -276,6 +280,11 @@ core::Color AnnotationBridge::displayColor() const {
     return a ? a->color : layer_.currentColor();
 }
 
+core::Color AnnotationBridge::displayFillColor() const {
+    const annotation::Annotation* a = layer_.selectedAnnotation();
+    return a ? a->fillColor : layer_.currentFillColor();
+}
+
 int AnnotationBridge::displayStrokeWidth() const {
     const annotation::Annotation* a = layer_.selectedAnnotation();
     return a ? a->strokeWidth : layer_.currentStrokeWidth();
@@ -284,6 +293,53 @@ int AnnotationBridge::displayStrokeWidth() const {
 bool AnnotationBridge::displayFill() const {
     const annotation::Annotation* a = layer_.selectedAnnotation();
     return a ? a->fillType : layer_.currentFill();
+}
+
+// 选中形状的转角圆角半径（取自形状几何）；无选中 / 无形状则取当前默认。
+double AnnotationBridge::displayCornerRadius() const {
+    const annotation::Annotation* a = layer_.selectedAnnotation();
+    return a && a->shape ? a->shape->cornerRadius() : layer_.currentCornerRadius();
+}
+
+// ---- 形状类型 → 能力判定（纯 UI 置灰策略，非几何计算；键于 Core ShapeType 枚举）----
+//   - 可填充：除直线（2 点无内部）与文字（字形，填充色不参与）外的形状均可填充——含折线 / 画笔等开放链，
+//     渲染时按偶奇规则首尾隐式闭合填充（Qt 预览 fillPath 与 Core rasterize 既有实现一致，均以 !isLine 为准）。
+//   - 可倒角：仅具顶点转角的形状（闭合多边形 + 折线）；直线（2 点无内部顶点）/ 圆 / 椭圆 / 画笔 / 文字无转角概念。
+namespace {
+bool supportsFillFor(const geometry::ShapeType t) {
+    // 直线无内部、文字为字形（填充色不参与），其余形状（含开放折线 / 画笔）均可填充。
+    return t != geometry::ShapeType::LINE && t != geometry::ShapeType::TEXT;
+}
+bool supportsCornerRadiusFor(const geometry::ShapeType t) {
+    switch (t) {
+        case geometry::ShapeType::RECTANGLE:
+        case geometry::ShapeType::SQUARE:
+        case geometry::ShapeType::RHOMBUS:
+        case geometry::ShapeType::POLYLINE:
+        case geometry::ShapeType::ISOS_TRIANGLE:
+        case geometry::ShapeType::EQU_TRIANGLE:
+        case geometry::ShapeType::RECT_TRIANGLE:
+        case geometry::ShapeType::EQU_RECT_TRIANGLE:
+            return true;
+        default:
+            return false;
+    }
+}
+} // namespace
+
+// 上下文判定：有选中 → 按选中形状类型；绘制工具激活 → 按当前工具类型；
+// SELECT 且无选中 → 不做限制（一律可用）。此时面板编辑的是「下一次绘制」的默认值，而 currentType_
+// 是上一绘制工具的残值（Core 仅在切到非 SELECT 工具时更新）；若据残值置灰，会出现
+// 「用直线后切回选择/移动，填充/圆角控件莫名点不了」的错禁问题。
+bool AnnotationBridge::contextSupportsFill() const {
+    if (const annotation::Annotation* a = layer_.selectedAnnotation()) return supportsFillFor(a->shapeType);
+    if (tool_ == AnnoTool::SELECT) return true;
+    return supportsFillFor(layer_.currentType());
+}
+bool AnnotationBridge::contextSupportsCornerRadius() const {
+    if (const annotation::Annotation* a = layer_.selectedAnnotation()) return supportsCornerRadiusFor(a->shapeType);
+    if (tool_ == AnnoTool::SELECT) return true;
+    return supportsCornerRadiusFor(layer_.currentType());
 }
 
 // 选中标注的累积 OBB 变换参数（绝对值），直接取自 Core Shape 同步维护的 obbScaleX/Y、obbRotationDeg；

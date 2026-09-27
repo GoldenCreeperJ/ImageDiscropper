@@ -70,10 +70,12 @@ void AnnotationCoordinator::connectSignals() {
     connect(exportPanel_, &ExportPanel::burnInChanged, this, &AnnotationCoordinator::onBurnInChanged);
     exportPanel_->setBurnInChecked(anno_->burnInEnabled()); // 初始同步一次（两侧默认 false，对齐意图）。
     connect(annoPropPanel_, &AnnotationPropPanel::colorPicked, this, &AnnotationCoordinator::onAnnoColorPicked);
+    connect(annoPropPanel_, &AnnotationPropPanel::fillColorPicked, this, &AnnotationCoordinator::onAnnoFillColorPicked);
     connect(annoPropPanel_, &AnnotationPropPanel::strokeChanged, this, &AnnotationCoordinator::onAnnoStrokeChanged);
     connect(annoPropPanel_, &AnnotationPropPanel::fillChanged, this, &AnnotationCoordinator::onAnnoFillChanged);
     connect(annoPropPanel_, &AnnotationPropPanel::textChanged, this, &AnnotationCoordinator::onAnnoTextChanged);
     connect(annoPropPanel_, &AnnotationPropPanel::fontSizeChanged, this, &AnnotationCoordinator::onAnnoFontSizeChanged);
+    connect(annoPropPanel_, &AnnotationPropPanel::cornerRadiusChanged, this, &AnnotationCoordinator::onAnnoCornerRadiusChanged);
     connect(annoPropPanel_, &AnnotationPropPanel::transformApplyRequested, this, &AnnotationCoordinator::onAnnoTransformApply);
 }
 
@@ -219,10 +221,12 @@ void AnnotationCoordinator::onAnnotationTransformPreview(const int index, const 
 
 // 属性面板 → 模型（EDIT 作用选中项，DRAW 改当前默认；均触发 changed→重绘）。
 void AnnotationCoordinator::onAnnoColorPicked(const QColor& c) const { anno_->setColor(toCoreColor(c)); }
+void AnnotationCoordinator::onAnnoFillColorPicked(const QColor& c) const { anno_->setFillColor(toCoreColor(c)); }
 void AnnotationCoordinator::onAnnoStrokeChanged(const int width) const { anno_->setStrokeWidth(width); }
 void AnnotationCoordinator::onAnnoFillChanged(const bool fill) const { anno_->setFill(fill); }
 void AnnotationCoordinator::onAnnoTextChanged(const QString& text) const { anno_->setText(text.toStdString()); }
 void AnnotationCoordinator::onAnnoFontSizeChanged(const double size) const { anno_->setFontSize(size); }
+void AnnotationCoordinator::onAnnoCornerRadiusChanged(const double radius) const { anno_->setCornerRadius(radius); }
 // 属性面板「变换」：将缩放/旋转写回模型（委托 Core Shape 的非破坏性矩阵，保留类型与字形；无选中时模型内部忽略）。
 void AnnotationCoordinator::onAnnoTransformApply(const double sx, const double sy, const double rotateDeg) const {
     anno_->transformSelected(sx, sy, rotateDeg);

@@ -45,8 +45,6 @@ enum class AnnoTool {
     RHOMBUS,         // 菱形
     CIRCLE,          // 圆形
     ELLIPSE,         // 椭圆
-    ROUNDRECT,       // 圆角矩形
-    ROUNDSQUARE,     // 圆角正方形
     ISOS_TRI,        // 等腰三角形
     EQU_TRI,         // 等边三角形
     RECT_TRI,        // 直角三角形
@@ -79,17 +77,21 @@ public:
     void setTool(AnnoTool tool);
 
     core::Color currentColor() const { return layer_.currentColor(); }
+    core::Color currentFillColor() const { return layer_.currentFillColor(); }
     int currentStrokeWidth() const { return layer_.currentStrokeWidth(); }
     bool currentFill() const { return layer_.currentFill(); }
     std::string currentText() const { return layer_.currentText(); }
     double currentFontSize() const { return layer_.currentFontSize(); }
+    double currentCornerRadius() const { return layer_.currentCornerRadius(); }
 
     // 写回属性：委托 Core change*（EDIT 模式作用选中项，DRAW 模式改当前默认），随后发 changed()。
-    void setColor(const core::Color& c);
+    void setColor(const core::Color& c);   // 边框 / 描边色
+    void setFillColor(const core::Color& c); // 填充色（独立于边框色）
     void setStrokeWidth(int w);
     void setFill(bool fill);
     void setText(const std::string& text);
     void setFontSize(double size);
+    void setCornerRadius(double r);   // 转角圆角半径（px，0＝直角）
 
     // ---- 两点形状绘制流程（矩形 / 圆 / 直线 / 三角 …）----
     void beginShape(core::Point2D p);   // 按下：记起点，切 DRAW，准备预览
@@ -149,8 +151,17 @@ public:
     // ---- 属性回显（供右侧标注属性页）----
     // 有选中项则返回其属性，否则返回当前工具默认属性。
     core::Color displayColor() const;
+    // 选中形状的填充色（有选中取其 fillColor），否则当前默认填充色。
+    core::Color displayFillColor() const;
     int displayStrokeWidth() const;
     bool displayFill() const;
+    // 选中形状的转角圆角半径（取形状几何），否则当前默认；无选中时取 layer 当前值。
+    double displayCornerRadius() const;
+    // 当前上下文是否支持转角倒角 / 内部填充（供属性面板置灰不适用控件）：有选中按选中形状类型
+    // （直线 / 圆 / 椭圆 / 文字无转角；仅直线 / 文字不可填充）；绘制工具按工具类型；SELECT 无选中一律可用
+    // （编辑的是下一次绘制的默认值，不受上一工具残值错禁）。
+    bool contextSupportsCornerRadius() const;
+    bool contextSupportsFill() const;
     // 选中标注的累积 OBB 变换参数（绝对值、带符号；缩放为负即翻转）——供属性面板忠实回显底层真实变换。
     // 无选中 / 无形状时返回恒等（1,1,0）。
     double displayObbScaleX() const;

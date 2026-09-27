@@ -27,7 +27,8 @@ namespace idc::annotation {
 // ---------------------------------------------------------------------------
 struct Annotation {
     std::unique_ptr<geometry::Shape> shape;  // 几何数据（多态）
-    core::Color color{core::kBlack};         // 颜色
+    core::Color color{core::kBlack};         // 边框 / 描边色
+    core::Color fillColor{core::kBlack};     // 填充色（仅 fillType 为真时用于闭合形状内部）
     int strokeWidth{2};                       // 线宽
     bool fillType{false};                     // 是否填充
     geometry::ShapeType shapeType{geometry::ShapeType::LINE}; // 形状类型
@@ -78,17 +79,24 @@ public:
     void setCurrentType(const geometry::ShapeType t) { currentType_ = t; }
 
     const core::Color& currentColor() const { return currentColor_; }
+    const core::Color& currentFillColor() const { return currentFillColor_; }
     int currentStrokeWidth() const { return currentStrokeWidth_; }
     bool currentFill() const { return currentFill_; }
     const std::string& currentText() const { return currentText_; }
     double currentFontSize() const { return currentFontSize_; }
+    double currentCornerRadius() const { return currentCornerRadius_; }
 
     // 修改当前属性；在 EDIT 模式下会作用到 selectedAnnotation。
     void changeColor(const core::Color& c);
+    // 修改填充色：EDIT 作用选中项的 fillColor；DRAW 改当前默认填充色并断开与边框色的联动
+    // （此后新标注填充色不再跟随边框色；未显式改过填充色时默认跟随边框色）。
+    void changeFillColor(const core::Color& c);
     void changeStrokeWidth(int w);
     void changeFill(bool fill);
     void changeText(const std::string& text);
     void changeFontSize(double size);
+    // 修改转角圆角半径：EDIT 模式作用到选中形状几何（就地改、不推快照），否则作为下一次绘制默认；负值钳为 0。
+    void changeCornerRadius(double r);
 
     // ------ 形状提交与编辑 ------
     // 提交一个新形状（由 ShapeFactory 构造后调用）。
@@ -130,10 +138,13 @@ private:
     // 当前工具属性
     geometry::ShapeType currentType_{geometry::ShapeType::LINE};
     core::Color currentColor_{core::kBlack};
+    core::Color currentFillColor_{core::kBlack};
+    bool fillColorLinked_{true};   // 填充色是否跟随边框色（未显式改过填充色时为真）
     int currentStrokeWidth_{2};
     bool currentFill_{false};
     std::string currentText_{"A"};
     double currentFontSize_{200.0};
+    double currentCornerRadius_{0.0};
 
     // 选中形状索引（EDIT 模式）
     std::optional<std::size_t> selectedIndex_;
