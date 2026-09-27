@@ -4,7 +4,7 @@
 #     交叉编译产物无法在构建机执行测试）；不写缓存（避免挤占 10GB 池）
 #   · mobile-release：移动双端 Release——真机安装用 APK / iOS 产物
 # 构建与打包细节见 cpp-build.yml；本文件只声明触发条件与矩阵。
-name: C++ Verify
+name: cpp-verify
 
 on:
   workflow_dispatch:
