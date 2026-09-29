@@ -42,6 +42,7 @@ set(IDC_CLI_LIB_SRC
         src/cli_app.cpp              # 顶层入口 cliMain：全局选项 / help / version / 分派 / 异常兜底
         src/arg_parser.cpp           # 轻量参数解析：token → 选项名到值列表
         src/value_parser.cpp         # 值解析：坐标 / 带 / 网格 / r,c / 画布 / 颜色 / 枚举 / 模板
+        src/annotation_args.cpp      # 命令行标注装配：--annotation 内联对象 / --annotations 文件 → Core 段解析 → 标注列表
         src/cli_error.cpp            # 错误报告：按约定格式写 stderr（见本目录 README）
         src/help.cpp                 # 帮助与版本文本
         src/job.cpp                  # 作业执行：读图 → runEngine → 坍缩校验 → exportImage → 退出码

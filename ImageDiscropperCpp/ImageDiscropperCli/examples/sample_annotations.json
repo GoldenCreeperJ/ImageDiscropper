@@ -1,0 +1,31 @@
+[
+  {
+    "type": "rectangle",
+    "x1": 40,
+    "y1": 40,
+    "x2": 200,
+    "y2": 160,
+    "color": "#FF00C8FF",
+    "strokeWidth": 3,
+    "fill": false
+  },
+  {
+    "type": "circle",
+    "x1": 380,
+    "y1": 140,
+    "x2": 440,
+    "y2": 140,
+    "color": "#FFFF3131",
+    "fillColor": "#32FF3131",
+    "strokeWidth": 2,
+    "fill": true
+  },
+  {
+    "type": "text",
+    "x": 40,
+    "y": 260,
+    "text": "idc annotate",
+    "fontSize": 28,
+    "color": "#FF7FD42E"
+  }
+]

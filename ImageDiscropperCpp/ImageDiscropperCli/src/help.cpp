@@ -32,10 +32,10 @@ namespace {
 
 // 各命令的选项列宽（= 该命令最长选项串的长度，注释标注基准项）。
 constexpr int kTopOptWidth = 20;     // --save-config <file>
-constexpr int kExtractOptWidth = 18; // --rect x1,y1,x2,y2
-constexpr int kEraseOptWidth = 18;   // --rect x1,y1,x2,y2
+constexpr int kExtractOptWidth = 22; // --annotation '<json>'
+constexpr int kEraseOptWidth = 22;   // --annotation '<json>'
 constexpr int kGridOptWidth = 25;    // --merge-decorate <method>
-constexpr int kConfigOptWidth = 20;  // --save-config <file>
+constexpr int kConfigOptWidth = 22;  // --annotation '<json>'
 
 // 打印一行选项：两空格缩进 + 定宽选项列 + 两空格 + 描述。
 // 描述以 [必填] / [可重复] 标签开头（无标签时直接写描述），
@@ -61,7 +61,7 @@ void printTopHelp() {
   extract   L1 标准提取：保留矩形 / 水平带 / 垂直带，输出单图
   erase     L2 反向剔除：删除十字带 / 横带 / 竖带 / 多矩形并集，分离或合并导出
   grid      L3 网格分割：按基准点与单元尺寸切网格，选择单元后分离或重排合并
-  config    从 JSON 配置文件执行作业（对应 SPEC §7 结构）
+  config    从 JSON 配置文件执行一次完整作业（含可选标注）
 
 全局选项：
 )HELP";
@@ -84,6 +84,8 @@ void printTopHelp() {
   idc erase --input photo.jpg --rect 100,100,300,250 --output-dir ./out/ --format png
   # L3 网格保留四角并重排合并到 2x2 画布
   idc grid --input photo.jpg --grid 100,100,200,150 --keep 0,0 --keep 0,2 --keep 2,0 --keep 2,2 --compose --canvas 2x2 --output result.png
+  # 标注烧入：extract 同时烧入一条红色描边矩形
+  idc extract --input photo.jpg --rect 100,100,300,250 --annotation '{"type":"rectangle","x1":10,"y1":10,"x2":80,"y2":50,"color":"#FFFF0000","strokeWidth":3}' --output out.png
 
 查看某子命令的完整选项：idc <command> --help
 )HELP";
@@ -96,6 +98,52 @@ void printVersion() {
 
 // 各子命令帮助文本（语义 / 全部选项 / 示例 / 常见错误）。
 namespace {
+
+// 标注段（extract / erase / grid / config 四层命令通用）：自包含的完整字段说明与示例，
+// 不引用任何工程文档（用户只需读 --help 即可写出一条合法标注）。lead 为命令差异提示，可为 nullptr。
+void annotationSection(const int width, const char* lead) {
+    std::cout << R"HELP(
+标注（可选，切割前烧入工作图；坐标基准＝预处理产出后的工作图尺寸）：
+)HELP";
+    if (lead != nullptr) std::cout << "  " << lead << '\n';
+    optionRow(width, "--annotation '<json>'", "[可重复] 内联一条标注对象，或一个标注对象数组");
+    optionRow(width, "--annotations <file>", "[可重复] 从「根为标注数组」的 JSON 文件读取");
+    std::cout << R"HELP(  字段按 type 分派几何，样式对所有类型通用：
+    · line 直线：points 恰 2 顶点 [[x1,y1],[x2,y2]]
+    · polyline 折线：points ≥2 顶点（开放线段）
+    · 约束图元——只写双锚点 x1,y1,x2,y2（几何由 Core 依锚点构造、恒合法，不接受手写顶点）；均可选 cornerRadius（圆角像素）：
+        rectangle 矩形：(x1,y1) 与 (x2,y2) 为对角两角
+        square 正方形：(x1,y1) 为一顶点，边长 = max(|Δx|,|Δy|)，朝 (x2,y2) 所在象限生长
+        rhombus 菱形：(x1,y1) 为中心，(|Δx|,|Δy|) 为两半对角线
+        isos-triangle 等腰 / equ-triangle 等边：(x1,y1) 为底边中点，(|Δx|,|Δy|) 定半底与高（等边按主方向取边长）
+        rect-triangle 直角 / equ-rect-triangle 等腰直角：(x1,y1) 为直角顶点，(|Δx|,|Δy|) 定两直角边（等腰直角取等长 max）
+    · ellipse 椭圆 / circle 圆——同样只写双锚点 x1,y1,x2,y2（几何由 Core 依锚点构造，不接受包围盒宽高）：
+        circle 圆：(x1,y1) 为圆心，半径 = |(x1,y1)→(x2,y2)|
+        ellipse 椭圆：(x1,y1) 为圆心，(|Δx|,|Δy|) 为两半轴（均须 >0）
+    · path 自由路径：segments=[{"t":类型,"coords":数值数组},…]（须非空且至少一条有效段）
+        t=M/L → coords=[x,y]；t=Q → coords=[控制点x,控制点y,x,y]；t=C → coords=[c1x,c1y,c2x,c2y,x,y]；t=Z → coords=[]
+    · text 文字：x, y（起点）, text（内容）, fontSize（像素字号，若给出须 >0）
+  样式字段（均可省略取默认）：
+    color 描边色、fillColor 填充色——均支持 #RRGGBB（不透明）或 #AARRGGBB（AA 为 alpha：00 全透~FF 全不透）
+    strokeWidth 线宽像素（默认 2）；fill 是否填充 true/false（默认 false）
+    zOrder 叠放次序（整数，0＝最底、越大越靠上；可省略，缺省回退为该元素在数组中的下标）——顶层后画、命中优先，--save-config 随 annotations 段往返；非整数（如小数）判非法，负数合法（视为最底层排序、载入后归一化为非负下标）
+    transform（GUI 的缩放/旋转快照）命令行一般省略，几何字段始终写局部坐标
+  校验与退出码（强制校验、逐条报因）：
+    · 任一条标注非法即整段 --annotation/--annotations 失败（退出码 1，stderr 逐条列出「第 N 个元素：原因」），不静默丢弃。
+    · type 缺失或未知字符串一律报错（不再默认按 line 处理）。
+    · 锚点退化即报「锚点退化」：矩形/菱形需 |Δx|>0 且 |Δy|>0；正方形/等腰直角需 max(|Δx|,|Δy|)>0；等腰/等边需半底与高、直角需两直角边非退化；圆需半径 >0、椭圆需两半轴均 >0。
+    · 自由图元：line 点数须恰为 2；text 的 fontSize 若给出须 >0；path 须有非空且有效的 segments。
+    · color/fillColor 须为合法 #RRGGBB 或 #AARRGGBB；strokeWidth / zOrder 须为整数（zOrder 为小数/字符串即报错；负数合法）。JSON 语法错误、根非对象/数组同样退出码 1。
+  单条示例：
+    {"type":"line","points":[[10,10],[200,150]],"color":"#FF0000","strokeWidth":4}
+    {"type":"rectangle","x1":10,"y1":10,"x2":120,"y2":80,"fill":true,"fillColor":"#80FF0000","strokeWidth":2}
+    {"type":"rhombus","x1":60,"y1":50,"x2":110,"y2":20,"color":"#FF0000"}
+    {"type":"circle","x1":70,"y1":70,"x2":100,"y2":70,"color":"#00FF00"}
+    {"type":"text","x":20,"y":30,"text":"HELLO","fontSize":18,"color":"#0000FF"}
+    {"type":"path","segments":[{"t":"M","coords":[0,0]},{"t":"L","coords":[50,50]},{"t":"Z","coords":[]}],"color":"#00FFFF"}
+  多条：重复 --annotation 各传一条，或一次传数组 [{"type":"line",…},{"type":"circle",…}]；也可 --annotations file 从文件批量读入。
+  导出：--save-config 会把命令行标注一并写入配置文件的 annotations 段（往返不丢）。)HELP";
+}
 
 void helpExtract() {
     std::cout << R"HELP(idc extract — L1 标准提取模式
@@ -117,7 +165,9 @@ void helpExtract() {
 )HELP";
     optionRow(kExtractOptWidth, "--output <file>", "[必填] 输出图像路径");
     optionRow(kExtractOptWidth, "--format <fmt>", "输出格式 png/jpeg/webp/bmp（默认由 --output 扩展名推断）");
+    annotationSection(kExtractOptWidth, nullptr);
     std::cout << R"HELP(
+
 通用：
 )HELP";
     optionRow(kExtractOptWidth, "-h, --help", "显示本帮助");
@@ -126,6 +176,8 @@ void helpExtract() {
   idc extract --input photo.jpg --rect 100,100,300,250 --output out.png
   idc extract --input photo.jpg --hband 100,250 --output band.png
   idc extract --input photo.jpg --vband 100,300 --output band.png
+  # 保留矩形同时烧入一条矩形标注
+  idc extract --input photo.jpg --rect 100,100,300,250 --annotation '{"type":"rectangle","x1":50,"y1":50,"x2":120,"y2":120,"fill":true,"fillColor":"#FFFF0000"}' --output out.png
 
 常见错误：
   退出码 1：缺少 --input / --output；三选一未满足（缺切割线或同时给出多个）；坐标非法或退化（x1>=x2 / y1>=y2，退化选框请改用 --hband / --vband）
@@ -158,7 +210,9 @@ void helpErase() {
     optionRow(kEraseOptWidth, "--output-dir <dir>", "分离输出目录（缺省分离导出时必填；不存在会自动创建）");
     optionRow(kEraseOptWidth, "--format <fmt>", "输出格式 png/jpeg/webp/bmp（默认 png；合并时优先按 --output 扩展名）");
     optionRow(kEraseOptWidth, "--naming <tpl>", "分离命名模板，默认 {name}_{index:03d}");
+    annotationSection(kEraseOptWidth, nullptr);
     std::cout << R"HELP(
+
 通用：
 )HELP";
     optionRow(kEraseOptWidth, "-h, --help", "显示本帮助");
@@ -225,7 +279,9 @@ void helpGrid() {
     optionRow(kGridOptWidth, "--output-dir <dir>", "分离输出目录（缺省分离导出时必填）");
     optionRow(kGridOptWidth, "--format <fmt>", "输出格式 png/jpeg/webp/bmp");
     optionRow(kGridOptWidth, "--naming <tpl>", "分离命名模板");
+    annotationSection(kGridOptWidth, nullptr);
     std::cout << R"HELP(
+
 通用：
 )HELP";
     optionRow(kGridOptWidth, "-h, --help", "显示本帮助");
@@ -265,7 +321,9 @@ void helpConfig() {
     optionRow(kConfigOptWidth, "--input <file>", "[必填] 输入图像路径");
     optionRow(kConfigOptWidth, "--output <file>", "合并输出路径（配置 emit.mode=merged 时用）");
     optionRow(kConfigOptWidth, "--output-dir <dir>", "分离输出目录（配置 emit.mode=separate 时用）");
+    annotationSection(kConfigOptWidth, "命令行标注会追加在 --load 配置自带的 annotations 段之后。");
     std::cout << R"HELP(
+
 通用：
 )HELP";
     optionRow(kConfigOptWidth, "-h, --help", "显示本帮助");

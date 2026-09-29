@@ -12,9 +12,11 @@
 #include "job.h"
 
 #include <iostream>
+#include <optional>
 
 #include "engine/engine_config_json.h" // saveEngineConfig
 #include "engine/image_io.h"           // readImageFile
+#include "annotation/annotation_layer.h" // AnnotationLayer::burnIn(base)（配置标注烧录）
 
 #include "cli_error.h"
 
@@ -42,13 +44,43 @@ ExitCode loadInputImage(const std::string& path, core::Image& out, const JobOpti
 
 // 执行作业：校正 source → runEngine → 坍缩校验 → exportImage → 退出码。
 ExitCode executeJob(engine::EngineConfig& config, const core::Image& image,
-                    const JobOutput& out, const JobOptions& opt) {
-    // 以实际图像尺寸校正 source（若含预处理，runEngine 内部会以预处理产出尺寸再覆盖）。
-    config.source.width = image.width();
-    config.source.height = image.height();
+                    const JobOutput& out, const JobOptions& opt,
+                    const annotation::AnnotationLayer* annotations) {
+    // FR-1：切割前把 preprocess / 标注物化为「工作图 work」。
+    //   几何流水线（runEngine）与落盘（exportImage）必须共用同一张 work——runEngine 内部会按预处理
+    //   产出尺寸（rotate ±90 宽高互换 / resize 改尺寸）计算裁剪区域，若仍拿未预处理的原图落盘，
+    //   裁剪矩形会套在尺寸/像素都不符的原图上，导致裁错内容或越界。物化后清空 config.preprocess，
+    //   令 runEngine 不再二次应用（与 GUI「引擎收已预处理图 + 空 preprocess」同一约定）。
+    //   NFR-8：按需物化——无 preprocess 且无标注（最常见用法）时 work 直指入参图，**不做整图深拷贝**。
+    std::optional<core::Image> buffer;              // 物化产物缓冲（函数期内存活；重新赋值前须确保旧指向已消费完）。
+    const core::Image* work = &image;
+    if (!config.preprocess.empty()) {
+        buffer = config.preprocess.apply(image);
+        if (buffer->empty()) {
+            reportError(makeError(ExitCode::RuntimeError, "预处理失败",
+                                  "预处理流水线产出空图像", "请检查配置 preprocess 的步骤与参数"));
+            return ExitCode::RuntimeError;
+        }
+        config.preprocess = preprocess::PreprocessPipeline{}; // 已物化进 buffer，清空防二次应用。
+        work = &*buffer;
+    }
+
+    // 标注烧录（SPEC §7 annotations 段）：标注坐标与工作图同基准，故必须在 preprocess 物化之后、
+    // runEngine / exportImage 之前烧进 work——几何与落盘继续共用同一张图（与预处理同一坐标纪律）。
+    // burnIn 先完整产出独立副本再接管 buffer（不悬垂：旧 work 指向已在求值时消费完）。
+    if (annotations != nullptr && !annotations->annotations().empty()) {
+        core::Image burned = annotations->burnIn(*work); // Core 逐形状光栅化（含 OBB 变换），CLI 不自实现像素合成。
+        buffer = std::move(burned);
+        work = &*buffer;
+        if (opt.verbose) std::cerr << "idc: 已把 " << annotations->annotations().size() << " 条标注烧录进工作图\n";
+    }
+
+    // 以工作图实际尺寸校正 source（预处理可能改变尺寸）。
+    config.source.width = work->width();
+    config.source.height = work->height();
 
     if (opt.verbose) std::cerr << "idc: 运行 Grid-Selection-Emit 引擎...\n";
-    const engine::EngineResult result = engine::runEngine(image, config);
+    const engine::EngineResult result = engine::runEngine(*work, config);
     if (!result.ok) {
         // Core 业务错误（E-1/E-5/E-6/E-7 等）统一归为运行时错误（2）。
         reportError(makeError(ExitCode::RuntimeError, "引擎执行失败", result.error,
@@ -68,8 +100,8 @@ ExitCode executeJob(engine::EngineConfig& config, const core::Image& image,
         std::cerr << "idc: 导出到 " << out.path
                   << (out.separate ? "（分离多图）" : "（合并单图）") << "\n";
 
-    // 落盘：分离 → 目标文件夹（Core 自动创建）；合并 → 单图文件路径。
-    if (!engine::exportImage(result.composition, image, out.path)) {
+    // 落盘：分离 → 目标文件夹（Core 自动创建）；合并 → 单图文件路径。裁剪源恒为已预处理 work。
+    if (!engine::exportImage(result.composition, *work, out.path)) {
         reportError(makeError(ExitCode::OutputError, "导出失败", "目标：" + out.path,
                               out.separate ? "请确认输出目录可创建且可写（未被同名文件占用、权限足够）"
                                            : "请确认输出路径的父目录存在、文件未被占用、磁盘未满"));
@@ -92,8 +124,9 @@ ExitCode executeJob(engine::EngineConfig& config, const core::Image& image,
 
 // 序列化配置到 JSON 文件（--save-config dry-run）；失败按输出失败（4）报告。
 ExitCode saveConfigToFile(const engine::EngineConfig& config, const std::string& path,
-                          const JobOptions& opt) {
-    if (!engine::saveEngineConfig(path, config)) {
+                          const JobOptions& opt,
+                          const annotation::AnnotationLayer* annotations) {
+    if (!engine::saveEngineConfig(path, config, annotations)) {
         reportError(makeError(ExitCode::OutputError, "无法保存配置文件", "路径：" + path,
                               "请确认路径的父目录存在且可写"));
         return ExitCode::OutputError;
@@ -104,9 +137,10 @@ ExitCode saveConfigToFile(const engine::EngineConfig& config, const std::string&
 
 // 作业收尾：--save-config 优先（dry-run，仅序列化不执行）；否则执行作业。
 ExitCode finishJob(engine::EngineConfig& config, const core::Image& image,
-                   const JobOutput& out, const std::string& saveConfigPath, const JobOptions& opt) {
-    if (!saveConfigPath.empty()) return saveConfigToFile(config, saveConfigPath, opt);
-    return executeJob(config, image, out, opt);
+                   const JobOutput& out, const std::string& saveConfigPath, const JobOptions& opt,
+                   const annotation::AnnotationLayer* annotations) {
+    if (!saveConfigPath.empty()) return saveConfigToFile(config, saveConfigPath, opt, annotations);
+    return executeJob(config, image, out, opt, annotations);
 }
 
 } // namespace idc::cli

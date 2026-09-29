@@ -23,12 +23,15 @@
 #include <filesystem>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #include "engine/engine.h"             // EngineConfig / EmitMode / MergeLayout
 #include "engine/engine_config_json.h" // loadEngineConfig（复用 Core JSON 模块，CONTRIBUTING.md「分层纪律」）
+#include "annotation/annotation_layer.h" // AnnotationLayer（配置 annotations 段的加载容器）
 
 #include "arg_parser.h"
+#include "annotation_args.h"
 #include "command_support.h"
 #include "exit_code.h"
 #include "job.h"
@@ -53,17 +56,31 @@ int cmdConfig(const std::vector<std::string>& tokens, const GlobalOptions& go) {
                     "请检查 --load 的路径是否正确、文件是否存在且可读");
 
     // --- 复用 Core 解析 SPEC §7 schema；文件存在但内容非法（语法错误 / 根非对象）→ 参数错误（1）。---
+    // 可选 annotations 段一并载入临时层：执行时由 job 烧进工作图，dry-run 时随配置透写不丢。
     engine::EngineConfig config;
-    if (!engine::loadEngineConfig(loadPath, config))
+    annotation::AnnotationLayer annoLayer;
+    if (!engine::loadEngineConfig(loadPath, config, &annoLayer))
         return fail(ExitCode::ArgError, "配置文件解析失败",
                     "无法按配置 JSON schema 解析：" + loadPath,
                     "请确认 JSON 语法正确且根为对象，字段含 source / preprocess / cut / select / order / emit");
+
+    // --- 命令行标注（--annotation / --annotations）：并入已载入的临时层（追加在配置自带段之后），---
+    //     使 --save-config dry-run 与执行都带上「配置自带 + 命令行」标注（坐标基准＝预处理产出）。
+    std::vector<annotation::Annotation> cliAnnos;
+    if (std::string annoErr; !collectAnnotations(args, cliAnnos, annoErr))
+        return fail(ExitCode::ArgError, "命令行标注解析失败", annoErr,
+                    "标注须为 SPEC §7 annotations 元素语法的 JSON 对象（--annotation）或根为标注数组的文件（--annotations）");
+    if (!cliAnnos.empty()) {
+        std::vector<annotation::Annotation> merged = annoLayer.annotations(); // 拷贝配置自带条目（Annotation 深拷贝 shape）
+        for (auto& a : cliAnnos) merged.push_back(std::move(a));
+        annoLayer.restoreAnnotations(std::move(merged));
+    }
 
     // --- 用途②：--save-config 为“加载后再序列化”的 dry-run（转换 / 校验），不读图、不切割。---
     //     保留 JSON 原有 source 尺寸（无图像可校正），仅完成一次读入 → 写出的往返。
     if (!go.saveConfig.empty())
         return toInt(saveConfigToFile(config, go.saveConfig,
-                                      makeJobOptions(go, /*explicitCollapse=*/false)));
+                                      makeJobOptions(go, /*explicitCollapse=*/false), &annoLayer));
 
     // --- 用途①：执行配置。SPEC §7 JSON 不含图像 / 输出路径，故须由命令行补齐。---
     if (!args.has("--input"))
@@ -102,7 +119,7 @@ int cmdConfig(const std::vector<std::string>& tokens, const GlobalOptions& go) {
 
     // --- 第 7 步：执行（runEngine → 坍缩校验 → exportImage，退出码由 job 映射）。---
     const JobOutput out{args.get(outKey), separate};
-    return toInt(executeJob(config, image, out, opt));
+    return toInt(executeJob(config, image, out, opt, &annoLayer));
 }
 
 } // namespace idc::cli

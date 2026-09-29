@@ -12,9 +12,9 @@
 | `test_main.cpp`         | 入口 `main`：依次调度 `testArgParser → testValueParser → testIntegration` |
 | `test_arg_parser.cpp`   | 单元：`ArgParser` 语法归类（含负数值消费）+ `parseGlobalOptions` 全局选项             |
 | `test_value_parser.cpp` | 单元：`value_parser` 全部「字符串 → 类型」解析与格式校验（成功 + 失败两路）                   |
-| `test_integration.cpp`  | 集成：IT-1~IT-21，进程内调用 `cliMain`，校验退出码 / 输出尺寸 / 像素落位 / 错误文本           |
+| `test_integration.cpp`  | 集成：IT-1~IT-25，进程内调用 `cliMain`，校验退出码 / 输出尺寸 / 像素落位 / 错误文本           |
 
-## 集成测试做法（IT-1~IT-21）
+## 集成测试做法（IT-1~IT-25）
 
 - **进程内调用**：`cli_tests` 链接 `idc_cli_lib`，直接调 `cliMain`（不启动子进程）；用 `rdbuf` 重定向
   `std::cout`/`std::cerr` 到 `ostringstream` 捕获输出，调用后恢复。
@@ -39,3 +39,7 @@
 | IT-15~18 | 缺必填 / 输入不存在 / 输出目录不存在 / 坍缩不可行                                               | 退出码 1 / 3 / 4 / 2 + stderr 提示                  |
 | IT-19~20 | `grid --merge-sort column-major` / `--merge-decorate reverse` + `--compose` | 填充路径列优先 / 整体逆序（与选择排序正交）                        |
 | IT-21    | `erase --merge rearrange`                                                   | 退出码 1 + 提示（重排为 L3 专属，L2 直接拒绝）                  |
+| IT-22    | `extract --annotation` 内联矩形标注                                               | 退出码 0；标注烧进工作图（内部点变色、未覆盖点保持原色）                  |
+| IT-23    | `extract --annotations <file>`（根为数组）                                        | 退出码 0；多条标注一并烧录（绿区 + 蓝区各自变色）                    |
+| IT-24    | `extract --annotation '{bad json'`                                          | 退出码 1 + stderr 含“标注”（Core 段解析失败）               |
+| IT-25    | `extract --annotation + --save-config`                                      | 退出码 0；写出的配置 JSON 含 `annotations` 段（透写不丢）       |

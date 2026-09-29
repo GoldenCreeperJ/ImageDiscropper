@@ -391,6 +391,64 @@ void testIntegration() {
         CHECK(r.err.find("L3") != std::string::npos);
     }
 
+    // ---- IT-22：extract --annotation 内联对象 → 标注烧进工作图（左上红区被绿色填充矩形覆盖）。----
+    // 保留整图（--rect 0,0,200,150，合并单图 200×150），在左上红区 (10,10)-(40,40) 烧一个绿色填充矩形；
+    // 内部点 (20,20) 应变绿，未被覆盖的 (60,60) 仍为红。
+    {
+        const std::string out = (root / "it22.png").string();
+        const Captured r = runCli({"extract", "--input", in, "--rect", "0,0,200,150",
+                                   "--annotation",
+                                   R"ANN({"type":"rectangle","x1":10,"y1":10,"x2":40,"y2":40,"color":"#FF00FF00","fillColor":"#FF00FF00","fill":true,"strokeWidth":2})ANN",
+                                   "--output", out});
+        CHECK(r.code == 0);
+        Image o;
+        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(o.width() == 200 && o.height() == 150);
+        CHECK(isGreen(o.getPixel(20, 20))); // 标注内部被填充
+        CHECK(isRed(o.getPixel(60, 60)));   // 未被标注覆盖，仍为原红
+    }
+
+    // ---- IT-23：extract --annotations 文件（根为数组）→ 多条标注一并烧录。----
+    {
+        const std::string annoFile = (root / "it23.json").string();
+        {
+            std::ofstream ofs(annoFile);
+            ofs << R"ANN([{"type":"rectangle","x1":10,"y1":10,"x2":40,"y2":40,"fillColor":"#FF00FF00","fill":true},{"type":"rectangle","x1":150,"y1":100,"x2":190,"y2":140,"fillColor":"#FF0000FF","fill":true}])ANN";
+        }
+        const std::string out = (root / "it23.png").string();
+        const Captured r = runCli({"extract", "--input", in, "--rect", "0,0,200,150",
+                                   "--annotations", annoFile, "--output", out});
+        CHECK(r.code == 0);
+        Image o;
+        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(isGreen(o.getPixel(20, 20)));   // 第一条：绿
+        CHECK(isBlue(o.getPixel(170, 120)));  // 第二条：蓝（右下黄区被覆盖）
+    }
+
+    // ---- IT-24：--annotation 非法 JSON → 退出码 1（参数错误，Core 段解析失败）。----
+    {
+        const std::string out = (root / "it24.png").string();
+        const Captured r = runCli({"extract", "--input", in, "--rect", "0,0,200,150",
+                                   "--annotation", "{not valid json", "--output", out});
+        CHECK(r.code == 1);
+        CHECK(r.err.find("标注") != std::string::npos);
+    }
+
+    // ---- IT-25：--annotation + --save-config → dry-run 序列化保留 annotations 段。----
+    {
+        const std::string cfgOut = (root / "it25.json").string();
+        const Captured r = runCli({"--save-config", cfgOut, "extract", "--input", in,
+                                   "--rect", "0,0,200,150",
+                                   "--annotation",
+                                   R"ANN({"type":"text","x":50,"y":50,"text":"hi","fontSize":24,"color":"#FFFFFFFF"})ANN",
+                                   "--output", (root / "it25.png").string()}); // --save-config 为 dry-run：--output 仅满足参数校验，不产出图像
+        CHECK(r.code == 0);
+        std::ifstream ifs(cfgOut);
+        const std::string text((std::istreambuf_iterator(ifs)), std::istreambuf_iterator<char>());
+        CHECK(text.find("\"annotations\"") != std::string::npos); // 标注段透写不丢
+        CHECK(text.find("\"text\"") != std::string::npos);        // 文字内容保留
+    }
+
     // ---- 清理临时目录（不污染仓库 / 系统临时区）。----
     fs::remove_all(root, ec);
 

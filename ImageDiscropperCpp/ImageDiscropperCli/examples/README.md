@@ -5,12 +5,13 @@
 
 ## 脚本清单
 
-| 脚本                     | 覆盖场景                             | 关键命令                                 |
-|------------------------|----------------------------------|--------------------------------------|
-| `l1_extract.sh`        | L1 矩形 / 横带 / 竖带保留                | `extract --rect / --hband / --vband` |
-| `l2_erase_collapse.sh` | L2 十字切割 + 坍缩合并（含横带 / 竖带 / 多矩形并集） | `erase --merge collapse`             |
-| `l2_erase_separate.sh` | L2 十字切割 + 分离导出到文件夹               | `erase --output-dir`                 |
-| `l3_grid_compose.sh`   | L3 网格选择 + 排序 + 重排合并 / 分离         | `grid --keep/--remove --compose`     |
+| 脚本                     | 覆盖场景                                 | 关键命令                                               |
+|------------------------|--------------------------------------|----------------------------------------------------|
+| `l1_extract.sh`        | L1 矩形 / 横带 / 竖带保留                    | `extract --rect / --hband / --vband`               |
+| `l2_erase_collapse.sh` | L2 十字切割 + 坍缩合并（含横带 / 竖带 / 多矩形并集）     | `erase --merge collapse`                           |
+| `l2_erase_separate.sh` | L2 十字切割 + 分离导出到文件夹                   | `erase --output-dir`                               |
+| `l3_grid_compose.sh`   | L3 网格选择 + 排序 + 重排合并 / 分离             | `grid --keep/--remove --compose`                   |
+| `l_annotate.sh`        | 命令行标注输入（内联 / 文件）与 `--save-config` 导出 | `--annotation` / `--annotations` / `--save-config` |
 
 ## 前置条件
 
@@ -30,6 +31,7 @@ bash l1_extract.sh
 bash l2_erase_collapse.sh
 bash l2_erase_separate.sh
 bash l3_grid_compose.sh
+bash l_annotate.sh
 ```
 
 脚本结束时会打印本次输出所在的临时目录路径，可前往查看结果图；临时目录位于系统 `tmp`，不写入仓库。
@@ -41,3 +43,6 @@ bash l3_grid_compose.sh
 - `l3_grid_compose.sh` 以 `--grid 0,0,160,120` 为例：640×480 图恰好铺成 4 列 × 4 行 = 16 个单元。
 - 分离导出（`--output-dir`）与合并导出（`--output`）的目标文件夹 / 父目录不存在时均由 Core 自动创建；
   仅当父路径被普通文件占用等 E-8 情形才失败（退出码 4）。
+- 标注载体两种（SPEC §7 annotations 元素语法，坐标基准＝预处理产出）：`--annotation '<内联 JSON 对象>'`
+  可重复（每次一条）、`--annotations <file.json>`（文件根为标注数组，如本目录 `sample_annotations.json`）。
+  `--save-config` 会把「配置自带 + 命令行」标注一并透写回 JSON 的 annotations 段（导出）。

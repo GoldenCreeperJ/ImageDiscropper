@@ -20,6 +20,8 @@
 
 #include "exit_code.h"
 
+namespace idc::annotation { class AnnotationLayer; }
+
 namespace idc::cli {
 
 // ---------------------------------------------------------------------------
@@ -45,19 +47,18 @@ struct JobOptions {
 // 失败（不存在 / 不可读 / 非图像）返回 InputError(3) 并已按错误格式打印错误。
 ExitCode loadInputImage(const std::string& path, core::Image& out, const JobOptions& opt);
 
-// 执行作业：以 image 的实际尺寸校正 config.source → runEngine → 坍缩校验 → exportImage。
-// 返回退出码；失败时已按错误格式打印错误。config 以引用传入（内部会写入 source 尺寸）。
-ExitCode executeJob(engine::EngineConfig& config, const core::Image& image,
-                    const JobOutput& out, const JobOptions& opt);
+// 执行作业：按需物化工作图 work（preprocess / 标注；两者皆无时直指入参图、不深拷贝）
+// → 以 work 尺寸校正 config.source → runEngine(work) → 坍缩校验 → exportImage(work)。
+// 几何与落盘共用同一张 work，确保含 rotate/resize 的配置坐标一致。返回退出码；
+// 失败时已按错误格式打印错误。config 以引用传入（内部会写入 source 尺寸并清空 preprocess）。
+ExitCode executeJob(engine::EngineConfig& config, const core::Image& image, const JobOutput& out, const JobOptions& opt, const annotation::AnnotationLayer* annotations = nullptr);
 
 // 把一份 EngineConfig 序列化到 JSON 文件（Core saveEngineConfig），用于 --save-config dry-run。
-// 成功返回 Ok 并（非 quiet 时）提示；失败（路径空 / 写盘失败）返回 OutputError(4)。
-ExitCode saveConfigToFile(const engine::EngineConfig& config, const std::string& path,
-                          const JobOptions& opt);
+// annotations 非空时附带标注段（往返不丢）。成功返回 Ok 并（非 quiet 时）提示；失败（路径空 / 写盘失败）返回 OutputError(4)。
+ExitCode saveConfigToFile(const engine::EngineConfig& config, const std::string& path, const JobOptions& opt, const annotation::AnnotationLayer* annotations = nullptr);
 
 // 作业收尾（三层命令 + config 共用）：若 saveConfigPath 非空则序列化配置并返回（dry-run，
 // 不执行切割）；否则执行 executeJob。使命令层收尾逻辑单点化（CONTRIBUTING.md「分层纪律」 不重复）。
-ExitCode finishJob(engine::EngineConfig& config, const core::Image& image,
-                   const JobOutput& out, const std::string& saveConfigPath, const JobOptions& opt);
+ExitCode finishJob(engine::EngineConfig& config, const core::Image& image, const JobOutput& out, const std::string& saveConfigPath, const JobOptions& opt, const annotation::AnnotationLayer* annotations = nullptr);
 
 } // namespace idc::cli
