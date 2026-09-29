@@ -21,7 +21,9 @@
 
 ## z 序（z_order.h）
 
-`kBase=0 < kAnnotation=10 < kDelete=20 < kKeep=30 < kGrid=40 < kCutLine=50 < kSelection=60 < kCellNumber=70`
+`kBase=0 < kAnnotation=10 < kAnnotationPreview=15 < kDelete=20 < kKeep=30 < kGrid=40 < kCutLine=50 < kSelection=60 < kCellNumber=70`
+
+> `kAnnotationPreview`＝标注绘制预览（橡皮筋），新建标注时逐帧更新的临时图元；须**抬到已提交标注之上**——它与 `kAnnotation` 同属一个 `AnnotationItem` 类（构造默认落在 `kAnnotation`），若同为 10 则靠插入次序叠放，会话中后提交的标注会盖住先创建的预览图元，致橡皮筋看不见。
 
 `kDelete < kKeep` 是遮罩渲染法的关键：红色删除底在下、绿色保留块在上。
 

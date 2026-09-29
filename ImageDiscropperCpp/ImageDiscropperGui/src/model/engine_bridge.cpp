@@ -7,9 +7,8 @@
 #include "model/engine_bridge.h"
 
 #include "engine/image_io.h" // readImageFile（loadImage 委托 Core 解码）。
+#include "annotation/annotation_layer.h" // AnnotationLayer（save/load 可选标注层透传，配置为真相源）。
 #include "engine/engine_config_json.h" // saveEngineConfig/loadEngineConfig（配置文件存取）。
-#include "pixel_ops/color_ops.h"     // toGray/invertChannels/splitChannels（预处理颜色变换）。
-#include "pixel_ops/geometric_ops.h" // rotate/flip/resize/scale（预处理几何变换）。
 
 namespace idc::gui {
 
@@ -27,12 +26,10 @@ bool EngineBridge::loadImage(const QString& path, core::Image& out, QString& err
     return true;
 }
 
-// 跑一次预览计算（委托 Core runEngine）。
-engine::EngineResult EngineBridge::runPreview(const core::Image& work,
-                                                   const engine::EngineConfig& cfg) {
-    // runEngine 内部：预处理(空) → 切割线 → 网格 → 选择集 → 极性 → split → 合成，
-    // 只做区域数学，不搬像素，故可对全分辨率工作图实时调用。
-    return idc::engine::runEngine(work, cfg);
+// 仅尺寸预览（委托 Core runEngineGeometry）：以已预处理输出尺寸直接跑几何流水线，不碰像素、不应用 cfg.preprocess。
+engine::EngineResult EngineBridge::runPreviewGeometry(const engine::SourceInfo& dims,
+                                                      const engine::EngineConfig& cfg) {
+    return idc::engine::runEngineGeometry(dims, cfg);
 }
 
 // 由切割配置生成贯穿全图的切割线集合（委托 Core generateCutLines）。
@@ -77,12 +74,13 @@ bool EngineBridge::exportResult(const core::Image& work, const engine::EngineCon
 // ---- 配置文件存取：逐个委托 Core saveEngineConfig/loadEngineConfig，不自实现 JSON（CONTRIBUTING.md「分层纪律」）----
 
 // 保存配置：委托 Core saveEngineConfig（SPEC §7 schema、缩进美化）；path 空或写盘失败透传中文错误。
-bool EngineBridge::saveConfig(const QString& path, const engine::EngineConfig& cfg, QString& err) {
+bool EngineBridge::saveConfig(const QString& path, const engine::EngineConfig& cfg, QString& err,
+                              const annotation::AnnotationLayer* annotations) {
     if (path.isEmpty()) {
         err = QStringLiteral("未指定配置文件路径");
         return false;
     }
-    if (!idc::engine::saveEngineConfig(path.toStdString(), cfg)) {
+    if (!idc::engine::saveEngineConfig(path.toStdString(), cfg, annotations)) {
         err = QStringLiteral("无法写入配置文件：%1").arg(path);
         return false;
     }
@@ -90,55 +88,23 @@ bool EngineBridge::saveConfig(const QString& path, const engine::EngineConfig& c
 }
 
 // 加载配置：委托 Core loadEngineConfig；path 空、读盘或解析失败透传中文错误，成功填充 out。
-bool EngineBridge::loadConfig(const QString& path, engine::EngineConfig& out, QString& err) {
+bool EngineBridge::loadConfig(const QString& path, engine::EngineConfig& out, QString& err,
+                              annotation::AnnotationLayer* annotations) {
     if (path.isEmpty()) {
         err = QStringLiteral("未指定配置文件路径");
         return false;
     }
-    if (!idc::engine::loadEngineConfig(path.toStdString(), out)) {
+    if (!idc::engine::loadEngineConfig(path.toStdString(), out, annotations)) {
         err = QStringLiteral("无法读取或解析配置文件：%1").arg(path);
         return false;
     }
     return true;
 }
 
-// ---- 预处理转发（FR-1）：逐个委托 Core pixel_ops::*，不做任何像素运算（CONTRIBUTING.md「分层纪律」）----
-
-// 旋转：委托 pixel_ops::rotate（仅 90 的整数倍，其余角度返回未旋转的副本）。
-core::Image EngineBridge::rotateImage(const core::Image& src, const int angleDeg) {
-    return pixel_ops::rotate(src, angleDeg);
-}
-
-// 翻转：委托 pixel_ops::flip（horizontal=true 左右、false 上下）。
-core::Image EngineBridge::flipImage(const core::Image& src, const bool horizontal) {
-    return pixel_ops::flip(src, horizontal);
-}
-
-// 目标尺寸缩放：委托 pixel_ops::resize（双线性插值）；非正尺寸时原图返回（不产生空图）。
-core::Image EngineBridge::resizeImage(const core::Image& src, const int newW, const int newH) {
-    if (newW <= 0 || newH <= 0) return src;
-    return pixel_ops::resize(src, newW, newH);
-}
-
-// 按比例缩放：委托 pixel_ops::scale（factor 必须 > 0，否则原图返回）。
-core::Image EngineBridge::scaleImage(const core::Image& src, const double factor) {
-    if (factor <= 0.0) return src;
-    return pixel_ops::scale(src, factor);
-}
-
-// 黑白（灰度）：委托 pixel_ops::toGray。
-core::Image EngineBridge::toGrayImage(const core::Image& src) {
-    return pixel_ops::toGray(src);
-}
-
-// 按通道反色：委托 pixel_ops::invertChannels（mask 长度 3，'1' 反色对应 R/G/B）。
-core::Image EngineBridge::invertImage(const core::Image& src, const std::string& mask) {
-    return pixel_ops::invertChannels(src, mask);
-}
-
-// 按通道分离：委托 pixel_ops::splitChannels（mask 长度 3，'1' 保留对应 R/G/B，'0' 置零）。
-core::Image EngineBridge::splitImage(const core::Image& src, const std::string& mask) {
-    return pixel_ops::splitChannels(src, mask);
+// 声明式队列物化：委托 Core PreprocessPipeline::apply（逐步分派含 ResizeOp/旋转全在 Core）。
+core::Image EngineBridge::applyPipeline(const core::Image& src,
+                                       const preprocess::PreprocessPipeline& pipeline) {
+    return pipeline.apply(src);
 }
 
 } // namespace idc::gui

@@ -10,7 +10,7 @@
 
 ## Document（QObject）
 
-持有：原图 `original_` / 工作图 `working_`（新载入图二者相同，预处理后 working 变化）、模式 `Tier`（默认 L1）、
+持有：原图 `original_`（不可变）/ **声明式预处理队列 `steps_`（`PreprocessPipeline`，有序步骤）** / 工作图 `working_`（＝`steps_.apply(original_)` 的重放产物；新载入图时 `steps_` 空、`working_`≡`original_`）、模式 `Tier`（默认 L1）、
 极性 `Polarity`（默认 KEEP）、L1 形状 / L2 子功能、选区矩形 `RectRegion` + `hasRect_`、
 **L2 多矩形列表 `rects_`（仅 `MULTI_RECT` 生效，其余子功能恒空）**、
 导出参数（`EmitMode`/`MergeLayout`/`ExportFormat`/质量/命名/输出目录/输出文件）、
@@ -22,7 +22,9 @@ L3 网格参数 `GridParams`（默认单元 100×100，避免 `GridParams` 默�
 - 枚举映射：`L1Shape{RECT,HBAND,VBAND}`、`L2Sub{CROSS,HLINE,VLINE,MULTI_RECT}` → Core `CutGenerator`
   （`RECT` / `HORIZONTAL_LINE` / `VERTICAL_LINE` / `MULTI_RECT`）；L3 → `GRID`（携带 `GridParams`）。
   `MULTI_RECT` 时 `buildCutConfig` 另把 `rects_` 搬运进 `CutConfig::rects`（Core 对每个矩形诱导十字带后取并集，方案 A）。
-- `buildCutConfig()` / `buildEngineConfig()`：**纯字段搬运 + 枚举映射**，不含任何几何/极性判定。
+- `buildCutConfig()` / `buildEngineConfig()`：**纯字段搬运 + 枚举映射**，不含任何几何/极性判定。`buildEngineConfig` 为**运行配置**（送预览/导出，`cfg.preprocess` 恒空——队列已物化进 `working_`）。
+- `buildSerializableConfig()`：**序列化配置**（供保存配置）——与 `buildEngineConfig` 同构但携带完整 `steps_` 队列、`source` 取**原图尺寸**（与加载时重放基准一致）。
+- 队列访问：`steps()`/`setSteps(pipeline)`（回灌整条队列）、`geomSig()`（`steps_.geometryOutput(original_.w, original_.h)`→尺寸/净旋转象限，供 `PreprocessController` 尺寸门）、`hasPreprocess()`（`!steps_.empty()`）。
 - `applyEngineConfig(cfg)`：`buildEngineConfig` 的**互逆反向映射**（配置加载与撤销重做共用）——生成器+tier 还原 L1 形状/L2 子功能，搬运几何/选择集/排序/导出参数（optional 画布/单元尺寸 nullopt↔0）；直接改字段后只发一次 `changed()`；不还原 source 尺寸（图像不随配置/快照变）；守卫「非 L3 不得重排」「网格单元尺寸为正」不变式。
 - 信号：`imageChanged()`（换图，需重建预览 pixmap）、`changed()`（任意参数变更，仅需刷新预览）。
 - `setMode()` 套用模式定义极性（L1→KEEP、L2→REMOVE；L1≡keep、L2≡remove）；**切入 L3 保留当前极性不变**（L3 极性独立，从 L2 进 L3 沿用 remove）；**离开 L3 时若 `layout_==REARRANGE` 自动复位为 COLLAPSE**（模型层维持「重排仅 L3」不变式）。
@@ -42,15 +44,16 @@ L3 网格参数 `GridParams`（默认单元 100×100，避免 `GridParams` 默�
 
 ## EngineBridge（无状态、可拷贝）
 
-| 方法                                  | 委托的 Core API                                                                          |
-|-------------------------------------|---------------------------------------------------------------------------------------|
-| `loadImage(path, out, err)`         | `engine::readImageFile`（统一解码为 RGBA）                                                   |
-| `runPreview(work, cfg)`             | `engine::runEngine`（仅区域数学，适合实时预览）                                                     |
-| `cutLines(cut, src)`                | `engine::generateCutLines`（取贯穿切割线供渲染）                                                 |
-| `buildGrid(cut, src)`               | GRID→`Grid::build`、其余→`generateCutLines`+`induceGrid`（镜像 `runEngine` 网格产出，供 L3 网格线渲染） |
-| `exportResult(work, cfg, out, err)` | `engine::runEngine` + `engine::exportImage`（全分辨率落盘，无损）                                |
-| `saveConfig(path, cfg, err)`        | `engine::saveEngineConfig`（SPEC §7 schema JSON 落盘）                                    |
-| `loadConfig(path, out, err)`        | `engine::loadEngineConfig`（从 JSON 还原配置；nlohmann 在 Core 侧 PRIVATE，GUI 不感知）             |
+| 方法                                   | 委托的 Core API                                                                                                                     |
+|--------------------------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| `loadImage(path, out, err)`          | `engine::readImageFile`（统一解码为 RGBA）                                                                                              |
+| `runPreviewGeometry(dims, cfg)`      | `engine::runEngineGeometry`（给定已预处理输出尺寸直接跑几何流水线、不应用 cfg.preprocess，供预览脱离全分辨率工作图）                                                  |
+| `cutLines(cut, src)`                 | `engine::generateCutLines`（取贯穿切割线供渲染）                                                                                            |
+| `buildGrid(cut, src)`                | GRID→`Grid::build`、其余→`generateCutLines`+`induceGrid`（镜像 `runEngine` 网格产出，供 L3 网格线渲染）                                            |
+| `exportResult(work, cfg, out, err)`  | `engine::runEngine` + `engine::exportImage`（全分辨率落盘，无损）                                                                           |
+| `saveConfig(path, cfg, err[, anno])` | `engine::saveEngineConfig`（SPEC §7 schema JSON 落盘；可选 `AnnotationLayer*` 非空时附带 `annotations` 段）                                   |
+| `loadConfig(path, out, err[, anno])` | `engine::loadEngineConfig`（从 JSON 还原配置；可选 `AnnotationLayer*` 非空时一并还原 `annotations` 段到该层、缺段＝清空；nlohmann 在 Core 侧 PRIVATE，GUI 不感知） |
+| `applyPipeline(src, pipeline)`       | `preprocess::PreprocessPipeline::apply`（声明式队列物化：把整条流水线按序应用到 src，供 `PreprocessController` 从 `original_` 重放 `steps_` 得 `working_`） |
 
 > 其余 GUI 代码只与 `EngineBridge` 交互，不直接 include 引擎实现细节，
 > 以此保证「GUI 不含切割/几何/导出逻辑」。
@@ -60,12 +63,14 @@ L3 网格参数 `GridParams`（默认单元 100×100，避免 `GridParams` 默�
 类比 `EngineBridge` 之于切割引擎：`AnnotationBridge` 是 GUI 中**唯一**持有并驱动 Core
 `annotation::AnnotationLayer` 的类，把画布/面板意图翻译成对 Core 标注 API 的调用，**自身不含任何几何/光栅化**。
 
-- `enum class AnnoTool`：SELECT + 各形状 + POLYLINE + TEXT + BRUSH；`shapeTypeForTool()` 映射到 Core `geometry::ShapeType`（**无箭头**：Core `ShapeType` 无 ARROW）。
+- `enum class AnnoTool`：SELECT + 各形状 + POLYLINE + TEXT + BRUSH；`shapeTypeForTool()` 映射到 Core `geometry::ShapeType`。
 - **工具/属性**：`setTool`（SELECT→Core EDIT 模式、其余→DRAW）、`setColor`（边框色）/`setFillColor`（独立填充色）/`setStrokeWidth`/`setFill`/`setCornerRadius`（转角圆角半径）/`setText`/`setFontSize`（委托 Core `change*`：EDIT 作用选中项、DRAW 改下一次绘制默认）。回显走 `displayColor/displayFillColor/displayStrokeWidth/displayFill/displayCornerRadius`（有选中取选中项、否则当前默认）。
 - **能力查询**（供属性面板置灰不适用控件，判定均在 GUI 桥层、不改 Core）：`contextSupportsFill()`（仅直线 / 文字不可填充，折线 / 画笔隐式闭合可填充）、`contextSupportsCornerRadius()`（仅顶点型多边形 / 折线可倒角）；有选中按选中形状类型、绘制工具按工具类型、SELECT 无选中一律可用（避免上一工具残值错禁默认值编辑）。
 - **绘制流程**：两点形状 `beginShape/updateShape/commitShape/cancelPending`；画笔 `beginPath/appendPathPoint/commitPath`（按住连续追点）；**折线点击式** `beginPath`（首次落顶点）/`appendPathPoint`（左键再落顶点）/`previewPolyline`（悬停时以草稿+到光标临时连线构造橡皮筋预览、**不落草稿**）/`commitPath`（右键/Esc 收笔，依 `pathDraft_` 正式顶点重建、丢弃橡皮筋临时段）/`hasPathDraft`；文字 `addText`。几何均走 Core `buildShape`。
 - **选择/移动/删除**：`selectAt`（Core `hitTest`+`selectAnnotation`）、`moveSelectedBy`（委托 Core `Shape::translateWorld` 世界系平移—内部把世界位移换算到局部系再偏移参数，**保留具体类型**不退化为 PATH、且旋转/缩放后拖动方向仍跟随光标）、`removeSelected`（Core `removeAnnotation`）。
+- **层序（叠放次序）**：`raiseSelected/lowerSelected/bringSelectedToFront/sendSelectedToBack` 作用于选中标注，取 `selectedAnnotationIndex()` 与 `annotations().size()` 算目标下标后委托 Core `moveAnnotation`（`Annotation::zOrder` 恒等于列表下标、大＝顶，增删移后由 Core 统一规范化），发 `changed()+selectionChanged()` 驱动画布重绘与面板回显；已在目标边界（顶/底）则早退。
 - **变换（缩放/旋转/翻转）**：`transformSelected(sx,sy,rotateDeg)` 委托 Core `Shape::applyObbTransform`（非破坏性仿射：绕局部盒中心沿自身轴缩放 + 绕世界中心刚性旋转，保留具体类型与字形不退化）；sx/sy 为**增量系数**（1.0=不变、负即翻转）、rotateDeg 为增量角。`displayObbScaleX/Y/RotationDeg()` 读出 Core 累积的**绝对带符号值**供属性面板忠实回显（变换语义与累积参数机制见 `include/geometry`）。属性面板与画布手柄**共用此入口**；无选中或增量恒等（1,1,0）则忽略。
 - **撤销/重做/清除**：`undo/redo/clearAll` → Core `revoke/redo/clear`（分层快照，GUI 不自建历史栈）。
 - **图层可见/导出烧录**：`setLayerVisible/setBurnIn` 为 GUI 侧标志；`burnIn(base)` 以传入的**当前工作图**为底逐个调 Core `rasterize` 合成（不复用 `AnnotationLayer::burnIn()` 内部可能陈旧的 `image_`，确保与预处理后最新底图一致）。
+- **配置还原**（SPEC §7 `annotations` 段）：`layer()` 只读引用内部 Core 层，供保存配置时交给 `EngineBridge::saveConfig` 序列化；`replaceAnnotations(items)` 委托 Core `restoreAnnotations` 整体替换当前列表（不推撤销快照、取消选中）后发 `changed()/selectionChanged()`；调用方（`MainWindow::onLoadConfig`）需保证在预处理队列重放（含尺寸门清标注）**之后**执行，否则还原会被误清；还原不纳入 DocHistory 文档撤销栈（已知限制）。
 - **信号**：`changed()`（标注列表/预览变化→画布重绘）、`selectionChanged()`（选中变化→高亮+属性面板）、`toolChanged()`（工具变化→面板同步）。

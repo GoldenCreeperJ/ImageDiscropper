@@ -36,7 +36,6 @@ namespace idc::gui {
 // ---------------------------------------------------------------------------
 // AnnoTool：GUI 标注工具枚举。
 // 分块依据：与 Core ShapeType 对应，但额外含 SELECT（选择 / 移动，无几何形状）。
-//           本轮不含箭头（Core ShapeType 无 ARROW，见计划「已知限制」）。
 // ---------------------------------------------------------------------------
 enum class AnnoTool {
     SELECT,          // 选择 / 移动（EDIT 模式）
@@ -126,10 +125,25 @@ public:
     // rotateDeg 为旋转角增量；无选中或无变化则忽略。属性面板与画布 OBB 手柄共用本入口。
     void transformSelected(double sx, double sy, double rotateDeg);
 
+    // ---- 层序（叠放次序）：Core 以标注下标为 z 序（大＝顶，见 hitTest/burnIn）----
+    // 均作用于选中项，委托 Core AnnotationLayer::moveAnnotation 重排；无选中则忽略。随后发 changed()/selectionChanged()。
+    void raiseSelected();         // 上移一层（向顶层）
+    void lowerSelected();         // 下移一层（向底层）
+    void bringSelectedToFront();  // 置于顶层
+    void sendSelectedToBack();    // 置于底层
+
     // ---- 撤销 / 重做 / 清除（复用 Core 内建分层快照）----
     void undo();                             // → Core revoke()
     void redo();                             // → Core redo()
     void clearAll();                         // → Core clear()
+
+    // ---- 配置还原（SPEC §7 annotations 段）----
+    // 只读引用 Core 层：供保存配置时把当前标注层交给 EngineBridge::saveConfig 序列化。
+    const annotation::AnnotationLayer& layer() const { return layer_; }
+    // 用载入的标注整体替换当前列表（委托 Core restoreAnnotations：不推撤销快照、取消选中），
+    // 随后发 changed()/selectionChanged() 驱动画布与面板刷新。调用方须保证已在预处理队列
+    // 重放（含尺寸门清标注）之后执行，否则还原会被尺寸门误清。
+    void replaceAnnotations(std::vector<annotation::Annotation> items);
 
     // ---- 图层可见性 / 导出烧录（GUI 侧标志，Core 无关）----
     bool layerVisible() const { return layerVisible_; }

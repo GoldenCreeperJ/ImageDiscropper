@@ -59,6 +59,8 @@ void CanvasScene::setBaseImage(const QPixmap& preview, const double scaleX, cons
         selItem_->setVisible(false);
         // 选区框的编辑事件转发为场景信号，供 MainWindow 写回 Document（视图/场景不认识 Document）。
         connect(selItem_, &SelectionRectItem::rectChanged, this, &CanvasScene::selectionEdited);
+        // 拖动选区边框开始：转发为场景交互信号，供上层清除标注选中（标注 OBB 手柄随选区拖动消失）。
+        connect(selItem_, &SelectionRectItem::dragStarted, this, &CanvasScene::selectionInteractionStarted);
         // 同步图层面板的切割线 / 选取边框显隐开关（新建图元需继承当前标志）。
         selItem_->setCutLinesVisible(cutLinesVisible_);
         selItem_->setBorderVisible(selectionVisible_);
@@ -188,6 +190,8 @@ void CanvasScene::updateMultiRects(const std::vector<engine::RectRegion>& rects)
         connect(it, &SelectionRectItem::rectChanged, this, [this, it](const QRectF& r) {
             if (const int idx = multiRectItems_.indexOf(it); idx >= 0) emit multiRectEdited(idx, r);
         });
+        // 多矩形拖框开始同样转发交互信号（任一选区框被拖动都清除标注选中）。
+        connect(it, &SelectionRectItem::dragStarted, this, &CanvasScene::selectionInteractionStarted);
         multiRectItems_.append(it);
     }
     // 刷新几何：跳过正在拖拽者（其位置/边界由手势维护，释放时才回设，避免逐帧 prepareGeometryChange 抖动）。
@@ -321,6 +325,8 @@ void CanvasScene::updatePendingAnnotation(const AnnotationBridge& model) {
             pendingAnnoItem_ = new AnnotationItem();
             pendingAnnoItem_->setHandleSize(annoHandleSize_);
             pendingAnnoItem_->setAcceptedMouseButtons(Qt::NoButton);  // 预览不可交互
+            // 橡皮筋预览抬到已提交标注之上（构造默认落在 kAnnotation，与后提交的标注同 z 会被盖住）。
+            pendingAnnoItem_->setZValue(zorder::kAnnotationPreview);
             addItem(pendingAnnoItem_);
         }
         annotation::Annotation tmp;

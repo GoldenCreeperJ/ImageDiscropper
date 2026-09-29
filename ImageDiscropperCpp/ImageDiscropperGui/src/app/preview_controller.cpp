@@ -75,10 +75,24 @@ void PreviewController::rebuildPreviewPixmap() {
     if (!doc_->hasImage()) {
         scene_->clearAll();
         exportSrcPixmap_ = QPixmap();   // 无图像：清空输出预览小源图。
+        lastFitW_ = lastFitH_ = -1;     // 清空后复位尺寸追踪，下次载入必然 fit。
         return;
     }
-    const auto [image, scaleX, scaleY] = makePreview(doc_->working(), previewMaxDim_);
-    const QPixmap pm = toPixmap(image);
+    // 预览底图：工作图最长边已在限制内（绝大多数图）时**直接转换**，跳过 makePreview 的整幅深拷贝；
+    // 仅超长边大图才走 makePreview 降采样（轻编辑每次都要重跑，省一次整图拷贝可显著降低卡顿，需求③）。
+    const core::Image& working = doc_->working();
+    const int srcLongest = std::max(working.width(), working.height());
+    QPixmap pm;
+    double scaleX = 1.0;
+    double scaleY = 1.0;
+    if (previewMaxDim_ > 0 && srcLongest > previewMaxDim_) {
+        const auto [image, sx, sy] = makePreview(working, previewMaxDim_);
+        pm = toPixmap(image);
+        scaleX = sx;
+        scaleY = sy;
+    } else {
+        pm = toPixmap(working);
+    }
     // 场景坐标 = 原图像素坐标；底图用放大系数把预览 pixmap 铺到原图尺寸。
     scene_->setBaseImage(pm, scaleX, scaleY, doc_->width(), doc_->height());
     // 输出预览专用小源图：把底图再降到最长边 ≤ kExportSrcMaxDim，使缩略图只在小图上 blit。
@@ -89,7 +103,12 @@ void PreviewController::rebuildPreviewPixmap() {
     // working（原图）→ 小源图 的放大系数（供 util::composeOutputThumbnail 把 Composition 源区域映射到小图坐标）。
     exportSrcScaleX_ = exportSrcPixmap_.width()  > 0 ? static_cast<double>(doc_->width())  / exportSrcPixmap_.width()  : 1.0;
     exportSrcScaleY_ = exportSrcPixmap_.height() > 0 ? static_cast<double>(doc_->height()) / exportSrcPixmap_.height() : 1.0;
-    view_->fitToWindow();
+    // 仅当输出尺寸变化（换图 / resize）才 fitToWindow 复位缩放；轻编辑尺寸不变则保持用户当前缩放（需求③）。
+    if (const int ow = doc_->width(), oh = doc_->height(); ow != lastFitW_ || oh != lastFitH_) {
+        view_->fitToWindow();
+        lastFitW_ = ow;
+        lastFitH_ = oh;
+    }
 }
 
 // 跑 Core 预览并刷新画布与状态（CONTRIBUTING.md「分层纪律」 实时预览）。
@@ -126,7 +145,7 @@ void PreviewController::refreshPreview() {
         // 把当前选择集与排序策略下发给点选图元（高亮已选单元）。
         scene_->updateCellSelection(doc_->selectedCells(), doc_->order().strategy);
 
-        const engine::EngineResult res = EngineBridge::runPreview(doc_->working(), cfg);
+        const engine::EngineResult res = EngineBridge::runPreviewGeometry(cfg.source, cfg);
         scene_->updateMasks(res);
         updateExportPreview(res);
 
@@ -152,7 +171,7 @@ void PreviewController::refreshPreview() {
     // L2 多矩形并集剔除：选区来自 rects_（非单 rect_），单独处理。
     // 用 Core 诱导网格画灰色网格线（各矩形十字带并集诱导），但不启动单元点选图元——
     // picker 会 grab 鼠标、阻断画布框选（多矩形靠框选逐个追加）。橙色轮廓标出各矩形，
-    // 单选区框隐藏。遮罩复用 runPreview 的 kept 结果（CONTRIBUTING.md「分层纪律」：GUI 不算并集）。
+    // 单选区框隐藏。遮罩复用 runPreviewGeometry 的 kept 结果（CONTRIBUTING.md「分层纪律」：GUI 不算并集）。
     if (doc_->mode() == engine::Tier::L2 && doc_->l2Sub() == L2Sub::MULTI_RECT) {
         scene_->updateMultiRects(doc_->rects());     // 增量刷新可拖拽选区框（拖拽中不回设正在拖者）。
         scene_->clearCutLines();
@@ -170,7 +189,7 @@ void PreviewController::refreshPreview() {
         const engine::EngineConfig cfg = doc_->buildEngineConfig();
         const engine::Grid grid = EngineBridge::buildGrid(cfg.cut, cfg.source);
         scene_->updateMultiRectCutLines(grid, true);
-        const engine::EngineResult res = EngineBridge::runPreview(doc_->working(), cfg);
+        const engine::EngineResult res = EngineBridge::runPreviewGeometry(cfg.source, cfg);
         scene_->updateMasks(res);
         updateExportPreview(res);
 
@@ -206,7 +225,7 @@ void PreviewController::refreshPreview() {
 
     // 组装配置 → 调 Core 预览（仅区域数学，实时）。
     const engine::EngineConfig cfg = doc_->buildEngineConfig();
-    const engine::EngineResult res = EngineBridge::runPreview(doc_->working(), cfg);
+    const engine::EngineResult res = EngineBridge::runPreviewGeometry(cfg.source, cfg);
 
     // 切割线来自 Core generateCutLines（GUI 不自算几何）；场景据此判定选区哪几条边有贯穿切割线，
     // 下发给选区框绘制为橙色贯穿线——切割线即选区边的延伸，拖动选区边＝移动切割线（同一图元）。

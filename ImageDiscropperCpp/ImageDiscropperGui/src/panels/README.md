@@ -2,18 +2,18 @@
 
 七个 QWidget 面板，均**不直接调 Core 几何/光栅化**。模式/参数/导出面板只读写 `Document`（用户操作 → 写回 Document →
 Document 发 `changed()` → app 层 `PreviewController` 刷新预览；反向同步用 `blockSignals` 防回环）。
-（例外：图像处理面板发「意图信号」，由 `PreprocessController` 经 EngineBridge 调 Core pixel_ops 变换工作图；标注工具/图层/属性面板发意图信号，由 `AnnotationCoordinator` 写回 `AnnotationBridge`。）
+（例外：图像处理面板是**声明式预处理队列编辑器**，只发队列意图信号，由 `PreprocessController` 经 EngineBridge 调 Core 从原图重放物化工作图；标注工具/图层/属性面板发意图信号，由 `AnnotationCoordinator` 写回 `AnnotationBridge`。）
 
-| 文件                              | 职责                                                                                                                                                             |
-|---------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `accordion_panel.{h,cpp}`       | **桌面右侧多页容器**：AccordionPanel（多节可同时展开，整栏外套 QScrollArea 滚动触达）；标题按钮 checkable + 前缀 ▾/▸                                                                             |
-| `left_panel.{h,cpp}`            | 左侧：模式切换 L1/L2/L3、极性开关（保留绿 / 删除红）（工具/图层已迁出）                                                                                                                     |
-| `param_panel.{h,cpp}`           | 右侧「参数」页：QStackedWidget 分 L1/L2/L3 三页；堆叠容器高度只随当前页（PageSizedStack 关 heightForWidth + reflowStack 钳 min=max + 根布局尾部 stretch 保顶对齐（移动端 tab 页），规避 SizeAll 下隐藏页撑高/居中） |
-| `export_panel.{h,cpp}`          | 右侧「导出」页：输出模式、目录/文件、格式、质量、命名、**导出时烧录标注开关**、**输出图像预览缩略图**、导出按钮                                                                                                   |
-| `image_panel.{h,cpp}`           | 右侧「图像」页：预处理（旋转/翻转/缩放/尺寸/黑白/反色/色道分离/重置）                                                                                                                         |
-| `tool_panel.{h,cpp}`            | 左侧「标注工具」组：选择/各形状/多线段/文字/画笔互斥按钮                                                                                                                                 |
-| `layer_panel.{h,cpp}`           | 左侧「图层」组：底图/标注/遮罩/网格线/切割线/选取边框/单元编号显示开关（按 z 序；标注烧录开关已迁至导出面板）                                                                                                    |
-| `annotation_prop_panel.{h,cpp}` | 右侧「标注」属性页：颜色/粗细/填充/文字/字号+ 变换区（缩放%/旋转° 显示选中形状的**绝对累积变换**、含负=翻转，**改动即生效无应用按钮**，作用于当前选中标注；`setTransformPreview` 与画布 OBB 手柄拖拽实时联动）                                 |
+| 文件                              | 职责                                                                                                                                                                                      |
+|---------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `accordion_panel.{h,cpp}`       | **桌面右侧多页容器**：AccordionPanel（多节可同时展开，整栏外套 QScrollArea 滚动触达）；标题按钮 checkable + 前缀 ▾/▸                                                                                                      |
+| `left_panel.{h,cpp}`            | 左侧：模式切换 L1/L2/L3、极性开关（保留绿 / 删除红）（工具/图层已迁出）                                                                                                                                              |
+| `param_panel.{h,cpp}`           | 右侧「参数」页：QStackedWidget 分 L1/L2/L3 三页；堆叠容器高度只随当前页（PageSizedStack 关 heightForWidth + reflowStack 钳 min=max + 根布局尾部 stretch 保顶对齐（移动端 tab 页），规避 SizeAll 下隐藏页撑高/居中）                          |
+| `export_panel.{h,cpp}`          | 右侧「导出」页：输出模式、目录/文件、格式、质量、命名、**导出时烧录标注开关**、**输出图像预览缩略图**、导出按钮                                                                                                                            |
+| `image_panel.{h,cpp}`           | 右侧「图像」页：**声明式预处理队列编辑器**（几何/色彩两独立列表 + 顶部独立 Resize 区 + 重置），发 stepAppend/Replace/Remove/Move/reset 队列信号                                                                                    |
+| `tool_panel.{h,cpp}`            | 左侧「标注工具」组：选择/各形状/多线段/文字/画笔互斥按钮                                                                                                                                                          |
+| `layer_panel.{h,cpp}`           | 左侧「图层」组：底图/标注/遮罩/网格线/切割线/选取边框/单元编号显示开关（按 z 序；标注烧录开关已迁至导出面板）                                                                                                                             |
+| `annotation_prop_panel.{h,cpp}` | 右侧「标注」属性页：颜色/粗细/填充/文字/字号+ 叠放区（上移/下移一层、置顶/置底，仅选中标注可用，层序控件已从标注菜单与 Ctrl+Shift 快捷键迁入）+ 变换区（缩放%/旋转° 显示选中形状的**绝对累积变换**、含负=翻转，**改动即生效无应用按钮**，作用于当前选中标注；`setTransformPreview` 与画布 OBB 手柄拖拽实时联动） |
 
 ## left_panel
 
@@ -65,18 +65,21 @@ Document 发 `changed()` → app 层 `PreviewController` 刷新预览；反向�
 
 ## image_panel
 
-预处理（FR-1）面板。面板**不碰 Core、不做像素运算**，只把控件值翻译为意图信号；
-实际变换由 `PreprocessController` 经 `EngineBridge` 调 Core `pixel_ops::*` 完成，结果写回 `Document` 工作图（原图始终保留）。
+预处理（FR-1）**声明式队列编辑器**。面板**不碰 Core、不做像素运算、不持真相**，只把控件值翻译为队列意图信号；
+实际重放物化由 `PreprocessController` 经 `EngineBridge` 调 Core（从原图重放整条队列）完成，结果写回 `Document` 工作图（原图始终保留）。
 
-- **旋转组**：左转 90° / 右转 90° / 180° → `rotateRequested(angleDeg)`（-90/90/180）。
-- **翻转组**：水平 / 垂直 → `flipRequested(bool horizontal)`。
-- **缩放/尺寸组**：比例百分比 spin（1..1000%）+「按比例应用」→ `scaleRequested(factor)`；
-  目标宽/高 spin（1..20000）+「保持宽高比」（改宽联动算高）+「按尺寸应用」→ `resizeRequested(w,h)`。
-- **颜色组**：黑白 → `grayRequested()`；反色（全通道）→ `invertRequested()`（灰度图上对单一亮度通道取反，仍有效）；
-  色道分离 R/G/B 复选框（勾选=保留）+「色道分离」→ `splitRequested(keepR,keepG,keepB)`（`PreprocessController` 拼成长度 3 掩码）。
-- **重置预处理**按钮 → `resetRequested()`：仅当 `doc_->hasPreprocess()` 时可用。
-- `syncFromDocument()`：无图时整板禁用；有图时把目标宽/高回灌为当前工作图尺寸（`blockSignals` 防联动回调）；
-  **工作图为灰度（黑白后）时禁用「黑白」与「色道分离」组控件**（灰度无 R/G/B 可分、黑白幂等），反色保持可用；并按 `hasPreprocess()` 启停重置按钮。
+轻操作在界面上**拆为几何、色彩两个独立列表**（表面两列表、底层一条队列），另加顶部独立的画布尺寸（Resize）常驻区：
+
+- **画布尺寸（Resize）独立区**（`resizeW_`・`resizeH_` + `resizeKeepRatio_`（改宽联动算高）+ `applySizeBtn_`；`resizeScalePct_`（1..1000%）+ `scaleSizeBtn_`；`clearSizeBtn_`；`currentSizeLabel_` 只读回显当前输出尺寸）：**常驻、有图即可用、不入队列**，发 `resizeAppliedRequested(w,h)` / `resizeScaleRequested(factor)` / `resizeClearedRequested()`；resize 恒最先从原图重采样。
+- **几何操作区**：`geoTypeCombo_`（旋转 / 翻转）+ `rotAngle_`（-90/90/180）/ `flipDir_`（水平/垂直）；`geoAddBtn_`→`buildGeoConfig()` 发 `stepAppendRequested(cfg)`、`geoReplaceBtn_`→`stepReplaceRequested(index,cfg)`；`geoList_` 展示几何步（`describeStep()` 生成中文行），`geoDelBtn_`/`geoUpBtn_`/`geoDownBtn_` 删除/上移/下移。
+- **色彩操作区**：`colorTypeCombo_`（黑白 / 色道反色 / 色道分离）+ `chR_`・`chG_`・`chB_`（反色＝反相它 / 分离＝保留它）；`colorAddBtn_`→`buildColorConfig()` 发 `stepAppendRequested(cfg)`、`colorReplaceBtn_`→`stepReplaceRequested(index,cfg)`；`colorList_` 展示色彩步，`colorDelBtn_`/`colorUpBtn_`/`colorDownBtn_` 删除/上移/下移。
+- **两列表→扁平下标映射**：`geoList_` 行号即底层队列扁平下标；`colorList_` 行号经 `colorFlatIndex()`（= `geoRowCount()` + 色彩行号）映到几何块之后的下标。底层 `steps` 恒为「全部几何步在前 + 全部色彩步在后」，`PreprocessController` 据此维持不变式（几何步插到几何块尾、色彩步追加队尾，跨类上下移忽略）。
+- **重置**：`resetBtn_`→`resetRequested()`：清空 resize 与整条队列，仅当 `doc_->hasPreprocess()` 时可用。
+
+发信号：`stepAppendRequested(PreprocessConfig)` / `stepReplaceRequested(int,cfg)` / `stepRemoveRequested(int)` / `stepMoveRequested(int,bool down)` / `resetRequested()`（index 均为底层**扁平下标**，均不持真相）。
+
+- `setDocument(Document*)` 绑定会话状态源；`syncFromDocument()`：无图时整板禁用；从 Document 反向同步时按类型把 `steps` 重分为几何段 / 色彩段重建两列表文本（上/下移后靠 `pendingSelectRow_` 使高亮跟随被移动项）、把 `resizeW_`・`resizeH_` 回灌为当前输出尺寸（`blockSignals` 防联动回调）、
+  **工作图为灰度（黑白后）时禁用「黑白」与「色道分离」**（灰度无 R/G/B 可分、黑白幂等），反色保持可用；按 `hasPreprocess()`/选中态启停按钮。
 - 「颜色选取（取色器）」与标注属性（描边/填充色）强相关，已由 `annotation_prop_panel` 统一提供（见下）。
 
 ## tool_panel
@@ -88,7 +91,6 @@ Document 发 `changed()` → app 层 `PreviewController` 刷新预览；反向�
 - 3 列网格含「等腰直角三角形」等宽标签，需较宽左栏（左栏最小宽由主窗 `leftScroll->setMinimumWidth` 控制）。
 - `onToolToggled(id, checked)` 仅 checked 时 `emit toolSelected(static_cast<AnnoTool>(id))`；默认勾选 SELECT。
 - `setModel()`/`syncFromModel()`：从模型反向同步当前工具选中态（`blockSignals` 防回环）。
-- **不含箭头**（Core `ShapeType` 无 ARROW，见 Gui README「已知限制」）。
 
 ## layer_panel
 
@@ -106,6 +108,7 @@ Document 发 `changed()` → app 层 `PreviewController` 刷新预览；反向�
 
 - `QFormLayout` 逐行排布：**边框色**色块按钮（`QColorDialog` 取色，**开启 `ShowAlphaChannel`**；标注颜色含 alpha，Core `Color` 有 a 分量、rasterizer 已做 src-over 混合；色块以 rgba 背景 + RGBA 文案回显）/ **填充色**独立色块按钮 / 粗细 spin（1..200）/ 填充开关 / 转角圆角半径 spin（0＝直角）/ 文字内容 / 字号 spin（1..2000）。
 - 信号：`colorPicked(QColor)`/`fillColorPicked(QColor)`/`strokeChanged(int)`/`fillChanged(bool)`/`cornerRadiusChanged(double)`/`textChanged(QString)`/`fontSizeChanged(double)`。
+- **叠放区**（`stackGroup_`，标题「叠放次序（选中标注）」，4 按钮横排）：上移一层 / 下移一层 / 置于顶层 / 置于底层，发 `stackRaiseRequested`/`stackLowerRequested`/`stackToFrontRequested`/`stackBackRequested` → `AnnotationCoordinator`（`onAnnoRaise/Lower/BringToFront/SendToBack`）→ `AnnotationBridge::raiseSelected` 等 → Core `moveAnnotation`（就地重排并规范化 `zOrder`＝下标）；层序控件**原属标注菜单，已迁入本面板**（菜单项与 Ctrl+Shift 快捷键一并移除）；`syncFromModel` 按 `selectedIndex().has_value()` 置 `stackGroup_` 的 enabled。
 - `syncFromModel()`：边框色 / 填充色 / 粗细 / 填充 / 圆角半径取 `displayXxx`（选中项属性，否则当前默认）、文字 / 字号取 `currentXxx`（`blockSignals` 防回环）。
 - **Core `Annotation` 区分边框色 `color` 与填充色 `fillColor`，故面板提供两个独立取色按钮**；新建标注的填充色默认跟随边框色，显式改过后断开联动。
 - **能力置灰**（`syncFromModel` 末尾按形状类型自动执行）：选中 / 绘制的形状不可填充（仅直线 / 文字）或未勾选填充时，禁用填充色按钮；无转角形状（直线 / 圆 / 椭圆 / 文字）时禁用圆角 spin。SELECT 且无选中时一律可用（此时编辑的是下一次绘制的默认值，不受上一工具残值错禁）；判定均由 `AnnotationBridge::contextSupportsFill/contextSupportsCornerRadius` 提供，面板只据此 `setEnabled`。

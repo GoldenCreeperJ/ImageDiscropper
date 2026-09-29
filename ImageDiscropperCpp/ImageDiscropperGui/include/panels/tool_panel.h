@@ -5,7 +5,6 @@
 //       写回 AnnotationBridge（CONTRIBUTING.md「分层纪律」：面板不含几何 / 光栅化）。
 // 分块依据：一个 QButtonGroup（互斥）承载全部工具按钮，id = AnnoTool 的整数值，避免额外映射表；
 //           syncFromModel 从模型反向同步选中态（blockSignals 防回环），与 LeftPanel 同步 Document 同构。
-// 说明：本轮不含箭头（Core ShapeType 无 ARROW，见计划「已知限制」）。
 // ============================================================================
 #pragma once
 

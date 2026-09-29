@@ -247,10 +247,11 @@ void CanvasView::gestureStrokeEnd(const QPoint& viewportPos) {
 // 收笔：绘制态右键（或等效手势）→ 交上层结束并提交折线 / 取消当前预览。
 void CanvasView::gestureStrokeFinish() { emit annoFinish(); }
 
-// 框选起带：记录起点并显示橡皮筋。
+// 框选起带：记录起点并显示橡皮筋（同时上报框选起始，供上层清除进行中的标注选中）。
 void CanvasView::gestureMarqueeBegin(const QPoint& viewportPos) {
     rubber_ = true;
     rubberStart_ = viewportPos;
+    emit marqueeStarted();
     if (!rubberBand_) rubberBand_ = new QRubberBand(QRubberBand::Rectangle, viewport());
     rubberBand_->setGeometry(QRect(rubberStart_, QSize()));
     rubberBand_->show();

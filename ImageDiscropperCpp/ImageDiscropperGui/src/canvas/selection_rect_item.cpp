@@ -311,6 +311,8 @@ void SelectionRectItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     }
     lastPos_ = p;
     event->accept();
+    // 手势确立（移动 / 缩放 / 拖边任一）：上报拖拽开始，供上层清除标注选中（拖动选区边框时标注 OBB 手柄即时消失）。
+    emit dragStarted();
 }
 
 // 移动：整体平移 / 对角缩放 / 单边法向拖动，实时钳制并发信号。

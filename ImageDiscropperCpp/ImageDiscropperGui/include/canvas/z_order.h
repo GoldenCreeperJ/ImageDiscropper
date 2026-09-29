@@ -15,6 +15,7 @@ namespace idc::gui::zorder {
 
 constexpr double kBase = 0.0;        // 1. 底图（预处理后的图像）
 constexpr double kAnnotation = 10.0; // 2. 标注图层（矢量叠加）
+constexpr double kAnnotationPreview = 15.0; // 2b. 标注绘制预览（橡皮筋）：恒位于已提交标注之上、遮罩之下；
 constexpr double kDelete = 20.0;     // 删除块遮罩（红色，铺满全图作底）
 constexpr double kKeep = 30.0;       // 保留块遮罩（绿色，叠加于红色之上）
 constexpr double kGrid = 40.0;       // 5. 网格线（L3 / L2 多矩形诱导）

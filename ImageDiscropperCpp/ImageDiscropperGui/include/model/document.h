@@ -14,11 +14,13 @@
 
 #include <QObject>
 
+#include <optional>
 #include <vector>
 
 #include "core/color.h"
 #include "core/image.h"
 #include "engine/engine.h"
+#include "preprocess/preprocess_pipeline.h"
 
 namespace idc::gui {
 
@@ -35,6 +37,13 @@ enum class L2Sub {
     HLINE,       // 横线切割 → CutGenerator::HORIZONTAL_LINE
     VLINE,       // 竖线切割 → CutGenerator::VERTICAL_LINE
     MULTI_RECT,  // 多矩形并集剔除（各矩形诱导十字带取并集）→ CutGenerator::MULTI_RECT
+};
+
+// 独立画布尺寸（Resize）目标：对原图设定的绝对宽高（像素）。
+// 不再作为可排序队列步骤，而是常驻独立设置；恒在轻操作队列之前重放（见 preprocess_controller.cpp）。
+struct ResizeTarget {
+    int width = 0;
+    int height = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -54,18 +63,53 @@ public:
     bool hasImage() const { return !working_.empty(); }
     int width() const { return working_.width(); }
     int height() const { return working_.height(); }
-    // 工作图是否为灰度（GRAY）——黑白后色道分离无意义、黑白本身幂等，供 GUI 禁用相关控件（反色对灰度仍有效）。
-    bool isWorkingGray() const { return working_.isGray(); }
     const QString& imagePath() const { return imagePath_; }
 
-    // ---- 预处理工作图（FR-1）----
-    // 用一次预处理结果替换工作图；original_ 始终保留原图，供「重置预处理」还原。
-    // 由 MainWindow 经 EngineBridge 算出新图后写回（Document 不碰 Core，CONTRIBUTING.md「分层纪律」）；触发 imageChanged()。
+    // ---- 预处理工作图（FR-1；独立 resize + 声明式轻操作队列）----
+    // 模型：original_（不可变）→ resize_（可选，恒最先重放、从原图重采样）→ steps_（可排序轻操作队列，绝不含 ResizeOp）
+    //       → working_（= 在 resize 产物上重放 steps_ 的物化结果）。
+    // 每次编辑由上层（PreprocessController）重放物化后写回；Document 只存状态、不跑像素运算（CONTRIBUTING.md「分层纪律」）。
+    // 用一次预处理结果替换工作图；original_ / resize_ / steps_ 保持不变，供「重置预处理」与几何签名重算。
+    // 由 PreprocessController 经 EngineBridge 算出新图后写回；触发 imageChanged()。
     void setWorkingImage(core::Image img);
-    // 重置预处理：工作图恢复为原图、清除「已预处理」标记；未预处理时早退。触发 imageChanged()。
+    // 重置预处理：清空 resize_ 与轻操作队列、工作图恢复为原图；未预处理时早退。触发 imageChanged()。
     void resetPreprocess();
-    // 当前工作图是否已被预处理（与原图不同）——供面板/菜单启用「重置预处理」。
-    bool hasPreprocess() const { return preprocessed_; }
+    // 当前工作图是否已被预处理（有 resize 或队列非空）——供面板/菜单启用「重置预处理」。
+    bool hasPreprocess() const { return !steps_.empty() || resize_.has_value(); }
+
+    // ---- 独立画布尺寸（Resize）----
+    // resize_ 为可选目标尺寸；设置后由 PreprocessController 重放（恒在轻操作之前、从原图重采样）。
+    bool hasResize() const { return resize_.has_value(); }
+    std::optional<ResizeTarget> resizeTarget() const { return resize_; }
+    // 覆盖 / 清除独立 resize（std::nullopt = 无 resize）。仅存状态，不物化、不发信号。
+    void setResize(std::optional<ResizeTarget> target);
+
+    // ---- 声明式预处理队列（steps_）----
+    // 只读访问当前队列（供面板渲染步骤列表、控制器克隆编辑）。
+    const preprocess::PreprocessPipeline& steps() const { return steps_; }
+    // 覆盖整条队列（控制器完成增删移改后回灌）；仅更新声明状态，不物化工作图、不发信号
+    //（物化与刷新时机由调用方经 setWorkingImage / changed 掌控）。
+    void setSteps(preprocess::PreprocessPipeline pipeline);
+    // 几何签名：对 original 尺寸跑 steps_ 的纯元数据推演，得 {输出宽高, 净旋转象限}。
+    // 队列编辑前后比较此签名——尺寸或净旋转象限变化即判定几何失效（清空框选/标注），
+    // 仅换色/换序等不改签名者保留既有选择（不清框）。
+    preprocess::PreprocessPipeline::GeometryOut geomSig() const;
+
+    // 队列是否已产出灰度：任一 GrayOp 之后输出恒为灰度（invert/rotate/flip/resize 均不恢复彩色，
+    // split 对灰度图为无操作）——供预处理面板 / 菜单在灰度后停用「黑白」「色道分离」两项冗余操作。
+    bool preprocessProducesGray() const;
+
+    // ---- base_ 重放缓存（独立 resize 作用于 original 的物化产物；见 preprocess_controller.cpp commitPipeline）----
+    // 目的：编辑轻操作队列时，无需从 original_ 重跑含 resize 的重采样——直接复用 base_ 只重放轻队列。
+    //       base_ 对应 basePath_（即 [resize?] 前缀），前缀逐字段相等才复用（无 resize 则为原图副本）。
+    // 生命周期：仅 PreprocessController 经 setBase 维护；凡换图（setImage）/重置预处理（resetPreprocess）即失效。
+    bool hasBase() const { return base_.has_value(); }
+    const core::Image& base() const { return *base_; }
+    const preprocess::PreprocessPipeline& basePrefix() const { return basePath_; }
+    // 记录一段前缀的重放产物为 base_（img 为其物化结果，prefix 为其对应的重放前缀队列）。
+    void setBase(core::Image img, preprocess::PreprocessPipeline prefix);
+    // 释放 base_ 重放缓存（由「有 resize」切到「无 resize」时回收内存；与 setImage / resetPreprocess 的失效同处理）。
+    void clearBase() { base_.reset(); basePath_.clear(); }
 
     // ---- 模式与极性 ----
     engine::Tier mode() const { return mode_; }
@@ -167,7 +211,13 @@ public:
     // 依当前模式/子选项构建切割配置。
     engine::CutConfig buildCutConfig() const;
     // 构建一次完整作业的配置（供 runEngine / exportImage 使用）。
+    // 约定不变：引擎永远收到「已预处理的工作图 + 空 preprocess」——预处理已物化进 working_，
+    // 故此处 preprocess 恒空，runEngine 不会二次应用（结构性根除双应用）。
     engine::EngineConfig buildEngineConfig() const;
+    // 构建可序列化配置（保存 / 载入用，SPEC §7）：与 buildEngineConfig 同字段，但
+    // preprocess 填入完整声明队列 steps_、source 取原图尺寸——还原端从 original 重放整链即可复现 working_。
+    // 与 buildEngineConfig 的关键差异只在 preprocess 段：运行配置恒空、序列化配置携带完整管线。
+    engine::EngineConfig buildSerializableConfig() const;
     // 反向映射（配置加载与撤销重做共用）：把一份 EngineConfig 的字段搬回 Document 状态，
     // 与 buildEngineConfig 互逆——生成器+tier 还原 L1 形状/L2 子功能，搬运几何/选择集/排序/导出参数。
     // 不还原 source 尺寸（图像不随配置/快照改变）；直接改字段后只发一次 changed()（避免逐 setter 多次刷新）。
@@ -181,9 +231,13 @@ signals:
     void changed();
 
 private:
-    core::Image original_;   // 原始载入图（RGBA）——始终不变，供「重置预处理」还原
-    core::Image working_;    // 切割引擎实际输入图（= 预处理累积后的工作图，无预处理时等于原图）
-    bool preprocessed_{false};    // 工作图是否已被预处理（与 original_ 不同）
+    core::Image original_;   // 原始载入图（RGBA）——始终不变，供队列重放与「重置预处理」还原
+    core::Image working_;    // 切割引擎实际输入图（= steps_ 重放到 original 的物化结果，无预处理时等于原图）
+    preprocess::PreprocessPipeline steps_;  // 声明式轻操作队列（绝不含 ResizeOp），几何签名与序列化的真相源
+    std::optional<ResizeTarget> resize_;     // 独立画布尺寸目标（可选，恒最先重放）
+    // base_ 重放缓存：独立 resize 作用于 original 的物化产物；basePath_ 为其 [resize?] 前缀，供失效比对。
+    std::optional<core::Image> base_;
+    preprocess::PreprocessPipeline basePath_;
     QString imagePath_;
 
     engine::Tier mode_{engine::Tier::L1};

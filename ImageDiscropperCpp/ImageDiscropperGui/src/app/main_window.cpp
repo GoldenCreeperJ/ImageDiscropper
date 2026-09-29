@@ -266,6 +266,8 @@ void MainWindow::syncPanels() const {
     param_->syncFromDocument();
     exportPanel_->syncFromDocument();
     imagePanel_->syncFromDocument();
+    // 灰度启停智能：队列已产出灰度时置灰菜单「黑白」（与面板冗余判定同源；色道分离仅存于面板，已在面板内禁用）。
+    if (aGrayMenu_) aGrayMenu_->setEnabled(doc_.hasImage() && !doc_.preprocessProducesGray());
     if (modeActionL1_) modeActionL1_->setChecked(doc_.mode() == engine::Tier::L1);
     if (modeActionL2_) modeActionL2_->setChecked(doc_.mode() == engine::Tier::L2);
     if (modeActionL3_) modeActionL3_->setChecked(doc_.mode() == engine::Tier::L3);
@@ -638,7 +640,9 @@ void MainWindow::onSaveConfig() {
         QStringLiteral("ImageDiscropper 配置 (*.json);;所有文件 (*)"));
     if (path.isEmpty()) return;
 #endif
-    if (QString err; EngineBridge::saveConfig(path, doc_.buildEngineConfig(), err))
+    // 保存携带完整声明式预处理队列（含 ResizeOp）：用 buildSerializableConfig（非运行配置的空 preprocess）。
+    // 标注层同时序列化进 SPEC §7 annotations 段（配置为真相源，往返不丢）。
+    if (QString err; EngineBridge::saveConfig(path, doc_.buildSerializableConfig(), err, &annoBridge_.layer()))
         notify(QStringLiteral("配置已保存：%1").arg(path), false);
     else
         notify(QStringLiteral("保存配置失败：%1").arg(err), true);
@@ -664,8 +668,16 @@ void MainWindow::onLoadConfig() {
     if (path.isEmpty()) return;
 #endif
     engine::EngineConfig cfg;
-    if (QString err; !EngineBridge::loadConfig(path, cfg, err)) { notify(QStringLiteral("加载配置失败：%1").arg(err), true); return; }
-    history_->recordConfigLoad(cfg);
+    // 标注先收进临时层：若直接灌真实层，随后的 applyLoadedQueue 尺寸门（维度变→清标注）会误清刚载入的标注。
+    annotation::AnnotationLayer loadedAnno;
+    if (QString err; !EngineBridge::loadConfig(path, cfg, err, &loadedAnno)) { notify(QStringLiteral("加载配置失败：%1").arg(err), true); return; }
+    history_->recordConfigLoad(cfg);   // 还原切割/选择/排序/导出参数（预处理队列为空 preprocess，不在此步处理）。
+    // 预处理队列单独从 original_ 重放物化（过尺寸门）：压栈快照走 buildEngineConfig（运行态，preprocess 恒空），
+    // 不是传入的 cfg，故撤销参数不会覆盖队列。
+    preprocess_->applyLoadedQueue(cfg.preprocess);
+    // 标注还原在队列重放之后（SPEC §7 顺序纪律：先重放预处理、再还原标注；坐标基准＝预处理产出）。
+    // 已知限制：还原不进 DocHistory 撤销栈（标注撤销由 Core AnnotationLayer 内建分层快照承担）。
+    annoBridge_.replaceAnnotations(loadedAnno.annotations());
     notify(QStringLiteral("配置已加载：%1").arg(path), false);
 }
 

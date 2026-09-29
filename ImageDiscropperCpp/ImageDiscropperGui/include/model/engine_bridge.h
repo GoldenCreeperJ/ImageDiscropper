@@ -5,7 +5,7 @@
 //       AnnotationBridge 驱动、坐标/图像转换由 util 适配器承担（详见 model/README.md，CONTRIBUTING.md「分层纪律」）。
 // 分块依据：
 //   - loadImage    委托 Core engine::readImageFile（解码）。
-//   - runPreview   委托 Core engine::runEngine（仅区域数学，不搬像素，适合实时预览）。
+//   - runPreviewGeometry 委托 Core engine::runEngineGeometry（仅按已预处理输出尺寸算区域，不碰像素，供实时预览）。
 //   - cutLines     委托 Core engine::generateCutLines（取得贯穿全图的切割线供渲染）。
 //   - buildGrid    委托 Core Grid::build / induceGrid（取得诱导网格供 L3 画网格线与单元）。
 //   - exportResult 委托 Core engine::runEngine + engine::exportImage（全分辨率落盘）。
@@ -15,10 +15,11 @@
 
 #include <QString>
 
-#include <string>
-
 #include "core/image.h"
 #include "engine/engine.h"
+#include "preprocess/preprocess_pipeline.h"
+
+namespace idc::annotation { class AnnotationLayer; } // 配置 annotations 段的可选读写层（前置声明免 include 扩散）
 
 namespace idc::gui {
 
@@ -31,10 +32,10 @@ public:
     // 成功返回 true 并填充 out；失败返回 false 并给出中文错误 err。
     static bool loadImage(const QString& path, core::Image& out, QString& err);
 
-    // 跑一次预览计算（委托 Core runEngine）。返回 EngineResult（含 kept / composition /
-    // collapsible / ok / error）。runEngine 只做区域数学，不对大图搬像素，适合实时刷新。
-    static engine::EngineResult runPreview(const core::Image& work,
-                                           const engine::EngineConfig& cfg);
+    // 仅尺寸预览（委托 Core runEngineGeometry）：给定已预处理输出尺寸直接跑几何流水线，
+    // 不接收图像、不应用 cfg.preprocess——供预览脱离全分辨率工作图（配合声明式队列）。
+    static engine::EngineResult runPreviewGeometry(const engine::SourceInfo& dims,
+                                                   const engine::EngineConfig& cfg);
 
     // 由切割配置生成贯穿全图的切割线集合（委托 Core generateCutLines），供画布渲染。
     // GUI 不自算切割线几何——只把 Core 给出的 xs/ys 交给选区图元画成橙色贯穿线（CONTRIBUTING.md「分层纪律」）。
@@ -55,23 +56,20 @@ public:
 
     // ---- 配置文件存取（FR-L3.8 / NFR-4；委托 Core，GUI 不自实现 JSON，CONTRIBUTING.md「分层纪律」）----
     // 保存：把一次作业配置序列化为 SPEC §7 schema 的 JSON 文件（缩进美化）。
+    // annotations 非空时附带标注段（SPEC §7 annotations，往返不丢）。
     // path 为空或写盘失败（Core E-8）返回 false 并给出中文错误 err。
-    static bool saveConfig(const QString& path, const engine::EngineConfig& cfg, QString& err);
+    static bool saveConfig(const QString& path, const engine::EngineConfig& cfg, QString& err,
+                           const annotation::AnnotationLayer* annotations = nullptr);
     // 加载：从 JSON 文件还原配置（SPEC §7 schema）。path 为空、读盘失败或 JSON 解析失败返回 false
     // 并给出中文错误 err；成功返回 true 并填充 out（由上层 Document::applyEngineConfig 反向映射）。
-    static bool loadConfig(const QString& path, engine::EngineConfig& out, QString& err);
+    // annotations 非空时一并还原标注段到该层（缺段＝清空；调用方决定何时并入真实层，见 MainWindow::onLoadConfig）。
+    static bool loadConfig(const QString& path, engine::EngineConfig& out, QString& err,
+                           annotation::AnnotationLayer* annotations = nullptr);
 
-    // ---- 预处理（FR-1；委托 Core pixel_ops::*，GUI 不自实现像素运算，CONTRIBUTING.md「分层纪律」）----
-    // 每个方法对输入图做一次变换并返回新图（不修改入参）；上层据此刷新 Document 工作图。
-    // 说明：本 GUI 采用「即时累积」预处理——每次操作把工作图变换后写回，原图始终保留
-    //       供「重置预处理」还原（CONTRIBUTING.md「分层纪律」 流水线：原图 → 预处理 → 切割 → 导出）。
-    static core::Image rotateImage(const core::Image& src, int angleDeg);      // 旋转 90/180/270
-    static core::Image flipImage(const core::Image& src, bool horizontal);     // 水平/垂直翻转
-    static core::Image resizeImage(const core::Image& src, int newW, int newH); // 目标尺寸缩放
-    static core::Image scaleImage(const core::Image& src, double factor);      // 按比例缩放
-    static core::Image toGrayImage(const core::Image& src);                    // 黑白（灰度）
-    static core::Image invertImage(const core::Image& src, const std::string& mask); // 按通道反色
-    static core::Image splitImage(const core::Image& src, const std::string& mask);  // 按通道分离
+    // 声明式队列物化（委托 Core PreprocessPipeline::apply）：把整条预处理流水线按序应用到 src，
+    // 返回结果图（不修改入参）。供 PreprocessController 从 original_ 重放 steps_ 得到 working_。
+    // GUI 不自实现任何逐步分派——流水线语义（含 ResizeOp/旋转）全由 Core 承担（CONTRIBUTING.md「分层纪律」）。
+    static core::Image applyPipeline(const core::Image& src, const preprocess::PreprocessPipeline& pipeline);
 };
 
 } // namespace idc::gui

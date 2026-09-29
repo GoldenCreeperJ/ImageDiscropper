@@ -67,6 +67,9 @@ public:
 signals:
     // 选区变化（已规范化、已钳制到图像内），参数为原图像素坐标矩形。
     void rectChanged(const QRectF& sceneRect);
+    // 用户抓取本选区框开始一次拖拽手势（移动 / 角缩放 / 拖边，按下即发）：
+    // 供上层在「拖动选区边框」时清除标注选中态（使标注 OBB 手柄随选区交互即时消失，与空白框选同源）。
+    void dragStarted();
 
 protected:
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;

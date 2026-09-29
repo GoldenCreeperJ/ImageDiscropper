@@ -171,8 +171,8 @@ void MainWindowUi::buildMenus(MainWindow* w) {
     const QAction* aFlipV = mImage->addAction(QStringLiteral("垂直翻转"));
     QObject::connect(aFlipV, &QAction::triggered, w, [w] { w->preprocess_->onFlip(false); });
     mImage->addSeparator();
-    const QAction* aGray = mImage->addAction(QStringLiteral("黑白"));
-    QObject::connect(aGray, &QAction::triggered, w, [w] { w->preprocess_->onGray(); });
+    w->aGrayMenu_ = mImage->addAction(QStringLiteral("黑白"));
+    QObject::connect(w->aGrayMenu_, &QAction::triggered, w, [w] { w->preprocess_->onGray(); });
     const QAction* aInvert = mImage->addAction(QStringLiteral("反色（全通道）"));
     QObject::connect(aInvert, &QAction::triggered, w, [w] { w->preprocess_->onInvert(true, true, true); });
     mImage->addSeparator();
@@ -197,6 +197,7 @@ void MainWindowUi::buildMenus(MainWindow* w) {
     QObject::connect(aAnnoDel, &QAction::triggered, w, [w] { w->annotation_->onAnnoDeleteSelected(); });
     const QAction* aAnnoClear = mAnno->addAction(QStringLiteral("清除全部标注(&C)"));
     QObject::connect(aAnnoClear, &QAction::triggered, w, [w] { w->annotation_->onAnnoClearAll(); });
+    // 层序（叠放）已从本菜单移至右侧「标注属性页」的“叠放次序”区（作用选中项）。
     mAnno->addSeparator();
     const QAction* aAnnoProp = mAnno->addAction(QStringLiteral("标注属性…"));
     QObject::connect(aAnnoProp, &QAction::triggered, w, [w] {

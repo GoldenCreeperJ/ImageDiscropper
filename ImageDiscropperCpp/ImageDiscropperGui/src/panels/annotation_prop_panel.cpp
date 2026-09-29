@@ -11,6 +11,7 @@
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QHBoxLayout>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSpinBox>
@@ -153,6 +154,27 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     transformGroup_->setEnabled(false);   // 初始无选中→置灰（syncFromModel 依选中态刷新）
     root->addWidget(transformGroup_);
 
+    // ---- 叠放次序区（仅对选中标注生效）：上移一层 / 下移一层 / 置于顶层 / 置于底层 ----
+    // 从标注菜单迁入本面板（用户诉求：层序属“选中项属性”，归位到属性页而非菜单）；无选中时整区置灰。
+    // 列表下标即 z 序（大＝顶，见 Core hitTest/burnIn），本区仅发意图、真正重排在 AnnotationBridge→Core moveAnnotation。
+    stackGroup_ = new QGroupBox(QStringLiteral("叠放次序（选中标注）"), this);
+    auto* stackRow = new QHBoxLayout(stackGroup_);
+    stackRow->setSpacing(6);
+    raiseBtn_ = new QPushButton(QStringLiteral("上移一层"), stackGroup_);
+    raiseBtn_->setToolTip(QStringLiteral("将选中标注向上移动一层（更靠近顶层）。"));
+    lowerBtn_ = new QPushButton(QStringLiteral("下移一层"), stackGroup_);
+    lowerBtn_->setToolTip(QStringLiteral("将选中标注向下移动一层（更靠近底层）。"));
+    toFrontBtn_ = new QPushButton(QStringLiteral("置于顶层"), stackGroup_);
+    toFrontBtn_->setToolTip(QStringLiteral("将选中标注移到最顶层。"));
+    toBackBtn_ = new QPushButton(QStringLiteral("置于底层"), stackGroup_);
+    toBackBtn_->setToolTip(QStringLiteral("将选中标注移到最底层。"));
+    stackRow->addWidget(raiseBtn_);
+    stackRow->addWidget(lowerBtn_);
+    stackRow->addWidget(toFrontBtn_);
+    stackRow->addWidget(toBackBtn_);
+    stackGroup_->setEnabled(false);   // 初始无选中→置灰
+    root->addWidget(stackGroup_);
+
     root->addStretch(1);
 
     // 控件变更 → 面板意图信号。
@@ -181,6 +203,11 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     connect(rotateSpin_, &QSpinBox::valueChanged, this, [this](const int v) {
         emit transformApplyRequested(1.0, 1.0, static_cast<double>(v) - curObbRot_);
     });
+    // 叠放次序 4 按钮 → 意图信号（由协调器转交 AnnotationBridge：raise/lower/toFront/toBack）。
+    connect(raiseBtn_, &QPushButton::clicked, this, &AnnotationPropPanel::stackRaiseRequested);
+    connect(lowerBtn_, &QPushButton::clicked, this, &AnnotationPropPanel::stackLowerRequested);
+    connect(toFrontBtn_, &QPushButton::clicked, this, &AnnotationPropPanel::stackToFrontRequested);
+    connect(toBackBtn_, &QPushButton::clicked, this, &AnnotationPropPanel::stackBackRequested);
 
     updateSwatch();
     updateFillSwatch();
@@ -231,6 +258,7 @@ void AnnotationPropPanel::syncFromModel() {
     // 变换区仅在有选中标注时可用（无选中时变换无作用对象）；数值回显选中形状的**绝对累积变换**（忠实反映底层）。
     const bool hasSel = model_->selectedIndex().has_value();
     transformGroup_->setEnabled(hasSel);
+    stackGroup_->setEnabled(hasSel);   // 叠放次序区同“变换区”：仅在有选中标注时可用
     curObbSx_ = hasSel ? model_->displayObbScaleX() : 1.0;
     curObbSy_ = hasSel ? model_->displayObbScaleY() : 1.0;
     curObbRot_ = hasSel ? model_->displayObbRotationDeg() : 0.0;

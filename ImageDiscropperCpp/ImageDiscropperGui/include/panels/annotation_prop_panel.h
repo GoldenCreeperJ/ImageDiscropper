@@ -51,6 +51,12 @@ signals:
     // 变换意图（仅作用于当前选中标注）：sx/sy 为缩放增量系数（1.0=不变）、rotateDeg 为旋转角增量（度）。
     // 由变换区 spin 改动直接触发（无「应用」按钮）；翻转无面板按钮（由画布包围盒手柄拖拽越过对边实现）。
     void transformApplyRequested(double sx, double sy, double rotateDeg);
+    // 叠放次序意图（仅作用于当前选中标注，由「叠放次序」区 4 按钮触发；无选中时按钮置灰）：
+    // 上移一层 / 下移一层 / 置于顶层 / 置于底层（MainWindow/协调器转交 AnnotationBridge）。
+    void stackRaiseRequested();
+    void stackLowerRequested();
+    void stackToFrontRequested();
+    void stackBackRequested();
 
 private slots:
     void onPickColor();       // 打开边框色取色器
@@ -76,6 +82,12 @@ private:
     QSpinBox* scaleXSpin_{nullptr};      // 水平缩放绝对 %（100=原尺寸、负=翻转）
     QSpinBox* scaleYSpin_{nullptr};      // 垂直缩放绝对 %（100=原尺寸、负=翻转）
     QSpinBox* rotateSpin_{nullptr};      // 旋转绝对角度 °（累积）
+    // ---- 叠放次序区（仅对选中标注生效，无选中时置灰）----
+    QGroupBox* stackGroup_{nullptr};
+    QPushButton* raiseBtn_{nullptr};      // 上移一层
+    QPushButton* lowerBtn_{nullptr};      // 下移一层
+    QPushButton* toFrontBtn_{nullptr};    // 置于顶层
+    QPushButton* toBackBtn_{nullptr};     // 置于底层
     // 上次 syncFromModel 时选中形状的绝对变换基准（供 spin 改动把目标绝对值换算为单轴增量）。
     double curObbSx_{1.0};
     double curObbSy_{1.0};

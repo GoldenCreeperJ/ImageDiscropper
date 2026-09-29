@@ -96,26 +96,31 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 | 字体 / 文案         | 界面文字全中文；`QStringLiteral` 包裹字面量                                    | —                      |
 | 反馈              | 错误经 `notify()` 写状态栏、限时显示（非模态）；所有交互 100ms 内视觉反馈                    | —                      |
 
-### 预处理（图像菜单 / 图像页）
+### 预处理（图像页：声明式队列编辑器）
 
-预处理在**切割之前**执行，作用于「工作图」；**原图始终保留**，可随时「重置预处理」还原。
-入口：**图像菜单** 或 右侧 **图像页**（二者共用同一批操作）。
+预处理在**切割之前**执行，是一串**有序步骤（队列）**而非「点一下改一次像素」的即时动作。
+用户在右侧 **图像页** 编排队列：轻操作**分「几何操作」「色彩操作」两个独立列表**呈现，各自带类型选择 + 参数区与步骤列表，可独立「添加 / 更新所选 / 删除 / 上移 / 下移」；
+顶部「画布尺寸」为独立常驻区（不入队列）；底部「重置预处理」清空整条队列。**两列表只是同一底层队列的分区视图**——底层 `steps` 恒为「全部几何步在前 + 全部色彩步在后」，提交时按此顺序合并。
+**原图始终保留**，工作图 = 队列对原图的重放结果；重放以 `base_`（最后一个 resize 及其之前的产物）为缓存，编辑 resize 之后的轻操作只在 `base_` 上重放轻后缀（免重复重采样），故 resize 永远以原图分辨率为基准、不累积误差。
 
-| 操作    | 说明                             |
-|-------|--------------------------------|
-| 旋转    | 左转 90° / 右转 90° / 180°（步进按钮）   |
-| 翻转    | 水平翻转 / 垂直翻转                    |
-| 缩放    | 按比例（%）或按目标宽/高，可勾选「保持宽高比」       |
-| 图像尺寸  | 直接指定目标宽/高重采样                   |
-| 黑白    | 转灰度                            |
-| 反色    | 对勾选的 R/G/B 通道取反（图像菜单「反色」默认全通道） |
-| 色道分离  | 仅保留勾选的 R/G/B 通道                |
-| 重置预处理 | 把工作图还原为原图                      |
+> **折叠物化（几何 + 色彩同类段规整）**：队列**存储 / 序列化 / 几何签名仍按用户编辑的原始顺序**，仅在物化 `working_` 时对轻后缀走一次 `PreprocessPipeline::folded()`——它对**连续同类段**各自就地规整、段间（含 `ResizeOp`）绝不跨越：① 连续的旋转/翻转步折叠为规范的 ≤2 个 D4 步（1 旋转 + 至多 1 翻转）；② 连续的色彩步（黑白/反色/色道分离）折叠为规范形（首个黑白前的反色/分离按逐通道位映射合为至多“分离+反色”两步、黑白幂等、黑白之后的分离为死步丢弃、反色按奇偶抵消），灰度之后的死步（如误置于黑白后的色道分离）因此被自动吞除，无需录入拦截。两者均**逐像素恒等**（几何已修为“灰度亦无损的纯位置置换”、色彩为同取整/掩码口径的纯位运算），且色彩规整以“载入强解 RGBA、进队为多通道”为前提。GUI 侧以「几何块在前 + 色彩块在后」不变式维持两列表分区（跨类上下移被忽略）。
 
-> **注意**：旋转 90°/270° 或缩放会改变图像尺寸，此时**基于旧尺寸的选区会被自动清除**，需重新框选。
+| 步骤类型  | 参数                      | 说明                    |
+|-------|-------------------------|-----------------------|
+| 旋转    | -90 / 90 / 180（角度下拉）    | 90/270 会交换宽高          |
+| 翻转    | 水平 / 垂直                 | 不改尺寸                  |
+| 按比例缩放 | 百分比（1..1000%）           | 依当前输出尺寸换算为绝对 resize 步 |
+| 目标尺寸  | 宽 / 高 + 「保持宽高比」（改宽联动算高） | 绝对 resize，从原图重烤       |
+| 黑白    | —                       | 转灰度                   |
+| 反色    | R/G/B 通道勾选              | 对勾选通道取反（全勾＝整体反色）      |
+| 色道分离  | R/G/B 通道勾选（勾选＝保留）       | 仅保留勾选通道               |
+| 重置    | —                       | 清空整条队列、工作图还原为原图       |
+
+> **几何签名尺寸门**：队列改动后用 `PreprocessPipeline::geometryOutput(w,h)` **纯元数据推演**输出尺寸与净旋转象限（不碰像素）；
+> 仅当**尺寸或净旋转象限变化**时才清除失效选区与标注（坐标基于旧尺寸），同维度改参（如换角度 90→180 但尺寸不变、改灰度阈值）保留选区。
 > 大图缩放/重采样可能耗时，期间会弹出「处理中」进度对话框（不可取消），完成后自动关闭。
 >
-> **已知取舍**：预处理**不纳入 Ctrl+Z 全局撤销**（全局撤销只覆盖切割参数态），如需回退请用「重置预处理」。
+> **已知取舍**：预处理队列**不纳入 Ctrl+Z 全局撤销**（全局撤销只覆盖切割参数态），如需回退请删改队列步骤或「重置预处理」。
 
 ### 标注工具
 
@@ -152,10 +157,8 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 **编辑标注属性**：选中标注后，右侧 **标注页** 可设置：**边框色、填充色（与边框色独立）、粗细、是否填充、圆角半径、文字内容、字号**，以及 **OBB 变换**（带符号缩放 X/Y、旋转角度，改动即生效、无「应用」按钮）。填充形状会同时按边框色描边，与画布预览一致；新建标注的填充色默认跟随边框色，显式改过后不再联动。
 画布上选中标注会出现 **8 个缩放手柄 + 1 个旋转手柄**（定向包围盒 OBB），拖拽即做缩放/拉伸/旋转/翻转（拖手柄越过对边＝翻转）。
 
-**标注菜单**：`标注` 菜单提供：撤销标注 / 重做标注 / 删除选中 / 清除全部（二次确认）/ 标注属性定位。
-
-> **已知限制**：当前标注类型**不含「箭头」与「扇形」**——底层 Core 的 `ShapeType` 尚未提供这两种类型
-> （可用「直线 + 多线段」或「圆 / 椭圆」近似替代，详见「已知限制」）。
+**标注菜单**：`标注` 菜单提供：撤销标注 / 重做标注 / 删除选中 / 清除全部（二次确认）/ 标注属性定位（**层序四式已移出菜单**，见下）。
+标注以**矢量图层列表**叠放，**每条 `Annotation` 携带显式 `zOrder`（恒等于列表下标，下标越大越靠上）**：新标注默认叠在最上层，`命中检测`（顶层优先）与`烧录`（后者覆盖前者）都以此为准。**叠放次序（上移一层 / 下移一层 / 置于顶层 / 置于底层）改由右侧标注属性页的「叠放次序」区调整**（仅选中标注时可用、不入菜单、无快捷键），委托 Core `AnnotationLayer::moveAnnotation` 就地重排（不清撤销主栈但清重做栈、选中项跟随移动、增删移后统一规范化 `zOrder`＝下标），改序即时反映到画布叠放、命中优先与（勾选烧录时的）导出预览，并随 SPEC §7 `annotations` 段以 `zOrder` 导入导出。
 
 ### 图层与烧录
 
@@ -230,9 +233,9 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 
 ### 配置文件加载 / 保存
 
-- **文件 → 保存配置…**：把当前作业参数（模式、切割、选择集、排序、导出参数）写为 SPEC §7 schema 的 JSON 文件。
-- **文件 → 加载配置…**：读取 JSON 反向还原到界面；**加载本身可一步撤销**（入同一撤销栈）。
-- 配置**不含图像像素**，仅保存参数态。
+- **文件 → 保存配置…**：把当前作业参数（模式、切割、选择集、排序、导出参数，**以及完整的预处理队列 steps**）写为 SPEC §7 schema 的 JSON 文件（`Document::buildSerializableConfig`：携带队列、source 取原图尺寸）。
+- **文件 → 加载配置…**：读取 JSON 反向还原到界面（`PreprocessController::applyLoadedQueue` 把配置里的 preprocess 队列回灌为 Document steps 并重放）；**加载本身可一步撤销**（入同一撤销栈）。
+- 配置**不含图像像素**，仅保存参数态与声明式预处理队列（队列可在重新打开同图时完整重现）。
 
 ### 快捷键列表
 
@@ -298,6 +301,10 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 11. **配置文件加载/保存**：文件菜单「加载配置/保存配置」经 `EngineBridge::saveConfig/loadConfig` 委托 Core `saveEngineConfig/loadEngineConfig`
    （规格 SPEC §7 schema 的 JSON，GUI 不自实现 JSON、不感知 nlohmann）；加载走 `Document::applyEngineConfig` 反向映射回各状态字段（生成器+tier 还原 L1 形状/L2 子功能，
    并守卫「非 L3 不得重排」「网格单元尺寸为正」不变式），且**加载本身入同一撤销栈**（可一步撤销回载入前）。
+   **标注随配置往返（SPEC §7 annotations 段）**：保存时把 `AnnotationBridge::layer()` 一并交给 `saveConfig` 序列化；加载时 Core 先把标注收进**临时层**，
+   待 `applyLoadedQueue` 队列重放（含尺寸门清标注）**之后**再 `AnnotationBridge::replaceAnnotations` 整体覆盖真实层
+   （顺序纪律：先重放预处理、再还原标注，否则刚载入的标注会被尺寸门误清）；还原走 Core `restoreAnnotations`（不推撤销快照），
+   **不纳入 DocHistory 文档撤销栈**（已知限制：撤销一次参数会把标注留在还原后状态）。
 12. **导出前输出图像预览（只渲染不重算）**：导出面板新增 `previewLabel_` 缩略图，由 `util::composeOutputThumbnail`（`util/output_preview_renderer`，无状态自由函数）按
    `refreshPreview` **已算好**的 `EngineResult.composition` 渲染——**不再跑 Core、不落盘**：把 `rebuildPreviewPixmap` 缓存的**小源图**
    `exportSrcPixmap_`（最长边 ≤ 512，与画布底图分离）按 `placements` 的 `source→dest` 用 `QPainter::drawPixmap` blit 到最长边 ≤ 192 的小画布。
@@ -308,11 +315,12 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 
 ## 已核对的 Core API（均来自实际头文件，非假设）
 
-- 编排：`engine::runEngine(const core::Image&, const EngineConfig&) -> EngineResult{ok,error,kept,collapsible,composition}`。
+- 编排：`engine::runEngine(const core::Image&, const EngineConfig&) -> EngineResult{ok,error,kept,collapsible,composition}`（内部 apply preprocess）；`engine::runEngineGeometry(const SourceInfo&, const EngineConfig&)`（仅按尺寸跑几何、忽略 preprocess，供预览）。
+- 预处理：`preprocess::PreprocessConfig = variant<GrayOp,SplitOp,InvertOp,RotateOp,FlipOp,ResizeOp>`；`PreprocessPipeline{add,insert,remove,setStep,moveUp,moveDown,clear,steps,apply,geometryOutput(w,h)->GeometryOut{width,height,rotQuad}}`（声明式队列）。
 - 切割线：`engine::generateCutLines(const CutConfig&, const SourceInfo&) -> CutLineSet`。
 - 配置：`EngineConfig{source,preprocess,cut,selectedCells,order,emitParams}`；
   `CutConfig{tier,generator(RECT/HORIZONTAL_LINE/VERTICAL_LINE/MULTI_RECT/GRID),rect,rects,grid,polarity}`。
-- 配置存取：`engine::saveEngineConfig(path, cfg)` / `engine::loadEngineConfig(path, out&)`（SPEC §7 schema JSON，nlohmann 在 Core 侧 PRIVATE）。
+- 配置存取：`engine::saveEngineConfig(path, cfg[, annotations])` / `engine::loadEngineConfig(path, out&[, annotations])`（SPEC §7 schema JSON，可选标注层指针：保存附带 `annotations` 段、加载还原到该层（缺段＝清空）；nlohmann 在 Core 侧 PRIVATE）。
 - 撤销历史：`history::HistoryManager<T>{push,popToRedo,popFromRedo,top,canUndo,canRedo,undoSize,clearAll}`（模板头实现，GUI 以 `T=EngineConfig` 实例化）。
 - 导出：`CompositionParams{mode,layout,mergeOrder,cols,rows,cellWidth,cellHeight,padColor,format,naming,quality,keepMetadata}`
   （`mergeOrder` = 重排填充顺序 `MergeOrder{strategy,reverse,snake}`，仅 REARRANGE、与选择排序正交）；
@@ -321,7 +329,7 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
   `Fragment{region,index,kind,row,col}`。
 - I/O 与处理：`engine::readImageFile`（统一解码为 RGBA）；`pixel_ops::resize/rotate/flip/...`；`core::Image{width,height,empty,getPixel,inBounds,...}`；
   `core::Color{r,g,b,a}`。
-- 标注：`geometry::Shape::worldPath()/obbPreviewTransform/applyObbTransform/translateWorld`；`annotation::AnnotationLayer`（`revoke/redo/removeAnnotation/rasterize`）。
+- 标注：`geometry::Shape::worldPath()/obbPreviewTransform/applyObbTransform/translateWorld/restoreTransformState`；`annotation::AnnotationLayer`（`revoke/redo/removeAnnotation/rasterize/restoreAnnotations/burnIn(base)`）。
 
 ## 布局与交互要点
 
@@ -335,16 +343,17 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 
 ### 图层 z 序（`include/canvas/z_order.h`，单一定义点）
 
-| z 值 | 常量            | 图层                                                                      |
-|-----|---------------|-------------------------------------------------------------------------|
-| 0   | `kBase`       | 底图（预处理后）                                                                |
-| 10  | `kAnnotation` | 标注图层（矢量叠加）                                                              |
-| 20  | `kDelete`     | 删除块遮罩（红，铺满全图作底）                                                         |
-| 30  | `kKeep`       | 保留块遮罩（绿，叠加于红之上）                                                         |
-| 40  | `kGrid`       | 网格线（L3 / L2 多矩形诱导）                                                      |
-| 50  | `kCutLine`    | 切割线层（保留值；切割线已并入选区图元）                                                    |
-| 60  | `kSelection`  | 选区边框（橙）+ 手柄 + 贯穿切割线延伸（同一图元）                                             |
-| 70  | `kCellNumber` | 单元格编号角标（L3 自定义序；`CellPickerItem` 的角标子图层，子 z = kCellNumber − kSelection） |
+| z 值 | 常量                   | 图层                                                                      |
+|-----|----------------------|-------------------------------------------------------------------------|
+| 0   | `kBase`              | 底图（预处理后）                                                                |
+| 10  | `kAnnotation`        | 标注图层（矢量叠加）                                                              |
+| 15  | `kAnnotationPreview` | 标注绘制预览（橡皮筋）：恒位于已提交标注之上、遮罩之下（避免与后提交标注同 z 被盖住）                            |
+| 20  | `kDelete`            | 删除块遮罩（红，铺满全图作底）                                                         |
+| 30  | `kKeep`              | 保留块遮罩（绿，叠加于红之上）                                                         |
+| 40  | `kGrid`              | 网格线（L3 / L2 多矩形诱导）                                                      |
+| 50  | `kCutLine`           | 切割线层（保留值；切割线已并入选区图元）                                                    |
+| 60  | `kSelection`         | 选区边框（橙）+ 手柄 + 贯穿切割线延伸（同一图元）                                             |
+| 70  | `kCellNumber`        | 单元格编号角标（L3 自定义序；`CellPickerItem` 的角标子图层，子 z = kCellNumber − kSelection） |
 
 > 遮罩渲染法（为何 `kDelete < kKeep`、GUI 不自算删除集）见决策 #1。场景坐标 = 原图像素坐标，见决策 #2。
 
@@ -358,7 +367,7 @@ MainWindow 编排槽 (onRubberSelect / onNudge / onCursor …)
    │  写回 Document（L1/L2 setRect、MULTI_RECT addRect、L3 命中单元 addCells）
    ▼
 Document.changed ──► onDocChanged ──► refreshPreview()
-   │                                      │ buildEngineConfig + EngineBridge.runPreview
+   │                                      │ buildEngineConfig + EngineBridge.runPreviewGeometry
    │                                      ▼
    │                          CanvasScene 刷新：切割线 / 遮罩 / 选区 / 网格 / 编号 + 输出预览
    ▼
@@ -380,13 +389,20 @@ scheduleHistoryCapture（500ms 防抖）──► docHistory_ 压入 EngineConfi
 
 ### 预处理与标注数据流
 
-- `ImagePanel` 发意图信号（`rotateRequested`/`flipRequested`/`scaleRequested`/`resizeRequested`/`grayRequested`/
-  `invertRequested`/`splitRequested`/`resetRequested`）→ `PreprocessController` 对应槽经 `EngineBridge` 调 Core
-  `pixel_ops::*` 变换 `doc_.working()`（图像菜单与图像页共用同一批槽）→ 公共收尾 `applyWorkingImage(next, okMsg)`：结果为空图则报错；
-  **维度变化（旋转 90/270、缩放）时先清除失效选区与标注**（`clearRect/clearRects/clearCells` 坐标基于旧尺寸 + `annoBridge_.clearAll()`）再
-  `setWorkingImage`（触发 `imageChanged` → 重建预览底图 + 刷新）；`onResetPreprocess` 把工作图还原为 `original_`（原图始终保留）。
-- 色道反色/分离共用面板 R/G/B 复选框作「作用通道」选择器（`invertChannels` 本就支持掩码，无需改 Core）。
-- 大图缩放/重采样经 `runWithBusyDialog(text, op)`：应用级模态、不可取消的 `QProgressDialog`，配 `busyResample_` 重入守卫。
+- **独立画布尺寸（Resize）**：`ImagePanel` 顶部「画布尺寸」区常驻（有图即可用、不入队列），发 `resizeAppliedRequested(w,h)` /
+  `resizeScaleRequested(factor)` / `resizeClearedRequested()` → `PreprocessController` 的 `onSetResizeTarget/onScaleResize/onClearResize`。
+  `resize_` 恒最先重放、从原图重采样（`base_` = resize(original)，无 resize 则原图副本）。
+- **轻操作队列（两独立列表 → 单一底层队列）**：`ImagePanel` 以「几何操作」「色彩操作」两个列表呈现，行号经 `geoRowCount()` 映射为**扁平下标**（色彩行＝几何行数 + 色彩行号），发队列编辑信号（`stepAppendRequested(cfg)` / `stepReplaceRequested(index,cfg)` /
+  `stepRemoveRequested(index)` / `stepMoveRequested(index,down)` / `resetRequested()`）→ `PreprocessController` 对应槽（`onStepAppend/Replace/Remove/Move`、`onResetPreprocess`）。控制器维持「几何块在前 + 色彩块在后」不变式：几何步插到几何块尾、色彩步追加队尾，跨类上下移忽略。
+  两者均汇入公共收尾 `commitPipeline(nextSteps, nextResize, okMsg, busyText)`：以「新轻队列 + 新 resize」为结果态，先用有效管线（`[resize?]+steps_`）
+  经 `geometryOutput` **推演几何签名**判断尺寸/净旋转象限是否变（变则先清失效选区与标注），再基于 `base_` 缓存重放——**仅 resize 前缀变化（baseDirty）才重烤 `base_`**（唯一重采样点），
+  轻编辑复用 `base_` 只跑轻后缀。忙碌框门控收紧为「baseDirty **且**确有 resize 需重采样」才弹（无 resize 的每步编辑不弹框、不改尺寸则不复位缩放，消除卡顿感）。
+  实际像素变换经 `EngineBridge` 调 Core，**面板不碰 Core、不持真相**；`resetRequested` 清空 resize 与整条队列、还原原图。原图始终保留。
+- **选中跟随**：上/下移某步后，`ImagePanel` 记住被移动项的新下标（`pendingSelectRow_`），`syncFromDocument` 重建列表后据此高亮跟随，而非停留在原下标（那会指向被换上来的另一操作）。
+- **配置载入归一化**：`applyLoadedQueue(pipeline)` 把散落的 `ResizeOp` 抽出为独立 `resize_`（多个取最后一个正尺寸），其余按序进轻队列——旧配置载入即归一化为「resize 首位 + 轻操作在后」。序列化仍复用 `preprocess` 数组（`buildSerializableConfig` 把 resize 恒置于首元素），**不改 Core/CLI/§7 schema**。
+- 入队的 `cfg` 是轻操作 `PreprocessConfig = variant<GrayOp,SplitOp,InvertOp,RotateOp,FlipOp>`（`steps_` 绝不含 `ResizeOp`）。
+- 大图缩放/重采样经 `runWithBusyDialog(text, op)`：应用级模态、不可取消的 `QProgressDialog`，配 `busyResample_` 重入守卫（仅 resize 重采样路径触发）。
+- **标注随框选隐柄**：`CanvasView::gestureMarqueeBegin`（空白处起框）发 `marqueeStarted` → `AnnotationCoordinator` 若当前有选中则 `clearSelection()`，使标注 OBB 手柄随框选即时消失（点选/拖动标注由图元接管、不走 marquee）。
 - 标注（`AnnotationCoordinator` 编排）：每个 Core `Annotation` 对应一个 `AnnotationItem`（`QGraphicsObject`），用 `Shape::worldPath()`→`QPainterPath`
   矢量叠加绘制（z=`kAnnotation`）；OBB 非破坏性变换（决策 #9）与烧录仅在导出时发生（决策 #8）；
   移动标注经 Core `Shape::translateWorld` 世界系平移，保留具体类型（不退化为 PATH）。
@@ -426,14 +442,16 @@ scheduleHistoryCapture（500ms 防抖）──► docHistory_ 压入 EngineConfi
 
 ## 已知限制
 
-| 项                | 现状           | 根因 / 说明                                                                                         |
-|------------------|--------------|-------------------------------------------------------------------------------------------------|
-| 箭头标注             | 未实现          | Core `ShapeType` 无 `ARROW`（`annotation_bridge.h`/`tool_panel.h` 已注明），需先扩展 Core；可用「直线 + 多线段」近似替代 |
-| 扇形标注             | 未实现          | Core `ShapeType` 无 `SECTOR/PIE`，同上；可用「圆 / 椭圆」近似替代                                               |
-| 预处理全局撤销          | 不纳入 `Ctrl+Z` | `docHistory_` 仅快照 `EngineConfig` 参数态、不含像素；靠「重置预处理」回退（产品取舍，决策 #10）                               |
-| 网格线吸附            | 未接入          | `selection_rect_item` 吸附目标仅图像边缘 + 中心（NFR-7 要求三选，尚缺网格线）                                          |
-| 插值方式下拉           | 未提供          | `engine_bridge` resize 固定双线性；Core 支持 `ResampleMode{NEAREST,BILINEAR}`，图像面板未暴露选择                 |
-| 8000×8000 ≥30fps | 未正式验证        | 预览已用降采样副本满足设计目标，但性能验收尚未落地实测（NFR-3）                                                              |
+| 项                                  | 现状                                | 根因 / 说明                                                                                                                                                                |
+|------------------------------------|-----------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 预处理全局撤销                            | 不纳入 `Ctrl+Z`                      | `docHistory_` 仅快照 `EngineConfig` 参数态、不含像素；靠「重置预处理」回退（产品取舍，决策 #10）                                                                                                      |
+| 标注配置还原的撤销                          | 不纳入文档撤销栈                          | `replaceAnnotations` 走 Core `restoreAnnotations`（不推撤销快照）；标注域自身可 `Ctrl+Z` 逐层回退，但「加载配置」这一步不可整体撤销（决策 #11）                                                                 |
+| 网格线吸附                              | 未接入                               | `selection_rect_item` 吸附目标仅图像边缘 + 中心（NFR-7 要求三选，尚缺网格线）                                                                                                                 |
+| 插值方式下拉                             | 未提供                               | `engine_bridge` resize 固定双线性；Core 支持 `ResampleMode{NEAREST,BILINEAR}`，图像面板未暴露选择                                                                                        |
+| 队列重放性能（已用 base_ 缓存 + 独立 resize 根治） | base_ 缓存重放                        | resize 已从可排序队列剥离为独立常驻设置，`base_` = resize(original)（无 resize 则原图副本）：轻操作队列编辑**恒复用 `base_`、不重采样、不弹框**；仅 resize 目标变化才重烤 `base_` 并（有实际重采样时）弹框。**代价**：额外常驻一张 `base_`（见下行内存）。 |
+| 队列编辑不可撤销                           | 不纳入 `Ctrl+Z`                      | 删/改/移步骤后文档撤销栈找不回（旧模型同样没有，非回归）；队列模型天然支持单步撤销，属未实现的机会项                                                                                                                    |
+| 大图内存驻留                             | `original_`+`base_`+`working_` 三份 | 工作图常驻、预览从全分辨率 `working_` 降采样；`base_` 缓存根治重放性能后新增第三份常驻图（前缀重放产物，随换图 / 重置预处理失效）；「`working_` 不常驻 / `previewBase` 小图重放」的进一步优化未实现                                            |
+| 8000×8000 ≥30fps                   | 未正式验证                             | 预览已用降采样副本满足设计目标，但性能验收尚未落地实测（NFR-3）                                                                                                                                     |
 
 ## 构建
 

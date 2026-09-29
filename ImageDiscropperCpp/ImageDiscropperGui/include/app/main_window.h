@@ -146,6 +146,9 @@ private:
     // 编辑菜单撤销/重做动作：提为成员以便依历史深度与标注上下文动态启/禁。
     QAction* aUndo_{nullptr};
     QAction* aRedo_{nullptr};
+
+    // 图像菜单「黑白」动作：提为成员以便队列已产出灰度时置灰（灰度启停智能，与预处理面板同源）。
+    QAction* aGrayMenu_{nullptr};
 };
 
 } // namespace idc::gui

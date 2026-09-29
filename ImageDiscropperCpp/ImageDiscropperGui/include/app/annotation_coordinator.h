@@ -83,6 +83,10 @@ public slots:
     void onAnnoRedo() const;                               // 标注菜单：重做（Core redo）。
     void onAnnoDeleteSelected() const;                     // 标注菜单/Delete 键：删除选中标注。
     void onAnnoClearAll() const;                           // 标注菜单：清除全部标注。
+    void onAnnoRaise() const;                              // 属性面板叠放区：选中项上移一层（向顶层）。
+    void onAnnoLower() const;                              // 属性面板叠放区：选中项下移一层（向底层）。
+    void onAnnoBringToFront() const;                       // 属性面板叠放区：选中项置于顶层。
+    void onAnnoSendToBack() const;                         // 属性面板叠放区：选中项置于底层。
 
 private:
     AnnotationBridge* anno_{nullptr};

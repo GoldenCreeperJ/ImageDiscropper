@@ -76,6 +76,10 @@ private:
     // 上次引擎结果的合成缓存：供烧录/标注变更时**只重渲染缩略图、不重跑 Core**（切割几何不受标注影响）。
     engine::Composition lastComposition_;
     bool lastExportResOk_{false};
+    // 上次 fitToWindow 时的输出尺寸：仅当工作图尺寸变化（换图 / resize）才复位缩放，
+    // 轻编辑不改尺寸 → 保持用户当前缩放不被复位（需求③）。
+    int lastFitW_{-1};
+    int lastFitH_{-1};
     // 预览最长边上限（NFR-3 降采样阈值）。取 4096：让绝大多数图片 1:1 显示，
     // 使放大后底图像素与精确整数坐标的切割线/遮罩对齐（仅超长边大图才降采样）。
     int previewMaxDim_{4096};

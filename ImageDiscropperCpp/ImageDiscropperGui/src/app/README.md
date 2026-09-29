@@ -4,16 +4,16 @@
 Core 调用集中在 `EngineBridge`，状态集中在 `Document`。为避免 `main_window.cpp` 成为上帝文件，
 编排按域拆到四个控制器，纯 UI 装配拆到 `MainWindowUi`，状态栏拆为 `StatusBar` 组件。
 
-| 文件                               | 职责                                                                                                                                                            |
-|----------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `main_window.{h,cpp}`            | 装配壳：装配 + 实例化/注入控制器 + 剩余信号槽串联（Document 信号 / 画布交互写回 / 历史启用态回灌）+ 文件/编辑动作 + 单键快捷键；构造拆为「骨架装配 → `initCore()` 接线」两段，`initCore` 为桌面/移动（mobile/MobileShell）逐行共用的唯一接线序列 |
-| `main_window_ui.{h,cpp}`         | `MainWindowUi` 静态建造者（MainWindow 的 friend）：buildCentral/buildMenus/buildToolbar/buildStatus 纯 UI 装配，回填部件指针                                                     |
-| `status_bar.{h,cpp}`             | `StatusBar`：六标签（坐标/RGB/模式/保留块/缩放/提示）+ 非模态 `notify`；`setCompactMode` 供移动端只留模式/块数/缩放（SPEC §8.3）                                                                 |
-| `doc_history.{h,cpp}`            | `DocHistory`：文档参数态撤销/重做（防抖采集/抑制守卫/载入配置冲刷压栈/上下文判定/启用态信号）                                                                                                       |
-| `preview_controller.{h,cpp}`     | `PreviewController`：refreshPreview 五分支状态机 + 导出输出预览缓存与按需渲染（A/B 规则）                                                                                             |
-| `preprocess_controller.{h,cpp}`  | `PreprocessController`：预处理 8 槽 + 维度失效清理 + 忙碌对话框；`setBusyOverlayMode` 供移动端改全屏遮罩（SPEC §8.2）                                                                     |
-| `annotation_coordinator.{h,cpp}` | `AnnotationCoordinator`：标注 33 槽 + 手势分派状态机 + 图层显隐/烧录联动                                                                                                         |
-| `main.cpp`                       | 程序入口（双产物各编一份：`idc_gui` 纯桌面 / `idc_gui_mobile` 经宏恒选移动壳；Android 单目标），含 `QApplication` + 事件循环                                                                    |
+| 文件                               | 职责                                                                                                                                                                                                                                                                                 |
+|----------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `main_window.{h,cpp}`            | 装配壳：装配 + 实例化/注入控制器 + 剩余信号槽串联（Document 信号 / 画布交互写回 / 历史启用态回灌）+ 文件/编辑动作 + 单键快捷键；构造拆为「骨架装配 → `initCore()` 接线」两段，`initCore` 为桌面/移动（mobile/MobileShell）逐行共用的唯一接线序列                                                                                                                      |
+| `main_window_ui.{h,cpp}`         | `MainWindowUi` 静态建造者（MainWindow 的 friend）：buildCentral/buildMenus/buildToolbar/buildStatus 纯 UI 装配，回填部件指针                                                                                                                                                                          |
+| `status_bar.{h,cpp}`             | `StatusBar`：六标签（坐标/RGB/模式/保留块/缩放/提示）+ 非模态 `notify`；`setCompactMode` 供移动端只留模式/块数/缩放（SPEC §8.3）                                                                                                                                                                                      |
+| `doc_history.{h,cpp}`            | `DocHistory`：文档参数态撤销/重做（防抖采集/抑制守卫/载入配置冲刷压栈/上下文判定/启用态信号）                                                                                                                                                                                                                            |
+| `preview_controller.{h,cpp}`     | `PreviewController`：refreshPreview 五分支状态机 + 导出输出预览缓存与按需渲染（A/B 规则）                                                                                                                                                                                                                  |
+| `preprocess_controller.{h,cpp}`  | `PreprocessController`：预处理编排（独立 resize + 声明式轻操作队列）——轻操作走 stepAppend/Replace/Remove/Move/reset 五信号 + 菜单「追加一步」入口，画布尺寸走 onSetResizeTarget/onScaleResize/onClearResize；两路径均汇入 `commitPipeline` 几何签名尺寸门 + `base_` 缓存复用重放；忙碌框仅在有 resize 需重采样时弹；`setBusyOverlayMode` 供移动端改全屏遮罩（SPEC §8.2） |
+| `annotation_coordinator.{h,cpp}` | `AnnotationCoordinator`：标注 33 槽 + 手势分派状态机 + 图层显隐/烧录联动                                                                                                                                                                                                                              |
+| `main.cpp`                       | 程序入口（双产物各编一份：`idc_gui` 纯桌面 / `idc_gui_mobile` 经宏恒选移动壳；Android 单目标），含 `QApplication` + 事件循环                                                                                                                                                                                         |
 
 ## 布局
 
@@ -51,14 +51,14 @@ AnnotationBridge.changed/selectionChanged/toolChanged → history_->updateEnable
 
 - `DocHistory::start()`：`Document.changed → scheduleCapture`（500ms 防抖采集）。
 - `PreviewController::connectSignals()`：`rightTabs currentChanged → onRightTabChanged`（导出页切回补渲染）。
-- `PreprocessController::connectSignals()`：`ImagePanel` 8 个意图信号 → 8 槽。
+- `PreprocessController::connectSignals()`：`ImagePanel` 轻队列意图信号（`stepAppendRequested`/`stepReplaceRequested`/`stepRemoveRequested`/`stepMoveRequested`/`resetRequested`）+ 独立尺寸区意图信号（`resizeAppliedRequested`/`resizeScaleRequested`/`resizeClearedRequested`）→ 对应槽。
 - `AnnotationCoordinator::connectSignals()`：标注域全部（`AnnotationBridge` 4 信号、`CanvasView` 6 手势、`CanvasScene` 4 标注、
   `ToolPanel`/`LayerPanel`（7，含单元编号 lambda）/`ExportPanel.burnInChanged`/`AnnotationPropPanel` 6），并做
   `exportPanel_->setBurnInChecked(anno->burnInEnabled())` 初始同步。
 - `MainWindowUi`：全部菜单/工具栏动作触发（图像菜单 lambda 直调 `preprocess_->on*`，标注菜单 lambda 直调 `annotation_->onAnno*`）。
 
 `PreviewController::refreshPreview()` 是核心：无图→清空；无选区→提示拖拽（不跑引擎，避免 E-1 噪声）；
-有选区→`buildEngineConfig` + `EngineBridge.runPreview` → 刷新切割线（`EngineBridge::cutLines`）/遮罩/选区，
+有选区→`buildEngineConfig` + `EngineBridge.runPreviewGeometry`（以工作图尺寸仅跑几何、忽略 preprocess）→ 刷新切割线（`EngineBridge::cutLines`）/遮罩/选区，
 并回写状态栏（`StatusBar::setCount/setHint`）与面板提示（保留块数、输出画布尺寸、坍缩可行性）。
 L2 MULTI_RECT 分支：`scene_->updateMultiRects(doc_.rects())` 增量刷新可拖拽选区框（不 clear+重建）。
 拖拽期间（`isDraggingSelection()` 或 `isDraggingMultiRect()`）跳过 `syncPanels()` 与对正在拖图元的回设，避免逐帧量化抖动与卡顿；释放时照常同步一次。
@@ -72,13 +72,17 @@ L2 MULTI_RECT 分支：`scene_->updateMultiRects(doc_.rects())` 增量刷新可�
 **导出烧录**：解析路径后、调引擎前，若 `annoBridge_.burnInEnabled() && count()>0` 则 `exportSrc = annoBridge_.burnIn(doc_.working())`
 （以当前工作图为底逐个调 Core `rasterize` 合成标注）再送 `EngineBridge::exportResult(exportSrc, ...)`；否则直接送 `doc_.working()`。切割预览几何不受标注影响（标注随像素被切开）。
 
-## 预处理（FR-1）——PreprocessController
+## 预处理（FR-1）——PreprocessController（独立 resize + 声明式轻操作队列）
 
-`ImagePanel` 发意图信号 → `PreprocessController` 对应槽经 `EngineBridge` 调 Core `pixel_ops::*` 变换 `doc_.working()` → 公共收尾
-`applyWorkingImage(next, okMsg)`：结果为空图则报错；**维度变化（旋转 90/270、缩放）时先清除失效选区与标注**再 `setWorkingImage`；
-`onResetPreprocess` 还原为 `original_`（原图始终保留）。图像菜单（`MainWindowUi` 的 lambda）与图像页共用同一批槽。
-色道反色 / 分离共用 R/G/B 复选框作「作用通道」选择器（`invertChannels` 支持掩码，无需改 Core）。
-大图重采样经 `runWithBusyDialog` 弹**应用级模态、不可取消**的 `QProgressDialog`（父窗口为注入的 MainWindow；`busyResample_` 重入守卫）。
+工作图恒为「轻操作队列(resize(original))」：**resize 不入队列**，为常驻独立尺寸区，永远作用于原图重采样、恒最先重放；`steps_` 仅承载 黑白/反色/色道分离/旋转/翻转 的可增删改上下移。
+`ImagePanel` 作轻队列编辑器发意图信号（`stepAppendRequested(cfg)`/`stepReplaceRequested(index,cfg)`/`stepRemoveRequested(index)`/
+`stepMoveRequested(index,down)`/`resetRequested()`）→ `PreprocessController` 对应槽；菜单/快捷键入口（`onRotate`/`onFlip`/`onGray`/`onInvert`/`onSplit`）均委托「追加一步」（`onStepAppend`）。
+独立尺寸区发 `resizeAppliedRequested(w,h)`/`resizeScaleRequested(factor)`/`resizeClearedRequested()` → `onSetResizeTarget`/`onScaleResize`/`onClearResize`（“按比例”经当前输出尺寸换算为绝对目标）。
+两条路径均汇入公共收尾 `commitPipeline(nextSteps, nextResize, okMsg, busyText)`：前缀恒为 `[resize?]`、后缀为 `steps_`，
+**先比较几何签名 `geomSig` 前后变化**（尺寸或净旋转象限变 → 先清失效选区与标注），再复用 `base_`＝`resize(original)` 缓存、仅重放轻后缀经 `EngineBridge::applyPipeline` 物化 `working_`（`setWorkingImage`）。
+**原图始终保留**，resize 恒从原图重采样（不累积误差）；轻编辑不改 `base_`，仅重放轻后缀。`applyLoadedQueue(pipeline)` 供配置载入时将数组内 `ResizeOp` 归一化抽出为独立 resize、余下按序入轻队列并重放。
+反色 / 分离共用 R/G/B 复选框作通道选择器（`PreprocessConfig = variant<GrayOp,SplitOp,InvertOp,RotateOp,FlipOp,ResizeOp>`）。
+仅当确有 resize 需重采样（`baseDirty && 前缀非空`）时，经 `runWithBusyDialog` 弹**应用级模态、不可取消**的 `QProgressDialog`（父窗口为注入的 MainWindow；`busyResample_` 重入守卫）——无 resize 的轻编辑不再弹框。
 流程详见 Gui README「预处理与标注数据流」。
 
 ## 标注——AnnotationCoordinator
@@ -103,7 +107,7 @@ AnnotationPropPanel.colorPicked/stroke/fill/text/fontSize → anno_->setColor/se
 ```
 
 - **绘制态门控**：SELECT 工具时 `setAnnotationDrawActive(false)`，画布维持既有橡皮筋选区/单元交互；任一绘制工具时置 true，左键拖拽路由到标注绘制。
-- **base 同步**：`openImageFromPath` 载新图后 `annoBridge_.setBaseImage(doc_.working())`（新图＝新标注会话）；`onImageChanged` 末尾 `scene_->updateAnnotations(annoBridge_)`（同维度预处理不清标注）；`PreprocessController::applyWorkingImage` 维度变化分支一并 `anno_->clearAll()`。
+- **base 同步**：`openImageFromPath` 载新图后 `annoBridge_.setBaseImage(doc_.working())`（新图＝新标注会话）；`onImageChanged` 末尾 `scene_->updateAnnotations(annoBridge_)`（同维度预处理不清标注）；`PreprocessController::commitPipeline` 几何签名变化分支（尺寸/净旋转象限变）一并 `anno_->clearAll()`。
 - **撤销/重做**：标注菜单驱动 `anno_->undo()/redo()`（→ Core 分层快照，**不再绑 Ctrl+Z/Y**）；Delete 键（经 `MainWindow::keyPressEvent` 转发）/菜单删除选中→`removeSelected()`；清除全部二次确认（父窗口为注入的 MainWindow）→`clearAll()`。
 - **对话框父窗口**：文字输入 `QInputDialog` 与清除确认 `QMessageBox` 均以注入的 `dialogParent_`（MainWindow）为父，保证模态落位。
 
@@ -115,8 +119,10 @@ AnnotationPropPanel.colorPicked/stroke/fill/text/fontSize → anno_->setColor/se
 换图 / 构造时 `reset()` 以当前态为唯一基线。`Ctrl+Z/Y` 经 `MainWindow::onUndo/onRedo` 依 `annotationContextActive()` **上下文路由**
 （标注上下文→`AnnotationCoordinator::onAnnoUndo/Redo`，否则→`DocHistory::undo/redo`）；启用态经 `availabilityChanged`
 回灌 `MainWindow::onHistoryAvailabilityChanged` 动态启停 `aUndo_/aRedo_`。**预处理不纳入全局撤销**（快照仅参数态），
-靠「重置预处理」回退。配置经 `EngineBridge::saveConfig/loadConfig` 委托 Core，加载经 `DocHistory::recordConfigLoad`
-（冲刷防抖 → 抑制采集地 `applyEngineConfig` → 压栈）且**入同一撤销栈**（可一步撤销）。
+靠删改队列步骤 / 「重置预处理」回退。配置经 `EngineBridge::saveConfig/loadConfig` 委托 Core（保存走 `Document::buildSerializableConfig`、携带完整 `steps_` 队列与 `annoBridge_.layer()` 标注段），
+加载经 `DocHistory::recordConfigLoad`（冲刷防抖 → 抑制采集地 `applyEngineConfig`→ 参数还原后由 `MainWindow::onLoadConfig` 调 `PreprocessController::applyLoadedQueue` 回灌预处理队列）
+且**入同一撤销栈**（可一步撤销）；标注段先收进**临时层**，队列重放（含尺寸门清标注）**之后**才 `AnnotationBridge::replaceAnnotations` 覆盖真实层
+（顺序纪律：先重放预处理、再还原标注；还原不入文档撤销栈，见 Gui README 决策 #11）。
 机制详见 Gui README「关键设计决策」#10/#11。
 
 ## 菜单 / 工具栏 / 快捷键（MainWindowUi 装配）

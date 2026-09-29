@@ -51,6 +51,15 @@ void AnnotationCoordinator::connectSignals() {
     connect(view_, &CanvasView::annoHover, this, &AnnotationCoordinator::onAnnoHover);
     connect(view_, &CanvasView::annoFinish, this, &AnnotationCoordinator::onAnnoFinish);
     connect(view_, &CanvasView::annoEscape, this, &AnnotationCoordinator::onAnnoEscape);
+    // 框选起带（空白处按下）：若当前有选中标注则清除选中，使其 OBB 交互手柄随框选即时消失
+    //（点选/拖动标注由图元接管、不走 marquee，故只在空白起框时清，免无谓 selectionChanged）。
+    connect(view_, &CanvasView::marqueeStarted, this, [this] {
+        if (anno_ && anno_->selectedIndex()) anno_->clearSelection();
+    });
+    // 拖动选区边框（移动 / 缩放 / 拖边，含多矩形）：同样清除标注选中，使 OBB 手柄随选区交互即时消失。
+    connect(scene_, &CanvasScene::selectionInteractionStarted, this, [this] {
+        if (anno_ && anno_->selectedIndex()) anno_->clearSelection();
+    });
 
     connect(scene_, &CanvasScene::annotationSelectRequested, this, &AnnotationCoordinator::onAnnotationSelect);
     connect(scene_, &CanvasScene::annotationMoved, this, &AnnotationCoordinator::onAnnotationMoved);
@@ -77,6 +86,11 @@ void AnnotationCoordinator::connectSignals() {
     connect(annoPropPanel_, &AnnotationPropPanel::fontSizeChanged, this, &AnnotationCoordinator::onAnnoFontSizeChanged);
     connect(annoPropPanel_, &AnnotationPropPanel::cornerRadiusChanged, this, &AnnotationCoordinator::onAnnoCornerRadiusChanged);
     connect(annoPropPanel_, &AnnotationPropPanel::transformApplyRequested, this, &AnnotationCoordinator::onAnnoTransformApply);
+    // 叠放次序（从标注菜单迁入属性面板）：4 意图信号 → 层序四槽（作于选中项，经 Bridge 调 Core moveAnnotation）。
+    connect(annoPropPanel_, &AnnotationPropPanel::stackRaiseRequested, this, &AnnotationCoordinator::onAnnoRaise);
+    connect(annoPropPanel_, &AnnotationPropPanel::stackLowerRequested, this, &AnnotationCoordinator::onAnnoLower);
+    connect(annoPropPanel_, &AnnotationPropPanel::stackToFrontRequested, this, &AnnotationCoordinator::onAnnoBringToFront);
+    connect(annoPropPanel_, &AnnotationPropPanel::stackBackRequested, this, &AnnotationCoordinator::onAnnoSendToBack);
 }
 
 // 工具面板选择：先收笔未完成的折线/画笔路径，再切换工具（setTool 内部会放弃两点预览）。
@@ -273,5 +287,12 @@ void AnnotationCoordinator::onAnnoClearAll() const {
     if (ret != QMessageBox::Yes) return;
     anno_->clearAll();
 }
+
+// 标注层序（叠放）：均作用于选中项，委托 AnnotationBridge（内部调 Core moveAnnotation）。
+// 无选中时桥内自行忽略；变化经 changed()/selectionChanged() → 重绘标注层 + 必要时刷新输出预览。
+void AnnotationCoordinator::onAnnoRaise() const { anno_->raiseSelected(); }
+void AnnotationCoordinator::onAnnoLower() const { anno_->lowerSelected(); }
+void AnnotationCoordinator::onAnnoBringToFront() const { anno_->bringSelectedToFront(); }
+void AnnotationCoordinator::onAnnoSendToBack() const { anno_->sendSelectedToBack(); }
 
 } // namespace idc::gui

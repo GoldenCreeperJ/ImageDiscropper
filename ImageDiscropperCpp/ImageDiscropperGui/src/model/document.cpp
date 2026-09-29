@@ -8,38 +8,76 @@
 
 #include <algorithm>
 #include <utility>
+#include <variant>
 
 namespace idc::gui {
 
 // 构造：无图像、默认 L1 + KEEP。
 Document::Document(QObject* parent) : QObject(parent) {}
 
-// 载入新图像：置原图与工作图，记录路径，清空选区。
+// 载入新图像：置原图与工作图，清空队列与选区。
 void Document::setImage(core::Image img, QString path) {
-    original_ = img;             // 保留一份原始副本（供后续「重置预处理」用）。
+    original_ = img;             // 保留一份原始副本（供队列重放与「重置预处理」）。
     working_ = std::move(img);   // 新图初始无预处理，工作图即原图。
-    preprocessed_ = false;       // 新图重置预处理标记。
+    steps_.clear();              // 新图重置轻操作队列。
+    resize_.reset();             // 换图：独立 resize 目标随原图失效。
+    base_.reset();               // 换图：base_ 重放缓存随原图失效。
+    basePath_.clear();
     imagePath_ = std::move(path);
     hasRect_ = false;
     rect_ = engine::RectRegion{};
     emit imageChanged();
 }
 
-// 写回一次预处理结果：替换工作图并置「已预处理」标记（original_ 不变）。
+// 写回一次预处理物化结果：替换工作图（original_ / steps_ 不变）。
 // 空图拒绝，避免画布/引擎拿到无效工作图。触发 imageChanged()（需重建预览底图）。
 void Document::setWorkingImage(core::Image img) {
     if (img.empty()) return;
     working_ = std::move(img);
-    preprocessed_ = true;
     emit imageChanged();
 }
 
-// 重置预处理：工作图恢复为原图（original_ 始终保留）；未预处理时无需还原。
+// 重置预处理：清空独立 resize 与轻操作队列、工作图恢复为原图（original_ 始终保留）；未预处理时无需还原。
 void Document::resetPreprocess() {
-    if (!preprocessed_) return;
+    if (steps_.empty() && !resize_) return;
+    steps_.clear();
+    base_.reset();               // 重置预处理：base_ 缓存一并失效。
+    resize_.reset();             // 重置预处理：独立 resize 目标一并清除。
+    basePath_.clear();
     working_ = original_;
-    preprocessed_ = false;
     emit imageChanged();
+}
+
+// 覆盖 / 清除独立 resize（仅存声明状态；物化与刷新由调用方经 setWorkingImage 掌控）。
+void Document::setResize(const std::optional<ResizeTarget> target) {
+    resize_ = target;
+}
+
+// 覆盖整条声明式预处理队列（仅存状态；物化与刷新由调用方掌控）。
+void Document::setSteps(preprocess::PreprocessPipeline pipeline) {
+    steps_ = std::move(pipeline);
+}
+
+// 记录一段前缀的重放产物为 base_（供 commitPipeline 免重复重采样复用）。
+void Document::setBase(core::Image img, preprocess::PreprocessPipeline prefix) {
+    base_ = std::move(img);
+    basePath_ = std::move(prefix);
+}
+
+// 几何签名：对原图尺寸跑「有效管线」（[resize?] + 轻操作队列）的纯元数据推演（不碰像素），得 {输出宽高, 净旋转象限}。
+preprocess::PreprocessPipeline::GeometryOut Document::geomSig() const {
+    preprocess::PreprocessPipeline effective;
+    if (resize_) effective.add(preprocess::ResizeOp{resize_->width, resize_->height});
+    for (const auto& cfg : steps_.steps()) effective.add(cfg);
+    return effective.geometryOutput(original_.width(), original_.height());
+}
+
+// 队列灰度推演：任一 GrayOp 使输出恒为灰度（下游 invert/rotate/flip/resize/split 均不恢复彩色），
+// 供启停智能在灰度后停用「黑白」「色道分离」（纯元数据扫描，不碰像素）。
+bool Document::preprocessProducesGray() const {
+    for (const auto& cfg : steps_.steps())
+        if (std::holds_alternative<preprocess::GrayOp>(cfg)) return true;
+    return false;
 }
 
 // 切换模式：L1/L2 由极性定义（L1≡keep、L2≡remove），切到二者时套用对应极性；
@@ -467,6 +505,21 @@ engine::EngineConfig Document::buildEngineConfig() const {
     if (mergeCellH_ > 0) cfg.emitParams.cellHeight = mergeCellH_;
 
     // preprocess 保持默认空流水线：预处理已即时作用于工作图（见 setWorkingImage），不在此重复。
+    return cfg;
+}
+
+// 构建可序列化配置（保存 / 载入）：复用 buildEngineConfig 的切割/选择/排序/导出字段，
+// 唯 preprocess 段填入「[resize?] + 轻操作队列」的完整有效管线（resize 恒置首位）、source 取原图尺寸
+//——还原端从 original 重放整链复现 working_（旧配置载入时在控制器侧归一化抽出 resize）。
+engine::EngineConfig Document::buildSerializableConfig() const {
+    engine::EngineConfig cfg = buildEngineConfig();
+    // 序列化携带完整预处理管线：若有独立 resize，作为数组首元素（resize 在轻操作之前）。
+    preprocess::PreprocessPipeline serial;
+    if (resize_) serial.add(preprocess::ResizeOp{resize_->width, resize_->height});
+    for (const auto& step : steps_.steps()) serial.add(step);
+    cfg.preprocess = serial;
+    cfg.source.width = original_.width();
+    cfg.source.height = original_.height();
     return cfg;
 }
 

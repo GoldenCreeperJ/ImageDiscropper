@@ -236,11 +236,56 @@ void AnnotationBridge::transformSelected(const double sx, const double sy, const
 }
 
 // ===========================================================================
+// 5b. 层序（叠放次序）：下标即 z 序（大＝顶）；作用于选中项，委托 Core moveAnnotation 重排
+// ===========================================================================
+void AnnotationBridge::raiseSelected() {
+    const std::optional<std::size_t> idx = layer_.selectedAnnotationIndex();
+    if (!idx) return;
+    if (const std::size_t n = layer_.annotations().size(); *idx + 1 >= n) return;                 // 已在顶层
+    layer_.moveAnnotation(*idx, *idx + 1);
+    emit changed();
+    emit selectionChanged();
+}
+
+void AnnotationBridge::lowerSelected() {
+    const std::optional<std::size_t> idx = layer_.selectedAnnotationIndex();
+    if (!idx || *idx == 0) return;             // 无选中或已在底层
+    layer_.moveAnnotation(*idx, *idx - 1);
+    emit changed();
+    emit selectionChanged();
+}
+
+void AnnotationBridge::bringSelectedToFront() {
+    const std::optional<std::size_t> idx = layer_.selectedAnnotationIndex();
+    if (!idx) return;
+    const std::size_t n = layer_.annotations().size();
+    if (n == 0 || *idx == n - 1) return;       // 已在顶层
+    layer_.moveAnnotation(*idx, n - 1);
+    emit changed();
+    emit selectionChanged();
+}
+
+void AnnotationBridge::sendSelectedToBack() {
+    const std::optional<std::size_t> idx = layer_.selectedAnnotationIndex();
+    if (!idx || *idx == 0) return;             // 无选中或已在底层
+    layer_.moveAnnotation(*idx, 0);
+    emit changed();
+    emit selectionChanged();
+}
+
+// ===========================================================================
 // 6. 撤销重做 / 图层可见性 / 导出烧录
 // ===========================================================================
 void AnnotationBridge::undo() { layer_.revoke(); emit changed(); emit selectionChanged(); }
 void AnnotationBridge::redo() { layer_.redo(); emit changed(); }
 void AnnotationBridge::clearAll() { layer_.clear(); emit changed(); emit selectionChanged(); }
+
+// 配置还原：整体替换标注列表（委托 Core restoreAnnotations，不推撤销快照），再发信号刷新画布/面板。
+void AnnotationBridge::replaceAnnotations(std::vector<annotation::Annotation> items) {
+    layer_.restoreAnnotations(std::move(items));
+    emit changed();
+    emit selectionChanged(); // 还原后无选中，面板同步退出属性回显。
+}
 
 void AnnotationBridge::setLayerVisible(const bool on) {
     if (layerVisible_ == on) return;

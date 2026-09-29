@@ -101,6 +101,8 @@ signals:
     void zoomChanged(qreal factor);
     // 用户框选出一个新选区（场景/原图坐标，已规范化）。
     void rubberSelect(const QRectF& sceneRect);
+    // 框选起带（空白处按下即发）：供上层清除进行中的标注选中，使标注 OBB 手柄随框选消失。
+    void marqueeStarted();
     // 方向键微调选区（dx,dy 为原图像素增量，Shift 时为大步）。
     void nudgeSelection(int dx, int dy);
     // 右键菜单意图。

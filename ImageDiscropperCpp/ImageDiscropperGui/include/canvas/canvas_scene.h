@@ -124,6 +124,9 @@ signals:
     // 选区框被用户移动/缩放/拖边（转发自 SelectionRectItem::rectChanged），参数为原图像素坐标矩形。
     // 拖动选区边＝移动对应切割线（二者同一图元），故只需这一个稳定信号。
     void selectionEdited(const QRectF& sceneRect);
+    // 用户开始拖动任一选区框（单选区或多矩形，转发自 SelectionRectItem::dragStarted）：
+    // 供上层在拖动选区边框时清除标注选中态（与空白框选 marqueeStarted 同义）。
+    void selectionInteractionStarted();
     // L3 单元点选（转发自 CellPickerItem）：单击切换 / 拖拽框选，交 MainWindow 写回 Document。
     void cellToggled(int index);
     void cellsMarqueeSelected(const std::vector<int>& indices);
