@@ -142,7 +142,7 @@ Documentation is organized by level; **each level has a clearly delimited scope 
 |---------|-------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
 | **MVP** | Unified engine + L2 reverse erasing + L1 extraction + separate/collapse export                  | ✅ Done                                                                                       |
 | **v2**  | L3 grid splitting (ordering + rearrange composition) + config presets, multi-rect union erasing | ✅ Done                                                                                       |
-| **v3**  | Basic image processing (FR-1), annotation layer                                                 | ⏳ Core support layer ready; GUI frontend done; full CLI/GUI ↔ engine integration in progress |
+| **v3**  | Basic image processing (FR-1), annotation layer                                                 | ✅ Done                                                                                       |
 
 ## 📄 License
 

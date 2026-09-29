@@ -88,7 +88,7 @@ CLI 命令与规格功能的对应（详见 [`ImageDiscropperCli/README.md`](Ima
 ```bash
 cmake --preset windows-debug   # Windows：Ninja + MSVC；Linux/macOS 用 linux-debug / macos-debug
 cmake --build build/windows-debug    # 产出 bin/idc(.exe)、idc_gui(.exe) 与 demo(.exe)
-ctest --test-dir build/windows-debug --output-on-failure   # 同时运行 Core unit_tests 与 CLI cli_tests（集成用例 IT-1~IT-21）
+ctest --test-dir build/windows-debug --output-on-failure   # 同时运行 Core unit_tests 与 CLI cli_tests（集成用例 IT-1~IT-25）
 ```
 
 首次配置自动安装清单依赖（qtbase 较慢）。手动方式（清单模式自动生效）：
@@ -122,7 +122,7 @@ ctest --test-dir build/windows-debug --output-on-failure   # 同时运行 Core u
 |---------|----------------------------------------------|-------------------------------------------|
 | **MVP** | 统一引擎 + L2 反向剔除（单矩形/横线/竖线）+ L1 标准提取 + 分离与坍缩导出 | ✅ 已落地                                     |
 | **v2**  | L3 网格分割（排序 + 重排合并）+ 配置预设、多矩形并集剔除             | ✅ 已落地                                     |
-| **v3**  | 基础图像处理（FR-1）、标注图层                            | ⏳ Core 支撑层已重构保留（尚未接入 CLI / GUI）；GUI 前端已落地 |
+| **v3**  | 基础图像处理（FR-1）、标注图层                            | ✅ 已落地（GUI/CLI 全链路接入）                            |
 
 > 本地处理、无损优先（NFR-1 / NFR-2）：图像不上传服务器；切割为纯像素搬运，仅 JPEG 输出有损。
 
