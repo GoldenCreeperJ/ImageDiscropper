@@ -17,6 +17,16 @@ static int normalizeAngle(const int angle) {
     return a;
 }
 
+// 内部工具：像素搬运——旋转 / 翻转均为纯位置置换，dst 与 src 同格式。
+// 非灰度走 getPixel/setPixel（字节一一对应，无损）；GRAY 必须走 getGray/setGray 直接拷单字节，
+// 否则 setPixel(GRAY) 会把 getPixel 返回的 (v,v,v) 经 BT.601 浮点重压缩并截断，使灰度值每趟漂移 ±1~2，
+// 破坏“旋转 / 翻转不改变像素值”的语义（亦使流水线几何折叠无法逐像素等价）。
+static void copyPixel(core::Image& dst, const int dx, const int dy,
+                      const core::Image& src, const int sx, const int sy) {
+    if (src.isGray()) dst.setGray(dx, dy, src.getGray(sx, sy));
+    else dst.setPixel(dx, dy, src.getPixel(sx, sy));
+}
+
 // 旋转 90°：新图宽高互换，(x, y) → (h - 1 - y, x)。
 static core::Image rotate90(const core::Image& src) {
     const int w = src.width();
@@ -24,7 +34,7 @@ static core::Image rotate90(const core::Image& src) {
     core::Image out(h, w, src.format());
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            out.setPixel(h - 1 - y, x, src.getPixel(x, y));
+            copyPixel(out, h - 1 - y, x, src, x, y);
         }
     }
     return out;
@@ -37,7 +47,7 @@ static core::Image rotate180(const core::Image& src) {
     core::Image out(w, h, src.format());
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            out.setPixel(w - 1 - x, h - 1 - y, src.getPixel(x, y));
+            copyPixel(out, w - 1 - x, h - 1 - y, src, x, y);
         }
     }
     return out;
@@ -50,7 +60,7 @@ static core::Image rotate270(const core::Image& src) {
     core::Image out(h, w, src.format());
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            out.setPixel(y, w - 1 - x, src.getPixel(x, y));
+            copyPixel(out, y, w - 1 - x, src, x, y);
         }
     }
     return out;
@@ -74,8 +84,8 @@ core::Image flip(const core::Image& src, const bool horizontal) {
     core::Image out(w, h, src.format());
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            if (horizontal) out.setPixel(w - 1 - x, y, src.getPixel(x, y));
-            else out.setPixel(x, h - 1 - y, src.getPixel(x, y));
+            if (horizontal) copyPixel(out, w - 1 - x, y, src, x, y);
+            else copyPixel(out, x, h - 1 - y, src, x, y);
         }
     }
     return out;

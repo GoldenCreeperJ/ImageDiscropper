@@ -20,7 +20,7 @@
 | `composition.cpp`        | `isCollapsible`（SPEC §4.4 定理）+ `compose`（SEPARATE / COLLAPSE / REARRANGE 三布局；REARRANGE 依 `MergeOrder` 行/列优先 + 蛇形 + 倒序生成输出槽序，与选择排序正交）  | ⑤      |
 | `export.cpp`             | `exportImage`：分离→crop + 编码 + 命名模板写入文件夹（自动创建）；合并→画布 blit + 写单图（E-7/E-8）                                                                | export |
 | `image_io.cpp`           | stb_image 解码（→ RGBA）+ stb 图像编码（PNG/JPEG/BMP）+ libwebp（WebP）；**全工程唯一定义 `STB_IMAGE_IMPLEMENTATION` / `STB_IMAGE_WRITE_IMPLEMENTATION`** | I/O    |
-| `engine_config_json.cpp` | `EngineConfig ↔ JSON`（SPEC §7 schema）+ 文件存取（内部用 nlohmann/json）                                                                        | 配置     |
+| `engine_config_json.cpp` | `EngineConfig ↔ JSON`（SPEC §7 schema，含可选 `annotations` 段的逐形状序列化/还原）+ 文件存取（内部用 nlohmann/json）                                          | 配置     |
 | `engine.cpp`             | 顶层编排 `runEngine`：串起 ①→②→split→③④→排序→⑤，含 E-1/E-6/E-7 校验；**合并重排仅 L3 可用**（非 L3 的 REARRANGE 直接报错），L1/L2 不可坍缩时亦报错（不自动降级）                   | 编排     |
 
 > **依赖顺序**：cut_line → grid → split → selection → sequence → composition → export；

@@ -16,7 +16,7 @@ core::Image toGray(const core::Image& src) {
 }
 
 // 按通道反色：mask 长度必须为 3，否则视为 "111"。
-// 灰度图只有单一亮度通道，反色即对每个字节取 255-v（mask 不适用于单通道）。
+// 灰度图只有单一亮度通道，逐通道选择对其不适用：mask 全 '0'（三通道都不反色）与彩色路径一致地视为空操作，否则对每字节取 255-v。
 // 彩色图按 mask 逐通道取反，alpha 通道始终保留不变。
 // 性能：单遍「拷贝 + 变换」，mask 在循环外折成每通道常量，循环体直写 R/G/B 三通道 XOR、无内层循环；
 //       alpha（第 4 字节）按 bpp 条件保留。RGB 为 3 字节、不对齐字边界，故只能逐字节而非打包位运算；
@@ -29,6 +29,8 @@ core::Image invertChannels(const core::Image& src, const std::string& mask) {
     const std::size_t n = src.sizeInBytes();
 
     if (src.isGray()) {
+        // 灰度单亮度通道：mask 全 '0' 不反色（与彩色恒等语义对齐），否则对每字节取 255-v。
+        if (const std::string m = mask.size() == 3 ? mask : std::string("111"); m == "000") return src.clone();
         for (std::size_t i = 0; i < n; ++i) d[i] = static_cast<std::uint8_t>(s[i] ^ 0xFF);  // 255 - v
         return out;
     }

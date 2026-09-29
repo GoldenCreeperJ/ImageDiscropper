@@ -19,4 +19,8 @@ namespace idc::engine {
 // 产出带单元序号的 Fragment——序号贯穿后续 applyPolarity 与 compose。
 RegionSet split(const core::Image& image, const Grid& grid);
 
+// 纯尺寸版 split：split 仅需图像宽高（从不读像素），此入口供「仅尺寸」引擎路径（实时预览）复用，
+// 使其脱离全分辨率像素。语义与 split 完全一致，仅以 (width,height) 取代 image。
+RegionSet splitSize(int width, int height, const Grid& grid);
+
 } // namespace idc::engine

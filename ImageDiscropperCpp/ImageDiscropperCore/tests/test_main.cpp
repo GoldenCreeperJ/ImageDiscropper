@@ -196,8 +196,11 @@ static void testPixelOps() {
     CHECK(ginv.width() == 4 && ginv.height() == 4);
     CHECK(ginv.getGray(0, 0) == 255);                      // 255 - 0
     CHECK(ginv.getGray(3, 3) == 255 - gimg.getGray(3, 3)); // 逐像素取反
-    // 灰度反色忽略 mask：任意 mask 都整体反相
+    // 灰度反色：除 mask 全 "000"（不反色）外，任意非全 0 mask 都整体反相
     CHECK(pixel_ops::invertChannels(gimg, "100").getGray(2, 1) == 255 - gimg.getGray(2, 1));
+    // mask 全 "000" 与彩色恒等语义对齐：灰度上也不反色（逐像素原值、仍 GRAY）
+    CHECK(pixel_ops::invertChannels(gimg, "000").isGray());
+    CHECK(pixel_ops::invertChannels(gimg, "000").getGray(2, 1) == gimg.getGray(2, 1));
     // 反色为对合：两次反色回到原值
     CHECK(pixel_ops::invertChannels(ginv, "111").getGray(1, 2) == gimg.getGray(1, 2));
 
@@ -248,6 +251,33 @@ static void testPixelOps() {
     const core::Image gscaled = pixel_ops::resize(gsolid, 8, 8, pixel_ops::ResampleMode::BILINEAR);
     CHECK(gscaled.isGray());
     CHECK(gscaled.getGray(3, 5) == 200);
+
+    // ---- 灰度几何无损：旋转 / 翻转是纯位置置换，不得改变任何灰度值（回归护栏：
+    //      旧实现经 getPixel→setPixel 的 BT.601 重压缩会使灰度值每漂移 ±1~2）。----
+    core::Image gv(5, 3, core::ImageFormat::GRAY);
+    for (int y = 0; y < 3; ++y)
+        for (int x = 0; x < 5; ++x)
+            gv.setGray(x, y, static_cast<std::uint8_t>(x * 7 + y * 13 + 11)); // 逐像素唯一且非平凡
+    // 旋转 90°×4 应回到原图且值无损。
+    core::Image grot = pixel_ops::rotate(gv, 90);
+    CHECK(grot.isGray() && grot.width() == 3 && grot.height() == 5);
+    grot = pixel_ops::rotate(grot, 90);
+    grot = pixel_ops::rotate(grot, 90);
+    grot = pixel_ops::rotate(grot, 90);
+    CHECK(grot.width() == 5 && grot.height() == 3);
+    for (int y = 0; y < 3; ++y)
+        for (int x = 0; x < 5; ++x)
+            CHECK(grot.getGray(x, y) == gv.getGray(x, y));   // 四次 90° = 恒等，值逐像素一致
+    // 水平翻转两次 = 恒等（值无损）；并验证单次映射 (x,y)->(w-1-x,y) 搬运的是原灰度值。
+    const core::Image gfh = pixel_ops::flip(gv, true);
+    CHECK(gfh.isGray());
+    for (int y = 0; y < 3; ++y)
+        for (int x = 0; x < 5; ++x)
+            CHECK(gfh.getGray(4 - x, y) == gv.getGray(x, y));
+    const core::Image gfh2 = pixel_ops::flip(gfh, true);
+    for (int y = 0; y < 3; ++y)
+        for (int x = 0; x < 5; ++x)
+            CHECK(gfh2.getGray(x, y) == gv.getGray(x, y));   // 翻两次无损回原
 
     std::cout << "[pixel_ops] OK\n";
 }
@@ -334,6 +364,59 @@ static void testAnnotation() {
     panel.removeAnnotation(99);           // 越界删除应被忽略
     CHECK(panel.annotations().size() == 1);
 
+    // AnnotationLayer：层序调整（moveAnnotation）——列表下标即 z 序（大＝顶，与 hitTest/burnIn 口径一致）。
+    // 新建独立层，DRAW 模式依次加红/绿/蓝三个矩形（下标 0/1/2）。
+    annotation::AnnotationLayer lay;
+    lay.setImage(canvas);
+    lay.setEditType(annotation::EditType::DRAW);
+    annotation::ShapeRequest mr;
+    mr.type = geometry::ShapeType::RECTANGLE;
+    lay.changeColor(core::kRed);   mr.p1 = {0, 0};   mr.p2 = {10, 10}; lay.addAnnotation(annotation::buildShape(mr));
+    lay.changeColor(core::kGreen); mr.p1 = {20, 20}; mr.p2 = {30, 30}; lay.addAnnotation(annotation::buildShape(mr));
+    lay.changeColor(core::kBlue);  mr.p1 = {40, 40}; mr.p2 = {50, 50}; lay.addAnnotation(annotation::buildShape(mr));
+    CHECK(lay.annotations().size() == 3);
+    CHECK(lay.annotations()[0].color == core::kRed);
+    CHECK(lay.annotations()[2].color == core::kBlue);
+    // zOrder 一等属性：新标注依次置顶，zOrder 恒等于列表下标（0＝最底、大＝顶）。
+    CHECK(lay.annotations()[0].zOrder == 0 && lay.annotations()[1].zOrder == 1 && lay.annotations()[2].zOrder == 2);
+
+    // 选中 index 0（红）→ 移到顶层（to=2）：顺序变 [绿,蓝,红]，选中下标跟随被移动项到 2。
+    lay.selectAnnotation(0);
+    lay.moveAnnotation(0, 2);
+    CHECK(lay.annotations()[0].color == core::kGreen);
+    CHECK(lay.annotations()[1].color == core::kBlue);
+    CHECK(lay.annotations()[2].color == core::kRed);
+    CHECK(lay.selectedAnnotationIndex().has_value() && *lay.selectedAnnotationIndex() == 2);
+    // 重排后 zOrder 已重新规范化＝新下标（红从 0 升至 2）。
+    CHECK(lay.annotations()[0].zOrder == 0 && lay.annotations()[1].zOrder == 1 && lay.annotations()[2].zOrder == 2);
+    CHECK(lay.annotations()[2].color == core::kRed && lay.annotations()[2].zOrder == 2);
+
+    // 移回底层（from=2 → to=0）：恢复 [红,绿,蓝]，选中跟随到 0。
+    lay.moveAnnotation(2, 0);
+    CHECK(lay.annotations()[0].color == core::kRed);
+    CHECK(lay.annotations()[2].color == core::kBlue);
+    CHECK(lay.selectedAnnotationIndex().has_value() && *lay.selectedAnnotationIndex() == 0);
+    CHECK(lay.annotations()[0].zOrder == 0 && lay.annotations()[1].zOrder == 1 && lay.annotations()[2].zOrder == 2);
+
+    // 区间内其它项的选中下标随移动方向平移：选中 index 1（绿）→ moveAnnotation(0,2) 把红移到底，
+    // 结果 [绿,蓝,红]，绿从 1 前移到 0，选中应随之变为 0。
+    lay.selectAnnotation(1);
+    lay.moveAnnotation(0, 2);
+    CHECK(lay.annotations()[0].color == core::kGreen);
+    CHECK(lay.selectedAnnotationIndex().has_value() && *lay.selectedAnnotationIndex() == 0);
+
+    // 越界 / 自移动被忽略，列表不变。
+    lay.moveAnnotation(99, 0);
+    lay.moveAnnotation(1, 1);
+    CHECK(lay.annotations().size() == 3);
+    CHECK(lay.annotations()[0].zOrder == 0 && lay.annotations()[1].zOrder == 1 && lay.annotations()[2].zOrder == 2);
+
+    // removeAnnotation 后剩余项 zOrder 重新规范化＝新下标（删当前 [绿,蓝,红] 的底（index 0），剩 [蓝,红] → zOrder 0/1）。
+    lay.removeAnnotation(0);
+    CHECK(lay.annotations().size() == 2);
+    CHECK(lay.annotations()[0].color == core::kBlue && lay.annotations()[0].zOrder == 0);
+    CHECK(lay.annotations()[1].color == core::kRed && lay.annotations()[1].zOrder == 1);
+
     // Shape::translate：就地平移保留具体类型（不再退化为通用 PATH）。
     // 矩形：平移后 type() 仍为 RECTANGLE，包围盒按 (dx,dy) 偏移、宽高不变。
     annotation::ShapeRequest r4;
@@ -370,13 +453,13 @@ static void testAnnotation() {
     r6.p1 = {0, 0};
     r6.p2 = {10, 6};   // dx=10、dy=6 → 边长 max = 10
     auto sq = annotation::buildShape(r6);
-    const geometry::BoundingBox s0 = sq->bounds();
+    const auto [x, y, width, height] = sq->bounds();
     // 轴对齐正方形：包围盒应为 10×10（边长取 max(dx,dy)，不随拖动倾斜）。
-    CHECK(std::abs(s0.width - 10.0) < 1e-6 && std::abs(s0.height - 10.0) < 1e-6);
+    CHECK(std::abs(width - 10.0) < 1e-6 && std::abs(height - 10.0) < 1e-6);
     sq->translate(2, 2);
     const geometry::BoundingBox s1 = sq->bounds();
     CHECK(sq->type() == geometry::ShapeType::SQUARE);
-    CHECK(std::abs(s1.x - s0.x - 2.0) < 1e-6 && std::abs(s1.y - s0.y - 2.0) < 1e-6);
+    CHECK(std::abs(s1.x - x - 2.0) < 1e-6 && std::abs(s1.y - y - 2.0) < 1e-6);
 
     // ViewTransform：屏幕 ↔ 逻辑坐标
     annotation::ViewTransform vt;
@@ -420,6 +503,121 @@ static void testPreprocess() {
     // configType 与 preprocessTypeName 辅助函数
     CHECK(preprocess::configType(preprocess::GrayOp{}) == preprocess::PreprocessType::GRAY);
     CHECK(std::string(preprocess::preprocessTypeName(preprocess::PreprocessType::FLIP)) == "Flip");
+
+    // ResizeOp：目标尺寸重采样；configType / typeName / makeDefaultConfig 均覆盖 RESIZE。
+    preprocess::PreprocessPipeline pipe2;
+    pipe2.add(preprocess::ResizeOp{24, 12});
+    const core::Image r2 = pipe2.apply(img);
+    CHECK(r2.width() == 24 && r2.height() == 12);
+    CHECK(preprocess::configType(preprocess::ResizeOp{}) == preprocess::PreprocessType::RESIZE);
+    CHECK(std::string(preprocess::preprocessTypeName(preprocess::PreprocessType::RESIZE)) == "Resize");
+    CHECK(std::holds_alternative<preprocess::ResizeOp>(preprocess::makeDefaultConfig(preprocess::PreprocessType::RESIZE)));
+    // 非正尺寸 → 无操作（原样返回，不崩溃）。
+    CHECK(preprocess::PreprocessPipeline{}.apply(img).width() == 16);
+    {
+        preprocess::PreprocessPipeline bad;
+        bad.add(preprocess::ResizeOp{0, 0});
+        CHECK(bad.apply(img).width() == 16 && bad.apply(img).height() == 16);
+    }
+
+    // geometryOutput：纯元数据推演尺寸/旋转象限，不搬像素。
+    // 链 gray→resize60×40→rotate90（交换 40×60, rotQuad=1）→flip（不变）。
+    preprocess::PreprocessPipeline pg;
+    pg.add(preprocess::GrayOp{});
+    pg.add(preprocess::ResizeOp{60, 40});
+    pg.add(preprocess::RotateOp{90});
+    pg.add(preprocess::FlipOp{true});
+    const auto [width0, height0, rotQuad0] = pg.geometryOutput(1000, 1000);
+    CHECK(width0 == 40 && height0 == 60 && rotQuad0 == 1);
+    // 三次 rotate 累加：90+90+(-90归一270) → rotQuad=(1+1+3)%4=1；净 90° → 宽高交换。
+    preprocess::PreprocessPipeline pg2;
+    pg2.add(preprocess::RotateOp{90});
+    pg2.add(preprocess::RotateOp{90});
+    pg2.add(preprocess::RotateOp{-90});
+    const auto [width1, height1, rotQuad1] = pg2.geometryOutput(10, 20);
+    CHECK(rotQuad1 == 1 && width1 == 20 && height1 == 10);
+
+    // ---- folded()：语义等价、趟数更少的折叠流水线——逐像素必与原序 apply 完全一致 ----
+    // 非方形渐变图：区分 rotate90/270 的宽高互换、flip 的 H/V 轴向，且内容逐像素唯一（镜像/旋转可辨）。
+    auto buildFoldImg = [] {
+        core::Image im(6, 4, core::ImageFormat::RGBA);
+        for (int y = 0; y < 4; ++y)
+            for (int x = 0; x < 6; ++x)
+                im.setPixel(x, y, core::Color(static_cast<std::uint8_t>(x * 40),
+                                              static_cast<std::uint8_t>(y * 60),
+                                              static_cast<std::uint8_t>((x + y) * 20), 255));
+        return im;
+    };
+    auto imagesEqual = [](const core::Image& a, const core::Image& b) {
+        if (a.width() != b.width() || a.height() != b.height() || a.format() != b.format()) return false;
+        for (int y = 0; y < a.height(); ++y)
+            for (int x = 0; x < a.width(); ++x)
+                if (a.getPixel(x, y) != b.getPixel(x, y)) return false;
+        return true;
+    };
+    const core::Image fbase = buildFoldImg();
+    auto checkFold = [&](const preprocess::PreprocessPipeline& p) {
+        const preprocess::PreprocessPipeline f = p.folded();
+        // 逐像素等价：折叠对连续几何段 / 色彩段各自就地规整、resize 作段界不动，最终图像（含尺寸/格式）必与原序完全一致。
+        CHECK(imagesEqual(p.apply(fbase), f.apply(fbase)));
+        // 趟数不增。
+        CHECK(f.size() <= p.size());
+        // 幂等：规范形式再折一次不变。
+        CHECK(imagesEqual(f.apply(fbase), f.folded().apply(fbase)));
+        // 输出尺寸（宽高）折叠前后必一致（像素等价已隐含此点）。
+        // 注：净旋转象限 rotQuad 不作断言——geometryOutput 刻意忽略 flip 累加 rotQuad，
+        //     而折叠会把「旋转∘镜像」这一 D4 元素重表示为不同的旋转量（如 FlipH;Rotate90 → Rotate270;FlipH，
+        //     像素逐点相同但忽略 flip 后的 rotQuad 不同）；GUI 几何签名恒按原始存储序计算，不走折叠，故无影响。
+        const auto g0 = p.geometryOutput(6, 4);
+        const auto g1 = f.geometryOutput(6, 4);
+        CHECK(g0.width == g1.width && g0.height == g1.height);
+    };
+    using preprocess::GrayOp;
+    using preprocess::InvertOp;
+    using preprocess::SplitOp;
+    using preprocess::RotateOp;
+    using preprocess::FlipOp;
+    using preprocess::ResizeOp;
+    // 纯旋转累加（3→1）。
+    { preprocess::PreprocessPipeline q; q.add(RotateOp{90}); q.add(RotateOp{90}); q.add(RotateOp{90}); checkFold(q); }
+    // rotate×flip 非交换（共轭）：flipH 后 rotate90。
+    { preprocess::PreprocessPipeline q; q.add(FlipOp{true}); q.add(RotateOp{90}); checkFold(q); }
+    // 反序：rotate90 后 flipH（应与上者不同，但各自折叠均须等价）。
+    { preprocess::PreprocessPipeline q; q.add(RotateOp{90}); q.add(FlipOp{true}); checkFold(q); }
+    // 对角镜像 + 异轴翻转混序（含 flip V）。
+    { preprocess::PreprocessPipeline q; q.add(FlipOp{false}); q.add(RotateOp{90}); q.add(FlipOp{true}); checkFold(q); }
+    // 同轴翻转对消 + 旋转复位。
+    { preprocess::PreprocessPipeline q; q.add(FlipOp{true}); q.add(FlipOp{true}); q.add(RotateOp{180}); q.add(RotateOp{180}); checkFold(q); }
+    // 色彩与几何穿插：色彩不跨几何重排，每个几何步被色彩隔成独立长度为1的段 → 不压缩（趟数不变），逐像素仍等价。
+    { preprocess::PreprocessPipeline q; q.add(GrayOp{}); q.add(RotateOp{90}); q.add(InvertOp{}); q.add(FlipOp{true}); q.add(SplitOp{"010"}); q.add(InvertOp{}); checkFold(q); }
+    // 显式验证“色彩隔断几何段”：[Rot90, Gray, Rot90] 两个 Rot90 被 Gray 隔开，各自折叠为自身 → 趟数保持 3（不跨 Gray 合并）。
+    { preprocess::PreprocessPipeline q; q.add(RotateOp{90}); q.add(GrayOp{}); q.add(RotateOp{90}); CHECK(q.folded().size() == 3); checkFold(q); }
+    // 显式验证“连续几何段压缩”：[Gray, Rot90, Rot90, Rot90, FlipH] 中后 4 个连续几何步折为规范 ≤2 op（叠加首部 Gray）→ 趟数严格减少。
+    { preprocess::PreprocessPipeline q; q.add(GrayOp{}); q.add(RotateOp{90}); q.add(RotateOp{90}); q.add(RotateOp{90}); q.add(FlipOp{true}); CHECK(q.folded().size() < q.size()); checkFold(q); }
+    // 单 flip V：折叠应退化为单个 FlipOp（非 180°+flipH），趟数=1。
+    { preprocess::PreprocessPipeline q; q.add(FlipOp{false}); CHECK(q.folded().size() == 1); checkFold(q); }
+    // resize 屏障：色彩 / resize 均不跨段，仅各段内连续几何被折叠；逐像素仍等价。
+    { preprocess::PreprocessPipeline q; q.add(RotateOp{90}); q.add(GrayOp{}); q.add(ResizeOp{8, 5}); q.add(FlipOp{true}); q.add(FlipOp{true}); q.add(InvertOp{}); q.add(RotateOp{270}); checkFold(q); }
+
+    // ---- 色彩段规整：连续同类色彩步就地折为规范形（base 为 RGBA，pre-gray 位映射合并成立）----
+    // 双反色对消为恒等 → 趟数归 0。
+    { preprocess::PreprocessPipeline q; q.add(InvertOp{}); q.add(InvertOp{}); CHECK(q.folded().size() == 0); checkFold(q); }
+    // split×2 逐通道与：仅留 B 再仅留 G → 全置零（K=000）→ 折为单个 Split("000")。
+    { preprocess::PreprocessPipeline q; q.add(SplitOp{"001"}); q.add(SplitOp{"010"}); CHECK(q.folded().size() == 1); checkFold(q); }
+    // invert+split 复合→规范 Split(K)+Invert(J)，逐像素恒等。
+    { preprocess::PreprocessPipeline q; q.add(InvertOp{"111"}); q.add(SplitOp{"001"}); checkFold(q); }
+    // 5 步混合色彩链（无 gray）→ pre-gray 位映射至多折为 2 op。
+    { preprocess::PreprocessPipeline q; q.add(InvertOp{"100"}); q.add(SplitOp{"011"}); q.add(InvertOp{"010"}); q.add(SplitOp{"110"}); q.add(InvertOp{"001"}); CHECK(q.folded().size() <= 2); checkFold(q); }
+    // gray 幂等：连续三个 gray → 仅留第一个。
+    { preprocess::PreprocessPipeline q; q.add(GrayOp{}); q.add(GrayOp{}); q.add(GrayOp{}); CHECK(q.folded().size() == 1); checkFold(q); }
+    // 死步：gray 之后的 split 无意义 → 丢弃（原「拒绝式屏障」改用规整吞除的场景）。
+    { preprocess::PreprocessPipeline q; q.add(GrayOp{}); q.add(SplitOp{"001"}); CHECK(q.folded().size() == 1); checkFold(q); }
+    // gray 之后 invert 按奇偶：两次抵消 → 仅剩 gray。
+    { preprocess::PreprocessPipeline q; q.add(GrayOp{}); q.add(InvertOp{}); q.add(InvertOp{}); CHECK(q.folded().size() == 1); checkFold(q); }
+    // 灰度态跨 run（跨几何）传播：[Gray, Rot90, Invert"100", Invert"010"] 末段已在灰度态，两个不同 mask 反色均整幅翻→抵消。
+    { preprocess::PreprocessPipeline q; q.add(GrayOp{}); q.add(RotateOp{90}); q.add(InvertOp{"100"}); q.add(InvertOp{"010"}); CHECK(q.folded().size() == 2); checkFold(q); }
+    // 跨 gray 不合并：gray 前后各一 invert 分属两侧位段，均保留（不可交换）。
+    { preprocess::PreprocessPipeline q; q.add(InvertOp{}); q.add(GrayOp{}); q.add(InvertOp{}); CHECK(q.folded().size() == 3); checkFold(q); }
 
     std::cout << "[preprocess] OK\n";
 }
@@ -535,6 +733,9 @@ int main() {
     testEnginePipeline();  // 引擎流水线功能（SPEC §3）
     testEngineExport();    // 引擎导出落盘（SPEC §4）
     testEngineBoundary();  // 引擎边界异常（SPEC §5 / E-1~E-8）
+    testEngineConfigJson(); // 配置 JSON 存取（SPEC §7，含 annotations 段）
+    testAnnoParseText();    // 标注 JSON 文本段级解析（SPEC §7，供 CLI 复用）
+    testAnnoAnchorRoundTrip(); // 约束图元锚点往返（buildShape ↔ shapeToJson/FromJson 顶点级一致）
     std::cout << "all tests passed.\n";
     return 0;
 }

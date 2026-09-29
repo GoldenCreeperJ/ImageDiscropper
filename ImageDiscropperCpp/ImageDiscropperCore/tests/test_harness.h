@@ -27,7 +27,13 @@
 //   testEnginePipeline —— SPEC §3 功能：L1/L2 保留尺寸与四角位置、极性开关、L3 网格/选择/排序/重排。
 //   testEngineExport   —— SPEC §4 导出：分离到文件夹、坍缩合并、降级重排、PNG/BMP/JPEG/WebP 四格式写盘。
 //   testEngineBoundary —— SPEC §5 边界：E-1~E-8 全覆盖 + 空块跳过 + 像素无重复无丢失。
+//   testEngineConfigJson —— SPEC §7 配置存取：字段往返 + annotations 段带样式往返 + 向后兼容。
+//   testAnnoParseText    —— SPEC §7 标注文本段级解析：parseAnnotationsFromJsonText 单对象/根数组/累积/回滚/逐条强制校验/空串。
+//   testAnnoAnchorRoundTrip —— SPEC §7 约束图元锚点往返：buildShape(锚点)→shapeToJson(反解)→shapeFromJson 顶点级一致。
 // ---------------------------------------------------------------------------
 void testEnginePipeline();
 void testEngineExport();
 void testEngineBoundary();
+void testEngineConfigJson();
+void testAnnoParseText();
+void testAnnoAnchorRoundTrip();

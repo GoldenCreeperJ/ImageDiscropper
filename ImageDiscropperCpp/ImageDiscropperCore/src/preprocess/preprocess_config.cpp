@@ -17,6 +17,7 @@ const char* preprocessTypeName(const PreprocessType t) {
         case PreprocessType::SPLIT: return "Split";
         case PreprocessType::ROTATE: return "Rotate";
         case PreprocessType::FLIP: return "Flip";
+        case PreprocessType::RESIZE: return "Resize";
     }
     return "Unknown";
 }
@@ -29,6 +30,7 @@ PreprocessConfig makeDefaultConfig(const PreprocessType t) {
         case PreprocessType::SPLIT: return SplitOp{};
         case PreprocessType::ROTATE: return RotateOp{};
         case PreprocessType::FLIP: return FlipOp{};
+        case PreprocessType::RESIZE: return ResizeOp{};
     }
     return GrayOp{};
 }
@@ -42,8 +44,21 @@ PreprocessType configType(const PreprocessConfig& cfg) {
         else if constexpr (std::is_same_v<T, InvertOp>) return PreprocessType::INVERT;
         else if constexpr (std::is_same_v<T, RotateOp>) return PreprocessType::ROTATE;
         else if constexpr (std::is_same_v<T, FlipOp>) return PreprocessType::FLIP;
+        else if constexpr (std::is_same_v<T, ResizeOp>) return PreprocessType::RESIZE;
         else return PreprocessType::GRAY;
     }, cfg);
+}
+
+// 几何步分类：旋转 / 翻转（影响像素位置）。
+bool isGeometryStep(const PreprocessConfig& cfg) {
+    const auto t = configType(cfg);
+    return t == PreprocessType::ROTATE || t == PreprocessType::FLIP;
+}
+
+// 色彩步分类：黑白 / 分离 / 反色（不改变像素位置）。Resize 二者皆非。
+bool isColorStep(const PreprocessConfig& cfg) {
+    const auto t = configType(cfg);
+    return t == PreprocessType::GRAY || t == PreprocessType::SPLIT || t == PreprocessType::INVERT;
 }
 
 } // namespace idc::preprocess

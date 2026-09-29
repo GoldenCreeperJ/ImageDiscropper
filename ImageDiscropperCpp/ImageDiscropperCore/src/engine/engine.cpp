@@ -78,37 +78,16 @@ std::vector<int> deriveSelection(const CutConfig& cut, const Grid& grid) {
 
 } // namespace
 
-// 依据配置对图像跑通完整 Grid-Selection-Emit 流水线，返回保留集与合成描述（不落盘）。
-EngineResult runEngine(const core::Image& image, const EngineConfig& config) {
+// 内部几何流水线主体：以给定 source 尺寸铺切割线/网格、以 (clipW,clipH) 裁剪 split。
+// 不含预处理、不接收像素——runEngine（图像入口）与 runEngineGeometry（仅尺寸入口）共用。
+static EngineResult runEngineImpl(const SourceInfo& source, const int clipW, const int clipH,
+                                  const EngineConfig& config) {
     EngineResult result;
 
-    // --- 前置校验：源图像（E-8 之外的输入合法性）。---
-    if (image.empty()) {
+    // --- 前置校验：尺寸合法性（非正视为空输入）。---
+    if (source.width <= 0 || source.height <= 0) {
         result.error = "源图像为空，无法切割";
         return result;
-    }
-
-    // --- FR-1：切割前先应用预处理流水线（旋转/翻转/灰度/反色/色道分离），其产出图像
-    //     才是切割引擎的真正输入（SPEC §3.1）。无步骤时直接复用原图，避免对大图做
-    //     多余深拷贝（NFR-8）。---
-    const bool hasPreprocess = !config.preprocess.steps().empty();
-    const core::Image preprocessed =
-        hasPreprocess ? config.preprocess.apply(image) : core::Image{};
-    const core::Image& work = hasPreprocess ? preprocessed : image;
-    if (work.empty()) {
-        result.error = "预处理后图像为空，无法切割";
-        return result;
-    }
-
-    // 切割输入尺寸：预处理可能改变尺寸（如旋转 90° 宽高互换），此时必须以产出图像为准；
-    // 无预处理时沿用 config.source，未显式给出（<=0）则回退到图像实际尺寸。
-    SourceInfo source = config.source;
-    if (hasPreprocess) {
-        source.width = work.width();
-        source.height = work.height();
-    } else {
-        if (source.width <= 0) source.width = work.width();
-        if (source.height <= 0) source.height = work.height();
     }
 
     // --- E-1：选框/矩形退化校验（贯穿全图的切割线需有效区间）。---
@@ -154,8 +133,8 @@ EngineResult runEngine(const core::Image& image, const EngineConfig& config) {
         return result;
     }
 
-    // --- split + ④ 极性 → 保留集 R（对预处理后的图像 work 切分）。---
-    const RegionSet all = split(work, grid);
+    // --- split + ④ 极性 → 保留集 R（对给定裁剪尺寸切分，不读像素）。---
+    const RegionSet all = splitSize(clipW, clipH, grid);
     const RegionSet kept = applyPolarity(all, selection);
 
     // --- E-7 / E-6：保留区为空（删除区覆盖全图或选择集为空）。---
@@ -200,6 +179,47 @@ EngineResult runEngine(const core::Image& image, const EngineConfig& config) {
     result.kept = kept;
     result.ok = true;
     return result;
+}
+
+// 图像入口：先按 config.preprocess 物化（FR-1），再以产出尺寸跑几何流水线。
+EngineResult runEngine(const core::Image& image, const EngineConfig& config) {
+    // --- 前置校验：源图像。---
+    if (image.empty()) {
+        EngineResult r;
+        r.error = "源图像为空，无法切割";
+        return r;
+    }
+
+    // --- FR-1：切割前先应用预处理流水线（旋转/翻转/灰度/反色/色道分离/尺寸），其产出图像
+    //     才是切割引擎的真正输入（SPEC §3.1）。无步骤时直接复用原图，避免对大图做多余深拷贝。---
+    const bool hasPreprocess = !config.preprocess.steps().empty();
+    const core::Image preprocessed =
+        hasPreprocess ? config.preprocess.apply(image) : core::Image{};
+    const core::Image& work = hasPreprocess ? preprocessed : image;
+    if (work.empty()) {
+        EngineResult r;
+        r.error = "预处理后图像为空，无法切割";
+        return r;
+    }
+
+    // 切割输入尺寸：预处理可能改变尺寸（旋转 90° 宽高互换、resize 设绝对值）时以产出图像为准；
+    // 无预处理时沿用 config.source，未显式给出（<=0）则回退到图像实际尺寸。
+    SourceInfo source = config.source;
+    if (hasPreprocess) {
+        source.width = work.width();
+        source.height = work.height();
+    } else {
+        if (source.width <= 0) source.width = work.width();
+        if (source.height <= 0) source.height = work.height();
+    }
+
+    // split 裁剪恒以实际工作图像素尺寸为准（与历史实现 split(work, grid) 完全一致）。
+    return runEngineImpl(source, work.width(), work.height(), config);
+}
+
+// 仅尺寸入口（预览专用）：给定输出尺寸直接跑几何流水线，忽略 config.preprocess（无图像可作用）。
+EngineResult runEngineGeometry(const SourceInfo& dims, const EngineConfig& config) {
+    return runEngineImpl(dims, dims.width, dims.height, config);
 }
 
 } // namespace idc::engine

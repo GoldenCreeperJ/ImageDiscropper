@@ -32,6 +32,11 @@ struct Annotation {
     int strokeWidth{2};                       // 线宽
     bool fillType{false};                     // 是否填充
     geometry::ShapeType shapeType{geometry::ShapeType::LINE}; // 形状类型
+    // 叠放次序（z 序）属性：0＝最底、越大越靠上。**恒等于其在标注列表（history_.undoStack）中的下标**
+    // ——列表下标仍是内存中命中/绘制/选中的唯一真相源（见 hitTest/burnIn），此字段为其显式副本，
+    // 随 SPEC §7 config 的 annotations 段逐条导入/导出，使叠放次序成为可持久化、可手改的一等属性。
+    // 任何增删移/恢复都会重新规范化（zOrder ＝ 下标），二者永不背离。
+    int zOrder{0};                            // 叠放次序（恒等于列表下标，0＝最底、大＝顶）
 
     // 拷贝构造：深拷贝 shape。
     Annotation(const Annotation& o);
@@ -123,9 +128,23 @@ public:
     // 同步修正选中下标：指向被删项则取消选中，位于被删项之后则前移一位。
     void removeAnnotation(std::size_t index);
 
+    // 将下标 from 的标注移动到 to（层序 / 叠放次序调整：列表下标即 z 序，大＝顶、见 hitTest/burnIn）。
+    // 越界或 from==to 则忽略；移动区间内的其他项依次平移、相对顺序不变。属一次新操作（清空重做栈）；
+    // 同步修正选中下标使其跟随被移动项。
+    void moveAnnotation(std::size_t from, std::size_t to);
+
+    // 整体替换当前标注列表（配置还原专用，SPEC §7 annotations 段）：清空历史（含重做栈）
+    // 后按给定顺序逐条收编——不走 addAnnotation（其样式固定取 currentXXX 默认值，无法
+    // 逐项恢复颜色/线宽/填充），也不推撤销快照（加载属新会话基准态，不应可撤销到加载前）。
+    // 底图 image_ 不受影响；调用后取消选中。
+    void restoreAnnotations(std::vector<Annotation> items);
+
     // ------ 合成 ------
     // 将当前底图与所有形状合成为一张 RGBA 图像并返回，不修改内部状态。
     core::Image burnIn() const;
+    // 以传入底图为烧录基准合成所有标注（不读也不改内部 image_）：供底图与层内 image_
+    // 可能不一致的场景（如 CLI 把配置标注烧进预处理产出的工作图），标注坐标按本层绘制时的基准系解释。
+    core::Image burnIn(const core::Image& base) const;
 
 private:
     core::Image image_;                              // 当前底图

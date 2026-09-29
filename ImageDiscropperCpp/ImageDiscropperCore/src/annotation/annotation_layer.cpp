@@ -26,7 +26,8 @@ Annotation::Annotation(const Annotation& o)
       fillColor(o.fillColor),
       strokeWidth(o.strokeWidth),
       fillType(o.fillType),
-      shapeType(o.shapeType) {}
+      shapeType(o.shapeType),
+      zOrder(o.zOrder) {}
 
 // 拷贝赋值：先释放旧 shape，再深拷贝。
 Annotation& Annotation::operator=(const Annotation& o) {
@@ -37,6 +38,7 @@ Annotation& Annotation::operator=(const Annotation& o) {
         strokeWidth = o.strokeWidth;
         fillType = o.fillType;
         shapeType = o.shapeType;
+        zOrder = o.zOrder;
     }
     return *this;
 }
@@ -65,6 +67,14 @@ const char* editTypeName(const EditType t) {
 // ===========================================================================
 // AnnotationLayer
 // ===========================================================================
+
+namespace {
+// 规范化叠放次序：把每条标注的 zOrder 重写为其在列表中的下标（0＝最底、大＝顶），
+// 维持「zOrder 恒等于下标」不变式——供任何改变列表顺序/长度的操作后统一收尾。
+void canonicalizeZOrder(std::vector<Annotation>& anns) {
+    for (std::size_t i = 0; i < anns.size(); ++i) anns[i].zOrder = static_cast<int>(i);
+}
+} // namespace
 
 // 构造：默认底图为空、模式为 DRAW、当前工具为 LINE、颜色黑、线宽 2、不填充。
 AnnotationLayer::AnnotationLayer() = default;
@@ -154,6 +164,7 @@ void AnnotationLayer::addAnnotation(std::unique_ptr<geometry::Shape> shape) {
     ps.strokeWidth = currentStrokeWidth_;
     ps.fillType = currentFill_;
     ps.shape = std::move(shape);
+    ps.zOrder = static_cast<int>(history_.undoStack().size());   // 新标注置于顶层：zOrder ＝ 追加后的下标
     history_.push(std::move(ps));   // push 内部清空重做栈
 }
 
@@ -225,19 +236,58 @@ void AnnotationLayer::removeAnnotation(const std::size_t index) {
     if (index >= anns.size()) return;
     anns.erase(anns.begin() + static_cast<std::ptrdiff_t>(index));
     history_.clearRedo();   // 新操作切断“未来”（与 push 语义一致）
+    canonicalizeZOrder(anns);   // 被删项之后的标注下标前移 → 同步重写 zOrder
     if (selectedIndex_) {
         if (*selectedIndex_ == index) selectedIndex_.reset();
         else if (*selectedIndex_ > index) --*selectedIndex_;
     }
 }
 
+// 层序调整：把 from 处标注就地移到 to（下标即 z 序，大＝顶）。区间内其余项沿移动方向平移一格、
+// 相对顺序不变。不增删标注、但属用户新操作→清空重做栈；选中下标跟随被移动项。
+void AnnotationLayer::moveAnnotation(const std::size_t from, const std::size_t to) {
+    std::vector<Annotation>& anns = history_.undoStack();
+    if (from >= anns.size() || to >= anns.size() || from == to) return;
+    Annotation item = std::move(anns[from]);
+    if (from < to) {
+        for (std::size_t i = from; i < to; ++i) anns[i] = std::move(anns[i + 1]);
+    } else {
+        for (std::size_t i = from; i > to; --i) anns[i] = std::move(anns[i - 1]);
+    }
+    anns[to] = std::move(item);
+    history_.clearRedo();
+    canonicalizeZOrder(anns);   // 重排后逐条重写 zOrder ＝ 新下标
+    if (selectedIndex_) {
+        if (*selectedIndex_ == from) selectedIndex_ = to;
+        else if (from < to && *selectedIndex_ > from && *selectedIndex_ <= to) --*selectedIndex_;
+        else if (to < from && *selectedIndex_ >= to && *selectedIndex_ < from) ++*selectedIndex_;
+    }
+}
+
+// 整体替换标注列表：先清主栈与重做栈，再按给定顺序收编（逐条 move，不推撤销快照）。
+// 供配置加载（SPEC §7 annotations 段）还原带样式标注；加载后取消选中（旧下标已无意义）。
+void AnnotationLayer::restoreAnnotations(std::vector<Annotation> items) {
+    history_.clearAll();
+    selectedIndex_.reset();
+    // 按调用方给定的顺序逐条收编（不在此排序：多来源合并时 zOrder 可能重叠，顺序由调用方负责，
+    // 如配置文件载入前已按 zOrder 稳定排序）。每条 push 后其下标即层位，末尾统一规范化 zOrder ＝ 下标。
+    for (Annotation& a : items) {
+        if (!a.shape) continue;   // 跳过无几何的残缺条目（与 addAnnotation 的空指针守卫一致）。
+        a.zOrder = static_cast<int>(history_.undoStack().size());
+        history_.push(std::move(a));
+    }
+}
+
 // ------ 合成 ------
 
 // 合成：以当前底图为基础，逐个光栅化所有形状，返回新图像。
-core::Image AnnotationLayer::burnIn() const {
-    core::Image out = image_.empty()
+core::Image AnnotationLayer::burnIn() const { return burnIn(image_); }
+
+// 合成（指定底图）：不读不改内部 image_，底图为空时退化为 1×1 透明图（与原 burnIn 行为一致）。
+core::Image AnnotationLayer::burnIn(const core::Image& base) const {
+    core::Image out = base.empty()
         ? core::Image(1, 1, core::ImageFormat::RGBA)
-        : image_.toRGBA();
+        : base.toRGBA();
 
     for (const Annotation& ps : history_.undoStack()) {
         if (!ps.shape) continue;

@@ -256,5 +256,30 @@ void testEnginePipeline() {
         CHECK(custom.size() == 4 && custom.order().front() == 3);
     }
 
+    // ---- 仅尺寸入口等价性：几何入口 == 先物化再走图像入口（预览脱离像素的正确性）。----
+    {
+        const Image img = makeImage(120, 80);
+        EngineConfig cfg;
+        cfg.source = SourceInfo{120, 80};
+        cfg.cut.tier = Tier::L2;
+        cfg.cut.generator = CutGenerator::RECT;
+        cfg.cut.rect = RectRegion(30, 20, 90, 60);
+        cfg.cut.polarity = Polarity::REMOVE;
+        cfg.emitParams.mode = EmitMode::MERGED;
+        cfg.emitParams.layout = MergeLayout::COLLAPSE;
+        // 预览侧：先用流水线把尺寸推演出来（rotate90 交换 → 80×120），再以该尺寸走仅尺寸入口。
+        cfg.preprocess.add(idc::preprocess::RotateOp{90});
+        const auto g = cfg.preprocess.geometryOutput(img.width(), img.height());
+        EngineConfig runCfg = cfg;
+        runCfg.preprocess.clear();                 // 仅尺寸入口不吃管线；尺寸已含旋转效果。
+        runCfg.source = SourceInfo{g.width, g.height};
+        const EngineResult rImg = runEngine(img, cfg);
+        const EngineResult rGeo = runEngineGeometry(SourceInfo{g.width, g.height}, runCfg);
+        CHECK(rImg.ok && rGeo.ok);
+        CHECK(rGeo.kept.size() == rImg.kept.size());
+        CHECK(rGeo.composition.canvasWidth == rImg.composition.canvasWidth &&
+              rGeo.composition.canvasHeight == rImg.composition.canvasHeight);
+    }
+
     std::cout << "[engine-pipeline] OK\n";
 }

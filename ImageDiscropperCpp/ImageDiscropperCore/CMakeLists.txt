@@ -24,7 +24,7 @@ endif()
 # 第三方依赖（均由 vcpkg 提供，且全部以 PRIVATE 方式接入——不经公共头暴露给下游）：
 #   · stb           header-only 图像编码库，仅 image_io.cpp 内含 <stb_image_write.h> 并定义实现宏。
 #   · libwebp       WebP 编码库，仅 image_io.cpp 内含 <webp/encode.h>/<webp/decode.h>（补齐 stb 不支持的 WebP）。
-#   · nlohmann_json 单头 JSON 库，仅 engine_config_json.cpp 内含 <nlohmann/json.hpp>（配置文件存取）。
+#   · nlohmann_json 单头 JSON 库，仅 engine_config_json.cpp 与 annotation/annotation_json.cpp 内含 <nlohmann/json.hpp>（配置整档 / 标注段 JSON，二者经私有内部头 src/json_common.h 共用助手与片段交换）。
 # 三者均只在各自 .cpp 内部使用，公共头不出现其类型，故对下游零依赖扩散（依赖单向）。
 # ---------------------------------------------------------------------------
 find_package(Stb REQUIRED)
@@ -53,11 +53,12 @@ set(IDC_PIXEL_OPS_SRC
         src/pixel_ops/geometric_ops.cpp
 )
 
-# annotation：标注层（FR-1.3）
+# annotation：标注层（FR-1.3）+ 标注 ↔ JSON 序列化（SPEC §7 annotations 段，自 engine 内聚收口至此）
 set(IDC_ANNOTATION_SRC
         src/annotation/shape_factory.cpp
         src/annotation/rasterizer.cpp
         src/annotation/annotation_layer.cpp
+        src/annotation/annotation_json.cpp
         src/annotation/view_transform.cpp
 )
 
@@ -126,6 +127,7 @@ if(IDC_BUILD_TESTS)
             tests/test_engine_pipeline.cpp
             tests/test_engine_export.cpp
             tests/test_engine_boundary.cpp
+            tests/test_engine_config_json.cpp
     )
     target_link_libraries(unit_tests PRIVATE image_discropper_core)
 

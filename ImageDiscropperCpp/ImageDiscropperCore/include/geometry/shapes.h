@@ -127,6 +127,17 @@ public:
     double obbScaleY() const { return obbScaleY_; }
     double obbRotationDeg() const { return obbRotationDeg_; }
 
+    // 配置还原专用：整体恢复此前序列化出的变换状态（矩阵 + 累积 OBB 参数）。
+    // 为什么不用 applyObbTransform 重放：变换途中若发生过 translateWorld（平移只改几何、不动矩阵），
+    // 单一 (sx,sy,deg) 无法复现原复合矩阵的平移分量；故保存时连同矩阵一起存、加载时一次性写回，
+    // 四个成员同进同出、不破坏「obb 参数与矩阵同步」不变式（仅供 engine_config_json 加载路径调用）。
+    void restoreTransformState(const AffineTransform& matrix, const double sx, const double sy, const double deg) {
+        xform_ = matrix;
+        obbScaleX_ = sx;
+        obbScaleY_ = sy;
+        obbRotationDeg_ = deg;
+    }
+
 protected:
     // 复制非破坏性变换状态（矩阵 + 累积 OBB 参数）到另一形状，供各 clone() 调用，
     // 避免深拷贝（含 GUI 持有的 Annotation 副本、撤销重做快照）丢失变换或面板回显基准。
@@ -249,6 +260,9 @@ public:
 
     const std::string& text() const { return text_; }
     double fontSize() const { return fontSize_; }
+    // 左上锚点坐标（与构造入参一致）：供配置序列化（SPEC §7 annotations 段）读取文字位置。
+    double x() const { return x_; }
+    double y() const { return y_; }
 
 private:
     std::string text_;

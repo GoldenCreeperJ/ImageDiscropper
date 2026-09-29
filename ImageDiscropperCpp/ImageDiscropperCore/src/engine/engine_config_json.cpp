@@ -5,24 +5,40 @@
 //       子对象、预处理步骤数组）；JSON 语法委托第三方库 nlohmann/json，本文件不手写解析器。
 //       转换函数（engineConfigToJson / engineConfigFromJson）为文件内私有实现，仅由
 //       saveEngineConfig / loadEngineConfig 调用，故 nlohmann/json 依赖不泄漏到公共头（PRIVATE）。
+//       annotations 段（标注列表）的 JSON 实现归属 annotation 模块：本文件组装 / 解析整档时对
+//       src/json_common.h 声明的 annotation::annotationsSegmentToJson / annotationsFromSegmentJson
+//       发起跨模块调用（公共 save/load 签名仍以可选 AnnotationLayer* 传递，向后兼容不变）。
 // 说明：读取一律宽容（缺字段/类型不符取默认值，绝不抛异常给调用方），写出严格对齐 SPEC §7
 //       示例的键名与嵌套结构；nlohmann::json 以 std::map 存对象，序列化按键升序输出。
 // ============================================================================
 #include "engine/engine_config_json.h"
 
 #include "preprocess/preprocess_config.h"
+#include "annotation/annotation_layer.h"
+
+#include "../json_common.h" // idc::jsonutil 助手 + 标注段交换函数声明（实现在 annotation 模块）
 
 #include <nlohmann/json.hpp>
 
-#include <cstdio>
+#include <algorithm>
 #include <fstream>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace idc::engine {
 namespace {
 
 using json = nlohmann::json;
+
+// 与 annotation 共用的宽容读取 / 颜色助手（单一真相源见 src/json_common.h）。
+using jsonutil::at;
+using jsonutil::colorFromHex;
+using jsonutil::colorToHex;
+using jsonutil::jBool;
+using jsonutil::jDouble;
+using jsonutil::jInt;
+using jsonutil::jStr;
 
 // ---------------------------------------------------------------------------
 // 枚举 ↔ 短横线小写串（SPEC §7：如 "row-major" / "multi-rect"）。
@@ -121,74 +137,6 @@ RemainderPolicy remainderFromName(const std::string& s) {
 }
 
 // ---------------------------------------------------------------------------
-// 颜色 ↔ "#AARRGGBB"（SPEC §7 示例 "#00000000" 即全透明）。
-// ---------------------------------------------------------------------------
-std::string colorToHex(const core::Color& c) {
-    char buf[16];
-    std::snprintf(buf, sizeof(buf), "#%02X%02X%02X%02X", c.a, c.r, c.g, c.b);
-    return std::string(buf);
-}
-
-// 解析两位十六进制；越界或非法返回 fallback。
-int hex2(const std::string& s, const std::size_t pos, const int fallback) {
-    if (pos + 2 > s.size()) return fallback;
-    int v = 0;
-    for (int i = 0; i < 2; ++i) {
-        const char c = s[pos + static_cast<std::size_t>(i)];
-        v <<= 4;
-        if (c >= '0' && c <= '9') v |= c - '0';
-        else if (c >= 'a' && c <= 'f') v |= c - 'a' + 10;
-        else if (c >= 'A' && c <= 'F') v |= c - 'A' + 10;
-        else return fallback;
-    }
-    return v;
-}
-
-core::Color colorFromHex(const std::string& str) {
-    std::string h = str;
-    if (!h.empty() && h[0] == '#') h.erase(0, 1);
-    if (h.size() >= 8) { // AARRGGBB
-        return core::Color(static_cast<std::uint8_t>(hex2(h, 2, 0)),
-                           static_cast<std::uint8_t>(hex2(h, 4, 0)),
-                           static_cast<std::uint8_t>(hex2(h, 6, 0)),
-                           static_cast<std::uint8_t>(hex2(h, 0, 255)));
-    }
-    if (h.size() >= 6) { // RRGGBB（不透明）
-        return core::Color(static_cast<std::uint8_t>(hex2(h, 0, 0)),
-                           static_cast<std::uint8_t>(hex2(h, 2, 0)),
-                           static_cast<std::uint8_t>(hex2(h, 4, 0)),
-                           255);
-    }
-    return core::kTransparent;
-}
-
-// ---------------------------------------------------------------------------
-// 宽容读取助手：nlohmann 的 const operator[] 对缺失键会断言，故统一经 at() 取子元素，
-//       再按类型安全取值；缺失或类型不符时返回给定默认值（与原手写实现的语义一致）。
-// ---------------------------------------------------------------------------
-// 安全取对象子元素：obj 非对象或键缺失时返回静态 null 单例（避免断言/悬垂）。
-const json& at(const json& obj, const char* key) {
-    static const json kNull = nullptr;
-    if (!obj.is_object()) return kNull;
-    const auto it = obj.find(key);
-    return it == obj.end() ? kNull : *it;
-}
-
-int jInt(const json& v, const int def) {
-    if (v.is_number_integer()) return v.get<int>();                    // 整数直接取。
-    if (v.is_number_float()) return static_cast<int>(v.get<double>()); // 浮点截断。
-    return def;                                                        // 其余（含 null/缺失）取默认。
-}
-
-std::string jStr(const json& v, const char* def) {
-    return v.is_string() ? v.get<std::string>() : std::string(def);
-}
-
-bool jBool(const json& v, const bool def) {
-    return v.is_boolean() ? v.get<bool>() : def;
-}
-
-// ---------------------------------------------------------------------------
 // 矩形 / 网格 / optional<int> 子对象映射。
 // ---------------------------------------------------------------------------
 json rectToJson(const RectRegion& r) {
@@ -242,6 +190,8 @@ json preprocessToJson(const preprocess::PreprocessConfig& cfg) {
             o["op"] = "rotate"; o["deg"] = std::get<RotateOp>(cfg).angle; break;
         case PreprocessType::FLIP:
             o["op"] = "flip"; o["axis"] = std::get<FlipOp>(cfg).horizontal ? "horizontal" : "vertical"; break;
+        case PreprocessType::RESIZE:
+            o["op"] = "resize"; o["width"] = std::get<ResizeOp>(cfg).width; o["height"] = std::get<ResizeOp>(cfg).height; break;
     }
     return o;
 }
@@ -254,14 +204,15 @@ bool preprocessFromJson(const json& v, preprocess::PreprocessConfig& out) {
     if (op == "invert") { InvertOp s; s.mask = jStr(at(v, "mask"), "111"); out = s; return true; }
     if (op == "rotate") { RotateOp s; s.angle = jInt(at(v, "deg"), 0); out = s; return true; }
     if (op == "flip") { FlipOp s; s.horizontal = jStr(at(v, "axis"), "horizontal") == "horizontal"; out = s; return true; }
+    if (op == "resize") { ResizeOp s; s.width = jInt(at(v, "width"), 0); s.height = jInt(at(v, "height"), 0); out = s; return true; }
     return false;
 }
 
 // ---------------------------------------------------------------------------
 // EngineConfig ↔ SPEC §7 schema JSON（文件内私有；仅由下方 save/load 调用）。
 // ---------------------------------------------------------------------------
-// 把 EngineConfig 序列化为 SPEC §7 schema 的 JSON 值。
-json engineConfigToJson(const EngineConfig& config) {
+// 把 EngineConfig 序列化为 SPEC §7 schema 的 JSON 值；annoLayer 非空且含标注时额外写 annotations 段。
+json engineConfigToJson(const EngineConfig& config, const annotation::AnnotationLayer* annoLayer) {
     json root;
 
     // source：原图尺寸。
@@ -323,11 +274,18 @@ json engineConfigToJson(const EngineConfig& config) {
     emit["keepMetadata"] = config.emitParams.keepMetadata;
     root["emit"] = emit;
 
+    // annotations：标注列表（可选段）——层为空或无标注时省略，保持旧文件观感不变。
+    // 段内逐条序列化实现归属 annotation 模块（经 json_common.h 交换 JSON 片段）。
+    if (annoLayer != nullptr && !annoLayer->annotations().empty())
+        root["annotations"] = annotation::annotationsSegmentToJson(*annoLayer);
+
     return root;
 }
 
 // 从 JSON 值还原 EngineConfig；根非对象返回 false，字段缺失/类型不符取默认值。
-bool engineConfigFromJson(const json& value, EngineConfig& out) {
+// annoLayer 非空时同步还原标注（含缺段→清空：配置文件为标注真相源）；annoErr 非空时逐条回传非法标注原因。
+bool engineConfigFromJson(const json& value, EngineConfig& out, annotation::AnnotationLayer* annoLayer,
+                          std::string* annoErr) {
     if (!value.is_object()) return false;
     out = EngineConfig{}; // 先复位为默认，再逐字段覆盖。
 
@@ -403,15 +361,24 @@ bool engineConfigFromJson(const json& value, EngineConfig& out) {
     out.emitParams.mergeOrder.reverse = jBool(at(arrange, "reverse"), false);
     out.emitParams.mergeOrder.snake = jBool(at(arrange, "snake"), false);
 
+    // annotations：传入层指针才处理（段缺失/非数组 → 清空，与“配置为真相源”语义一致）。
+    // 逐条严格校验、任一非法即整档载入失败（不静默丢弃）——重建逻辑归属 annotation 模块
+    // （经 json_common.h 交换 JSON 片段，annoErr 回传逐条原因）。
+    if (annoLayer != nullptr) {
+        if (!annotation::annotationsFromSegmentJson(at(value, "annotations"), *annoLayer, annoErr))
+            return false;
+    }
+
     return true;
 }
 
 } // namespace
 
-// 保存配置到文件（缩进美化）；path 为空或写盘失败（E-8）返回 false。
-bool saveEngineConfig(const std::string& path, const EngineConfig& config) {
+// 保存配置到文件（缩进美化）；path 为空或写盘失败（E-8）返回 false。annotations 非空时附带 SPEC §7 标注段。
+bool saveEngineConfig(const std::string& path, const EngineConfig& config,
+                      const annotation::AnnotationLayer* annotations) {
     if (path.empty()) return false;
-    const std::string text = engineConfigToJson(config).dump(2); // 缩进 2 空格美化。
+    const std::string text = engineConfigToJson(config, annotations).dump(2); // 缩进 2 空格美化。
     std::ofstream ofs(path, std::ios::trunc);
     if (!ofs) return false; // E-8：无法创建/写入（目录不存在或被占用）。
     ofs << text;
@@ -419,14 +386,16 @@ bool saveEngineConfig(const std::string& path, const EngineConfig& config) {
     return !ofs.fail();
 }
 
-// 从文件加载配置；path 为空、读盘失败或 JSON 解析失败返回 false。
-bool loadEngineConfig(const std::string& path, EngineConfig& out) {
+// 从文件加载配置；path 为空、读盘失败或 JSON 解析失败返回 false。annotations 非空时同步还原标注（严格校验）。
+// annoErr 非空时，若因标注段非法而失败，回传逐条原因（供 CLI 报因；GUI 可传 nullptr）。
+bool loadEngineConfig(const std::string& path, EngineConfig& out,
+                      annotation::AnnotationLayer* annotations, std::string* annoErr) {
     if (path.empty()) return false;
     std::ifstream ifs(path, std::ios::binary);
     if (!ifs) return false; // E-8：文件不存在或不可读。
     try {
         const json value = json::parse(ifs); // 直接从流解析；语法错误抛 parse_error。
-        return engineConfigFromJson(value, out);
+        return engineConfigFromJson(value, out, annotations, annoErr);
     } catch (const json::exception&) {
         return false; // JSON 语法错误（对齐原“解析失败返回 false”契约）。
     }

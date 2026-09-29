@@ -18,7 +18,7 @@ core::Image toGray(const core::Image& src);
 
 // 按通道反色：mask 为长度为 3 的字符串（形如 "101"），
 // '1' 表示对应通道 R/G/B 取 255 - v，'0' 表示保持不变（alpha 始终不变）。
-// 灰度图只有单一亮度通道，对每个像素取 255 - v（忽略 mask）。返回新对象。
+// 灰度图只有单一亮度通道，逐通道选择不适用：mask 全 '0'（"000"）与彩色路径一致视为空操作返回副本，否则对每字节取 255 - v。返回新对象。
 core::Image invertChannels(const core::Image& src, const std::string& mask = "111");
 
 // 按通道分离：mask 中 '1' 表示保留对应通道，'0' 表示置 0。

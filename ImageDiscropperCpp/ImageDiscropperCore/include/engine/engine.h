@@ -129,4 +129,9 @@ struct EngineResult {
 // 落盘由 exportImage 单独完成，以分离“计算”与“I/O”（SPEC §1）。
 EngineResult runEngine(const core::Image& image, const EngineConfig& config);
 
+// 仅尺寸入口（预览专用）：直接以给定输出尺寸跑几何流水线（切割线→网格→选择→split→合成）。
+// 不接收图像、不应用 config.preprocess（调用方须传“已预处理尺寸”）。产物与
+// runEngine(config.preprocess.apply(原图), 空管线cfg) 一致，供 GUI 实时预览脱离全分辨率像素。
+EngineResult runEngineGeometry(const SourceInfo& dims, const EngineConfig& config);
+
 } // namespace idc::engine
