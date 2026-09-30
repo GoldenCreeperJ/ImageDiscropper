@@ -2,7 +2,9 @@
 // 文件：src/preprocess/preprocess_pipeline.cpp
 // 作用：实现 PreprocessPipeline 的步骤管理与执行逻辑。
 //       applyOne 是核心分派函数：按 PreprocessConfig 的实际类型调用
-//       pixel_ops 模块中的对应算法，返回新图像。
+//       pixel_kernels 私有核（旋转/翻转/反色/分离）与 core::Image 成员（灰度/缩放），返回新图像。
+//       applyExec 另走执行层融合：先把队列压成 ExecStep 计划（resize 为块界，块内 ≤4 步），
+//       再交融合核 channelMap / remapD4 单趟执行；applyOne 逐步语义保留作等价参照 oracle。
 // ============================================================================
 #include "preprocess/preprocess_pipeline.h"
 
@@ -10,61 +12,19 @@
 #include <type_traits>
 #include <variant>
 
-#include "pixel_ops/color_ops.h"
-#include "pixel_ops/geometric_ops.h"
+#include "pixel_kernels.h"
 
 namespace idc::preprocess {
 namespace {
 
-// 归一旋转角到象限 0..3（90° 步长），与 pixel_ops::normalizeAngle 同口径。
+// 归一旋转角到象限 0..3（90° 步长），与 pixel_kernels.cpp 的 normalizeAngle 同口径。
 int rotateQuad(const int angle) {
     int a = angle % 360;
     if (a < 0) a += 360;
     return a / 90 % 4;
 }
 
-// 把一段几何 op（RotateOp/FlipOp，按施加先后排列）折叠为规范的 ≤2 个 op。
-// 累积 D4 元素表示为 g = Fh(f) ∘ Rot(r)（先施 Rot(r)，f 为真再施水平镜像）。
-// 新 op 施加于当前结果「之后」（左乘），据共轭关系 Fh∘Rot(θ)=Rot(-θ)∘Fh 推得增量规则：
-//   Rotate(k) : f==0 → r+=k ；f==1 → r-=k（跨过镜像时旋转取反）
-//   FlipH     : f^=1
-//   FlipV     : r+=2; f^=1（因 FlipV = R180 ∘ FlipH）
-// 分解（尽量少趟）：恒等→无；纯旋转→1 个 RotateOp；镜像且 r∈{0,2}→单个 FlipOp(H/V)；
-// 镜像且 r∈{1,3}（对角镜像）→先 RotateOp 后 FlipOp(H)。
-std::vector<PreprocessConfig> foldGeometryRun(const std::vector<PreprocessConfig>& run) {
-    int r = 0;
-    int f = 0;
-    for (const auto& cfg : run) {
-        if (const auto* rot = std::get_if<RotateOp>(&cfg)) {
-            const int k = rotateQuad(rot->angle);
-            r = f == 0 ? r + k : r - k;
-        } else if (const auto* fl = std::get_if<FlipOp>(&cfg)) {
-            if (fl->horizontal) {
-                f ^= 1;
-            } else {
-                r += 2;
-                f ^= 1;
-            }
-        }
-    }
-    r = (r % 4 + 4) % 4;
-    std::vector<PreprocessConfig> out;
-    if (f == 0) {
-        if (r != 0) out.emplace_back(RotateOp{r * 90});
-    } else {
-        if (r == 0) {
-            out.emplace_back(FlipOp{true});    // 水平镜像
-        } else if (r == 2) {
-            out.emplace_back(FlipOp{false});   // 垂直镜像（Fh ∘ R180 = FlipV）
-        } else {
-            out.emplace_back(RotateOp{r * 90}); // 对角镜像：先旋转后水平翻折
-            out.emplace_back(FlipOp{true});
-        }
-    }
-    return out;
-}
-
-// 掩码规范化：与 pixel_ops 完全同口径——长度非 3 视为 "111"（保证折叠后与 applyOne 逐像素一致）。
+// 掩码规范化：与 pixel_kernels 色彩核完全同口径——长度非 3 视为 "111"（保证融合执行与 applyOne 逐像素一致）。
 std::string normMask3(const std::string& m) { return m.size() == 3 ? m : std::string("111"); }
 
 // 逐通道掩码复合：pre-gray 段将任意 Split/Invert 序列折成单映射 f(v)=(v&K)^J。
@@ -72,45 +32,114 @@ std::string normMask3(const std::string& m) { return m.size() == 3 ? m : std::st
 char maskAnd(const char a, const char b) { return a == '1' && b == '1' ? '1' : '0'; }
 char maskXor(const char a, const char b) { return a != b ? '1' : '0'; }
 
-// 把一段**连续**色彩步折叠为规范形（逐像素等价）：
-//   · 首个 GrayOp 之前（多通道）：全部 Split/Invert 复合为至多 SplitOp{K}+InvertOp{J}（恒等分量省略）；
-//   · 只保留第一个 GrayOp（gray∘gray=clone，后续灰度为幂等空操作）；
-//   · GrayOp 之后（单亮度通道）：SplitOp 为死步丢弃，InvertOp 按奇偶折叠（两次抵消），末尾至多补 1 个 InvertOp{"111"}。
-// enteringGray：本段进入时图像是否已为灰度（由前面某段曾出现 GrayOp 决定）。灰度态在整个流水线内单调不回退
-//   （几何 / resize 均保持灰度），故需由调用方传入；进入灰度后本段内不再有多通道路径。
-// 前提：进入流水线的图像为多通道（载入器强解 RGBA），故 !enteringGray 的 pre-gray 位映射合并对真实输入成立。
-std::vector<PreprocessConfig> foldColorRun(const std::vector<PreprocessConfig>& run, const bool enteringGray) {
-    std::vector<PreprocessConfig> out;
-    std::string k = "111";
-    std::string j = "000";
-    bool afterGray = enteringGray;   // 灰度态单调不回退；一旦进入即为单通道语义
-    int invertParity = 0;
-    const auto flushPre = [&] {
-        if (k != "111") out.emplace_back(SplitOp{k});
-        if (j != "000") out.emplace_back(InvertOp{j});
+// ---------------------------------------------------------------------------
+// execPlan：执行层融合计划（内部类型，**绝不进 PreprocessConfig / §7 schema / 序列化 / GUI 词表**）。
+// 块（以 ResizeOp 为界）内任意队列至多 4 步即可承载：
+//   ExecChannelMap —— pre-gray 多通道位映射 f(v)=(v&K)^J（channelMap 融合核，折掉任意 Split/Invert 序列）；
+//   ExecGray       —— 灰度化（幂等，块内至多一次）；
+//   ExecGrayInvert —— 灰度态整幅取反（字节 XOR，奇偶累积；GRAY 输入时跨块持续）；
+//   ExecD4         —— 整块几何步单趟重排（remapD4 融合核，折掉任意 Rotate/Flip 序列，含跨 gray 合并）；
+//   ResizeOp       —— 块界，原样透传（复用 applyOne 单步语义，含非正尺寸空操作）。
+// 可交换性依据：逐像素位映射 / 灰度字节计算与 D4 精确置换互为可交换，故同块内色彩与几何可各自独立融合
+//   （几何无损前提：copyPixel 的 GRAY 单字节直拷）；resize 双线性取整与两者均不可交换 → 唯一块界。
+// 输出步序：同块内按 map → gray → 灰度反色 → D4 规范序发射（可交换故与声明序逐像素等价）。
+struct ExecChannelMap { std::string k, j; };
+struct ExecGray {};
+struct ExecGrayInvert {};
+struct ExecD4 { int quad; bool flipH; };
+using ExecStep = std::variant<ExecChannelMap, ExecGray, ExecGrayInvert, ExecD4, ResizeOp>;
+
+// 由声明队列构建融合计划。inputIsGray 决定初始通道态（载入器强解 RGBA 时恒为 false；
+// 直接喂 GRAY 图时 Split 全部变死步、Invert 按整幅奇偶——与 applyOne 逐步语义逐像素对齐）。
+// 几何累加用 D4 共轭律（Fh∘Rot(θ)=Rot(-θ)∘Fh）；掩码累加经 normMask3/maskAnd/maskXor 逐通道复合。
+std::vector<ExecStep> buildExecPlan(const std::vector<PreprocessConfig>& steps, const bool inputIsGray) {
+    std::vector<ExecStep> plan;
+    int r = 0, f = 0;                    // D4 累加器：g = Fh(f) ∘ Rot(r)
+    std::string k = "111", j = "000";    // pre-gray 位映射累加器
+    bool gray = inputIsGray;             // 灰度态单调不回退（几何 / resize 均保持灰度）
+    int parity = 0;                      // 灰度整幅取反奇偶
+    const auto flushMap = [&] {
+        if (!gray && (k != "111" || j != "000")) plan.emplace_back(ExecChannelMap{k, j});
+        k = "111";
+        j = "000";
     };
-    for (const auto& cfg : run) {
-        if (std::holds_alternative<GrayOp>(cfg)) {
-            if (!afterGray) { flushPre(); out.emplace_back(GrayOp{}); afterGray = true; }
-            continue;   // 重复 gray（或 gray 后再 gray）＝幂等空操作，丢弃
+    const auto flushInvert = [&] {
+        if (gray && parity != 0) {
+            plan.emplace_back(ExecGrayInvert{});
+            parity = 0;
         }
-        if (afterGray) {
-            // 单通道：Split 无意义丢弃；非全 0 的 Invert 翻转一次奇偶。
-            if (const auto* inv = std::get_if<InvertOp>(&cfg); inv && normMask3(inv->mask) != "000")
-                invertParity ^= 1;
-            continue;   // SplitOp 及 mask=="000" 的 InvertOp 均为空操作
-        }
-        if (const auto* sp = std::get_if<SplitOp>(&cfg)) {
-            const std::string m = normMask3(sp->mask);
-            for (int c = 0; c < 3; ++c) { k[c] = maskAnd(k[c], m[c]); j[c] = maskAnd(j[c], m[c]); }
-        } else if (const auto* iv = std::get_if<InvertOp>(&cfg)) {
-            const std::string m = normMask3(iv->mask);
-            for (int c = 0; c < 3; ++c) j[c] = maskXor(j[c], m[c]);
+    };
+    const auto flushD4 = [&] {
+        if (r != 0 || f != 0) plan.emplace_back(ExecD4{(r % 4 + 4) % 4, f != 0});
+        r = 0;
+        f = 0;
+    };
+    for (const auto& cfg : steps) {
+        if (isGeometryStep(cfg)) {
+            if (const auto* rot = std::get_if<RotateOp>(&cfg)) {
+                const int quad = rotateQuad(rot->angle);
+                r = f == 0 ? r + quad : r - quad;
+            } else if (const auto* fl = std::get_if<FlipOp>(&cfg)) {
+                if (fl->horizontal) {
+                    f ^= 1;
+                } else {
+                    r += 2;
+                    f ^= 1;
+                }
+            }
+        } else if (isColorStep(cfg)) {
+            if (std::holds_alternative<GrayOp>(cfg)) {
+                if (!gray) {   // 重复 gray 幂等丢弃
+                    flushMap();    // pre-gray 位映射必在灰度化之前落地
+                    plan.emplace_back(ExecGray{});
+                    gray = true;
+                }
+            } else if (gray) {
+                // 单通道：Split 死步丢弃；非全 '0' 掩码的 Invert 整幅翻一次（非 3 长归 "111" 同口径）。
+                if (const auto* inv = std::get_if<InvertOp>(&cfg); inv && normMask3(inv->mask) != "000")
+                    parity ^= 1;
+            } else if (const auto* sp = std::get_if<SplitOp>(&cfg)) {
+                const std::string m = normMask3(sp->mask);
+                for (int c = 0; c < 3; ++c) { k[c] = maskAnd(k[c], m[c]); j[c] = maskAnd(j[c], m[c]); }
+            } else if (const auto* iv = std::get_if<InvertOp>(&cfg)) {
+                const std::string m = normMask3(iv->mask);
+                for (int c = 0; c < 3; ++c) j[c] = maskXor(j[c], m[c]);
+            }
+        } else {
+            // ResizeOp（块界）：本块三步先落地再透传，绝不跨 resize 合并（双线性取整不可交换）。
+            flushMap();
+            flushInvert();
+            flushD4();
+            plan.emplace_back(std::get<ResizeOp>(cfg));
         }
     }
-    if (!afterGray) flushPre();
-    else if (invertParity) out.emplace_back(InvertOp{std::string("111")});
-    return out;
+    flushMap();
+    flushInvert();
+    flushD4();
+    return plan;
+}
+
+// 执行单个计划步：融合核直调；ResizeOp 回 fall applyOne，保证与逐步语义同一口径。
+core::Image applyExecStep(const core::Image& src, const ExecStep& st) {
+    return std::visit([&](const auto& op) -> core::Image {
+        using T = std::decay_t<decltype(op)>;
+
+        if constexpr (std::is_same_v<T, ExecChannelMap>) {
+            return channelMap(src, op.k, op.j);
+        }
+        else if constexpr (std::is_same_v<T, ExecGray>) {
+            return src.toGray();
+        }
+        else if constexpr (std::is_same_v<T, ExecGrayInvert>) {
+            return invertChannels(src, "111");
+        }
+        else if constexpr (std::is_same_v<T, ExecD4>) {
+            return remapD4(src, op.quad, op.flipH);
+        }
+        else {
+            return applyOne(src, op);   // ResizeOp
+        }
+    }, st);
 }
 
 } // namespace
@@ -119,29 +148,30 @@ std::vector<PreprocessConfig> foldColorRun(const std::vector<PreprocessConfig>& 
 // 公共接口：对一张图像应用单个操作，返回结果
 // 分块依据：每种 PreprocessConfig 子类对应一个 if constexpr 分支，
 //          由 std::visit 在编译期完成类型分派，避免运行时 switch。
+//          像素核：几何/色彩走 pixel_kernels（私有），灰度与缩放走 core::Image 成员。
 // ---------------------------------------------------------------------------
 core::Image applyOne(const core::Image& src, const PreprocessConfig& cfg) {
     return std::visit([&](const auto& op) -> core::Image {
         using T = std::decay_t<decltype(op)>;
 
         if constexpr (std::is_same_v<T, GrayOp>) {
-            return pixel_ops::toGray(src);
+            return src.toGray();
         }
         else if constexpr (std::is_same_v<T, SplitOp>) {
-            return pixel_ops::splitChannels(src, op.mask);
+            return splitChannels(src, op.mask);
         }
         else if constexpr (std::is_same_v<T, InvertOp>) {
-            return pixel_ops::invertChannels(src, op.mask);
+            return invertChannels(src, op.mask);
         }
         else if constexpr (std::is_same_v<T, RotateOp>) {
-            return pixel_ops::rotate(src, op.angle);
+            return rotate(src, op.angle);
         }
         else if constexpr (std::is_same_v<T, FlipOp>) {
-            return pixel_ops::flip(src, op.horizontal);
+            return flip(src, op.horizontal);
         }
         else if constexpr (std::is_same_v<T, ResizeOp>) {
             if (op.width <= 0 || op.height <= 0) return src.clone();   // 非正尺寸 → 无操作。
-            return pixel_ops::resize(src, op.width, op.height);
+            return src.resized(op.width, op.height);
         }
         else {
             return src.clone();
@@ -200,45 +230,16 @@ core::Image PreprocessPipeline::apply(const core::Image& src) const {
     return cur;
 }
 
-// 语义等价、趟数更少的折叠版流水线：对**连续同类段**各自就地规整，段间（含 resize）绝不跨越重排。
-//   · 连续几何段（RotateOp/FlipOp）→ 规范 ≤2 op（D4 纯置换复合，逐像素恒等）；
-//   · 连续色彩段（GrayOp/SplitOp/InvertOp）→ 规范形（pre-gray 折成 Split+Invert、gray 幂等、
-//     post-gray 死步丢弃 + invert 按奇偶折叠）；与 applyOne 同取整/掩码口径，逐像素恒等。
-// 不跨边界调序：色彩与几何/resize 并非总可交换（resize 双线性、gray 截断），故只在同类连续段内折叠。
-PreprocessPipeline PreprocessPipeline::folded() const {
-    PreprocessPipeline out;
-    std::vector<PreprocessConfig> geoRun;    // 当前连续几何段（按施加顺序）
-    std::vector<PreprocessConfig> colorRun;  // 当前连续色彩段（按施加顺序）
-    bool graySeen = false;                    // 全流水线单调灰度态：某段出现 GrayOp 后恒为 true
-    const auto flushColor = [&] {
-        if (colorRun.empty()) return;
-        const bool hadGray = std::any_of(colorRun.begin(), colorRun.end(),
-            [](const PreprocessConfig& c) { return std::holds_alternative<GrayOp>(c); });
-        for (auto& c : foldColorRun(colorRun, graySeen)) out.add(std::move(c));
-        colorRun.clear();
-        if (hadGray) graySeen = true;
-    };
-    const auto flushGeo = [&] {
-        for (auto& c : foldGeometryRun(geoRun)) out.add(std::move(c));
-        geoRun.clear();
-    };
-    for (const auto& cfg : steps_) {
-        if (isGeometryStep(cfg)) {
-            flushColor();                    // 几何段起头：先落地前段色彩
-            geoRun.push_back(cfg);
-        } else if (isColorStep(cfg)) {
-            flushGeo();                       // 色彩段起头：先落地前段几何
-            colorRun.push_back(cfg);
-        } else {
-            // ResizeOp（或非预期类型）：本身即段界，两段先后落地后原样保留。
-            flushColor();
-            flushGeo();
-            out.add(cfg);
-        }
+// 执行层融合入口：先把队列压成 execPlan（见 buildExecPlan 注释），再按计划单趟执行。
+// 与 apply(src) 逐像素等价（含尺寸/格式）；像素趟数恒 ≤ 块数×4，与队列长度解耦。
+// 计划构建不碰像素；逐步 apply/applyOne 保留不动，充当等价性参照 oracle。
+core::Image PreprocessPipeline::applyExec(const core::Image& src) const {
+    const std::vector<ExecStep> plan = buildExecPlan(steps_, src.isGray());
+    core::Image cur = src.clone();
+    for (const auto& st : plan) {
+        cur = applyExecStep(cur, st);
     }
-    flushColor();
-    flushGeo();
-    return out;
+    return cur;
 }
 
 // 纯元数据推演：不触碰像素，只按各步语义更新 (w,h) 与净旋转象限。

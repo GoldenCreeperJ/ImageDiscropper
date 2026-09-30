@@ -1,12 +1,14 @@
 // ============================================================================
 // 文件：include/core/image.h
 // 作用：定义图像像素容器 Image。
-//       支持 RGB / RGBA / GRAY 三种像素模式，提供像素读写、拷贝、通道访问等
-//       基础操作。所有 pixel_ops / annotation 模块的算法都在此数据结构上进行。
+//       支持 RGB / RGBA / GRAY 三种像素模式，提供像素读写、拷贝、通道访问与通用像素
+//       原语（重采样缩放 / 取色）等基础操作。preprocess / annotation 等上层模块的
+//       算法都在此数据结构上进行。
 // ============================================================================
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "core/color.h"
@@ -27,6 +29,12 @@ enum class ImageFormat {
 
 // 返回该格式下每像素字节数。
 std::size_t bytesPerPixel(ImageFormat fmt);
+
+// 缩放算法（原 pixel_ops::ResampleMode 迁入 core，供 resized / scaled 使用）。
+enum class ResampleMode {
+    NEAREST,    // 最近邻，速度快，锯齿明显
+    BILINEAR,   // 双线性插值，速度中等，效果均衡
+};
 
 // ---------------------------------------------------------------------------
 // Image：行主序像素缓冲
@@ -80,8 +88,16 @@ public:
     // 将当前图像转换为 GRAY（按 ITU-R BT.601 亮度公式加权）。
     Image toGray() const;
 
+    // 重采样缩放：按目标宽高进行最近邻 / 双线性重采样，保留内容；非法目标尺寸或空图返回 0×0。
+    // 原 pixel_ops::resize 逐字迁入——预览降采样（GUI）与 ResizeOp 物化（preprocess）共用同一核。
+    Image resized(int newWidth, int newHeight, ResampleMode mode = ResampleMode::BILINEAR) const;
+    // 按比例缩放：factor 必须 > 0，先换算目标宽高再委托 resized。
+    Image scaled(double factor, ResampleMode mode = ResampleMode::BILINEAR) const;
+    // 拾取指定坐标的像素颜色（“颜色选取”用）；越界返回 std::nullopt。
+    std::optional<Color> colorAt(int x, int y) const;
+
     // 重新分配像素缓冲为新尺寸/格式，原像素数据被丢弃并清零。
-    // 注意：与 pixel_ops::resize（重采样缩放、保留内容）语义相反，本方法不保留原图内容。
+    // 注意：与 resized（重采样缩放、保留内容）语义相反，本方法不保留原图内容。
     void reallocate(int width, int height, ImageFormat fmt);
 
     // 用指定颜色填充整个图像。

@@ -44,16 +44,16 @@ L3 网格参数 `GridParams`（默认单元 100×100，避免 `GridParams` 默�
 
 ## EngineBridge（无状态、可拷贝）
 
-| 方法                                   | 委托的 Core API                                                                                                                     |
-|--------------------------------------|----------------------------------------------------------------------------------------------------------------------------------|
-| `loadImage(path, out, err)`          | `engine::readImageFile`（统一解码为 RGBA）                                                                                              |
-| `runPreviewGeometry(dims, cfg)`      | `engine::runEngineGeometry`（给定已预处理输出尺寸直接跑几何流水线、不应用 cfg.preprocess，供预览脱离全分辨率工作图）                                                  |
-| `cutLines(cut, src)`                 | `engine::generateCutLines`（取贯穿切割线供渲染）                                                                                            |
-| `buildGrid(cut, src)`                | GRID→`Grid::build`、其余→`generateCutLines`+`induceGrid`（镜像 `runEngine` 网格产出，供 L3 网格线渲染）                                            |
-| `exportResult(work, cfg, out, err)`  | `engine::runEngine` + `engine::exportImage`（全分辨率落盘，无损）                                                                           |
-| `saveConfig(path, cfg, err[, anno])` | `engine::saveEngineConfig`（SPEC §7 schema JSON 落盘；可选 `AnnotationLayer*` 非空时附带 `annotations` 段）                                   |
-| `loadConfig(path, out, err[, anno])` | `engine::loadEngineConfig`（从 JSON 还原配置；可选 `AnnotationLayer*` 非空时一并还原 `annotations` 段到该层、缺段＝清空；nlohmann 在 Core 侧 PRIVATE，GUI 不感知） |
-| `applyPipeline(src, pipeline)`       | `preprocess::PreprocessPipeline::apply`（声明式队列物化：把整条流水线按序应用到 src，供 `PreprocessController` 从 `original_` 重放 `steps_` 得 `working_`） |
+| 方法                                   | 委托的 Core API                                                                                                                                                                                   |
+|--------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `loadImage(path, out, err)`          | `engine::readImageFile`（统一解码为 RGBA）                                                                                                                                                            |
+| `runPreviewGeometry(dims, cfg)`      | `engine::runEngineGeometry`（给定已预处理输出尺寸直接跑几何流水线、不应用 cfg.preprocess，供预览脱离全分辨率工作图）                                                                                                                |
+| `cutLines(cut, src)`                 | `engine::generateCutLines`（取贯穿切割线供渲染）                                                                                                                                                          |
+| `buildGrid(cut, src)`                | GRID→`Grid::build`、其余→`generateCutLines`+`induceGrid`（镜像 `runEngine` 网格产出，供 L3 网格线渲染）                                                                                                          |
+| `exportResult(work, cfg, out, err)`  | `engine::runEngine` + `engine::exportImage`（全分辨率落盘，无损）                                                                                                                                         |
+| `saveConfig(path, cfg, err[, anno])` | `engine::saveEngineConfig`（SPEC §7 schema JSON 落盘；可选 `AnnotationLayer*` 非空时附带 `annotations` 段）                                                                                                 |
+| `loadConfig(path, out, err[, anno])` | `engine::loadEngineConfig`（从 JSON 还原配置；可选 `AnnotationLayer*` 非空时一并还原 `annotations` 段到该层、缺段＝清空；nlohmann 在 Core 侧 PRIVATE，GUI 不感知）                                                               |
+| `applyPipeline(src, pipeline)`       | `preprocess::PreprocessPipeline::applyExec`（声明式队列物化：执行层融合把整条流水线应用到 src——色彩折单次 `channelMap`、几何折单次 `D4 remap`、与逐步 `apply` 逐像素等价，供 `PreprocessController` 从 `original_` 重放 `steps_` 得 `working_`） |
 
 > 其余 GUI 代码只与 `EngineBridge` 交互，不直接 include 引擎实现细节，
 > 以此保证「GUI 不含切割/几何/导出逻辑」。

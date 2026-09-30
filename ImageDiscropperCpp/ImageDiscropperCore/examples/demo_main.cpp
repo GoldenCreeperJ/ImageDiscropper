@@ -3,8 +3,8 @@
 // 作用：综合演示 ImageDiscropperCore 库的典型使用方式，覆盖以下模块：
 //       - core：Image / Color 基础操作
 //       - geometry + annotation：构造形状、光栅化到底图、合成
-//       - pixel_ops：灰度、通道反色、旋转、翻转、缩放、颜色拾取
-//       - preprocess：PreprocessPipeline 顺序编排
+//       - preprocess：PreprocessPipeline 顺序编排与像素核（旋转/翻转经 applyOne；
+//         灰度、缩放、颜色拾取核已落户 core::Image 成员）
 //       - view_transform：屏幕 ↔ 逻辑坐标换算、以指定点缩放
 //       - engine：真正跑通 Grid-Selection-Emit 流水线（L2 剔除坍缩 / L3 网格重排）并导出到磁盘
 // 分块依据：每一步聚焦一个模块或一个典型场景，便于按需拷贝到实际项目。
@@ -21,8 +21,6 @@
 #include "annotation/shape_factory.h"
 #include "annotation/view_transform.h"
 #include "preprocess/preprocess_pipeline.h"
-#include "pixel_ops/color_ops.h"
-#include "pixel_ops/geometric_ops.h"
 
 // 打印图像基本信息，便于观察每一步的结果。
 static void printInfo(const char* label, const idc::core::Image& img) {
@@ -110,7 +108,7 @@ int main() {
 
     // ------------------------------------------------------------------
     // 5. 图像处理流水线演示：灰度 → 反色
-    //    两个步骤都是保留的核心 pixel_ops 能力
+    //    两个步骤都是预处理流水线的核心能力
     // ------------------------------------------------------------------
     core::Image work = composed.clone();
     printInfo("pipeline input", work);
@@ -125,19 +123,19 @@ int main() {
     // ------------------------------------------------------------------
     // 6. 几何变换演示：旋转 90°、水平翻转、缩放 0.5x
     // ------------------------------------------------------------------
-    core::Image rot90 = pixel_ops::rotate(pipelineOut, 90);
+    core::Image rot90 = preprocess::applyOne(pipelineOut, preprocess::RotateOp{90});
     printInfo("rotate 90", rot90);
 
-    core::Image flipped = pixel_ops::flip(rot90, true);
+    core::Image flipped = preprocess::applyOne(rot90, preprocess::FlipOp{true});
     printInfo("flip H", flipped);
 
-    core::Image half = pixel_ops::scale(flipped, 0.5, pixel_ops::ResampleMode::BILINEAR);
+    core::Image half = flipped.scaled(0.5, core::ResampleMode::BILINEAR);
     printInfo("scale 0.5x", half);
 
     // ------------------------------------------------------------------
     // 7. 颜色选取演示：拾取 (10, 10) 处像素颜色
     // ------------------------------------------------------------------
-    if (auto c = pixel_ops::pickColor(composed, 10, 10)) {
+    if (auto c = composed.colorAt(10, 10)) {
         std::cout << "pickColor(10,10) = R" << static_cast<int>(c->r)
                   << " G" << static_cast<int>(c->g)
                   << " B" << static_cast<int>(c->b)

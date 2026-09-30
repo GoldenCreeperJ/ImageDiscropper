@@ -103,7 +103,7 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 顶部「画布尺寸」为独立常驻区（不入队列）；底部「重置预处理」清空整条队列。**两列表只是同一底层队列的分区视图**——底层 `steps` 恒为「全部几何步在前 + 全部色彩步在后」，提交时按此顺序合并。
 **原图始终保留**，工作图 = 队列对原图的重放结果；重放以 `base_`（最后一个 resize 及其之前的产物）为缓存，编辑 resize 之后的轻操作只在 `base_` 上重放轻后缀（免重复重采样），故 resize 永远以原图分辨率为基准、不累积误差。
 
-> **折叠物化（几何 + 色彩同类段规整）**：队列**存储 / 序列化 / 几何签名仍按用户编辑的原始顺序**，仅在物化 `working_` 时对轻后缀走一次 `PreprocessPipeline::folded()`——它对**连续同类段**各自就地规整、段间（含 `ResizeOp`）绝不跨越：① 连续的旋转/翻转步折叠为规范的 ≤2 个 D4 步（1 旋转 + 至多 1 翻转）；② 连续的色彩步（黑白/反色/色道分离）折叠为规范形（首个黑白前的反色/分离按逐通道位映射合为至多“分离+反色”两步、黑白幂等、黑白之后的分离为死步丢弃、反色按奇偶抵消），灰度之后的死步（如误置于黑白后的色道分离）因此被自动吞除，无需录入拦截。两者均**逐像素恒等**（几何已修为“灰度亦无损的纯位置置换”、色彩为同取整/掩码口径的纯位运算），且色彩规整以“载入强解 RGBA、进队为多通道”为前提。GUI 侧以「几何块在前 + 色彩块在后」不变式维持两列表分区（跨类上下移被忽略）。
+> **执行层融合物化（几何 + 色彩统一收敛到执行层）**：队列**存储 / 序列化 / 几何签名仍按用户编辑的原始顺序**，仅在物化 `working_` 时对轻后缀走一次 `PreprocessPipeline::applyExec()`——它先把整条队列压成内部 `execPlan`（**绝不落回词表步**），再交融合核单趟执行：① 连续的旋转/翻转步折为**单次 D4 remap**（`remapD4`，闭式逆采样一趟重排，取代逐步搬运）；② 连续的色彩步（黑白/反色/色道分离）折为**单次位映射** `channelMap`：pre-gray 段任意 Split/Invert 序列合为 `f(v)=(v&K)^J` 一趟完成、黑白幂等、黑白之后的分离为死步丢弃、反色按奇偶累积。`ResizeOp` 是**唯一块界**（双线性取整与色彩/几何均不可交换），块内步数恒 ≤4，故**像素趟数与队列长度解耦**；灰度之后的死步（如误置于黑白后的色道分离）在计划构建时自动吞除，无需录入拦截。融合执行与逐步 `apply` **逐像素恒等**（几何为“灰度亦无损的纯位置置换”、色彩为同取整/掩码口径的纯位运算），且以“载入强解 RGBA、进队为多通道”为前提。GUI 侧以「几何块在前 + 色彩块在后」不变式维持两列表分区（跨类上下移被忽略）。
 
 | 步骤类型  | 参数                      | 说明                    |
 |-------|-------------------------|-----------------------|
@@ -267,7 +267,7 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
    于是遮罩 / 切割线 / 选区都能直接按原图坐标叠加，避免到处换算。
 3. **几何在全分辨率算、只在预览图上画**：`runEngine` 只做区域数学（split/compose 不搬像素），故可对全分辨率
    工作图跑预览，把区域按缩放因子映射到预览 pixmap；导出时对全分辨率图跑，保证无损（NFR-2）。
-4. **降采样预览复用 `pixel_ops::resize`**：`makePreview(img, maxDim)` 内部调用 Core 的 resize（NEAREST）生成预览副本，
+4. **降采样预览复用 `core::Image::resized`**：`makePreview(img, maxDim)` 内部调用 Core 的 `resized`（NEAREST）生成预览副本，
    无需新增 Core 接口。
 5. **单一状态源 + 双桥接**：`Document` 是唯一真相源，切割/预处理经 `EngineBridge`、标注域经 `AnnotationBridge`（各自唯一入口）；面板 / 画布只读写
    `Document`，不各自持有真相，降低耦合。
@@ -316,18 +316,18 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 ## 已核对的 Core API（均来自实际头文件，非假设）
 
 - 编排：`engine::runEngine(const core::Image&, const EngineConfig&) -> EngineResult{ok,error,kept,collapsible,composition}`（内部 apply preprocess）；`engine::runEngineGeometry(const SourceInfo&, const EngineConfig&)`（仅按尺寸跑几何、忽略 preprocess，供预览）。
-- 预处理：`preprocess::PreprocessConfig = variant<GrayOp,SplitOp,InvertOp,RotateOp,FlipOp,ResizeOp>`；`PreprocessPipeline{add,insert,remove,setStep,moveUp,moveDown,clear,steps,apply,geometryOutput(w,h)->GeometryOut{width,height,rotQuad}}`（声明式队列）。
+- 预处理：`preprocess::PreprocessConfig = variant<GrayOp,SplitOp,InvertOp,RotateOp,FlipOp,ResizeOp>`；`PreprocessPipeline{add,insert,remove,setStep,moveUp,moveDown,clear,steps,apply,applyExec,geometryOutput(w,h)->GeometryOut{width,height,rotQuad}}`（声明式队列；`applyExec` 为执行层融合入口，与 `apply` 逐像素等价）。
 - 切割线：`engine::generateCutLines(const CutConfig&, const SourceInfo&) -> CutLineSet`。
 - 配置：`EngineConfig{source,preprocess,cut,selectedCells,order,emitParams}`；
   `CutConfig{tier,generator(RECT/HORIZONTAL_LINE/VERTICAL_LINE/MULTI_RECT/GRID),rect,rects,grid,polarity}`。
 - 配置存取：`engine::saveEngineConfig(path, cfg[, annotations])` / `engine::loadEngineConfig(path, out&[, annotations])`（SPEC §7 schema JSON，可选标注层指针：保存附带 `annotations` 段、加载还原到该层（缺段＝清空）；nlohmann 在 Core 侧 PRIVATE）。
-- 撤销历史：`history::HistoryManager<T>{push,popToRedo,popFromRedo,top,canUndo,canRedo,undoSize,clearAll}`（模板头实现，GUI 以 `T=EngineConfig` 实例化）。
+- 撤销历史：`core::HistoryManager<T>{push,popToRedo,popFromRedo,top,canUndo,canRedo,undoSize,clearAll}`（模板头实现，原 `history` 模块已并入 `core`；GUI 以 `T=EngineConfig` 实例化）。
 - 导出：`CompositionParams{mode,layout,mergeOrder,cols,rows,cellWidth,cellHeight,padColor,format,naming,quality,keepMetadata}`
   （`mergeOrder` = 重排填充顺序 `MergeOrder{strategy,reverse,snake}`，仅 REARRANGE、与选择排序正交）；
   `Composition{canvasWidth,canvasHeight,placements,...}`；`engine::exportImage(...)`。
 - 区域：`RectRegion{left,top,right,bottom,width(),height(),area()}`；`RegionSet{size(),empty(),fragments(),boundingBox()}`；
   `Fragment{region,index,kind,row,col}`。
-- I/O 与处理：`engine::readImageFile`（统一解码为 RGBA）；`pixel_ops::resize/rotate/flip/...`；`core::Image{width,height,empty,getPixel,inBounds,...}`；
+- I/O 与处理：`engine::readImageFile`（统一解码为 RGBA）；`core::Image::{resized,colorAt}`（通用像素原语）+ `preprocess::applyOne/applyExec`（预处理像素核与执行层融合）；`core::Image{width,height,empty,getPixel,inBounds,...}`；
   `core::Color{r,g,b,a}`。
 - 标注：`geometry::Shape::worldPath()/obbPreviewTransform/applyObbTransform/translateWorld/restoreTransformState`；`annotation::AnnotationLayer`（`revoke/redo/removeAnnotation/rasterize/restoreAnnotations/burnIn(base)`）。
 

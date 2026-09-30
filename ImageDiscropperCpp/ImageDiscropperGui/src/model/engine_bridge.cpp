@@ -101,10 +101,11 @@ bool EngineBridge::loadConfig(const QString& path, engine::EngineConfig& out, QS
     return true;
 }
 
-// 声明式队列物化：委托 Core PreprocessPipeline::apply（逐步分派含 ResizeOp/旋转全在 Core）。
+// 声明式队列物化：委托 Core PreprocessPipeline::applyExec（执行层融合：色彩折单次 channelMap、几何折单次 D4，
+// 与逐步 apply 逐像素等价；ResizeOp/旋转分派全在 Core）。
 core::Image EngineBridge::applyPipeline(const core::Image& src,
                                        const preprocess::PreprocessPipeline& pipeline) {
-    return pipeline.apply(src);
+    return pipeline.applyExec(src);
 }
 
 } // namespace idc::gui

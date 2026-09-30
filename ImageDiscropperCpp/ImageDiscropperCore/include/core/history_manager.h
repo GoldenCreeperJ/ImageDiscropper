@@ -1,6 +1,7 @@
 // ============================================================================
-// 文件：include/history/history_manager.h
-// 作用：通用撤销 / 重做栈模板 HistoryManager<T>。
+// 文件：include/core/history_manager.h
+// 作用：通用撤销 / 重做栈模板 HistoryManager<T>（原 history 模块并入 core，
+//       命名空间由 idc::history 改为 idc::core，语义零改动）。
 // 说明：模板实现直接放在头文件中，避免额外实例化文件。
 // ============================================================================
 #pragma once
@@ -8,7 +9,7 @@
 #include <optional>
 #include <vector>
 
-namespace idc::history {
+namespace idc::core {
 
 // ---------------------------------------------------------------------------
 // HistoryManager<T>：泛型撤销 / 重做栈
@@ -79,4 +80,4 @@ private:
     std::vector<T> redoStack_;
 };
 
-} // namespace idc::history
+} // namespace idc::core

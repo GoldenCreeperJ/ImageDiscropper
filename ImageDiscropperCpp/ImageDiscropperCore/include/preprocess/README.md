@@ -15,7 +15,7 @@
    `folded()`（连续同类段就地规整、逐像素恒等、趟数更少的折叠流水线）与 `geometryOutput()`（输出尺寸 +
    净旋转象限推演，供 GUI 几何签名使用）。
 
-| 文件                      | 职责                                                              |
-|-------------------------|-----------------------------------------------------------------|
+| 文件                      | 职责                                                                                                     |
+|-------------------------|--------------------------------------------------------------------------------------------------------|
 | `preprocess_config.h`   | 预处理类型枚举 `PreprocessType`、各步骤参数（含 `ResizeOp`）与 `PreprocessConfig` 变体、`makeDefaultConfig` / `configType` |
-| `preprocess_pipeline.h` | 预处理流水线 `PreprocessPipeline`：步骤增删改序、`apply` 执行、`folded` 折叠、`geometryOutput` 几何推演 |
+| `preprocess_pipeline.h` | 预处理流水线 `PreprocessPipeline`：步骤增删改序、`apply` 执行、`folded` 折叠、`geometryOutput` 几何推演                        |

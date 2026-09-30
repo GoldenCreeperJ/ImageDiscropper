@@ -1,11 +1,13 @@
 // ============================================================================
 // 文件：src/core/image.cpp
 // 作用：实现 include/core/image.h 中声明的 Image 类，包括像素缓冲管理、像素读写、
-//       格式转换（toRGBA / toGray）、缓冲重分配（reallocate）、裁剪贴图（crop / blit）与整体填充等。
+//       格式转换（toRGBA / toGray）、缓冲重分配（reallocate）、裁剪贴图（crop / blit）、
+//       重采样缩放（resized / scaled）与整体填充等。
 // ============================================================================
 #include "core/image.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace idc::core {
@@ -155,6 +157,79 @@ Image Image::toGray() const {
         }
     }
     return out;
+}
+
+// 尺寸调整：按目标宽高进行最近邻或双线性重采样（原 pixel_ops::resize 逐字迁入，语义与输出字节恒等）。
+// 性能要点：直接基于行主序字节缓冲计算——四个角点指针每像素只求一次并一次性读取全部通道，
+// 避免逐像素 getPixel/setPixel 的边界检查与逐通道的格式分支。
+Image Image::resized(const int newWidth, const int newHeight, const ResampleMode mode) const {
+    if (newWidth <= 0 || newHeight <= 0 || empty()) return {};
+    Image out(newWidth, newHeight, format_);
+
+    const int sw = width_;
+    const int sh = height_;
+    const int ch = isGray() ? 1 : format_ == ImageFormat::RGBA ? 4 : 3;
+    const std::uint8_t* sd = data_.data();
+    std::uint8_t* dd = out.data_.data();
+    const double stepX = static_cast<double>(sw) / newWidth;
+    const double stepY = static_cast<double>(sh) / newHeight;
+    const double maxX = sw - 1;
+    const double maxY = sh - 1;
+
+    for (int y = 0; y < newHeight; ++y) {
+        const double srcYf = (y + 0.5) * stepY - 0.5;
+        for (int x = 0; x < newWidth; ++x) {
+            const double srcXf = (x + 0.5) * stepX - 0.5;
+            std::uint8_t* o = dd + (static_cast<std::size_t>(y) * newWidth + x) * ch;
+
+            if (mode == ResampleMode::NEAREST) {
+                const int xi = std::clamp(static_cast<int>(std::round(srcXf)), 0, sw - 1);
+                const int yi = std::clamp(static_cast<int>(std::round(srcYf)), 0, sh - 1);
+                const std::uint8_t* p = sd + (static_cast<std::size_t>(yi) * sw + xi) * ch;
+                for (int c = 0; c < ch; ++c) o[c] = p[c];
+                continue;
+            }
+
+            // 双线性：先把源坐标夹到 [0, sw-1] / [0, sh-1]，再取四邻域角点
+            const double fx = std::clamp(srcXf, 0.0, maxX);
+            const double fy = std::clamp(srcYf, 0.0, maxY);
+            const int x0 = static_cast<int>(std::floor(fx));
+            const int y0 = static_cast<int>(std::floor(fy));
+            const int x1 = std::min(x0 + 1, sw - 1);
+            const int y1 = std::min(y0 + 1, sh - 1);
+            const double tx = fx - x0;
+            const double ty = fy - y0;
+
+            const std::uint8_t* p00 = sd + (static_cast<std::size_t>(y0) * sw + x0) * ch;
+            const std::uint8_t* p10 = sd + (static_cast<std::size_t>(y0) * sw + x1) * ch;
+            const std::uint8_t* p01 = sd + (static_cast<std::size_t>(y1) * sw + x0) * ch;
+            const std::uint8_t* p11 = sd + (static_cast<std::size_t>(y1) * sw + x1) * ch;
+
+            const double wx0 = 1.0 - tx;
+            const double wy0 = 1.0 - ty;
+            for (int c = 0; c < ch; ++c) {
+                const double top = p00[c] * wx0 + p10[c] * tx;
+                const double bot = p01[c] * wx0 + p11[c] * tx;
+                const double v = top * wy0 + bot * ty;
+                o[c] = static_cast<std::uint8_t>(std::clamp(v, 0.0, 255.0));
+            }
+        }
+    }
+    return out;
+}
+
+// 按比例缩放：先计算目标宽高再委托 resized。
+Image Image::scaled(const double factor, const ResampleMode mode) const {
+    if (factor <= 0.0 || empty()) return {};
+    const int nw = std::max(1, static_cast<int>(std::round(width_ * factor)));
+    const int nh = std::max(1, static_cast<int>(std::round(height_ * factor)));
+    return resized(nw, nh, mode);
+}
+
+// 拾取像素颜色：用于“颜色选取”功能，越界返回 nullopt。
+std::optional<Color> Image::colorAt(const int x, const int y) const {
+    if (!inBounds(x, y)) return std::nullopt;
+    return getPixel(x, y);
 }
 
 // 重新分配像素缓冲为新尺寸/格式，原像素数据被丢弃并清零。

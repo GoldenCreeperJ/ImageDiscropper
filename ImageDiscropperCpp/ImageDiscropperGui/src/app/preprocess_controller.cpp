@@ -142,13 +142,14 @@ void PreprocessController::commitPipeline(const preprocess::PreprocessPipeline& 
             doc_->clearBase();   // 由「有 resize」切到「无 resize」：释放陈旧缓存，稳态仅 original_ + working_ 两份。
         }
         // 轻队列恒快：在 base_ 上重放 nextSteps（空队列 → 直接取 base_ 副本）。
-        // 重放走折叠版 folded()（连续几何段折为 ≤2 op、连续色彩段就地规整、灰度后死步自动吞除；段间不跨越，resize 已为 base_ 前缀）：逐像素结果不变、全分辨率趟数更少。
-        // 注：仅物化时折叠；steps_ 存储 / 序列化 / 上面的几何签名均用原序 nextSteps（折叠不改净几何签名）。
+        // 重放经 EngineBridge::applyPipeline → Core applyExec（执行层融合：色彩折单次 channelMap、几何折单次 D4、灰度后死步自动吞除；
+        // resize 已为 base_ 前缀，轻队列不含 resize → 整条恒单块）：逐像素结果不变、趟数与队列长度解耦。
+        // 注：仅物化时融合；steps_ 存储 / 序列化 / 上面的几何签名均用原序 nextSteps（融合不改净几何签名）。
         // ⚠ working 必须以指针读取基准图（original_ 或 base_）后 clone / 重放产出，绝不能 move base_：base_ 是跨多次轻编辑
         //    复用的重放缓存，一旦被搬进 working_ 即被搬空，下次编辑被迫从 original 重跑（含 resize 重采样）——勿“优化”成移动语义。
         core::Image out = nextSteps.empty()
                               ? baseSrc->clone()
-                              : EngineBridge::applyPipeline(*baseSrc, nextSteps.folded());
+                              : EngineBridge::applyPipeline(*baseSrc, nextSteps);
         if (out.empty()) {
             status_->notify(QStringLiteral("预处理失败：结果为空图"), true);
             return;

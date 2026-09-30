@@ -1,13 +1,16 @@
 // ============================================================================
 // 文件：tests/test_main.cpp
-// 作用：极简冒烟测试入口，覆盖 core / geometry / pixel_ops / annotation / preprocess /
+// 作用：极简冒烟测试入口，覆盖 core / geometry / annotation / preprocess /
 //       history / engine 七大模块的关键行为，并调用引擎验收测试段（pipeline / export /
 //       boundary，定义于独立 test_engine_*.cpp）。使用共享 CHECK 宏，不依赖第三方框架。
 // 分块依据：每个模块一个 testXxx() 函数，main 依次调用；引擎的完整流水线/导出/边界
 //       验收拆分到 test_engine_*.cpp，经 test_harness.h 声明后在此统一调度，避免 God File。
 // ============================================================================
+#include <array>
 #include <cstdlib>
 #include <iostream>
+#include <random>
+#include <string>
 
 #include "test_harness.h"
 
@@ -20,10 +23,8 @@
 #include "annotation/shape_factory.h"
 #include "annotation/view_transform.h"
 #include "geometry/shapes.h"
-#include "history/history_manager.h"
+#include "core/history_manager.h"
 #include "preprocess/preprocess_pipeline.h"
-#include "pixel_ops/color_ops.h"
-#include "pixel_ops/geometric_ops.h"
 
 // ---------------------------------------------------------------------------
 // core 模块测试：颜色运算、图像读写、格式转换
@@ -134,7 +135,7 @@ static void testGeometry() {
 }
 
 // ---------------------------------------------------------------------------
-// pixel_ops 模块测试：灰度、旋转、翻转、缩放（含纯色等价性）、通道反色 / 分离（含灰度反色）、颜色拾取
+// preprocess 像素核测试（经公共入口 applyOne 逐步执行）：灰度、旋转、翻转、缩放（含纯色等价性）、通道反色 / 分离（含灰度反色）、颜色拾取
 // ---------------------------------------------------------------------------
 static void testPixelOps() {
     using namespace idc;
@@ -148,82 +149,82 @@ static void testPixelOps() {
     }
 
     // 灰度化
-    core::Image gray = pixel_ops::toGray(img);
+    core::Image gray = img.toGray();
     CHECK(gray.isGray());
     CHECK(gray.width() == 8 && gray.height() == 8);
 
     // 旋转 90°：宽高互换
-    core::Image rot = pixel_ops::rotate(img, 90);
+    core::Image rot = preprocess::applyOne(img, preprocess::RotateOp{90});
     CHECK(rot.width() == 8 && rot.height() == 8);
     // 旋转 180° 后回到原尺寸
-    core::Image rot180 = pixel_ops::rotate(img, 180);
+    core::Image rot180 = preprocess::applyOne(img, preprocess::RotateOp{180});
     CHECK(rot180.width() == 8 && rot180.height() == 8);
     // 旋转 360° 等价于原图
-    core::Image rot360 = pixel_ops::rotate(img, 360);
+    core::Image rot360 = preprocess::applyOne(img, preprocess::RotateOp{360});
     CHECK(rot360.getPixel(0, 0) == img.getPixel(0, 0));
 
     // 水平翻转：(0,0) 与 (w-1,0) 交换
-    core::Image flipH = pixel_ops::flip(img, true);
+    core::Image flipH = preprocess::applyOne(img, preprocess::FlipOp{true});
     CHECK(flipH.getPixel(0, 0) == img.getPixel(7, 0));
     CHECK(flipH.getPixel(7, 0) == img.getPixel(0, 0));
 
     // 缩放：放大到 16x16
-    core::Image scaled = pixel_ops::resize(img, 16, 16, pixel_ops::ResampleMode::BILINEAR);
+    core::Image scaled = img.resized(16, 16, core::ResampleMode::BILINEAR);
     CHECK(scaled.width() == 16 && scaled.height() == 16);
 
     // 通道反色：R 通道反色后 (0,0) 处 R 应变为 255 - 0 = 255
-    core::Image invR = pixel_ops::invertChannels(img, "100");
+    core::Image invR = preprocess::applyOne(img, preprocess::InvertOp{std::string("100")});
     CHECK(invR.getPixel(0, 0).r == 255);
     CHECK(invR.getPixel(0, 0).g == 0);   // G 未反色，仍为原值 0
 
     // 通道分离：只保留 B 通道，R/G 应为 0
-    core::Image onlyB = pixel_ops::splitChannels(img, "001");
+    core::Image onlyB = preprocess::applyOne(img, preprocess::SplitOp{std::string("001")});
     CHECK(onlyB.getPixel(3, 3).r == 0);
     CHECK(onlyB.getPixel(3, 3).g == 0);
     CHECK(onlyB.getPixel(3, 3).b == 128);
 
     // 颜色拾取：合法坐标返回 optional 有值，越界返回 nullopt
-    CHECK(pixel_ops::pickColor(img, 0, 0).has_value());
-    CHECK(!pixel_ops::pickColor(img, 100, 100).has_value());
+    CHECK(img.colorAt(0, 0).has_value());
+    CHECK(!img.colorAt(100, 100).has_value());
 
     // ---- 灰度图反色（黑白后仍可反色）：对单一亮度通道取 255 - v，格式仍为 GRAY ----
     core::Image gimg(4, 4, core::ImageFormat::GRAY);
     for (int y = 0; y < 4; ++y)
         for (int x = 0; x < 4; ++x)
             gimg.setGray(x, y, static_cast<std::uint8_t>(x * 40 + y * 10)); // 值域 0..150
-    const core::Image ginv = pixel_ops::invertChannels(gimg, "111");
+    const core::Image ginv = preprocess::applyOne(gimg, preprocess::InvertOp{std::string("111")});
     CHECK(ginv.isGray());
     CHECK(ginv.width() == 4 && ginv.height() == 4);
     CHECK(ginv.getGray(0, 0) == 255);                      // 255 - 0
     CHECK(ginv.getGray(3, 3) == 255 - gimg.getGray(3, 3)); // 逐像素取反
     // 灰度反色：除 mask 全 "000"（不反色）外，任意非全 0 mask 都整体反相
-    CHECK(pixel_ops::invertChannels(gimg, "100").getGray(2, 1) == 255 - gimg.getGray(2, 1));
+    CHECK(preprocess::applyOne(gimg, preprocess::InvertOp{std::string("100")}).getGray(2, 1) == 255 - gimg.getGray(2, 1));
     // mask 全 "000" 与彩色恒等语义对齐：灰度上也不反色（逐像素原值、仍 GRAY）
-    CHECK(pixel_ops::invertChannels(gimg, "000").isGray());
-    CHECK(pixel_ops::invertChannels(gimg, "000").getGray(2, 1) == gimg.getGray(2, 1));
+    CHECK(preprocess::applyOne(gimg, preprocess::InvertOp{std::string("000")}).isGray());
+    CHECK(preprocess::applyOne(gimg, preprocess::InvertOp{std::string("000")}).getGray(2, 1) == gimg.getGray(2, 1));
     // 反色为对合：两次反色回到原值
-    CHECK(pixel_ops::invertChannels(ginv, "111").getGray(1, 2) == gimg.getGray(1, 2));
+    CHECK(preprocess::applyOne(ginv, preprocess::InvertOp{std::string("111")}).getGray(1, 2) == gimg.getGray(1, 2));
 
     // ---- 灰度图色道分离无意义：返回副本（像素不变、仍为 GRAY）----
-    const core::Image gsplit = pixel_ops::splitChannels(gimg, "001");
+    const core::Image gsplit = preprocess::applyOne(gimg, preprocess::SplitOp{std::string("001")});
     CHECK(gsplit.isGray());
     CHECK(gsplit.getGray(2, 2) == gimg.getGray(2, 2));
 
     // ---- 彩色反色 "111"：R/G/B 全反、alpha 保留 ----
     core::Image aimg(2, 2, core::ImageFormat::RGBA);
     aimg.fill(core::Color(10, 200, 30, 77));
-    const core::Image ainv = pixel_ops::invertChannels(aimg, "111");
+    const core::Image ainv = preprocess::applyOne(aimg, preprocess::InvertOp{std::string("111")});
     CHECK(ainv.getPixel(0, 0) == core::Color(245, 55, 225, 77)); // alpha=77 不变
 
     // ---- 彩色分离 "010"：仅留 G，R/B 置 0，alpha 保留 ----
-    const core::Image asplit = pixel_ops::splitChannels(aimg, "010");
+    const core::Image asplit = preprocess::applyOne(aimg, preprocess::SplitOp{std::string("010")});
     CHECK(asplit.getPixel(1, 1) == core::Color(0, 200, 0, 77));
 
     // ---- resize 等价性：纯色图缩放后仍为同一纯色（NEAREST / BILINEAR 均不应引入偏差；2× 放大→权重为二进制精确值）----
     core::Image solid(6, 4, core::ImageFormat::RGBA);
     solid.fill(core::Color(12, 34, 56, 78));
-    const core::Image solidNear = pixel_ops::resize(solid, 12, 8, pixel_ops::ResampleMode::NEAREST);
-    const core::Image solidBil = pixel_ops::resize(solid, 12, 8, pixel_ops::ResampleMode::BILINEAR);
+    const core::Image solidNear = solid.resized(12, 8, core::ResampleMode::NEAREST);
+    const core::Image solidBil = solid.resized(12, 8, core::ResampleMode::BILINEAR);
     CHECK(solidNear.width() == 12 && solidNear.height() == 8);
     CHECK(solidNear.getPixel(0, 0) == core::Color(12, 34, 56, 78));
     CHECK(solidNear.getPixel(11, 7) == core::Color(12, 34, 56, 78));
@@ -237,7 +238,7 @@ static void testPixelOps() {
     quad.setPixel(1, 0, core::Color(0, 255, 0, 255));   // 右上 绿
     quad.setPixel(0, 1, core::Color(0, 0, 255, 255));   // 左下 蓝
     quad.setPixel(1, 1, core::Color(255, 255, 0, 255)); // 右下 黄
-    const core::Image quad4 = pixel_ops::resize(quad, 4, 4, pixel_ops::ResampleMode::NEAREST);
+    const core::Image quad4 = quad.resized(4, 4, core::ResampleMode::NEAREST);
     CHECK(quad4.getPixel(0, 0) == core::Color(255, 0, 0, 255));
     CHECK(quad4.getPixel(3, 0) == core::Color(0, 255, 0, 255));
     CHECK(quad4.getPixel(0, 3) == core::Color(0, 0, 255, 255));
@@ -248,7 +249,7 @@ static void testPixelOps() {
     for (int y = 0; y < 4; ++y)
         for (int x = 0; x < 4; ++x)
             gsolid.setGray(x, y, 200);
-    const core::Image gscaled = pixel_ops::resize(gsolid, 8, 8, pixel_ops::ResampleMode::BILINEAR);
+    const core::Image gscaled = gsolid.resized(8, 8, core::ResampleMode::BILINEAR);
     CHECK(gscaled.isGray());
     CHECK(gscaled.getGray(3, 5) == 200);
 
@@ -259,27 +260,27 @@ static void testPixelOps() {
         for (int x = 0; x < 5; ++x)
             gv.setGray(x, y, static_cast<std::uint8_t>(x * 7 + y * 13 + 11)); // 逐像素唯一且非平凡
     // 旋转 90°×4 应回到原图且值无损。
-    core::Image grot = pixel_ops::rotate(gv, 90);
+    core::Image grot = preprocess::applyOne(gv, preprocess::RotateOp{90});
     CHECK(grot.isGray() && grot.width() == 3 && grot.height() == 5);
-    grot = pixel_ops::rotate(grot, 90);
-    grot = pixel_ops::rotate(grot, 90);
-    grot = pixel_ops::rotate(grot, 90);
+    grot = preprocess::applyOne(grot, preprocess::RotateOp{90});
+    grot = preprocess::applyOne(grot, preprocess::RotateOp{90});
+    grot = preprocess::applyOne(grot, preprocess::RotateOp{90});
     CHECK(grot.width() == 5 && grot.height() == 3);
     for (int y = 0; y < 3; ++y)
         for (int x = 0; x < 5; ++x)
             CHECK(grot.getGray(x, y) == gv.getGray(x, y));   // 四次 90° = 恒等，值逐像素一致
     // 水平翻转两次 = 恒等（值无损）；并验证单次映射 (x,y)->(w-1-x,y) 搬运的是原灰度值。
-    const core::Image gfh = pixel_ops::flip(gv, true);
+    const core::Image gfh = preprocess::applyOne(gv, preprocess::FlipOp{true});
     CHECK(gfh.isGray());
     for (int y = 0; y < 3; ++y)
         for (int x = 0; x < 5; ++x)
             CHECK(gfh.getGray(4 - x, y) == gv.getGray(x, y));
-    const core::Image gfh2 = pixel_ops::flip(gfh, true);
+    const core::Image gfh2 = preprocess::applyOne(gfh, preprocess::FlipOp{true});
     for (int y = 0; y < 3; ++y)
         for (int x = 0; x < 5; ++x)
             CHECK(gfh2.getGray(x, y) == gv.getGray(x, y));   // 翻两次无损回原
 
-    std::cout << "[pixel_ops] OK\n";
+    std::cout << "[pixel_kernels] OK\n";
 }
 
 // ---------------------------------------------------------------------------
@@ -537,7 +538,7 @@ static void testPreprocess() {
     const auto [width1, height1, rotQuad1] = pg2.geometryOutput(10, 20);
     CHECK(rotQuad1 == 1 && width1 == 20 && height1 == 10);
 
-    // ---- folded()：语义等价、趟数更少的折叠流水线——逐像素必与原序 apply 完全一致 ----
+    // ---- 折叠/执行融合回归队列：applyExec 与逐步 apply 逐像素等价（声明层 folded() 已删除）----
     // 非方形渐变图：区分 rotate90/270 的宽高互换、flip 的 H/V 轴向，且内容逐像素唯一（镜像/旋转可辨）。
     auto buildFoldImg = [] {
         core::Image im(6, 4, core::ImageFormat::RGBA);
@@ -556,21 +557,11 @@ static void testPreprocess() {
         return true;
     };
     const core::Image fbase = buildFoldImg();
+    // 正确性口径（folded() 删除后）：applyExec（execPlan + channelMap/remapD4 单趟融合核）与逐步 apply 必逐像素等价（含尺寸/格式）。
+    // 旧 folded() 的“趟数不增 / 幂等 / 折叠前后尺寸一致”类断言随声明层入口退役；下方回归队列 + 种子随机性质测试共同保证等价性。
+    // 注：rotQuad 不作断言——geometryOutput 忽略 flip 累加，与像素执行序无关，applyExec 不改净几何签名。
     auto checkFold = [&](const preprocess::PreprocessPipeline& p) {
-        const preprocess::PreprocessPipeline f = p.folded();
-        // 逐像素等价：折叠对连续几何段 / 色彩段各自就地规整、resize 作段界不动，最终图像（含尺寸/格式）必与原序完全一致。
-        CHECK(imagesEqual(p.apply(fbase), f.apply(fbase)));
-        // 趟数不增。
-        CHECK(f.size() <= p.size());
-        // 幂等：规范形式再折一次不变。
-        CHECK(imagesEqual(f.apply(fbase), f.folded().apply(fbase)));
-        // 输出尺寸（宽高）折叠前后必一致（像素等价已隐含此点）。
-        // 注：净旋转象限 rotQuad 不作断言——geometryOutput 刻意忽略 flip 累加 rotQuad，
-        //     而折叠会把「旋转∘镜像」这一 D4 元素重表示为不同的旋转量（如 FlipH;Rotate90 → Rotate270;FlipH，
-        //     像素逐点相同但忽略 flip 后的 rotQuad 不同）；GUI 几何签名恒按原始存储序计算，不走折叠，故无影响。
-        const auto g0 = p.geometryOutput(6, 4);
-        const auto g1 = f.geometryOutput(6, 4);
-        CHECK(g0.width == g1.width && g0.height == g1.height);
+        CHECK(imagesEqual(p.apply(fbase), p.applyExec(fbase)));
     };
     using preprocess::GrayOp;
     using preprocess::InvertOp;
@@ -590,43 +581,131 @@ static void testPreprocess() {
     { preprocess::PreprocessPipeline q; q.add(FlipOp{true}); q.add(FlipOp{true}); q.add(RotateOp{180}); q.add(RotateOp{180}); checkFold(q); }
     // 色彩与几何穿插：色彩不跨几何重排，每个几何步被色彩隔成独立长度为1的段 → 不压缩（趟数不变），逐像素仍等价。
     { preprocess::PreprocessPipeline q; q.add(GrayOp{}); q.add(RotateOp{90}); q.add(InvertOp{}); q.add(FlipOp{true}); q.add(SplitOp{"010"}); q.add(InvertOp{}); checkFold(q); }
-    // 显式验证“色彩隔断几何段”：[Rot90, Gray, Rot90] 两个 Rot90 被 Gray 隔开，各自折叠为自身 → 趟数保持 3（不跨 Gray 合并）。
-    { preprocess::PreprocessPipeline q; q.add(RotateOp{90}); q.add(GrayOp{}); q.add(RotateOp{90}); CHECK(q.folded().size() == 3); checkFold(q); }
-    // 显式验证“连续几何段压缩”：[Gray, Rot90, Rot90, Rot90, FlipH] 中后 4 个连续几何步折为规范 ≤2 op（叠加首部 Gray）→ 趟数严格减少。
-    { preprocess::PreprocessPipeline q; q.add(GrayOp{}); q.add(RotateOp{90}); q.add(RotateOp{90}); q.add(RotateOp{90}); q.add(FlipOp{true}); CHECK(q.folded().size() < q.size()); checkFold(q); }
-    // 单 flip V：折叠应退化为单个 FlipOp（非 180°+flipH），趟数=1。
-    { preprocess::PreprocessPipeline q; q.add(FlipOp{false}); CHECK(q.folded().size() == 1); checkFold(q); }
-    // resize 屏障：色彩 / resize 均不跨段，仅各段内连续几何被折叠；逐像素仍等价。
+    // 色彩隔断几何队列 [Rot90, Gray, Rot90]：execPlan 下几何可跨 gray 合并为单次 D4（不同于声明层折叠），逐像素等价仍成立。
+    { preprocess::PreprocessPipeline q; q.add(RotateOp{90}); q.add(GrayOp{}); q.add(RotateOp{90}); checkFold(q); }
+    // 连续几何压缩 [Gray, Rot90×3, FlipH]：三个 Rot90 + FlipH 归并为单次 D4，逐像素等价。
+    { preprocess::PreprocessPipeline q; q.add(GrayOp{}); q.add(RotateOp{90}); q.add(RotateOp{90}); q.add(RotateOp{90}); q.add(FlipOp{true}); checkFold(q); }
+    // 单 flip V：归并为单个 D4 元素，逐像素等价。
+    { preprocess::PreprocessPipeline q; q.add(FlipOp{false}); checkFold(q); }
+    // resize 屏障：resize 两侧色彩/几何不跨块合并，逐像素等价仍成立。
     { preprocess::PreprocessPipeline q; q.add(RotateOp{90}); q.add(GrayOp{}); q.add(ResizeOp{8, 5}); q.add(FlipOp{true}); q.add(FlipOp{true}); q.add(InvertOp{}); q.add(RotateOp{270}); checkFold(q); }
 
-    // ---- 色彩段规整：连续同类色彩步就地折为规范形（base 为 RGBA，pre-gray 位映射合并成立）----
-    // 双反色对消为恒等 → 趟数归 0。
-    { preprocess::PreprocessPipeline q; q.add(InvertOp{}); q.add(InvertOp{}); CHECK(q.folded().size() == 0); checkFold(q); }
-    // split×2 逐通道与：仅留 B 再仅留 G → 全置零（K=000）→ 折为单个 Split("000")。
-    { preprocess::PreprocessPipeline q; q.add(SplitOp{"001"}); q.add(SplitOp{"010"}); CHECK(q.folded().size() == 1); checkFold(q); }
-    // invert+split 复合→规范 Split(K)+Invert(J)，逐像素恒等。
+    // ---- 色彩队列回归：applyExec 与 apply 逐像素等价（base 为 RGBA，pre-gray 位映射合并成立）----
+    // 双反色对消为恒等。
+    { preprocess::PreprocessPipeline q; q.add(InvertOp{}); q.add(InvertOp{}); checkFold(q); }
+    // split×2 逐通道与：仅留 B 再仅留 G → 全置零（K=000）。
+    { preprocess::PreprocessPipeline q; q.add(SplitOp{"001"}); q.add(SplitOp{"010"}); checkFold(q); }
+    // invert+split 复合→单次 channelMap（(v&K)^J），逐像素恒等。
     { preprocess::PreprocessPipeline q; q.add(InvertOp{"111"}); q.add(SplitOp{"001"}); checkFold(q); }
-    // 5 步混合色彩链（无 gray）→ pre-gray 位映射至多折为 2 op。
-    { preprocess::PreprocessPipeline q; q.add(InvertOp{"100"}); q.add(SplitOp{"011"}); q.add(InvertOp{"010"}); q.add(SplitOp{"110"}); q.add(InvertOp{"001"}); CHECK(q.folded().size() <= 2); checkFold(q); }
-    // gray 幂等：连续三个 gray → 仅留第一个。
-    { preprocess::PreprocessPipeline q; q.add(GrayOp{}); q.add(GrayOp{}); q.add(GrayOp{}); CHECK(q.folded().size() == 1); checkFold(q); }
-    // 死步：gray 之后的 split 无意义 → 丢弃（原「拒绝式屏障」改用规整吞除的场景）。
-    { preprocess::PreprocessPipeline q; q.add(GrayOp{}); q.add(SplitOp{"001"}); CHECK(q.folded().size() == 1); checkFold(q); }
+    // 5 步混合色彩链（无 gray）→ pre-gray 位映射合为单次 channelMap。
+    { preprocess::PreprocessPipeline q; q.add(InvertOp{"100"}); q.add(SplitOp{"011"}); q.add(InvertOp{"010"}); q.add(SplitOp{"110"}); q.add(InvertOp{"001"}); checkFold(q); }
+    // gray 幂等：连续三个 gray → 仅首个生效。
+    { preprocess::PreprocessPipeline q; q.add(GrayOp{}); q.add(GrayOp{}); q.add(GrayOp{}); checkFold(q); }
+    // 死步：gray 之后的 split 无意义（灰度态规整吞除）。
+    { preprocess::PreprocessPipeline q; q.add(GrayOp{}); q.add(SplitOp{"001"}); checkFold(q); }
     // gray 之后 invert 按奇偶：两次抵消 → 仅剩 gray。
-    { preprocess::PreprocessPipeline q; q.add(GrayOp{}); q.add(InvertOp{}); q.add(InvertOp{}); CHECK(q.folded().size() == 1); checkFold(q); }
-    // 灰度态跨 run（跨几何）传播：[Gray, Rot90, Invert"100", Invert"010"] 末段已在灰度态，两个不同 mask 反色均整幅翻→抵消。
-    { preprocess::PreprocessPipeline q; q.add(GrayOp{}); q.add(RotateOp{90}); q.add(InvertOp{"100"}); q.add(InvertOp{"010"}); CHECK(q.folded().size() == 2); checkFold(q); }
-    // 跨 gray 不合并：gray 前后各一 invert 分属两侧位段，均保留（不可交换）。
-    { preprocess::PreprocessPipeline q; q.add(InvertOp{}); q.add(GrayOp{}); q.add(InvertOp{}); CHECK(q.folded().size() == 3); checkFold(q); }
+    { preprocess::PreprocessPipeline q; q.add(GrayOp{}); q.add(InvertOp{}); q.add(InvertOp{}); checkFold(q); }
+    // 灰度态跨几何传播：[Gray, Rot90, Invert"100", Invert"010"] 末段已在灰度态，两个不同 mask 反色均整幅翻→抵消。
+    { preprocess::PreprocessPipeline q; q.add(GrayOp{}); q.add(RotateOp{90}); q.add(InvertOp{"100"}); q.add(InvertOp{"010"}); checkFold(q); }
+    // 跨 gray 色彩不合并：gray 前后 invert 分属多通道位映射 / 灰度态整幅翻两侧，均保留。
+    { preprocess::PreprocessPipeline q; q.add(InvertOp{}); q.add(GrayOp{}); q.add(InvertOp{}); checkFold(q); }
+
+    // ---- applyExec：执行层融合专项（channelMap 四态 / 几何跨 gray 合并 / GRAY 输入 / 种子随机性质）----
+    // channelMap 强制255 四态（K=000∧J=111）：单 op 词表不可表达，仅 Split("000")+Invert("111") 两步可达；
+    // execPlan 折成单次 channelMap，逐像素仍与两步 apply 一致（alpha 字节保留）。
+    {
+        preprocess::PreprocessPipeline q;
+        q.add(SplitOp{"000"});
+        q.add(InvertOp{"111"});
+        const core::Image o = q.applyExec(fbase);
+        CHECK(imagesEqual(q.apply(fbase), o));
+        CHECK(o.getPixel(1, 1) == core::Color(255, 255, 255, 255));   // 三通道强制 255，非取反原值
+    }
+    // 几何跨 gray 合并：[Rot90, Gray, Rot90] 两段几何在 execPlan 下跨 gray 合成单次 D4 remap（色彩 gray 步照常发射），逐像素与逐步 apply 不变。
+    { preprocess::PreprocessPipeline q; q.add(RotateOp{90}); q.add(GrayOp{}); q.add(RotateOp{90}); checkFold(q); }
+    // alpha≠255 基图：融合位映射必原样保留 alpha 字节。
+    auto buildAlphaImg = [] {
+        core::Image im(5, 3, core::ImageFormat::RGBA);
+        for (int y = 0; y < 3; ++y)
+            for (int x = 0; x < 5; ++x)
+                im.setPixel(x, y, core::Color(static_cast<std::uint8_t>(x * 50 + 7),
+                                              static_cast<std::uint8_t>(y * 80 + 11),
+                                              static_cast<std::uint8_t>((x * y + x + 1) * 13 % 256),
+                                              static_cast<std::uint8_t>(30 + x * 40)));
+        return im;
+    };
+    const core::Image ebase = buildAlphaImg();
+    auto checkExecOn = [&](const preprocess::PreprocessPipeline& q, const core::Image& base) {
+        CHECK(imagesEqual(q.apply(base), q.applyExec(base)));
+    };
+    // Split+Invert 链在 alpha 基图上等价（验证 channelMap 的 alpha 保留与掩码归一口径）。
+    {
+        preprocess::PreprocessPipeline q;
+        q.add(SplitOp{"101"});
+        q.add(InvertOp{"010"});
+        q.add(InvertOp{"x"});           // 非 3 长掩码：K 归 "111"、J 归…按既有口径 "111"（与 applyOne 同路）
+        q.add(RotateOp{270});
+        checkExecOn(q, ebase);
+    }
+    // GRAY 输入基图：Split 全变死步、Invert 按整幅奇偶、几何/resize 保持灰度——计划按 inputIsGray 初始化灰度态。
+    core::Image gbase(6, 4, core::ImageFormat::GRAY);
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 6; ++x)
+            gbase.setGray(x, y, static_cast<std::uint8_t>((x * 40 + y * 17) % 256));
+    {
+        preprocess::PreprocessPipeline q;   // 灰度输入 + 死步 Split + 双反色对消 + 几何交错 + 跨块反色
+        q.add(SplitOp{"001"});
+        q.add(InvertOp{"100"});
+        q.add(RotateOp{90});
+        q.add(InvertOp{"010"});
+        q.add(ResizeOp{7, 4});
+        q.add(GrayOp{});
+        q.add(InvertOp{"111"});
+        q.add(FlipOp{false});
+        checkExecOn(q, gbase);
+    }
+    // 种子随机性质测试：200 条随机队列（六类 op 全参与、掩码含全0/非3长、角度含负值）× 三张基图轮换，
+    // 每条断言 applyExec 与逐步 apply 逐像素等价（含尺寸/格式；resize 块界交错路径同时被压到）。
+    std::mt19937 rng(20260927);
+    const std::array<const core::Image*, 3> bases = {&fbase, &ebase, &gbase};
+    auto randMask = [&rng] {
+        switch (rng() % 6) {
+            case 0: return std::string("000");
+            case 1: return std::string("111");
+            case 2: return std::string("101");
+            case 3: return std::string("010");
+            case 4: return std::string("11");   // 非 3 长 → 触发归一口径
+            default: {
+                std::string m(3, '0');
+                for (char& c : m) c = rng() % 2 ? '1' : '0';
+                return m;
+            }
+        }
+    };
+    for (int t = 0; t < 200; ++t) {
+        preprocess::PreprocessPipeline q;
+        const int len = 1 + static_cast<int>(rng() % 8);
+        for (int i = 0; i < len; ++i) {
+            switch (rng() % 6) {
+                case 0: q.add(GrayOp{}); break;
+                case 1: q.add(SplitOp{randMask()}); break;
+                case 2: q.add(InvertOp{randMask()}); break;
+                case 3: q.add(RotateOp{(static_cast<int>(rng() % 4) - 1) * 90}); break;   // -90..180
+                case 4: q.add(FlipOp{rng() % 2 == 0}); break;
+                default: q.add(ResizeOp{1 + static_cast<int>(rng() % 7), 1 + static_cast<int>(rng() % 5)}); break;
+            }
+        }
+        checkExecOn(q, *bases[rng() % 3]);
+    }
 
     std::cout << "[preprocess] OK\n";
 }
 
 // ---------------------------------------------------------------------------
-// history 模块测试：泛型撤销 / 重做栈
+// history 能力测试（原 history 模块、现属 core）：泛型撤销 / 重做栈
 // ---------------------------------------------------------------------------
 static void testHistory() {
-    idc::history::HistoryManager<int> h;
+    idc::core::HistoryManager<int> h;
     CHECK(!h.canUndo() && !h.canRedo());
 
     h.push(1);

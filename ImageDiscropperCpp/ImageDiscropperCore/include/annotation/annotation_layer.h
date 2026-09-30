@@ -14,11 +14,11 @@
 #include <vector>
 
 #include "core/color.h"
+#include "core/history_manager.h"
 #include "core/image.h"
 #include "core/point.h"
 #include "geometry/shape_type.h"
 #include "geometry/shapes.h"
-#include "history/history_manager.h"
 
 namespace idc::annotation {
 
@@ -148,10 +148,10 @@ public:
 
 private:
     core::Image image_;                              // 当前底图
-    // 已提交形状列表 + 撤销重做：复用通用 history::HistoryManager<Annotation>——其主栈
+    // 已提交形状列表 + 撤销重做：复用通用 core::HistoryManager<Annotation>（原 history 模块并入 core）——其主栈
     // （undoStack）即「当前有效标注列表」，重做栈承载被撤销、等待恢复的标注；不再自建
-    // annotations_ / garbage_ 两个向量（消除与 history 模块的重复实现）。
-    history::HistoryManager<Annotation> history_;
+    // annotations_ / garbage_ 两个向量（消除与撤销栈能力的重复实现）。
+    core::HistoryManager<Annotation> history_;
     EditType editType_{EditType::DRAW};              // 当前编辑模式
 
     // 当前工具属性

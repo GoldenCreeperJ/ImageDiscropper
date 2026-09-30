@@ -6,7 +6,7 @@ GUI 侧的**视图关注点**工具：Core 类型↔Qt 类型适配、大图降�
 |-----------------------------------|--------------------------------------------------------------------------------------------|
 | `image_qt_adapter.{h,cpp}`        | `core::Image` ↔ `QImage` / `QPixmap` 适配                                                    |
 | `path_qt_adapter.{h,cpp}`         | `geometry::Path` → `QPainterPath`、`core::Color` ↔ `QColor` 适配（标注矢量渲染/取色）                   |
-| `preview_scaler.{h,cpp}`          | 大图降采样预览（复用 Core `pixel_ops::resize`）                                                       |
+| `preview_scaler.{h,cpp}`          | 大图降采样预览（复用 Core `core::Image::resized`）                                                    |
 | `annotation_qt_painter.{h,cpp}`   | `paintAnnotation`：把单条标注矢量绘到 `QPainter` 的**公共渲染函数**（画布图元与输出预览烘焙共用）                          |
 | `output_preview_renderer.{h,cpp}` | 导出输出预览的**离屏渲染**：`bakeAnnotationsInto`（标注烘焙）+ `composeOutputThumbnail`（按 `Composition` 缩略图） |
 
@@ -31,7 +31,7 @@ GUI 侧的**视图关注点**工具：Core 类型↔Qt 类型适配、大图降�
 
 - `struct PreviewImage { core::Image image; double scaleX, scaleY; }`：预览副本 + 预览→原图的放大系数。
 - `PreviewImage makePreview(const core::Image&, int maxDimension)`：最长边 ≤ `maxDimension` 时返回原图副本
-  （`scale=1`）；否则调用 Core `pixel_ops::resize(..., NEAREST)` 降采样，`scaleX = 原宽 / 预览宽`。
+  （`scale=1`）；否则调用 Core `core::Image::resized(..., NEAREST)` 降采样，`scaleX = 原宽 / 预览宽`。
 
 ## annotation_qt_painter
 

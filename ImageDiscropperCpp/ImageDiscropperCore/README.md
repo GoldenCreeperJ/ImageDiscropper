@@ -18,19 +18,17 @@
 - **① 核心引擎层（新项目主体）**：`engine`。承载本工具区别于常规裁剪的全部价值
   （切割线 / 诱导网格 / 选择集 / 极性 / 排布导出），对应 MVP 与 v2，
   是后续开发的主战场；现已落地为完整可运行的统一引擎（含 stb/libwebp 图像编码 / nlohmann JSON 配置）。
-- **② 复用支撑层（前置能力）**：`core` / `pixel_ops` / `preprocess` / `geometry` /
-  `annotation` / `history`。由旧库重构保留，服务于 SPEC §3.1 **FR-1「基础图像处理」前置层**，
+- **② 复用支撑层（前置能力）**：`core` / `preprocess` / `geometry` /
+  `annotation`。由旧库重构保留，服务于 SPEC §3.1 **FR-1「基础图像处理」前置层**，
   多属 v3（标注图层最重、最后做）。它们是引擎的输入准备与辅助，**不是**主体。
 
-| 模块           | 命名空间              | 层      | 职责                                                                                                                                          | 对应规格                          |
-|--------------|-------------------|--------|---------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------|
-| `engine`     | `idc::engine`     | ★ 核心   | Grid-Selection-Emit 统一引擎（切割/网格/选择/合成/导出/JSON 全实现）                                                                                           | SPEC §1 全部核心概念                |
-| `core`       | `idc::core`       | 支撑（地基） | 基础数据类型：`Color` / `Point2D` / `Image`                                                                                                        | SPEC §2.2 `Image`             |
-| `pixel_ops`  | `idc::pixel_ops`  | 支撑     | 像素处理：颜色/通道、旋转/翻转/缩放                                                                                                                         | FR-1.1 / FR-1.2 / FR-1.4      |
-| `preprocess` | `idc::preprocess` | 支撑     | 切割前的**声明式有序步骤队列**：`PreprocessPipeline`（灰度/反色/色道分离/旋转/翻转/**尺寸 resize**）+ 纯元数据 `geometryOutput` 几何推演 + 逐像素等价、对连续几何 / 色彩段就地规整的 `folded()` 趟数优化 | SPEC §7 `preprocess` 段 / FR-1 |
-| `geometry`   | `idc::geometry`   | 支撑     | 标注图形几何：`ShapeType` / `Shape` / `Path` / `AffineTransform`                                                                                   | FR-1.3 标注几何                   |
-| `annotation` | `idc::annotation` | 支撑     | 标注层：`AnnotationLayer` / `ShapeFactory` / `Rasterizer` / `ViewTransform`                                                                     | FR-1.3 标注图层（可烧录）              |
-| `history`    | `idc::history`    | 支撑     | 泛型撤销 / 重做栈：`HistoryManager<T>`（被 `annotation::AnnotationLayer` 复用）                                                                          | FR-1.5 / NFR-4                |
+| 模块           | 命名空间              | 层      | 职责                                                                                                                                                                                                       | 对应规格                               |
+|--------------|-------------------|--------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|
+| `engine`     | `idc::engine`     | ★ 核心   | Grid-Selection-Emit 统一引擎（切割/网格/选择/合成/导出/JSON 全实现）                                                                                                                                                        | SPEC §1 全部核心概念                     |
+| `core`       | `idc::core`       | 支撑（地基） | 基础数据类型：`Color` / `Point2D` / `Image`（含迁入的通用像素原语 `resized`/`scaled`/`colorAt` 与 `toGray`）+ 泛型撤销 / 重做栈 `HistoryManager<T>`（原 `history` 模块并入，被 `annotation::AnnotationLayer` 与 GUI 复用）                      | SPEC §2.2 `Image` / FR-1.5 / NFR-4 |
+| `preprocess` | `idc::preprocess` | 支撑     | 切割前的**声明式有序步骤队列**：`PreprocessPipeline`（灰度/反色/色道分离/旋转/翻转/**尺寸 resize**）+ 纯元数据 `geometryOutput` 几何推演 + 逐像素等价的执行层融合入口 `applyExec`（色彩折单次 `channelMap` f(v)=(v&K)^J、几何折单次 D4 `remapD4`，私有像素核 `pixel_kernels`） | SPEC §7 `preprocess` 段 / FR-1      |
+| `geometry`   | `idc::geometry`   | 支撑     | 标注图形几何：`ShapeType` / `Shape` / `Path` / `AffineTransform`                                                                                                                                                | FR-1.3 标注几何                        |
+| `annotation` | `idc::annotation` | 支撑     | 标注层：`AnnotationLayer` / `ShapeFactory` / `Rasterizer` / `ViewTransform`                                                                                                                                  | FR-1.3 标注图层（可烧录）                   |
 
 > `examples/`（演示程序）与 `tests/`（极简自测）分别验证库的典型用法与关键行为。
 > 注：表中「层」表达**主次**（`engine` 为主体）；§4 的目录顺序仅为**物理布局**，二者不必一致。
@@ -93,12 +91,10 @@ ImageDiscropperCore/
 ├── CMakeLists.txt            构建脚本（静态库 + demo + unit_tests）
 ├── README.md                 本文件
 ├── include/                  公共头文件（对外接口）
-│   ├── core/                 基础数据类型：Color / Point / Image
+│   ├── core/                 基础数据类型：Color / Point / Image（含通用像素原语 resized/scaled/colorAt）+ 泛型撤销/重做栈 HistoryManager（原 history 并入）
 │   ├── geometry/             标注图形几何：ShapeType / Shape / Path / AffineTransform
-│   ├── pixel_ops/            像素处理算法（颜色/通道、几何变换）
 │   ├── annotation/           标注层：AnnotationLayer / ShapeFactory / Rasterizer / ViewTransform
-│   ├── preprocess/           预处理流水线：PreprocessConfig / PreprocessPipeline
-│   ├── history/              撤销 / 重做栈
+│   ├── preprocess/           预处理流水线：PreprocessConfig / PreprocessPipeline（像素核 pixel_kernels 为 src 私有）
 │   └── engine/               ★ Grid-Selection-Emit 统一引擎接口
 ├── src/                      对应 include 的实现文件（engine 全链路真实实现）
 ├── examples/                 演示程序 demo_main.cpp（真正跑通引擎并导出到 demo_output/）

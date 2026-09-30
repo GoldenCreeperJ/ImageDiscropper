@@ -66,9 +66,10 @@ public:
     static bool loadConfig(const QString& path, engine::EngineConfig& out, QString& err,
                            annotation::AnnotationLayer* annotations = nullptr);
 
-    // 声明式队列物化（委托 Core PreprocessPipeline::apply）：把整条预处理流水线按序应用到 src，
-    // 返回结果图（不修改入参）。供 PreprocessController 从 original_ 重放 steps_ 得到 working_。
-    // GUI 不自实现任何逐步分派——流水线语义（含 ResizeOp/旋转）全由 Core 承担（CONTRIBUTING.md「分层纪律」）。
+    // 声明式队列物化（委托 Core PreprocessPipeline::applyExec）：把整条预处理流水线以执行层融合
+    // 方式应用到 src（色彩折单次 channelMap、几何折单次 D4、与逐步 apply 逐像素等价），返回结果图（不修改入参）。
+    // 供 PreprocessController 从 original_ 重放 steps_ 得到 working_。
+    // GUI 不自实现任何逐步分派/折叠——流水线语义（含 ResizeOp/旋转）全由 Core 承担（CONTRIBUTING.md「分层纪律」）。
     static core::Image applyPipeline(const core::Image& src, const preprocess::PreprocessPipeline& pipeline);
 };
 

@@ -13,8 +13,8 @@
 #include <QObject>
 #include <QTimer>
 
+#include "core/history_manager.h"
 #include "engine/engine.h"
-#include "history/history_manager.h"
 
 namespace idc::gui {
 
@@ -62,7 +62,7 @@ private:
     AnnotationBridge* anno_{nullptr};
     StatusBar* status_{nullptr};
 
-    history::HistoryManager<engine::EngineConfig> history_;
+    core::HistoryManager<engine::EngineConfig> history_;
     QTimer timer_;           // 防抖定时器：把拖拽/连点的连续 changed() 合并为一条历史。
     bool suppress_{false};   // 还原（undo/redo/applyEngineConfig）期间抑制历史采集，防回环污染。
 };

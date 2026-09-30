@@ -57,17 +57,15 @@ public:
     // 将流水线应用到 src，返回结果图像。不修改 src。
     core::Image apply(const core::Image& src) const;
 
-    // 返回一个**逐像素语义等价、但趟数更少**的折叠流水线（不修改本对象）——对**连续同类段**各自就地规整，段间绝不跨越：
-    //   · 连续几何步（RotateOp / FlipOp）→ 规范 ≤2 op（1 RotateOp + 至多 1 FlipOp）：连续 rotate/flip 复合是纯像素
-    //     位置置换（D4），折叠后逐像素与逐尺寸恒等；
-    //   · 连续色彩步（GrayOp / SplitOp / InvertOp）→ 规范形：首个 gray 前的 Split/Invert 折成至多 Split+Invert（逐通道
-    //     位映射 f(v)=(v&K)^J）、gray 幂等（重复丢弃）、gray 后 Split 死步丢弃且 Invert 按奇偶折成至多 1 步；纯位运算 +
-    //     取整点不变，故逐像素恒等；
-    //   · ResizeOp 及各段之间 **原地保留、绝不跨越重排**（resize 双线性与 gray 截断使色彩/几何并非总能交换）。
-    // 注：仅减少同类连续段的重放趟数与死步，不改变 apply/geometryOutput 的结果；调用方按需选择是否走折叠。
-    // 前提：灰度态在整个流水线内单调不回退（几何 / resize 均保持灰度），且输入图像为多通道（载入器强解 RGBA），
-    //       pre-gray 位映射合并据此成立；若直接喂入 GRAY 图作为起点则超出该前提（不属正常使用）。
-    PreprocessPipeline folded() const;
+    // 执行层融合入口（与 apply 逐像素等价，含尺寸/格式）：先把队列压成内部 ExecStep 计划
+    // 再单趟执行——色彩步折成单次位映射 f(v)=(v&K)^J（channelMap 融合核），几何步折成单次
+    // D4 重排（remapD4 融合核），灰度化幂等去重，灰度态反色按奇偶合并；像素趟数恒 ≤ 块数×4，
+    // 与队列长度解耦。块界唯一为 ResizeOp（双线性取整与逐像素映射/置换不可交换）；色彩与几何可跨
+    // gray 合并（逐像素字节映射与精确置换互为可交换，几何无损前提是 GRAY 搬运单字节直拷）。
+    // ExecStep 为 cpp 内部类型：不进 PreprocessConfig / schema / 序列化 / GUI 词表，对外仅增本方法。
+    // 注：apply 逐步语义保留不动，充当本方法的等价性参照 oracle；旧声明层折叠入口 folded() 已删除，
+    //     折叠口径统一收敛到本方法（执行层），不再保留两套折叠。
+    core::Image applyExec(const core::Image& src) const;
 
     // 几何推演结果（纯元数据，不碰像素）：供 GUI 在请求期计算几何签名。
     struct GeometryOut { int width; int height; int rotQuad; };

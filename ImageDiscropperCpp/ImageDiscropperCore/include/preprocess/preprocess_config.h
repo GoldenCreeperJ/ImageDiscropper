@@ -82,7 +82,7 @@ PreprocessConfig makeDefaultConfig(PreprocessType t);
 PreprocessType configType(const PreprocessConfig& cfg);
 
 // 轻操作分类（几何 / 色彩）：Rotate/Flip = 几何，Gray/Split/Invert = 色彩，Resize 二者皆非。
-// 单一真相源——Core 折叠（folded）、控制器不变式（appendLightKeepingInvariant）、面板双列表下标映射均以此为准，口径不漂移。
+// 单一真相源——Core 执行层融合（applyExec 计划构建 buildExecPlan）、控制器不变式（appendLightKeepingInvariant）、面板双列表下标映射均以此为准，口径不漂移。
 bool isGeometryStep(const PreprocessConfig& cfg);
 bool isColorStep(const PreprocessConfig& cfg);
 
