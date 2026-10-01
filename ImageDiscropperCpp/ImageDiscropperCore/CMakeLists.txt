@@ -50,11 +50,11 @@ set(IDC_GEOMETRY_SRC
         src/geometry/path.cpp
 )
 
-# annotation：标注层（FR-1.3）+ 标注 ↔ JSON 序列化（SPEC §7 annotations 段，自 engine 内聚收口至此）
+# annotation：标注集合（FR-1.3，纯数据 + zOrder + 光栅合成；会话态已拆至 GUI AnnotationEditor）+ 标注 ↔ JSON 序列化（SPEC §7 annotations 段，自 engine 内聚收口至此）
 set(IDC_ANNOTATION_SRC
         src/annotation/shape_factory.cpp
         src/annotation/rasterizer.cpp
-        src/annotation/annotation_layer.cpp
+        src/annotation/annotation_set.cpp
         src/annotation/annotation_json.cpp
         src/annotation/view_transform.cpp
 )
@@ -119,8 +119,14 @@ if(IDC_BUILD_TESTS)
             tests/test_engine_export.cpp
             tests/test_engine_boundary.cpp
             tests/test_engine_config_json.cpp
+            # 跨模块直编：GUI 的标注编辑会话（零 Qt 依赖）——供会话语义（撤销/重做/选中跟随）回归。
+            ../ImageDiscropperGui/src/model/annotation_editor.cpp
+            # 跨模块直编：GUI 的预处理会话（零 Qt 依赖）——供 geo→color 不变式/归一化/baseDirty/签名回归。
+            ../ImageDiscropperGui/src/model/preprocess_session.cpp
     )
     target_link_libraries(unit_tests PRIVATE image_discropper_core)
+    # 仅为直编 annotation_editor.cpp 与 test_main 引 model/annotation_editor.h 开放 GUI include 根。
+    target_include_directories(unit_tests PRIVATE ../ImageDiscropperGui/include)
 
     add_test(NAME unit_tests COMMAND unit_tests)
 endif()

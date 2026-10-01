@@ -4,56 +4,29 @@
 // ============================================================================
 #pragma once
 
+#include <utility>
 #include <vector>
 
 #include "core/image.h"
+#include "core/pipeline_manager.h"
 #include "preprocess/preprocess_config.h"
 
 namespace idc::preprocess {
 
 // ---------------------------------------------------------------------------
-// PreprocessPipeline：操作流水线
+// PreprocessPipeline：操作流水线（**公开继承** core::Pipeline<PreprocessConfig>，
+// is-a 建立：预处理管线就是一个「PreprocessConfig 的有序步骤队列」再加像素/几何语义）。
+// 存储 + CRUD（add / insert / remove / moveUp / moveDown / clear / size / empty / items /
+// begin / end / operator==）及「越界钳制 / 忽略」边界策略均由基类代劳；本类只保留
+// 与 PreprocessConfig 语义绑定的方法（apply / applyExec / geometryOutput）与域内别名。
 // 使用方式：
 //   PreprocessPipeline pipe;
 //   pipe.add(GrayOp{});
 //   pipe.add(RotateOp{90});
 //   core::Image out = pipe.apply(src);
 // ---------------------------------------------------------------------------
-class PreprocessPipeline {
+class PreprocessPipeline : public core::Pipeline<PreprocessConfig> {
 public:
-    // 追加一个操作步骤到队尾。
-    void add(PreprocessConfig cfg);
-
-    // 在指定位置插入一个操作步骤；index 超出范围时追加到队尾。
-    void insert(std::size_t index, PreprocessConfig cfg);
-
-    // 删除指定位置的操作步骤；index 越界时忽略。
-    void remove(std::size_t index);
-
-    // 就地替换指定位置的操作步骤（用于编辑已有步骤的参数）；index 越界时忽略。
-    void setStep(std::size_t index, PreprocessConfig cfg);
-
-    // 上移指定位置的操作步骤（用于调整执行顺序）；已在首位时忽略。
-    void moveUp(std::size_t index);
-
-    // 下移指定位置的操作步骤（用于调整执行顺序）；已在末位时忽略。
-    void moveDown(std::size_t index);
-
-    // 清空所有步骤。
-    void clear();
-
-    // 当前步骤数量。
-    std::size_t size() const { return steps_.size(); }
-
-    // 队列是否为空（无任何步骤）。
-    bool empty() const { return steps_.empty(); }
-
-    // 只读访问步骤列表。
-    const std::vector<PreprocessConfig>& steps() const { return steps_; }
-
-    // 两条队列逐步相等（依赖 PreprocessConfig 各 op 的 operator==）：用于 base_ 前缀失效比对等。
-    bool operator==(const PreprocessPipeline& other) const { return steps_ == other.steps_; }
-
     // 将流水线应用到 src，返回结果图像。不修改 src。
     core::Image apply(const core::Image& src) const;
 
@@ -74,9 +47,6 @@ public:
     //   width/height —— resize 设绝对值、rotate 90/270 交换宽高，gray/invert/split/flip 保持；
     //   rotQuad     —— 所有 rotate 角度累加后 mod 4（0..3），忽略 flip（不入签名）。
     GeometryOut geometryOutput(int width, int height) const;
-
-private:
-    std::vector<PreprocessConfig> steps_;
 };
 
 // 便捷函数：直接对一张图像应用单个操作，返回结果。

@@ -342,7 +342,7 @@ void ImagePanel::onClearResizeClicked() { emit resizeClearedRequested(); }
 int ImagePanel::geoRowCount() const {
     if (!doc_) return 0;
     int n = 0;
-    for (const auto& cfg : doc_->steps().steps()) {
+    for (const auto& cfg : doc_->steps().items()) {
         if (!isGeo(cfg)) break;   // 几何块在前，遇首个色彩即止
         ++n;
     }
@@ -364,7 +364,7 @@ int ImagePanel::colorFlatIndex() const {
 void ImagePanel::onGeoSelectionChanged() {
     const int row = geoList_->currentRow();
     if (row >= 0 && doc_) {
-        if (const auto& steps = doc_->steps().steps(); static_cast<std::size_t>(row) < steps.size()) loadGeoIntoControls(steps[static_cast<std::size_t>(row)]);
+        if (const auto& steps = doc_->steps().items(); static_cast<std::size_t>(row) < steps.size()) loadGeoIntoControls(steps[static_cast<std::size_t>(row)]);
     }
     const bool has = doc_ && doc_->hasImage();
     geoReplaceBtn_->setEnabled(has && row >= 0);
@@ -378,7 +378,7 @@ void ImagePanel::onGeoSelectionChanged() {
 void ImagePanel::onColorSelectionChanged() {
     const int row = colorList_->currentRow();
     if (row >= 0 && doc_) {
-        const auto& steps = doc_->steps().steps();
+        const auto& steps = doc_->steps().items();
         if (const auto flat = static_cast<std::size_t>(geoRowCount() + row); flat < steps.size()) loadColorIntoControls(steps[flat]);
     }
     const bool has = doc_ && doc_->hasImage();
@@ -462,7 +462,7 @@ void ImagePanel::syncFromDocument() {
 
     // ---- 按类型拆分队列到两个列表（几何块 / 色彩块）----
     std::vector<preprocess::PreprocessConfig> geoSteps, colorSteps;
-    for (const auto& cfg : doc_->steps().steps())
+    for (const auto& cfg : doc_->steps().items())
         (isGeo(cfg) ? geoSteps : colorSteps).push_back(cfg);
 
     // 重建列表：阻断选中信号避免回灌抖动；记住各列选中行。若本次源于「上/下移」（pending 有效），

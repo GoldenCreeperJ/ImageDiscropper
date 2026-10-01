@@ -5,19 +5,24 @@
 都直接或间接依赖这里的类型。对应 SPEC §2.2 的 `Image` 概念与 FR-1.5 / NFR-4 的撤销重做能力。
 
 **分块依据**：将「数据」与「算法」解耦，把最基础的像素点、颜色、图像三种数据结构
-独立成三个头文件，避免上层出现循环依赖；与业务无关的通用能力（泛型撤销 / 重做栈，
-原 `history` 模块）同样落在本层，供标注层 / GUI 文档历史复用。
+独立成三个头文件，避免上层出现循环依赖；与业务无关的通用容器能力（泛型撤销 / 重做栈、
+泛型有序步骤队列，原 `history` 模块并入）同样落在本层，供标注层 / GUI 文档历史 / preprocess 复用。
 
-| 文件                  | 职责                                                                                             |
-|---------------------|------------------------------------------------------------------------------------------------|
-| `color.h`           | RGBA 颜色结构体 `Color` 及颜色运算（反色 / 感知反色 / 互补色 / HSV 转换）                                             |
-| `point.h`           | 二维浮点坐标 `Point2D`、整数点 `Point2I` 及其算术运算                                                          |
-| `image.h`           | 图像像素容器 `Image`，支持 RGB / RGBA / GRAY 三种模式，行主序存储                                                 |
-| `history_manager.h` | 泛型撤销 / 重做栈 `HistoryManager<T>`：`push` / `popToRedo` / `popFromRedo` 等（纯模板头实现，原 `history` 模块并入） |
+| 文件                   | 职责                                                                                                                                                                                                                               |
+|----------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `color.h`            | RGBA 颜色结构体 `Color` 及颜色运算（反色 / 感知反色 / 互补色 / HSV 转换）                                                                                                                                                                               |
+| `point.h`            | 二维浮点坐标 `Point2D`、整数点 `Point2I` 及其算术运算                                                                                                                                                                                            |
+| `image.h`            | 图像像素容器 `Image`，支持 RGB / RGBA / GRAY 三种模式，行主序存储                                                                                                                                                                                   |
+| `history_manager.h`  | 泛型撤销 / 重做栈 `HistoryManager<T>`：`push` / `popToRedo` / `popFromRedo` 等（纯模板头实现，原 `history` 模块并入）                                                                                                                                   |
+| `pipeline_manager.h` | 泛型有序步骤队列 `Pipeline<T>`：`add` / `insert` / `remove` / `replaceAt` / `moveUp` / `moveDown` / `clear` + `size` / `empty` / `items` / `operator==`（纯模板头实现，与元素类型无关的「按序增删移改 + 越界钳制/忽略」容器骨架；现由 `preprocess::PreprocessPipeline` 公开继承复用） |
 
 > 语义：`push` 追加新条目并清空重做栈（新操作切断「未来」）；`popToRedo` 撤销、
 > `popFromRedo` 重做。主栈经 `undoStack()`（只读 / 可写两个重载）对外暴露：可写重载供使用方对「当前有效条目」
-> 原地编辑（如标注 EDIT 模式改样式，不新增历史条目）。当前由 `annotation::AnnotationLayer`
-> 复用为其标注撤销重做栈，GUI `DocHistory` 以 `T=EngineConfig` 实例化承载文档参数态历史。
+> 原地编辑（如标注 EDIT 模式改样式，不新增历史条目）。现仅由 GUI `DocHistory` 以 `T=EngineConfig`
+> 实例化承载文档参数态历史（标注会话的撤销/重做已拆至 GUI `AnnotationEditor`，改在 `AnnotationSet` 上自行编排、不再复用本栈）。
+
+> `Pipeline<T>` 语义：与 `HistoryManager<T>` 同为纯头模板，逻辑只落在 `std::vector` 下标操作与边界策略上，绝不含 `T` 专属代码。
+> 边界钳制/忽略：`insert` 越界（`>= size`）钳制为追加队尾、`remove`/`replaceAt` 越界忽略、`moveUp` 首位忽略、`moveDown` 末位忽略；
+> `moveUp/moveDown` 只做相邻单格机械换序，不感知跨元素不变式（geo→color 分区那类不变式属上层会话职责）。现由 `preprocess::PreprocessPipeline` 以其存储 + CRUD 骨架公开继承复用（LSP 成立：Core 侧无跨方法守卫不变式可绕过）。
 
 > 坐标与像素约定遵循 SPEC §2.1：整数像素、原点左上、`x` 向右 `y` 向下。

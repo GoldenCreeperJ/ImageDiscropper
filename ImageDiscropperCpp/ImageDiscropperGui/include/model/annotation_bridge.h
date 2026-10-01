@@ -1,18 +1,19 @@
 // ============================================================================
 // 文件：model/annotation_bridge.h
-// 作用：标注域的「桥」——GUI 中唯一持有并驱动 Core annotation::AnnotationLayer 的类
-//       （类比 EngineBridge 之于切割引擎）。它把画布手势 / 面板意图翻译成对 Core 标注
+// 作用：标注域的「桥」——GUI 中唯一持有并驱动标注编辑会话 AnnotationEditor 的类
+//       （类比 EngineBridge 之于切割引擎）。它把画布手势 / 面板意图翻译成对会话 / Core 标注
 //       API 的调用（buildShape / addAnnotation / hitTest / rasterize …），自身不含任何
 //       几何计算或光栅化实现（CONTRIBUTING.md「分层纪律」）。
 // 分块依据：
 //   - AnnoTool         : GUI 侧标注工具枚举（选择 + 各形状 + 多线段 + 文字 + 画笔），
 //                        与 Core geometry::ShapeType 一一映射（SELECT 无对应形状）。
-//   - AnnotationBridge : 拥有 Core AnnotationLayer，暴露绘制 / 选择 / 移动 / 删除 /
-//                        撤销重做 / 图层可见性 / 导出烧录等意图方法，并以信号驱动画布重绘。
+//   - AnnotationBridge : 拥有 AnnotationEditor（内含 Core annotation::AnnotationSet 数据集合），
+//                        暴露绘制 / 选择 / 移动 / 删除 / 撤销重做 / 图层可见性 / 导出烧录等意图方法，
+//                        并以信号驱动画布重绘。
 // 说明：
 //   · 标注层与底图**分离**——画布用矢量叠加渲染（见 canvas/annotation_item），不改底图像素；
 //     仅在导出时按需 burnIn(base) 合成（CONTRIBUTING.md「分层纪律」 标注与切割解耦、CONTRIBUTING.md「分层纪律」 预处理→标注→切割→导出）。
-//   · 撤销 / 重做复用 Core AnnotationLayer 内建 revoke()/redo()（分层快照），GUI 不自建历史栈。
+//   · 撤销 / 重做复用 AnnotationEditor 内建 revoke()/redo()（条目级会话态），GUI 不自建历史栈。
 // ============================================================================
 #pragma once
 
@@ -26,7 +27,7 @@
 #include "core/color.h"
 #include "core/image.h"
 #include "core/point.h"
-#include "annotation/annotation_layer.h"
+#include "model/annotation_editor.h"
 #include "geometry/path.h"
 #include "geometry/shape_type.h"
 #include "geometry/shapes.h"
@@ -75,13 +76,13 @@ public:
     // 切换工具：SELECT→Core EDIT 模式（属性作用选中项），其余→DRAW 模式（属性作为下一次绘制默认）。
     void setTool(AnnoTool tool);
 
-    core::Color currentColor() const { return layer_.currentColor(); }
-    core::Color currentFillColor() const { return layer_.currentFillColor(); }
-    int currentStrokeWidth() const { return layer_.currentStrokeWidth(); }
-    bool currentFill() const { return layer_.currentFill(); }
-    std::string currentText() const { return layer_.currentText(); }
-    double currentFontSize() const { return layer_.currentFontSize(); }
-    double currentCornerRadius() const { return layer_.currentCornerRadius(); }
+    core::Color currentColor() const { return editor_.currentColor(); }
+    core::Color currentFillColor() const { return editor_.currentFillColor(); }
+    int currentStrokeWidth() const { return editor_.currentStrokeWidth(); }
+    bool currentFill() const { return editor_.currentFill(); }
+    std::string currentText() const { return editor_.currentText(); }
+    double currentFontSize() const { return editor_.currentFontSize(); }
+    double currentCornerRadius() const { return editor_.currentCornerRadius(); }
 
     // 写回属性：委托 Core change*（EDIT 模式作用选中项，DRAW 模式改当前默认），随后发 changed()。
     void setColor(const core::Color& c);   // 边框 / 描边色
@@ -113,7 +114,7 @@ public:
     // ---- 选择 / 移动 / 删除（复用 Core，不在 GUI 算几何）----
     void selectAt(core::Point2D p);     // 命中检测并选中（委托 Core hitTest/selectAnnotation）
     void clearSelection();                   // 取消选中
-    std::optional<std::size_t> selectedIndex() const { return layer_.selectedAnnotationIndex(); }
+    std::optional<std::size_t> selectedIndex() const { return editor_.selectedAnnotationIndex(); }
     // 平移选中标注：委托 Core Shape::translateWorld 就地偏移形状自身参数，**保留具体类型**
     // （不再展平重建为通用 PATH，故 TEXT 字形、参数化元数据与控制点语义均不丢失）。
     void moveSelectedBy(double dx, double dy);
@@ -125,8 +126,8 @@ public:
     // rotateDeg 为旋转角增量；无选中或无变化则忽略。属性面板与画布 OBB 手柄共用本入口。
     void transformSelected(double sx, double sy, double rotateDeg);
 
-    // ---- 层序（叠放次序）：Core 以标注下标为 z 序（大＝顶，见 hitTest/burnIn）----
-    // 均作用于选中项，委托 Core AnnotationLayer::moveAnnotation 重排；无选中则忽略。随后发 changed()/selectionChanged()。
+    // ---- 层序（叠放次序）：以标注下标为 z 序（大＝顶，见 hitTest/burnIn）----
+    // 均作用于选中项，委托 AnnotationEditor::moveAnnotation 重排；无选中则忽略。随后发 changed()/selectionChanged()。
     void raiseSelected();         // 上移一层（向顶层）
     void lowerSelected();         // 下移一层（向底层）
     void bringSelectedToFront();  // 置于顶层
@@ -137,10 +138,9 @@ public:
     void redo();                             // → Core redo()
     void clearAll();                         // → Core clear()
 
-    // ---- 配置还原（SPEC §7 annotations 段）----
-    // 只读引用 Core 层：供保存配置时把当前标注层交给 EngineBridge::saveConfig 序列化。
-    const annotation::AnnotationLayer& layer() const { return layer_; }
-    // 用载入的标注整体替换当前列表（委托 Core restoreAnnotations：不推撤销快照、取消选中），
+    // 只读引用底层集合：供保存配置时把当前标注交给 EngineBridge::saveConfig 序列化。
+    const annotation::AnnotationSet& set() const { return editor_.set(); }
+    // 用载入的标注整体替换当前列表（委托 AnnotationEditor::restoreAnnotations：不推撤销快照、取消选中），
     // 随后发 changed()/selectionChanged() 驱动画布与面板刷新。调用方须保证已在预处理队列
     // 重放（含尺寸门清标注）之后执行，否则还原会被尺寸门误清。
     void replaceAnnotations(std::vector<annotation::Annotation> items);
@@ -153,12 +153,12 @@ public:
 
     // ---- 导出合成 ----
     // 以传入的 base（当前工作图）为底，逐个调 Core rasterize 合成所有标注，返回新 RGBA 图。
-    // 不复用 AnnotationLayer::burnIn()（其内部 image_ 可能预处理后陈旧），确保与最新底图一致。
+    // 不复用会话所持底图（其可能预处理后陈旧），确保与最新底图一致。
     core::Image burnIn(const core::Image& base) const;
 
     // ---- 只读访问（供画布渲染）----
-    const std::vector<annotation::Annotation>& annotations() const { return layer_.annotations(); }
-    std::size_t count() const { return layer_.annotations().size(); }
+    const std::vector<annotation::Annotation>& annotations() const { return editor_.annotations(); }
+    std::size_t count() const { return editor_.annotations().size(); }
     // 当前拖拽预览形状（未提交）；无预览时返回 nullptr。画布据此画橡皮筋矢量。
     const geometry::Shape* pendingShape() const { return pending_.get(); }
 
@@ -192,7 +192,7 @@ private:
     // 依当前工具与预览锚点重建 pending_（两点形状用 p1/p2，折线 / 画笔用 pathDraft_）。
     void rebuildPending(core::Point2D current);
 
-    annotation::AnnotationLayer layer_;  // Core 标注会话（唯一真相源）
+    AnnotationEditor editor_;  // 标注编辑会话（内含 Core AnnotationSet 数据集合，唯一真相源）
     AnnoTool tool_{AnnoTool::SELECT};
 
     // 绘制预览状态（仅 GUI 侧临时，不进 Core 历史）

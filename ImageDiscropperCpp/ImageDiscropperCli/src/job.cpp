@@ -16,7 +16,7 @@
 
 #include "engine/engine_config_json.h" // saveEngineConfig
 #include "engine/image_io.h"           // readImageFile
-#include "annotation/annotation_layer.h" // AnnotationLayer::burnIn(base)（配置标注烧录）
+#include "annotation/annotation_set.h" // AnnotationSet::burnIn(base)（配置标注烧录）
 
 #include "cli_error.h"
 
@@ -45,7 +45,7 @@ ExitCode loadInputImage(const std::string& path, core::Image& out, const JobOpti
 // 执行作业：校正 source → runEngine → 坍缩校验 → exportImage → 退出码。
 ExitCode executeJob(engine::EngineConfig& config, const core::Image& image,
                     const JobOutput& out, const JobOptions& opt,
-                    const annotation::AnnotationLayer* annotations) {
+                    const annotation::AnnotationSet* annotations) {
     // FR-1：切割前把 preprocess / 标注物化为「工作图 work」。
     //   几何流水线（runEngine）与落盘（exportImage）必须共用同一张 work——runEngine 内部会按预处理
     //   产出尺寸（rotate ±90 宽高互换 / resize 改尺寸）计算裁剪区域，若仍拿未预处理的原图落盘，
@@ -125,7 +125,7 @@ ExitCode executeJob(engine::EngineConfig& config, const core::Image& image,
 // 序列化配置到 JSON 文件（--save-config dry-run）；失败按输出失败（4）报告。
 ExitCode saveConfigToFile(const engine::EngineConfig& config, const std::string& path,
                           const JobOptions& opt,
-                          const annotation::AnnotationLayer* annotations) {
+                          const annotation::AnnotationSet* annotations) {
     if (!engine::saveEngineConfig(path, config, annotations)) {
         reportError(makeError(ExitCode::OutputError, "无法保存配置文件", "路径：" + path,
                               "请确认路径的父目录存在且可写"));
@@ -138,7 +138,7 @@ ExitCode saveConfigToFile(const engine::EngineConfig& config, const std::string&
 // 作业收尾：--save-config 优先（dry-run，仅序列化不执行）；否则执行作业。
 ExitCode finishJob(engine::EngineConfig& config, const core::Image& image,
                    const JobOutput& out, const std::string& saveConfigPath, const JobOptions& opt,
-                   const annotation::AnnotationLayer* annotations) {
+                   const annotation::AnnotationSet* annotations) {
     if (!saveConfigPath.empty()) return saveConfigToFile(config, saveConfigPath, opt, annotations);
     return executeJob(config, image, out, opt, annotations);
 }

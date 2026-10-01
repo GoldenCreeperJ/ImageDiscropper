@@ -7,7 +7,7 @@
 #include "model/engine_bridge.h"
 
 #include "engine/image_io.h" // readImageFile（loadImage 委托 Core 解码）。
-#include "annotation/annotation_layer.h" // AnnotationLayer（save/load 可选标注层透传，配置为真相源）。
+#include "annotation/annotation_set.h" // AnnotationSet（save/load 可选标注集合透传，配置为真相源）。
 #include "engine/engine_config_json.h" // saveEngineConfig/loadEngineConfig（配置文件存取）。
 
 namespace idc::gui {
@@ -75,7 +75,7 @@ bool EngineBridge::exportResult(const core::Image& work, const engine::EngineCon
 
 // 保存配置：委托 Core saveEngineConfig（SPEC §7 schema、缩进美化）；path 空或写盘失败透传中文错误。
 bool EngineBridge::saveConfig(const QString& path, const engine::EngineConfig& cfg, QString& err,
-                              const annotation::AnnotationLayer* annotations) {
+                              const annotation::AnnotationSet* annotations) {
     if (path.isEmpty()) {
         err = QStringLiteral("未指定配置文件路径");
         return false;
@@ -89,7 +89,7 @@ bool EngineBridge::saveConfig(const QString& path, const engine::EngineConfig& c
 
 // 加载配置：委托 Core loadEngineConfig；path 空、读盘或解析失败透传中文错误，成功填充 out。
 bool EngineBridge::loadConfig(const QString& path, engine::EngineConfig& out, QString& err,
-                              annotation::AnnotationLayer* annotations) {
+                              annotation::AnnotationSet* annotations) {
     if (path.isEmpty()) {
         err = QStringLiteral("未指定配置文件路径");
         return false;

@@ -20,7 +20,7 @@
 
 #include "engine/engine.h" // EngineConfig / Tier / CutGenerator / Polarity / EmitMode / MergeLayout
 #include "engine/region.h" // RectRegion / horizontalBand / verticalBand
-#include "annotation/annotation_layer.h" // AnnotationLayer / Annotation（命令行标注烧录容器）
+#include "annotation/annotation_set.h" // AnnotationSet / Annotation（命令行标注烧录容器）
 
 #include "annotation_args.h"
 #include "arg_parser.h"
@@ -132,13 +132,13 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     config.source.width = image.width();
     config.source.height = image.height();
 
-    // --- 第 7 步：命令行标注（SPEC §7 annotations 元素语法）装配到临时层，交 job 烧录 / 随 --save-config 透写。---
+    // --- 第 7 步：命令行标注（SPEC §7 annotations 元素语法）装配到临时集合，交 job 烧录 / 随 --save-config 透写。---
     //     坐标基准＝预处理产出（job 内先物化 preprocess 再烧标注）；无标注时传 nullptr（不烧录、不写段）。
     std::vector<annotation::Annotation> annos;
     if (!collectAnnotations(args, annos, err)) return argError(err);
-    annotation::AnnotationLayer annoLayer;
-    const annotation::AnnotationLayer* annoPtr = nullptr;
-    if (!annos.empty()) { annoLayer.restoreAnnotations(std::move(annos)); annoPtr = &annoLayer; }
+    annotation::AnnotationSet annoSet;
+    const annotation::AnnotationSet* annoPtr = nullptr;
+    if (!annos.empty()) { annoSet.restore(std::move(annos)); annoPtr = &annoSet; }
 
     // --- 第 7 步：执行 / dry-run（--save-config）。分离取 --output-dir，合并取 --output。---
     const JobOutput out{separate ? args.get("--output-dir") : args.get("--output"), separate};

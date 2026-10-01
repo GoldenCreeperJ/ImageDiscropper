@@ -33,47 +33,12 @@
 #include "model/annotation_bridge.h"
 #include "model/document.h"
 #include "model/engine_bridge.h"
+#include "model/preprocess_session.h"
 #include "panels/image_panel.h"
 #include "preprocess/preprocess_config.h"
 
 namespace idc::gui {
 
-namespace {
-
-// 组装「有效管线」= [resize?] + 轻操作队列——几何签名推演与 base_ 前缀的唯一真相源。
-preprocess::PreprocessPipeline effectivePipeline(const std::optional<ResizeTarget>& resize,
-                                                 const preprocess::PreprocessPipeline& steps) {
-    preprocess::PreprocessPipeline out;
-    if (resize) out.add(preprocess::ResizeOp{resize->width, resize->height});
-    for (const auto& cfg : steps.steps()) out.add(cfg);
-    return out;
-}
-
-// 轻操作分类：几何步（Rotate/Flip）判定——口径统一委托 Core preprocess::isGeometryStep（与面板 / 折叠同源）。
-// ResizeOp 不入轻队列（已独立成区），故不会到达此处。
-bool isGeoCfg(const preprocess::PreprocessConfig& cfg) {
-    return preprocess::isGeometryStep(cfg);
-}
-
-// 队列首色下标 = 几何块长度（几何恒在前、色彩恒在后）：几何块 [0, geoLen)、色彩块 [geoLen, n)。
-std::size_t geoBlockLen(const preprocess::PreprocessPipeline& steps) {
-    std::size_t n = 0;
-    for (const auto& cfg : steps.steps()) {
-        if (!isGeoCfg(cfg)) break;
-        ++n;
-    }
-    return n;
-}
-
-// 按类型不变式追加一步：几何步插到几何块末尾（首色之前）、色彩步追加到队尾——
-// 由此 steps_ 恒为「[全部几何][全部色彩]」，与面板双列表及提交合并 resize→geo→color 完全一致。
-void appendLightKeepingInvariant(preprocess::PreprocessPipeline& steps,
-                                 const preprocess::PreprocessConfig& cfg) {
-    if (isGeoCfg(cfg)) steps.insert(geoBlockLen(steps), cfg);   // 落在几何块末尾、色彩块之前
-    else steps.add(cfg);                                        // 色彩步恒在队尾
-}
-
-} // namespace
 
 PreprocessController::PreprocessController(QObject* parent) : QObject(parent) {}
 
@@ -114,15 +79,15 @@ void PreprocessController::commitPipeline(const preprocess::PreprocessPipeline& 
     // 编辑前几何签名（对原图尺寸跑「有效管线」的纯元数据推演）。
     const auto [bWidth, bHeight, bRotQuad] = doc_->geomSig();
     // 编辑后几何签名（结果态有效管线）。
-    const auto [aWidth, aHeight, aRotQuad] = effectivePipeline(nextResize, nextSteps)
+    const auto [aWidth, aHeight, aRotQuad] = PreprocessSession::makeEffective(nextResize, nextSteps)
                                                 .geometryOutput(doc_->original().width(),
                                                                 doc_->original().height());
     const bool geomChanged = aWidth != bWidth || aHeight != bHeight || aRotQuad != bRotQuad;
 
     // base_ 前缀 = [resize?]（单元素或空）；baseDirty：无缓存，或缓存前缀与之逐字段不等。
     const preprocess::PreprocessPipeline prefix =
-        effectivePipeline(nextResize, preprocess::PreprocessPipeline{});
-    const bool baseDirty = !doc_->hasBase() || !(doc_->basePrefix() == prefix);
+        PreprocessSession::makeEffective(nextResize, preprocess::PreprocessPipeline{});
+    const bool baseDirty = doc_->baseDirtyFor(prefix);
 
     auto doWork = [this, &nextSteps, &nextResize, &prefix, geomChanged, baseDirty, okMsg] {
         // 轻队列重放基准图 baseSrc：无 resize → 指向不可变 original_（零拷贝）；有 resize → base_（按需重烤复用）。
@@ -205,22 +170,9 @@ void PreprocessController::runWithBusyDialog(const QString& text, const std::fun
 //     多次双线性重采样 ≠ 一次（对上次插值结果再采样会二次失真），故只保留末个正尺寸并单次从原图采样。
 void PreprocessController::applyLoadedQueue(const preprocess::PreprocessPipeline& pipeline) {
     if (!doc_->hasImage()) return;
-    preprocess::PreprocessPipeline light;
-    std::optional<ResizeTarget> resize;
-    // 先扫一遍抽出 resize（多个取最后一个正尺寸），其余按类型归位：几何段在前、色彩段在后（各保持相对顺序）。
-    preprocess::PreprocessPipeline geo, color;
-    for (const auto& cfg : pipeline.steps()) {
-        if (std::holds_alternative<preprocess::ResizeOp>(cfg)) {
-            if (const auto&[width, height] = std::get<preprocess::ResizeOp>(cfg); width > 0 && height > 0)
-                resize = ResizeTarget{width, height};
-            continue;   // 任何 ResizeOp 都不入轻队列（含非正尺寸的退化 resize）。
-        }
-        if (isGeoCfg(cfg)) geo.add(cfg);
-        else color.add(cfg);
-    }
-    for (const auto& cfg : geo.steps()) light.add(cfg);
-    for (const auto& cfg : color.steps()) light.add(cfg);
-    commitPipeline(light, resize,
+    // 归一化交 session 静态策略：抽出散落 ResizeOp 为独立 resize（多个取末个正尺寸）、其余重排 geo 前 color 后。
+    const auto [steps, resize] = PreprocessSession::normalizeLoaded(pipeline);
+    commitPipeline(steps, resize,
                    QStringLiteral("已载入预处理队列"),
                    QStringLiteral("正在按载入的队列重放图像，请稍候…"));
 }
@@ -231,14 +183,14 @@ void PreprocessController::applyLoadedQueue(const preprocess::PreprocessPipeline
 void PreprocessController::onStepAppend(const preprocess::PreprocessConfig& cfg) {
     if (!doc_->hasImage()) return;
     preprocess::PreprocessPipeline next = doc_->steps();
-    appendLightKeepingInvariant(next, cfg);   // 几何入几何块尾、色彩入队尾（保持 geo 前 color 后）
+    PreprocessSession::appendKeepingInvariant(next, cfg);   // 几何入几何块尾、色彩入队尾（保持 geo 前 color 后）
     commitPipeline(next, doc_->resizeTarget(), QStringLiteral("已添加预处理步骤"), QString());
 }
 
 void PreprocessController::onStepReplace(const int index, preprocess::PreprocessConfig cfg) {
     if (index < 0) return;
     preprocess::PreprocessPipeline next = doc_->steps();
-    next.setStep(static_cast<std::size_t>(index), std::move(cfg));
+    next.replaceAt(static_cast<std::size_t>(index), std::move(cfg));
     commitPipeline(next, doc_->resizeTarget(), QStringLiteral("已更新预处理步骤"), QString());
 }
 
@@ -252,16 +204,8 @@ void PreprocessController::onStepRemove(const int index) {
 void PreprocessController::onStepMove(const int index, const bool down) {
     if (index < 0) return;
     preprocess::PreprocessPipeline next = doc_->steps();
-    const auto& steps = next.steps();
-    const auto i = static_cast<std::size_t>(index);
-    if (i >= steps.size()) return;
-    // 块内移动限幅：仅当相邻项与本项同类（同属几何块或同属色彩块）才换序，避免跨块破坏 geo→color 不变式。
-    const std::size_t j = down ? i + 1 : i - 1;
-    if (down && j >= steps.size()) return;
-    if (!down && j >= steps.size()) return;   // i==0 时 i-1 下溢落入此分支
-    if (isGeoCfg(steps[i]) != isGeoCfg(steps[j])) return;
-    if (down) next.moveDown(i);
-    else next.moveUp(i);
+    // 块内移动限幅交 session 静态策略：仅相邻同类才移一格，越界/跨块返回 false（保持 geo→color 不变式）。
+    if (!PreprocessSession::moveWithinBlock(next, static_cast<std::size_t>(index), down)) return;
     commitPipeline(next, doc_->resizeTarget(), QStringLiteral("已调整步骤顺序"), QString());
 }
 
@@ -320,14 +264,14 @@ void PreprocessController::onClearResize() {
 void PreprocessController::onRotate(const int angleDeg) {
     if (!doc_->hasImage()) return;
     preprocess::PreprocessPipeline next = doc_->steps();
-    appendLightKeepingInvariant(next, preprocess::RotateOp{angleDeg});
+    PreprocessSession::appendKeepingInvariant(next, preprocess::RotateOp{angleDeg});
     commitPipeline(next, doc_->resizeTarget(), QStringLiteral("已添加旋转 %1°").arg(angleDeg), QString());
 }
 
 void PreprocessController::onFlip(const bool horizontal) {
     if (!doc_->hasImage()) return;
     preprocess::PreprocessPipeline next = doc_->steps();
-    appendLightKeepingInvariant(next, preprocess::FlipOp{horizontal});
+    PreprocessSession::appendKeepingInvariant(next, preprocess::FlipOp{horizontal});
     commitPipeline(next, doc_->resizeTarget(),
                    horizontal ? QStringLiteral("已添加水平翻转") : QStringLiteral("已添加垂直翻转"),
                    QString());
@@ -336,7 +280,7 @@ void PreprocessController::onFlip(const bool horizontal) {
 void PreprocessController::onGray() {
     if (!doc_->hasImage()) return;
     preprocess::PreprocessPipeline next = doc_->steps();
-    appendLightKeepingInvariant(next, preprocess::GrayOp{});
+    PreprocessSession::appendKeepingInvariant(next, preprocess::GrayOp{});
     commitPipeline(next, doc_->resizeTarget(), QStringLiteral("已添加黑白"), QString());
 }
 
@@ -345,7 +289,7 @@ void PreprocessController::onInvert(const bool invR, const bool invG, const bool
     if (!doc_->hasImage()) return;
     const std::string mask = std::string(invR ? "1" : "0") + (invG ? "1" : "0") + (invB ? "1" : "0");
     preprocess::PreprocessPipeline next = doc_->steps();
-    appendLightKeepingInvariant(next, preprocess::InvertOp{mask});
+    PreprocessSession::appendKeepingInvariant(next, preprocess::InvertOp{mask});
     commitPipeline(next, doc_->resizeTarget(), QStringLiteral("已添加按通道反色"), QString());
 }
 
@@ -354,7 +298,7 @@ void PreprocessController::onSplit(const bool keepR, const bool keepG, const boo
     if (!doc_->hasImage()) return;
     const std::string mask = std::string(keepR ? "1" : "0") + (keepG ? "1" : "0") + (keepB ? "1" : "0");
     preprocess::PreprocessPipeline next = doc_->steps();
-    appendLightKeepingInvariant(next, preprocess::SplitOp{mask});
+    PreprocessSession::appendKeepingInvariant(next, preprocess::SplitOp{mask});
     commitPipeline(next, doc_->resizeTarget(), QStringLiteral("已添加按通道分离"), QString());
 }
 

@@ -20,6 +20,7 @@
 #include "core/color.h"
 #include "core/image.h"
 #include "engine/engine.h"
+#include "model/preprocess_session.h"
 #include "preprocess/preprocess_pipeline.h"
 
 namespace idc::gui {
@@ -39,12 +40,8 @@ enum class L2Sub {
     MULTI_RECT,  // 多矩形并集剔除（各矩形诱导十字带取并集）→ CutGenerator::MULTI_RECT
 };
 
-// 独立画布尺寸（Resize）目标：对原图设定的绝对宽高（像素）。
-// 不再作为可排序队列步骤，而是常驻独立设置；恒在轻操作队列之前重放（见 preprocess_controller.cpp）。
-struct ResizeTarget {
-    int width = 0;
-    int height = 0;
-};
+// 独立画布尺寸 ResizeTarget 已迁至 model/preprocess_session.h（供零 Qt 会话对象独立编译），
+// 经上方 include 传递可见；Document 及各调用点无需改动引用。
 
 // ---------------------------------------------------------------------------
 // Document：会话状态单一真相源（QObject，便于信号驱动刷新）。
@@ -75,18 +72,18 @@ public:
     // 重置预处理：清空 resize_ 与轻操作队列、工作图恢复为原图；未预处理时早退。触发 imageChanged()。
     void resetPreprocess();
     // 当前工作图是否已被预处理（有 resize 或队列非空）——供面板/菜单启用「重置预处理」。
-    bool hasPreprocess() const { return !steps_.empty() || resize_.has_value(); }
+    bool hasPreprocess() const { return preprocess_.hasPreprocess(); }
 
     // ---- 独立画布尺寸（Resize）----
     // resize_ 为可选目标尺寸；设置后由 PreprocessController 重放（恒在轻操作之前、从原图重采样）。
-    bool hasResize() const { return resize_.has_value(); }
-    std::optional<ResizeTarget> resizeTarget() const { return resize_; }
+    bool hasResize() const { return preprocess_.hasResize(); }
+    std::optional<ResizeTarget> resizeTarget() const { return preprocess_.resizeTarget(); }
     // 覆盖 / 清除独立 resize（std::nullopt = 无 resize）。仅存状态，不物化、不发信号。
     void setResize(std::optional<ResizeTarget> target);
 
     // ---- 声明式预处理队列（steps_）----
     // 只读访问当前队列（供面板渲染步骤列表、控制器克隆编辑）。
-    const preprocess::PreprocessPipeline& steps() const { return steps_; }
+    const preprocess::PreprocessPipeline& steps() const { return preprocess_.steps(); }
     // 覆盖整条队列（控制器完成增删移改后回灌）；仅更新声明状态，不物化工作图、不发信号
     //（物化与刷新时机由调用方经 setWorkingImage / changed 掌控）。
     void setSteps(preprocess::PreprocessPipeline pipeline);
@@ -103,13 +100,15 @@ public:
     // 目的：编辑轻操作队列时，无需从 original_ 重跑含 resize 的重采样——直接复用 base_ 只重放轻队列。
     //       base_ 对应 basePath_（即 [resize?] 前缀），前缀逐字段相等才复用（无 resize 则为原图副本）。
     // 生命周期：仅 PreprocessController 经 setBase 维护；凡换图（setImage）/重置预处理（resetPreprocess）即失效。
-    bool hasBase() const { return base_.has_value(); }
-    const core::Image& base() const { return *base_; }
-    const preprocess::PreprocessPipeline& basePrefix() const { return basePath_; }
+    bool hasBase() const { return preprocess_.hasBase(); }
+    const core::Image& base() const { return preprocess_.base(); }
+    const preprocess::PreprocessPipeline& basePrefix() const { return preprocess_.basePrefix(); }
     // 记录一段前缀的重放产物为 base_（img 为其物化结果，prefix 为其对应的重放前缀队列）。
     void setBase(core::Image img, preprocess::PreprocessPipeline prefix);
     // 释放 base_ 重放缓存（由「有 resize」切到「无 resize」时回收内存；与 setImage / resetPreprocess 的失效同处理）。
-    void clearBase() { base_.reset(); basePath_.clear(); }
+    void clearBase() { preprocess_.clearBase(); }
+    // 候选前缀是否需要重烤：无缓存，或已缓存 basePath_ 与之逐字段不等 → true。供 commitPipeline 提交前判 baseDirty。
+    bool baseDirtyFor(const preprocess::PreprocessPipeline& prefix) const { return preprocess_.baseDirtyFor(prefix); }
 
     // ---- 模式与极性 ----
     engine::Tier mode() const { return mode_; }
@@ -233,11 +232,9 @@ signals:
 private:
     core::Image original_;   // 原始载入图（RGBA）——始终不变，供队列重放与「重置预处理」还原
     core::Image working_;    // 切割引擎实际输入图（= steps_ 重放到 original 的物化结果，无预处理时等于原图）
-    preprocess::PreprocessPipeline steps_;  // 声明式轻操作队列（绝不含 ResizeOp），几何签名与序列化的真相源
-    std::optional<ResizeTarget> resize_;     // 独立画布尺寸目标（可选，恒最先重放）
-    // base_ 重放缓存：独立 resize 作用于 original 的物化产物；basePath_ 为其 [resize?] 前缀，供失效比对。
-    std::optional<core::Image> base_;
-    preprocess::PreprocessPipeline basePath_;
+    // 预处理会话态（steps_/resize_/base_/basePath_ 四件套 + geo→color 不变式/归一化/签名推演）内聚于此，
+    // Document 组合持有作单一真相源；读写经上方转委托方法暴露，Controller 经 Document 驱动（见 preprocess_session.h）。
+    PreprocessSession preprocess_;
     QString imagePath_;
 
     engine::Tier mode_{engine::Tier::L1};

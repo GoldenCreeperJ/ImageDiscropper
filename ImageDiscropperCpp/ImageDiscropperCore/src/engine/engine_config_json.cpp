@@ -7,14 +7,14 @@
 //       saveEngineConfig / loadEngineConfig 调用，故 nlohmann/json 依赖不泄漏到公共头（PRIVATE）。
 //       annotations 段（标注列表）的 JSON 实现归属 annotation 模块：本文件组装 / 解析整档时对
 //       src/json_common.h 声明的 annotation::annotationsSegmentToJson / annotationsFromSegmentJson
-//       发起跨模块调用（公共 save/load 签名仍以可选 AnnotationLayer* 传递，向后兼容不变）。
+//       发起跨模块调用（公共 save/load 签名仍以可选 AnnotationSet* 传递，向后兼容不变）。
 // 说明：读取一律宽容（缺字段/类型不符取默认值，绝不抛异常给调用方），写出严格对齐 SPEC §7
 //       示例的键名与嵌套结构；nlohmann::json 以 std::map 存对象，序列化按键升序输出。
 // ============================================================================
 #include "engine/engine_config_json.h"
 
 #include "preprocess/preprocess_config.h"
-#include "annotation/annotation_layer.h"
+#include "annotation/annotation_set.h"
 
 #include "../json_common.h" // idc::jsonutil 助手 + 标注段交换函数声明（实现在 annotation 模块）
 
@@ -211,8 +211,8 @@ bool preprocessFromJson(const json& v, preprocess::PreprocessConfig& out) {
 // ---------------------------------------------------------------------------
 // EngineConfig ↔ SPEC §7 schema JSON（文件内私有；仅由下方 save/load 调用）。
 // ---------------------------------------------------------------------------
-// 把 EngineConfig 序列化为 SPEC §7 schema 的 JSON 值；annoLayer 非空且含标注时额外写 annotations 段。
-json engineConfigToJson(const EngineConfig& config, const annotation::AnnotationLayer* annoLayer) {
+// 把 EngineConfig 序列化为 SPEC §7 schema 的 JSON 值；annoSet 非空且含标注时额外写 annotations 段。
+json engineConfigToJson(const EngineConfig& config, const annotation::AnnotationSet* annoSet) {
     json root;
 
     // source：原图尺寸。
@@ -220,7 +220,7 @@ json engineConfigToJson(const EngineConfig& config, const annotation::Annotation
 
     // preprocess：基础图像处理步骤数组。
     json pre = json::array();
-    for (const preprocess::PreprocessConfig& step : config.preprocess.steps())
+    for (const preprocess::PreprocessConfig& step : config.preprocess.items())
         pre.push_back(preprocessToJson(step));
     root["preprocess"] = pre;
 
@@ -274,17 +274,17 @@ json engineConfigToJson(const EngineConfig& config, const annotation::Annotation
     emit["keepMetadata"] = config.emitParams.keepMetadata;
     root["emit"] = emit;
 
-    // annotations：标注列表（可选段）——层为空或无标注时省略，保持旧文件观感不变。
+    // annotations：标注列表（可选段）——集合为空或无标注时省略，保持旧文件观感不变。
     // 段内逐条序列化实现归属 annotation 模块（经 json_common.h 交换 JSON 片段）。
-    if (annoLayer != nullptr && !annoLayer->annotations().empty())
-        root["annotations"] = annotation::annotationsSegmentToJson(*annoLayer);
+    if (annoSet != nullptr && !annoSet->annotations().empty())
+        root["annotations"] = annotation::annotationsSegmentToJson(*annoSet);
 
     return root;
 }
 
 // 从 JSON 值还原 EngineConfig；根非对象返回 false，字段缺失/类型不符取默认值。
-// annoLayer 非空时同步还原标注（含缺段→清空：配置文件为标注真相源）；annoErr 非空时逐条回传非法标注原因。
-bool engineConfigFromJson(const json& value, EngineConfig& out, annotation::AnnotationLayer* annoLayer,
+// annoSet 非空时同步还原标注（含缺段→清空：配置文件为标注真相源）；annoErr 非空时逐条回传非法标注原因。
+bool engineConfigFromJson(const json& value, EngineConfig& out, annotation::AnnotationSet* annoSet,
                           std::string* annoErr) {
     if (!value.is_object()) return false;
     out = EngineConfig{}; // 先复位为默认，再逐字段覆盖。
@@ -361,11 +361,11 @@ bool engineConfigFromJson(const json& value, EngineConfig& out, annotation::Anno
     out.emitParams.mergeOrder.reverse = jBool(at(arrange, "reverse"), false);
     out.emitParams.mergeOrder.snake = jBool(at(arrange, "snake"), false);
 
-    // annotations：传入层指针才处理（段缺失/非数组 → 清空，与“配置为真相源”语义一致）。
+    // annotations：传入集合指针才处理（段缺失/非数组 → 清空，与“配置为真相源”语义一致）。
     // 逐条严格校验、任一非法即整档载入失败（不静默丢弃）——重建逻辑归属 annotation 模块
     // （经 json_common.h 交换 JSON 片段，annoErr 回传逐条原因）。
-    if (annoLayer != nullptr) {
-        if (!annotation::annotationsFromSegmentJson(at(value, "annotations"), *annoLayer, annoErr))
+    if (annoSet != nullptr) {
+        if (!annotation::annotationsFromSegmentJson(at(value, "annotations"), *annoSet, annoErr))
             return false;
     }
 
@@ -376,7 +376,7 @@ bool engineConfigFromJson(const json& value, EngineConfig& out, annotation::Anno
 
 // 保存配置到文件（缩进美化）；path 为空或写盘失败（E-8）返回 false。annotations 非空时附带 SPEC §7 标注段。
 bool saveEngineConfig(const std::string& path, const EngineConfig& config,
-                      const annotation::AnnotationLayer* annotations) {
+                      const annotation::AnnotationSet* annotations) {
     if (path.empty()) return false;
     const std::string text = engineConfigToJson(config, annotations).dump(2); // 缩进 2 空格美化。
     std::ofstream ofs(path, std::ios::trunc);
@@ -389,7 +389,7 @@ bool saveEngineConfig(const std::string& path, const EngineConfig& config,
 // 从文件加载配置；path 为空、读盘失败或 JSON 解析失败返回 false。annotations 非空时同步还原标注（严格校验）。
 // annoErr 非空时，若因标注段非法而失败，回传逐条原因（供 CLI 报因；GUI 可传 nullptr）。
 bool loadEngineConfig(const std::string& path, EngineConfig& out,
-                      annotation::AnnotationLayer* annotations, std::string* annoErr) {
+                      annotation::AnnotationSet* annotations, std::string* annoErr) {
     if (path.empty()) return false;
     std::ifstream ifs(path, std::ios::binary);
     if (!ifs) return false; // E-8：文件不存在或不可读。

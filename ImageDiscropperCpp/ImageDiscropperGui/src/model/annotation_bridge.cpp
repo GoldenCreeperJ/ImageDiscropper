@@ -48,13 +48,13 @@ geometry::ShapeType shapeTypeForTool(const AnnoTool tool) {
 // 2. 构造与底图 / 工具
 // ===========================================================================
 AnnotationBridge::AnnotationBridge(QObject* parent) : QObject(parent) {
-    // 默认工具为 SELECT，与 Core 的 EDIT 模式对齐（属性写回作用到选中项）。
-    layer_.setEditType(annotation::EditType::EDIT);
+    // 默认工具为 SELECT，与编辑会话的 EDIT 模式对齐（属性写回作用到选中项）。
+    editor_.setEditType(EditType::EDIT);
 }
 
 void AnnotationBridge::setBaseImage(const core::Image& base) {
     // Core setImage 会清空旧标注与重做栈（新底图＝新会话），并复位选中。
-    layer_.setImage(base);
+    editor_.setImage(base);
     pending_.reset();
     pathDraft_ = geometry::Path{};
     emit changed();
@@ -66,10 +66,10 @@ void AnnotationBridge::setTool(const AnnoTool tool) {
     cancelPending();               // 切换工具前放弃未提交的预览 / 路径草稿
     tool_ = tool;
     if (tool_ == AnnoTool::SELECT) {
-        layer_.setEditType(annotation::EditType::EDIT);
+        editor_.setEditType(EditType::EDIT);
     } else {
-        layer_.setEditType(annotation::EditType::DRAW);
-        layer_.setCurrentType(shapeTypeForTool(tool_));
+        editor_.setEditType(EditType::DRAW);
+        editor_.setCurrentType(shapeTypeForTool(tool_));
     }
     emit toolChanged();
     emit selectionChanged();       // setEditType 已复位选中
@@ -78,13 +78,13 @@ void AnnotationBridge::setTool(const AnnoTool tool) {
 // ===========================================================================
 // 3. 属性写回（委托 Core change*；EDIT 作用选中项，DRAW 改当前默认）
 // ===========================================================================
-void AnnotationBridge::setColor(const core::Color& c) { layer_.changeColor(c); emit changed(); }
-void AnnotationBridge::setFillColor(const core::Color& c) { layer_.changeFillColor(c); emit changed(); }
-void AnnotationBridge::setStrokeWidth(const int w) { layer_.changeStrokeWidth(w); emit changed(); }
-void AnnotationBridge::setFill(const bool fill) { layer_.changeFill(fill); emit changed(); }
-void AnnotationBridge::setText(const std::string& text) { layer_.changeText(text); emit changed(); }
-void AnnotationBridge::setFontSize(const double size) { layer_.changeFontSize(size); emit changed(); }
-void AnnotationBridge::setCornerRadius(const double r) { layer_.changeCornerRadius(r); emit changed(); }
+void AnnotationBridge::setColor(const core::Color& c) { editor_.changeColor(c); emit changed(); }
+void AnnotationBridge::setFillColor(const core::Color& c) { editor_.changeFillColor(c); emit changed(); }
+void AnnotationBridge::setStrokeWidth(const int w) { editor_.changeStrokeWidth(w); emit changed(); }
+void AnnotationBridge::setFill(const bool fill) { editor_.changeFill(fill); emit changed(); }
+void AnnotationBridge::setText(const std::string& text) { editor_.changeText(text); emit changed(); }
+void AnnotationBridge::setFontSize(const double size) { editor_.changeFontSize(size); emit changed(); }
+void AnnotationBridge::setCornerRadius(const double r) { editor_.changeCornerRadius(r); emit changed(); }
 
 // ===========================================================================
 // 4. 绘制流程
@@ -94,9 +94,9 @@ void AnnotationBridge::setCornerRadius(const double r) { layer_.changeCornerRadi
 void AnnotationBridge::rebuildPending(const core::Point2D current) {
     annotation::ShapeRequest req;
     req.type = shapeTypeForTool(tool_);
-    req.text = layer_.currentText();
-    req.fontSize = layer_.currentFontSize();
-    req.cornerRadius = layer_.currentCornerRadius();
+    req.text = editor_.currentText();
+    req.fontSize = editor_.currentFontSize();
+    req.cornerRadius = editor_.currentCornerRadius();
     if (tool_ == AnnoTool::POLYLINE || tool_ == AnnoTool::BRUSH) {
         req.path = pathDraft_;                 // buildShape 将 path 封装为 PathShape
     } else {
@@ -119,7 +119,7 @@ void AnnotationBridge::updateShape(const core::Point2D p) {
 
 void AnnotationBridge::commitShape() {
     if (!pending_) return;
-    layer_.addAnnotation(std::move(pending_));  // Core 用当前 color/stroke/fill 封装为 Annotation
+    editor_.addAnnotation(std::move(pending_));  // 会话用当前 color/stroke/fill 封装为 Annotation
     pending_.reset();
     emit changed();
 }
@@ -151,7 +151,7 @@ void AnnotationBridge::previewPolyline(const core::Point2D cursor) {
     if (tool_ != AnnoTool::POLYLINE || pathDraft_.empty()) return;
     annotation::ShapeRequest req;
     req.type = geometry::ShapeType::POLYLINE;
-    req.cornerRadius = layer_.currentCornerRadius();
+    req.cornerRadius = editor_.currentCornerRadius();
     req.path = pathDraft_;                     // 拷贝草稿（含已落顶点）
     req.path.lineTo(cursor.x, cursor.y);       // 追加橡皮筋临时段（仅预览）
     pending_ = idc::annotation::buildShape(req);
@@ -168,9 +168,9 @@ void AnnotationBridge::commitPath() {
     // previewPolyline 追加了橡皮筋临时段的预览形状，收笔时须丢弃该临时段，只保留已落顶点。
     annotation::ShapeRequest req;
     req.type = shapeTypeForTool(tool_);        // POLYLINE→POLYLINE，BRUSH→PATH
-    req.cornerRadius = layer_.currentCornerRadius();
+    req.cornerRadius = editor_.currentCornerRadius();
     req.path = pathDraft_;
-    layer_.addAnnotation(idc::annotation::buildShape(req));
+    editor_.addAnnotation(idc::annotation::buildShape(req));
     pending_.reset();
     pathDraft_ = geometry::Path{};
     emit changed();
@@ -183,9 +183,9 @@ void AnnotationBridge::addText(const core::Point2D p, const std::string& text) {
     req.p1 = p;
     req.p2 = p;
     req.text = text;
-    req.fontSize = layer_.currentFontSize();
-    layer_.changeText(text);                       // 同步为当前文本默认
-    layer_.addAnnotation(idc::annotation::buildShape(req));
+    req.fontSize = editor_.currentFontSize();
+    editor_.changeText(text);                       // 同步为当前文本默认
+    editor_.addAnnotation(idc::annotation::buildShape(req));
     emit changed();
 }
 
@@ -193,19 +193,19 @@ void AnnotationBridge::addText(const core::Point2D p, const std::string& text) {
 // 5. 选择 / 移动 / 删除（复用 Core）
 // ===========================================================================
 void AnnotationBridge::selectAt(const core::Point2D p) {
-    layer_.selectAnnotation(layer_.hitTest(p));    // 命中检测全在 Core
+    editor_.selectAnnotation(editor_.hitTest(p));    // 命中检测全在 Core
     emit selectionChanged();
     emit changed();
 }
 
 void AnnotationBridge::clearSelection() {
-    layer_.selectAnnotation(std::nullopt);
+    editor_.selectAnnotation(std::nullopt);
     emit selectionChanged();
     emit changed();
 }
 
 void AnnotationBridge::moveSelectedBy(const double dx, const double dy) {
-    const annotation::Annotation* a = layer_.selectedAnnotation();
+    const annotation::Annotation* a = editor_.selectedAnnotation();
     if (!a || !a->shape) return;
     // 复用 Core 几何：世界系平移形状（内部把世界位移换算到局部系后偏移自身参数），保留具体类型与参数化身份
     // ——不再展平为通用 PATH，故 TEXT 字形、矩形/圆等元数据与控制点语义均不丢失（shapeType 保持不变）；
@@ -215,9 +215,9 @@ void AnnotationBridge::moveSelectedBy(const double dx, const double dy) {
 }
 
 void AnnotationBridge::removeSelected() {
-    const std::optional<std::size_t> idx = layer_.selectedAnnotationIndex();
+    const std::optional<std::size_t> idx = editor_.selectedAnnotationIndex();
     if (!idx) return;
-    layer_.removeAnnotation(*idx);                 // 委托 Core 删除（属新操作，会清空重做栈）
+    editor_.removeAnnotation(*idx);                 // 委托会话删除（属新操作，会清空重做栈）
     emit changed();
     emit selectionChanged();
 }
@@ -227,7 +227,7 @@ void AnnotationBridge::removeSelected() {
 // **保留具体类型与文字字形**（不退化）；sx/sy 为负即翻转。属性面板与画布包围盒手柄共用本入口。
 // 无选中 / 无变化则忽略。
 void AnnotationBridge::transformSelected(const double sx, const double sy, const double rotateDeg) {
-    const annotation::Annotation* a = layer_.selectedAnnotation();
+    const annotation::Annotation* a = editor_.selectedAnnotation();
     if (!a || !a->shape) return;
     const bool scaleChanged = std::fabs(sx - 1.0) > 1e-9 || std::fabs(sy - 1.0) > 1e-9;
     if (const bool rotateChanged = std::fabs(rotateDeg) > 1e-9; !scaleChanged && !rotateChanged) return;
@@ -239,36 +239,36 @@ void AnnotationBridge::transformSelected(const double sx, const double sy, const
 // 5b. 层序（叠放次序）：下标即 z 序（大＝顶）；作用于选中项，委托 Core moveAnnotation 重排
 // ===========================================================================
 void AnnotationBridge::raiseSelected() {
-    const std::optional<std::size_t> idx = layer_.selectedAnnotationIndex();
+    const std::optional<std::size_t> idx = editor_.selectedAnnotationIndex();
     if (!idx) return;
-    if (const std::size_t n = layer_.annotations().size(); *idx + 1 >= n) return;                 // 已在顶层
-    layer_.moveAnnotation(*idx, *idx + 1);
+    if (const std::size_t n = editor_.annotations().size(); *idx + 1 >= n) return;                 // 已在顶层
+    editor_.moveAnnotation(*idx, *idx + 1);
     emit changed();
     emit selectionChanged();
 }
 
 void AnnotationBridge::lowerSelected() {
-    const std::optional<std::size_t> idx = layer_.selectedAnnotationIndex();
+    const std::optional<std::size_t> idx = editor_.selectedAnnotationIndex();
     if (!idx || *idx == 0) return;             // 无选中或已在底层
-    layer_.moveAnnotation(*idx, *idx - 1);
+    editor_.moveAnnotation(*idx, *idx - 1);
     emit changed();
     emit selectionChanged();
 }
 
 void AnnotationBridge::bringSelectedToFront() {
-    const std::optional<std::size_t> idx = layer_.selectedAnnotationIndex();
+    const std::optional<std::size_t> idx = editor_.selectedAnnotationIndex();
     if (!idx) return;
-    const std::size_t n = layer_.annotations().size();
+    const std::size_t n = editor_.annotations().size();
     if (n == 0 || *idx == n - 1) return;       // 已在顶层
-    layer_.moveAnnotation(*idx, n - 1);
+    editor_.moveAnnotation(*idx, n - 1);
     emit changed();
     emit selectionChanged();
 }
 
 void AnnotationBridge::sendSelectedToBack() {
-    const std::optional<std::size_t> idx = layer_.selectedAnnotationIndex();
+    const std::optional<std::size_t> idx = editor_.selectedAnnotationIndex();
     if (!idx || *idx == 0) return;             // 无选中或已在底层
-    layer_.moveAnnotation(*idx, 0);
+    editor_.moveAnnotation(*idx, 0);
     emit changed();
     emit selectionChanged();
 }
@@ -276,13 +276,13 @@ void AnnotationBridge::sendSelectedToBack() {
 // ===========================================================================
 // 6. 撤销重做 / 图层可见性 / 导出烧录
 // ===========================================================================
-void AnnotationBridge::undo() { layer_.revoke(); emit changed(); emit selectionChanged(); }
-void AnnotationBridge::redo() { layer_.redo(); emit changed(); }
-void AnnotationBridge::clearAll() { layer_.clear(); emit changed(); emit selectionChanged(); }
+void AnnotationBridge::undo() { editor_.revoke(); emit changed(); emit selectionChanged(); }
+void AnnotationBridge::redo() { editor_.redo(); emit changed(); }
+void AnnotationBridge::clearAll() { editor_.clear(); emit changed(); emit selectionChanged(); }
 
 // 配置还原：整体替换标注列表（委托 Core restoreAnnotations，不推撤销快照），再发信号刷新画布/面板。
 void AnnotationBridge::replaceAnnotations(std::vector<annotation::Annotation> items) {
-    layer_.restoreAnnotations(std::move(items));
+    editor_.restoreAnnotations(std::move(items));
     emit changed();
     emit selectionChanged(); // 还原后无选中，面板同步退出属性回显。
 }
@@ -298,21 +298,9 @@ void AnnotationBridge::setBurnIn(const bool on) {
 }
 
 core::Image AnnotationBridge::burnIn(const core::Image& base) const {
-    // 以传入的当前工作图为底（而非 Core 内部可能陈旧的 image_），逐个调 Core rasterize 合成。
-    core::Image out = base.empty()
-        ? core::Image(1, 1, core::ImageFormat::RGBA)
-        : base.toRGBA();
-    for (const annotation::Annotation& a : layer_.annotations()) {
-        if (!a.shape) continue;
-        annotation::PaintStyle style;
-        style.color = a.color;
-        style.fillColor = a.fillColor;
-        style.strokeWidth = a.strokeWidth;
-        style.fill = a.fillType;
-        style.antialias = true;
-        idc::annotation::rasterize(out, *a.shape, style);
-    }
-    return out;
+    // 以传入的当前工作图为底（而非会话内部可能陈旧的底图）委托合成：
+    // AnnotationEditor::burnIn(base) 内转 Core AnnotationSet::burnIn（空 base → 1×1 口径与历史一致）。
+    return editor_.burnIn(base);
 }
 
 // ===========================================================================
@@ -321,29 +309,29 @@ core::Image AnnotationBridge::burnIn(const core::Image& base) const {
 
 // 有选中项则取其属性，否则取当前工具默认（与 Core change* 的 EDIT/DRAW 分支一致）。
 core::Color AnnotationBridge::displayColor() const {
-    const annotation::Annotation* a = layer_.selectedAnnotation();
-    return a ? a->color : layer_.currentColor();
+    const annotation::Annotation* a = editor_.selectedAnnotation();
+    return a ? a->color : editor_.currentColor();
 }
 
 core::Color AnnotationBridge::displayFillColor() const {
-    const annotation::Annotation* a = layer_.selectedAnnotation();
-    return a ? a->fillColor : layer_.currentFillColor();
+    const annotation::Annotation* a = editor_.selectedAnnotation();
+    return a ? a->fillColor : editor_.currentFillColor();
 }
 
 int AnnotationBridge::displayStrokeWidth() const {
-    const annotation::Annotation* a = layer_.selectedAnnotation();
-    return a ? a->strokeWidth : layer_.currentStrokeWidth();
+    const annotation::Annotation* a = editor_.selectedAnnotation();
+    return a ? a->strokeWidth : editor_.currentStrokeWidth();
 }
 
 bool AnnotationBridge::displayFill() const {
-    const annotation::Annotation* a = layer_.selectedAnnotation();
-    return a ? a->fillType : layer_.currentFill();
+    const annotation::Annotation* a = editor_.selectedAnnotation();
+    return a ? a->fillType : editor_.currentFill();
 }
 
 // 选中形状的转角圆角半径（取自形状几何）；无选中 / 无形状则取当前默认。
 double AnnotationBridge::displayCornerRadius() const {
-    const annotation::Annotation* a = layer_.selectedAnnotation();
-    return a && a->shape ? a->shape->cornerRadius() : layer_.currentCornerRadius();
+    const annotation::Annotation* a = editor_.selectedAnnotation();
+    return a && a->shape ? a->shape->cornerRadius() : editor_.currentCornerRadius();
 }
 
 // ---- 形状类型 → 能力判定（纯 UI 置灰策略，非几何计算；键于 Core ShapeType 枚举）----
@@ -377,28 +365,28 @@ bool supportsCornerRadiusFor(const geometry::ShapeType t) {
 // 是上一绘制工具的残值（Core 仅在切到非 SELECT 工具时更新）；若据残值置灰，会出现
 // 「用直线后切回选择/移动，填充/圆角控件莫名点不了」的错禁问题。
 bool AnnotationBridge::contextSupportsFill() const {
-    if (const annotation::Annotation* a = layer_.selectedAnnotation()) return supportsFillFor(a->shapeType);
+    if (const annotation::Annotation* a = editor_.selectedAnnotation()) return supportsFillFor(a->shapeType);
     if (tool_ == AnnoTool::SELECT) return true;
-    return supportsFillFor(layer_.currentType());
+    return supportsFillFor(editor_.currentType());
 }
 bool AnnotationBridge::contextSupportsCornerRadius() const {
-    if (const annotation::Annotation* a = layer_.selectedAnnotation()) return supportsCornerRadiusFor(a->shapeType);
+    if (const annotation::Annotation* a = editor_.selectedAnnotation()) return supportsCornerRadiusFor(a->shapeType);
     if (tool_ == AnnoTool::SELECT) return true;
-    return supportsCornerRadiusFor(layer_.currentType());
+    return supportsCornerRadiusFor(editor_.currentType());
 }
 
 // 选中标注的累积 OBB 变换参数（绝对值），直接取自 Core Shape 同步维护的 obbScaleX/Y、obbRotationDeg；
 // 无选中 / 无形状时返回恒等（1,1,0）——供属性面板忠实回显底层真实变换（不自行分解矩阵，避免符号歧义）。
 double AnnotationBridge::displayObbScaleX() const {
-    const annotation::Annotation* a = layer_.selectedAnnotation();
+    const annotation::Annotation* a = editor_.selectedAnnotation();
     return a && a->shape ? a->shape->obbScaleX() : 1.0;
 }
 double AnnotationBridge::displayObbScaleY() const {
-    const annotation::Annotation* a = layer_.selectedAnnotation();
+    const annotation::Annotation* a = editor_.selectedAnnotation();
     return a && a->shape ? a->shape->obbScaleY() : 1.0;
 }
 double AnnotationBridge::displayObbRotationDeg() const {
-    const annotation::Annotation* a = layer_.selectedAnnotation();
+    const annotation::Annotation* a = editor_.selectedAnnotation();
     return a && a->shape ? a->shape->obbRotationDeg() : 0.0;
 }
 

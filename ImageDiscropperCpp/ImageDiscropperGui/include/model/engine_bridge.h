@@ -19,7 +19,7 @@
 #include "engine/engine.h"
 #include "preprocess/preprocess_pipeline.h"
 
-namespace idc::annotation { class AnnotationLayer; } // 配置 annotations 段的可选读写层（前置声明免 include 扩散）
+namespace idc::annotation { class AnnotationSet; } // 配置 annotations 段的可选读写集合（前置声明免 include 扩散）
 
 namespace idc::gui {
 
@@ -59,12 +59,12 @@ public:
     // annotations 非空时附带标注段（SPEC §7 annotations，往返不丢）。
     // path 为空或写盘失败（Core E-8）返回 false 并给出中文错误 err。
     static bool saveConfig(const QString& path, const engine::EngineConfig& cfg, QString& err,
-                           const annotation::AnnotationLayer* annotations = nullptr);
+                           const annotation::AnnotationSet* annotations = nullptr);
     // 加载：从 JSON 文件还原配置（SPEC §7 schema）。path 为空、读盘失败或 JSON 解析失败返回 false
     // 并给出中文错误 err；成功返回 true 并填充 out（由上层 Document::applyEngineConfig 反向映射）。
     // annotations 非空时一并还原标注段到该层（缺段＝清空；调用方决定何时并入真实层，见 MainWindow::onLoadConfig）。
     static bool loadConfig(const QString& path, engine::EngineConfig& out, QString& err,
-                           annotation::AnnotationLayer* annotations = nullptr);
+                           annotation::AnnotationSet* annotations = nullptr);
 
     // 声明式队列物化（委托 Core PreprocessPipeline::applyExec）：把整条预处理流水线以执行层融合
     // 方式应用到 src（色彩折单次 channelMap、几何折单次 D4、与逐步 apply 逐像素等价），返回结果图（不修改入参）。

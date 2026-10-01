@@ -103,7 +103,7 @@ core::Image remapD4(const core::Image& src, int quad, const bool flipH) {
     if (src.empty()) return src.clone();
     const int w = src.width();
     const int h = src.height();
-    quad = ((quad % 4) + 4) % 4;
+    quad = (quad % 4 + 4) % 4;
     const bool swap = quad == 1 || quad == 3;    // 奇数象限宽高互换
     const int W = swap ? h : w;
     const int H = swap ? w : h;
@@ -145,9 +145,9 @@ core::Image channelMap(const core::Image& src, const std::string& k, const std::
     }
     const std::size_t bpp = core::bytesPerPixel(out.format());   // RGB=3 / RGBA=4
     for (std::size_t i = 0; i + bpp <= n; i += bpp) {
-        d[i + 0] = static_cast<std::uint8_t>((s[i + 0] & ka[0]) ^ ja[0]);
-        d[i + 1] = static_cast<std::uint8_t>((s[i + 1] & ka[1]) ^ ja[1]);
-        d[i + 2] = static_cast<std::uint8_t>((s[i + 2] & ka[2]) ^ ja[2]);
+        d[i + 0] = static_cast<std::uint8_t>(s[i + 0] & ka[0] ^ ja[0]);
+        d[i + 1] = static_cast<std::uint8_t>(s[i + 1] & ka[1] ^ ja[1]);
+        d[i + 2] = static_cast<std::uint8_t>(s[i + 2] & ka[2] ^ ja[2]);
         if (bpp == 4) d[i + 3] = s[i + 3];
     }
     return out;

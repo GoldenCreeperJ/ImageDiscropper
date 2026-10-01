@@ -158,7 +158,7 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 画布上选中标注会出现 **8 个缩放手柄 + 1 个旋转手柄**（定向包围盒 OBB），拖拽即做缩放/拉伸/旋转/翻转（拖手柄越过对边＝翻转）。
 
 **标注菜单**：`标注` 菜单提供：撤销标注 / 重做标注 / 删除选中 / 清除全部（二次确认）/ 标注属性定位（**层序四式已移出菜单**，见下）。
-标注以**矢量图层列表**叠放，**每条 `Annotation` 携带显式 `zOrder`（恒等于列表下标，下标越大越靠上）**：新标注默认叠在最上层，`命中检测`（顶层优先）与`烧录`（后者覆盖前者）都以此为准。**叠放次序（上移一层 / 下移一层 / 置于顶层 / 置于底层）改由右侧标注属性页的「叠放次序」区调整**（仅选中标注时可用、不入菜单、无快捷键），委托 Core `AnnotationLayer::moveAnnotation` 就地重排（不清撤销主栈但清重做栈、选中项跟随移动、增删移后统一规范化 `zOrder`＝下标），改序即时反映到画布叠放、命中优先与（勾选烧录时的）导出预览，并随 SPEC §7 `annotations` 段以 `zOrder` 导入导出。
+标注以**矢量图层列表**叠放，**每条 `Annotation` 携带显式 `zOrder`（恒等于列表下标，下标越大越靠上）**：新标注默认叠在最上层，`命中检测`（顶层优先）与`烧录`（后者覆盖前者）都以此为准。**叠放次序（上移一层 / 下移一层 / 置于顶层 / 置于底层）改由右侧标注属性页的「叠放次序」区调整**（仅选中标注时可用、不入菜单、无快捷键），委托 `AnnotationEditor::moveAnnotation` 就地重排（不清撤销主栈但清重做栈、选中项跟随移动、增删移后统一规范化 `zOrder`＝下标），改序即时反映到画布叠放、命中优先与（勾选烧录时的）导出预览，并随 SPEC §7 `annotations` 段以 `zOrder` 导入导出。
 
 ### 图层与烧录
 
@@ -283,9 +283,9 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
    或单元宽/高 < 网格单元宽/高时，面板内联**红字警告** + 导出前**弹窗二次确认**；填充顺序（行/列优先 + 蛇形 + 倒序）与 L3 选择排序正交，写回 `Document.mergeOrder_`。
 8. **标注矢量叠加、仅导出时烧录**：标注层与底图**分离**——每个 Core `Annotation` 对应一个 `AnnotationItem`（`QGraphicsObject`），
    用 `Shape::worldPath()`→`QPainterPath` 矢量叠加绘制（含非破坏性变换，z=`kAnnotation`），**不改底图像素**；同维度预处理不清标注。
-   **烧录仅在导出时发生**：`AnnotationBridge::burnIn(base)` 以**当前工作图**为底逐个调 Core `rasterize` 合成（不复用 `AnnotationLayer::burnIn()` 内部可能陈旧的 `image_`），
+   **烧录仅在导出时发生**：`AnnotationBridge::burnIn(base)` 以**当前工作图**为底逐个调 Core `rasterize` 合成（不复用会话 `AnnotationEditor` 所持底图 `image_`，其可能预处理后陈旧），
    再送引擎切割——标注随像素被切开。标注几何/命中/光栅化全在 Core，GUI 只采集手势/翻译参数/渲染；
-   标注撤销/重做复用 Core `AnnotationLayer` 内建 `revoke()/redo()`（分层快照）。
+   标注撤销/重做复用 `AnnotationEditor` 内建 `revoke()/redo()`（条目级会话态）。
 9. **标注 OBB 非破坏性变换（画布手柄 + 面板绝对值）**：选中标注后画布绘**定向包围盒（OBB）** 的 8 缩放手柄 + 1 旋转手柄，
    拖拽经 Core `Shape::obbPreviewTransform`（逐帧矢量预览）/`applyObbTransform`（释放提交）做缩放/拉伸/旋转/翻转——变换以矩阵 `xform_`
    累积、**不改子类参数化几何**（类型/文字字形不退化），渲染/命中走 `worldPath()`；负缩放即翻转（拖手柄越过对边自然产生）。
@@ -293,7 +293,7 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
    （每 spin 按单轴换算增量下发，避免取整误差牵连其余轴）。矩阵运算全在 Core，GUI 只采集手柄拖拽、把世界光标经 `worldToLocal` 映回局部算系数。
 10. **全局撤销/重做＝双历史 + 上下文路由**：撤销分两条独立历史——①**文档参数态**用 Core `HistoryManager<EngineConfig>`
    快照（`capture=Document::buildEngineConfig`、`restore=Document::applyEngineConfig`，与配置加载同构、复用同一对互逆映射）；②**标注**沿用 Core
-   `AnnotationLayer` 内建分层快照（`AnnotationBridge::undo/redo`）。编辑菜单/工具栏的 Ctrl+Z/Y 经 `MainWindow::onUndo/onRedo` **上下文路由**：
+   `AnnotationEditor` 内建条目级会话态（`AnnotationBridge::undo/redo`）。编辑菜单/工具栏的 Ctrl+Z/Y 经 `MainWindow::onUndo/onRedo` **上下文路由**：
    标注工具激活（非 SELECT）或存在选中标注时转发到标注撤销，否则走文档参数撤销——两条历史不再各绑 Ctrl+Z/Y（消除原标注菜单与编辑菜单的快捷键冲突）。
    文档历史由 `app/DocHistory` 控制器持有：**500ms 防抖定时器**把拖拽/连点的连续 `changed()` 合并为一条（栈顶恒为「当前态」，
    `undoSize>1` 才可撤销）；还原/载入期以 `suppress_` 抑制再采集防回环；启用态经 `availabilityChanged` 信号回灌菜单动作。
@@ -316,7 +316,7 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 ## 已核对的 Core API（均来自实际头文件，非假设）
 
 - 编排：`engine::runEngine(const core::Image&, const EngineConfig&) -> EngineResult{ok,error,kept,collapsible,composition}`（内部 apply preprocess）；`engine::runEngineGeometry(const SourceInfo&, const EngineConfig&)`（仅按尺寸跑几何、忽略 preprocess，供预览）。
-- 预处理：`preprocess::PreprocessConfig = variant<GrayOp,SplitOp,InvertOp,RotateOp,FlipOp,ResizeOp>`；`PreprocessPipeline{add,insert,remove,setStep,moveUp,moveDown,clear,steps,apply,applyExec,geometryOutput(w,h)->GeometryOut{width,height,rotQuad}}`（声明式队列；`applyExec` 为执行层融合入口，与 `apply` 逐像素等价）。
+- 预处理：`preprocess::PreprocessConfig = variant<GrayOp,SplitOp,InvertOp,RotateOp,FlipOp,ResizeOp>`；`PreprocessPipeline{add,insert,remove,setStep,moveUp,moveDown,clear,steps,apply,applyExec,geometryOutput(w,h)->GeometryOut{width,height,rotQuad}}`（声明式队列；其存储 + CRUD **公开继承 `core::Pipeline<PreprocessConfig>`**——与元素类型无关的泛型有序步骤队列骨架，GUI 不直调基类接口；`applyExec` 为执行层融合入口，与 `apply` 逐像素等价）。
 - 切割线：`engine::generateCutLines(const CutConfig&, const SourceInfo&) -> CutLineSet`。
 - 配置：`EngineConfig{source,preprocess,cut,selectedCells,order,emitParams}`；
   `CutConfig{tier,generator(RECT/HORIZONTAL_LINE/VERTICAL_LINE/MULTI_RECT/GRID),rect,rects,grid,polarity}`。
@@ -329,7 +329,7 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
   `Fragment{region,index,kind,row,col}`。
 - I/O 与处理：`engine::readImageFile`（统一解码为 RGBA）；`core::Image::{resized,colorAt}`（通用像素原语）+ `preprocess::applyOne/applyExec`（预处理像素核与执行层融合）；`core::Image{width,height,empty,getPixel,inBounds,...}`；
   `core::Color{r,g,b,a}`。
-- 标注：`geometry::Shape::worldPath()/obbPreviewTransform/applyObbTransform/translateWorld/restoreTransformState`；`annotation::AnnotationLayer`（`revoke/redo/removeAnnotation/rasterize/restoreAnnotations/burnIn(base)`）。
+- 标注：`geometry::Shape::worldPath()/obbPreviewTransform/applyObbTransform/translateWorld/restoreTransformState`；`annotation::AnnotationSet`（数据/命中/合成 `hitTest/burnIn(base)`，经 `AnnotationEditor` 组合；会话态 `revoke/redo/removeAnnotation/restoreAnnotations` 归 `AnnotationEditor`）。
 
 ## 布局与交互要点
 

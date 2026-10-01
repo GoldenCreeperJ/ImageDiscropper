@@ -396,19 +396,19 @@ Annotation annotationFromJson(const json& v, std::string& reason, const int fall
 // 标注段 ↔ JSON 片段（跨模块私有交换，声明见 src/json_common.h）：
 // engine_config_json 组装 / 解析整份 SPEC §7 文档时对 annotations 段调用之。
 // ---------------------------------------------------------------------------
-// 层内标注 → annotations 数组（逐条 annotationToJson，无形状 / 未知类返回 null 时跳过）。
-nlohmann::json annotationsSegmentToJson(const AnnotationLayer& layer) {
+// 集合内标注 → annotations 数组（逐条 annotationToJson，无形状 / 未知类返回 null 时跳过）。
+nlohmann::json annotationsSegmentToJson(const AnnotationSet& set) {
     json arr = json::array();
-    for (const Annotation& a : layer.annotations()) {
+    for (const Annotation& a : set.annotations()) {
         if (json o = annotationToJson(a); !o.is_null()) arr.push_back(std::move(o));
     }
     return arr;
 }
 
-// annotations 数组值 → 层（严格校验，逐条重建）：任一非法即整体失败（不静默丢弃），
-// annoErr 非空时逐条回传原因；段缺失 / 非数组 → 清空层（配置文件为标注真相源）；
-// 成功则按 zOrder 稳定排序（等值保序）后 restoreAnnotations（其内规范化 zOrder ＝ 新下标）。
-bool annotationsFromSegmentJson(const nlohmann::json& arrValue, AnnotationLayer& layer, std::string* annoErr) {
+// annotations 数组值 → 集合（严格校验，逐条重建）：任一非法即整体失败（不静默丢弃），
+// annoErr 非空时逐条回传原因；段缺失 / 非数组 → 清空集合（配置文件为标注真相源）；
+// 成功则按 zOrder 稳定排序（等值保序）后 restore（其内规范化 zOrder ＝ 新下标）。
+bool annotationsFromSegmentJson(const nlohmann::json& arrValue, AnnotationSet& set, std::string* annoErr) {
     std::vector<Annotation> items;
     std::vector<std::string> errs;
     if (arrValue.is_array()) {
@@ -433,10 +433,10 @@ bool annotationsFromSegmentJson(const nlohmann::json& arrValue, AnnotationLayer&
         return false;
     }
     // 按 zOrder 稳定排序（等值保持原数组顺序）：正常 GUI 导出 zOrder 与位置一致→恒等；
-    // 手改乱序时尊重显式层位意图。随后 restoreAnnotations 会规范化 zOrder ＝ 新下标。
+    // 手改乱序时尊重显式层位意图。随后 restore 会规范化 zOrder ＝ 新下标。
     std::stable_sort(items.begin(), items.end(),
                      [](const Annotation& x, const Annotation& y) { return x.zOrder < y.zOrder; });
-    layer.restoreAnnotations(std::move(items));
+    set.restore(std::move(items));
     return true;
 }
 
@@ -479,7 +479,7 @@ bool parseAnnotationsFromJsonText(const std::string& text,
             return false;
         }
         if (built.empty()) { err = "标注 JSON 无有效条目"; return false; }
-        // 单来源批内按 zOrder 稳定排序（等值保序）；跨批/与已有层合并的相对顺序由调用方（out 追加序）决定。
+        // 单来源批内按 zOrder 稳定排序（等值保序）；跨批/与已有集合合并的相对顺序由调用方（out 追加序）决定。
         std::stable_sort(built.begin(), built.end(),
                          [](const Annotation& x, const Annotation& y) { return x.zOrder < y.zOrder; });
         for (auto& a : built) out.push_back(std::move(a));

@@ -15,7 +15,7 @@
 #include <QRectF>
 #include <QTransform>
 
-#include "annotation/annotation_layer.h"   // Annotation / Shape 访问
+#include "annotation/annotation_set.h"   // Annotation / Shape 访问
 #include "engine/composition.h"            // Composition / Placement
 #include "engine/region.h"                 // RectRegion（empty/width/height）
 #include "geometry/shapes.h"               // Shape::worldPath / transform

@@ -100,11 +100,15 @@ set(IDC_GUI_UTIL_SRC
 # model：会话状态单一真相源 Document 与唯一触碰 Core 的 EngineBridge。
 set(IDC_GUI_MODEL_SRC
         include/model/annotation_bridge.h
+        include/model/annotation_editor.h
         include/model/document.h
         include/model/engine_bridge.h
+        include/model/preprocess_session.h
         src/model/annotation_bridge.cpp
+        src/model/annotation_editor.cpp
         src/model/document.cpp
         src/model/engine_bridge.cpp
+        src/model/preprocess_session.cpp
 )
 
 # canvas：QGraphicsView/Scene 画布，图层化渲染底图/遮罩/切割线/网格线/选区/标注矢量叠加；

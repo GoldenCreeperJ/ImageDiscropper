@@ -30,5 +30,5 @@
   三层命令不设 preprocess，`work` 即原图，路径不变。
 - **标注入口与烧录（SPEC §7 `annotations` 元素语法）**：四层命令（extract/erase/grid/config）均经 `annotation_args.collectAnnotations` 收集命令行标注
   （`--annotation` 内联对象可重复、`--annotations` 根数组文件可重复），解析委托 Core 的 `parseAnnotationsFromJsonText`（CLI 不引 nlohmann/json）；
-  `config.cpp` 还把命令行标注**追加**在 `--load` 配置自带 `annotations` 段之后。装配到临时 `AnnotationLayer` 后传给 `executeJob`；
+  `config.cpp` 还把命令行标注**追加**在 `--load` 配置自带 `annotations` 段之后。装配到临时 `AnnotationSet` 后传给 `executeJob`；
   该层坐标以**工作图**为基准，故 `executeJob` 在 `preprocess` 物化**之后**、校正 `source` 之前用 `annotations->burnIn(work)` 把标注烧进 `work`（与 GUI「先重放预处理、再还原标注」同一顺序纪律）；`--save-config` dry-run 把「配置自带 + 命令行」标注一并透写回 `annotations`（往返不丢）。无标注时传 `nullptr`（不烧录、不写段，行为零回归）。

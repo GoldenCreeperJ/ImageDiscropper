@@ -1,8 +1,9 @@
+
 // ============================================================================
 // 文件：tests/test_engine_config_json.cpp
 // 作用：配置文件存取验收（SPEC §7）——EngineConfig ↔ JSON 往返、preprocess 队列（含 resize）、
 //       可选 annotations 段的带样式标注往返（几何/样式/变换整体快照），以及向后兼容行为
-//       （nullptr 层忽略标注段、无段载入清空层）。
+//       （不传集合指针时忽略标注段、无段载入清空集合）。
 // 分块依据：本文件只测「序列化语义」，不触碰引擎计算与导出落盘（那些见 test_engine_pipeline /
 //       test_engine_export）；写入系统临时目录并在结束时清理。
 // ============================================================================
@@ -15,7 +16,7 @@
 #include <string>
 #include <vector>
 
-#include "annotation/annotation_layer.h"
+#include "annotation/annotation_set.h"
 #include "annotation/annotation_json.h"
 #include "annotation/shape_factory.h"
 #include "core/color.h"
@@ -29,10 +30,10 @@ namespace {
 // 浮点近似相等（JSON 双精度往返容差）。
 bool nearEq(const double a, const double b) { return std::fabs(a - b) < 1e-9; }
 
-// 构造覆盖四类具体形状 + 变换/样式的标注层。
-idc::annotation::AnnotationLayer makeLayer() {
+// 构造覆盖四类具体形状 + 变换/样式的标注集合。
+idc::annotation::AnnotationSet makeSet() {
     using namespace idc;
-    annotation::AnnotationLayer layer;
+    annotation::AnnotationSet set;
     std::vector<annotation::Annotation> items;
 
     // ① 矩形（PolygonShape）：圆角 + OBB 变换（缩放 1.5×2 后旋转 30°）+ 变换途中平移
@@ -86,8 +87,8 @@ idc::annotation::AnnotationLayer makeLayer() {
         a.shape = std::make_unique<geometry::PathShape>(std::move(p), geometry::ShapeType::PATH);
         items.push_back(std::move(a));
     }
-    layer.restoreAnnotations(std::move(items));
-    return layer;
+    set.restore(std::move(items));
+    return set;
 }
 
 } // namespace
@@ -118,20 +119,20 @@ void testEngineConfigJson() {
     cfg.emitParams.cols = 3;
     cfg.emitParams.padColor = core::Color(0, 0, 0, 0);
 
-    annotation::AnnotationLayer layer = makeLayer();
+    annotation::AnnotationSet layer = makeSet();
 
     // ---- 往返：带标注保存 → 全新对象加载。----
     CHECK(engine::saveEngineConfig(file.string(), cfg, &layer));
     engine::EngineConfig got;
-    annotation::AnnotationLayer gotLayer;
+    annotation::AnnotationSet gotLayer;
     CHECK(engine::loadEngineConfig(file.string(), got, &gotLayer));
 
     // 配置字段一致。
     CHECK(got.source.width == 800 && got.source.height == 600);
     CHECK(got.preprocess.size() == 2);
-    CHECK(std::holds_alternative<preprocess::ResizeOp>(got.preprocess.steps()[0]));
-    CHECK(std::get<preprocess::ResizeOp>(got.preprocess.steps()[0]).width == 400);
-    CHECK(std::get<preprocess::RotateOp>(got.preprocess.steps()[1]).angle == 90);
+    CHECK(std::holds_alternative<preprocess::ResizeOp>(got.preprocess.items()[0]));
+    CHECK(std::get<preprocess::ResizeOp>(got.preprocess.items()[0]).width == 400);
+    CHECK(std::get<preprocess::RotateOp>(got.preprocess.items()[1]).angle == 90);
     CHECK(got.cut.tier == engine::Tier::L3 && got.cut.generator == engine::CutGenerator::GRID);
     CHECK(got.cut.grid.cellWidth == 100 && got.cut.grid.remainder == engine::RemainderPolicy::PAD);
     CHECK(got.selectedCells.size() == 2 && got.selectedCells[1] == 4);
@@ -222,28 +223,28 @@ void testEngineConfigJson() {
         }
     }
 
-    // ---- 向后兼容：不传层保存 → 文件无 annotations 段；不传层加载 → 标注段被忽略。----
+    // ---- 向后兼容：不传集合保存 → 文件无 annotations 段；不传集合加载 → 标注段被忽略。----
     const fs::path plainFile = dir / "plain.json";
     CHECK(engine::saveEngineConfig(plainFile.string(), cfg));
     {
         std::ifstream ifs(plainFile);
-        const std::string text((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+        const std::string text((std::istreambuf_iterator(ifs)), std::istreambuf_iterator<char>());
         CHECK(text.find("\"annotations\"") == std::string::npos);
     }
     CHECK(engine::loadEngineConfig(plainFile.string(), got)); // 旧调用形态仍可编译（默认参数）。
 
-    // ---- 真相源语义：文件无 annotations 段 + 传层加载 → 清空既有标注。----
-    annotation::AnnotationLayer keep = makeLayer();
+    // ---- 真相源语义：文件无 annotations 段 + 传集合加载 → 清空既有标注。----
+    annotation::AnnotationSet keep = makeSet();
     CHECK(engine::loadEngineConfig(plainFile.string(), got, &keep));
     CHECK(keep.annotations().empty());
 
-    // ---- 空层保存 → 省略 annotations 段。----
+    // ---- 空集合保存 → 省略 annotations 段。----
     const fs::path emptyFile = dir / "empty.json";
-    annotation::AnnotationLayer emptyLayer;
+    annotation::AnnotationSet emptyLayer;
     CHECK(engine::saveEngineConfig(emptyFile.string(), cfg, &emptyLayer));
     {
         std::ifstream ifs(emptyFile);
-        const std::string text((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+        const std::string text((std::istreambuf_iterator(ifs)), std::istreambuf_iterator<char>());
         CHECK(text.find("\"annotations\"") == std::string::npos);
     }
 
@@ -292,7 +293,7 @@ void testAnnoParseText() {
             out, err));
         CHECK(out.size() == 2);
         CHECK(out[0].strokeWidth == 9 && out[1].strokeWidth == 1);
-        // 批内排序后由调用层（restoreAnnotations）会规范化 zOrder＝下标；此处仅验证相对顺序。
+        // 批内排序后由调用方（restore）会规范化 zOrder＝下标；此处仅验证相对顺序。
     }
 
     // ③ 多次调用累积（追加语义）：先 1 条后 2 条 → 共 3。
@@ -388,18 +389,18 @@ void testAnnoAnchorRoundTrip() {
         {geometry::ShapeType::EQU_RECT_TRIANGLE, {0, 0},    {-6, 10}},
     };
 
-    // 源层：逐 case 经 buildShape 生成规范顶点；先抽取期望顶点/圆角（shape 将被移入层）。
+    // 源集合：逐 case 经 buildShape 生成规范顶点；先抽取期望顶点/圆角（shape 将被移入集合）。
     std::vector<std::vector<core::Point2D>> expectedPts;
     std::vector<double> expectedRadius;
     std::vector<annotation::Annotation> items;
-    for (const auto& c : cases) {
+    for (const auto&[type, p1, p2] : cases) {
         annotation::ShapeRequest req;
-        req.type = c.type;
-        req.p1 = c.p1;
-        req.p2 = c.p2;
+        req.type = type;
+        req.p1 = p1;
+        req.p2 = p2;
         req.cornerRadius = 3.0;
         annotation::Annotation a;
-        a.shapeType = c.type;
+        a.shapeType = type;
         a.shape = annotation::buildShape(req);
         const auto* poly = dynamic_cast<const geometry::PolygonShape*>(a.shape.get());
         CHECK(poly != nullptr);
@@ -408,13 +409,13 @@ void testAnnoAnchorRoundTrip() {
         items.push_back(std::move(a));
     }
 
-    annotation::AnnotationLayer layer;
-    layer.restoreAnnotations(std::move(items));
+    annotation::AnnotationSet layer;
+    layer.restore(std::move(items));
 
     engine::EngineConfig cfg;
     CHECK(engine::saveEngineConfig(file.string(), cfg, &layer));
     engine::EngineConfig got;
-    annotation::AnnotationLayer gotLayer;
+    annotation::AnnotationSet gotLayer;
     CHECK(engine::loadEngineConfig(file.string(), got, &gotLayer));
 
     CHECK(gotLayer.annotations().size() == expectedPts.size());
@@ -442,24 +443,24 @@ void testAnnoAnchorRoundTrip() {
     struct EllipseExpect { double cx, cy, rx, ry; };
     std::vector<EllipseExpect> ellExpect;
     std::vector<annotation::Annotation> ellItems;
-    for (const auto& c : ellCases) {
+    for (const auto&[type, p1, p2] : ellCases) {
         annotation::ShapeRequest req;
-        req.type = c.type;
-        req.p1 = c.p1;
-        req.p2 = c.p2;
+        req.type = type;
+        req.p1 = p1;
+        req.p2 = p2;
         annotation::Annotation a;
-        a.shapeType = c.type;
+        a.shapeType = type;
         a.shape = annotation::buildShape(req);
         const auto* ell = dynamic_cast<const geometry::EllipseShape*>(a.shape.get());
         CHECK(ell != nullptr);
         if (ell) ellExpect.push_back({ell->centerX(), ell->centerY(), ell->radiusX(), ell->radiusY()});
         ellItems.push_back(std::move(a));
     }
-    annotation::AnnotationLayer ellLayer;
-    ellLayer.restoreAnnotations(std::move(ellItems));
+    annotation::AnnotationSet ellLayer;
+    ellLayer.restore(std::move(ellItems));
     CHECK(engine::saveEngineConfig(file.string(), cfg, &ellLayer));
     engine::EngineConfig got2;
-    annotation::AnnotationLayer gotEllLayer;
+    annotation::AnnotationSet gotEllLayer;
     CHECK(engine::loadEngineConfig(file.string(), got2, &gotEllLayer));
     CHECK(gotEllLayer.annotations().size() == ellExpect.size());
     for (std::size_t i = 0; i < gotEllLayer.annotations().size() && i < ellExpect.size(); ++i) {

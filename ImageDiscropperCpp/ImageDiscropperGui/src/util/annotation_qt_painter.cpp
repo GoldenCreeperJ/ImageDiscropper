@@ -10,7 +10,7 @@
 #include <QPainter>
 #include <QPen>
 
-#include "annotation/annotation_layer.h"   // Annotation（几何 + 样式）
+#include "annotation/annotation_set.h"   // Annotation（几何 + 样式）
 #include "geometry/shapes.h"               // Shape::toPath / TextShape / ShapeType
 #include "util/path_qt_adapter.h"          // toQColor / toQTransform / toQPainterPath
 

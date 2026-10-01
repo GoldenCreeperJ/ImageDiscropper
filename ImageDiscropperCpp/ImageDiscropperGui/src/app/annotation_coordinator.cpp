@@ -270,7 +270,7 @@ void AnnotationCoordinator::onBurnInChanged(const bool on) const {
     preview_->refreshExportPreviewFromCache();   // B：烧录开关只影响输出预览（叠加/去除标注），用缓存重渲染、不重跑 Core。
 }
 
-// 标注菜单动作：撤销/重做/删除选中/清除全部（均复用 Core AnnotationLayer）。
+// 标注菜单动作：撤销/重做/删除选中/清除全部（均复用 AnnotationEditor 内建会话态）。
 void AnnotationCoordinator::onAnnoUndo() const { anno_->undo(); }
 void AnnotationCoordinator::onAnnoRedo() const { anno_->redo(); }
 void AnnotationCoordinator::onAnnoDeleteSelected() const {
@@ -288,7 +288,7 @@ void AnnotationCoordinator::onAnnoClearAll() const {
     anno_->clearAll();
 }
 
-// 标注层序（叠放）：均作用于选中项，委托 AnnotationBridge（内部调 Core moveAnnotation）。
+// 标注层序（叠放）：均作用于选中项，委托 AnnotationBridge（内部调 AnnotationEditor::moveAnnotation）。
 // 无选中时桥内自行忽略；变化经 changed()/selectionChanged() → 重绘标注层 + 必要时刷新输出预览。
 void AnnotationCoordinator::onAnnoRaise() const { anno_->raiseSelected(); }
 void AnnotationCoordinator::onAnnoLower() const { anno_->lowerSelected(); }

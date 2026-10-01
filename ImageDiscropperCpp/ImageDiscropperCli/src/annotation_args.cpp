@@ -10,7 +10,7 @@
 #include <fstream>
 #include <sstream>
 
-#include "annotation/annotation_layer.h" // annotation::Annotation（完整类型，供 vector 实例化）
+#include "annotation/annotation_set.h" // annotation::Annotation（仅记录类型，供 vector 实例化）
 #include "annotation/annotation_json.h" // annotation::parseAnnotationsFromJsonText（标注 JSON 段级解析，归属 annotation 模块）
 
 namespace idc::cli {
@@ -18,7 +18,7 @@ namespace {
 
 // 读取整个文本文件到 outText；文件不存在或不可读返回 false。
 bool readFileText(const std::string& path, std::string& outText) {
-    std::ifstream ifs(path, std::ios::binary);
+    const std::ifstream ifs(path, std::ios::binary);
     if (!ifs) return false;
     std::ostringstream ss;
     ss << ifs.rdbuf();

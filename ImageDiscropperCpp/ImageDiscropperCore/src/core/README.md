@@ -11,3 +11,5 @@
 | `point.cpp`           | 距离计算等辅助函数                                            |
 | `image.cpp`           | 图像像素缓冲、读写、格式转换实现                                     |
 | `history_manager.cpp` | 空翻译单元占位（`HistoryManager<T>` 纯模板实现全在头文件，供将来扩展非模板辅助函数） |
+
+> `pipeline_manager.h` 的 `Pipeline<T>` 为纯头模板、无 `.cpp`（无占位 TU）：其语义全在头文件，消费者侧（`preprocess`）按需实例化即可。

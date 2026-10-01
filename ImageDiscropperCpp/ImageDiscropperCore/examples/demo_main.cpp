@@ -11,13 +11,15 @@
 // ============================================================================
 #include <filesystem>
 #include <iostream>
+#include <optional>
+#include <vector>
 
 #include "core/color.h"
 #include "core/image.h"
 #include "core/point.h"
 #include "engine/engine.h"
 #include "engine/engine_config_json.h"
-#include "annotation/annotation_layer.h"
+#include "annotation/annotation_set.h"
 #include "annotation/shape_factory.h"
 #include "annotation/view_transform.h"
 #include "preprocess/preprocess_pipeline.h"
@@ -42,10 +44,10 @@ int main() {
     printInfo("base", base);
 
     // ------------------------------------------------------------------
-    // 2. 使用 ShapeFactory 构造若干形状，并提交到 AnnotationLayer
+    // 2. 使用 ShapeFactory 构造若干形状，组装为 Annotation 记录提交到 AnnotationSet
+    //    （集合不持底图：烧录经 burnIn(base) 显式传入；编辑模式/选中/撤销重做等会话态归 GUI AnnotationEditor）
     // ------------------------------------------------------------------
-    annotation::AnnotationLayer panel;
-    panel.setImage(base);
+    annotation::AnnotationSet annoSet;
 
     // 2.1 画一条红色直线：(20,20) → (100,80)
     {
@@ -53,9 +55,12 @@ int main() {
         req.p1 = {20, 20};
         req.p2 = {100, 80};
         req.type = geometry::ShapeType::LINE;
-        panel.changeColor(core::kRed);
-        panel.changeStrokeWidth(3);
-        panel.addAnnotation(annotation::buildShape(req));
+        annotation::Annotation a;
+        a.shapeType = req.type;
+        a.color = core::kRed;
+        a.strokeWidth = 3;
+        a.shape = annotation::buildShape(req);
+        annoSet.add(std::move(a));
     }
 
     // 2.2 画一个蓝色填充矩形：(110,20) → (180,70)
@@ -64,10 +69,14 @@ int main() {
         req.p1 = {110, 20};
         req.p2 = {180, 70};
         req.type = geometry::ShapeType::RECTANGLE;
-        panel.changeColor(core::kBlue);
-        panel.changeFill(true);
-        panel.addAnnotation(annotation::buildShape(req));
-        panel.changeFill(false); // 还原，避免影响后续
+        annotation::Annotation a;
+        a.shapeType = req.type;
+        a.color = core::kBlue;
+        a.fillColor = core::kBlue; // 会话中联动模板由 editor 负责，集合侧逐条显式填写
+        a.strokeWidth = 2;
+        a.fillType = true;
+        a.shape = annotation::buildShape(req);
+        annoSet.add(std::move(a));
     }
 
     // 2.3 画一个绿色圆形：圆心 (60, 90)，半径 20
@@ -76,31 +85,43 @@ int main() {
         req.p1 = {60, 90};
         req.p2 = {80, 90}; // 距离 = 20，作为半径
         req.type = geometry::ShapeType::CIRCLE;
-        panel.changeColor(core::kGreen);
-        panel.changeStrokeWidth(2);
-        panel.addAnnotation(annotation::buildShape(req));
+        annotation::Annotation a;
+        a.shapeType = req.type;
+        a.color = core::kGreen;
+        a.strokeWidth = 2;
+        a.shape = annotation::buildShape(req);
+        annoSet.add(std::move(a));
     }
 
-    std::cout << "shapes committed: " << panel.annotations().size() << "\n";
+    std::cout << "shapes committed: " << annoSet.annotations().size() << "\n";
 
-    // 2.4 合成：把底图与所有形状合并为一张最终图像
-    core::Image composed = panel.burnIn();
+    // 2.4 合成：把底图与所有形状合并为一张最终图像（底图显式传入，集合不自持）
+    core::Image composed = annoSet.burnIn(base);
     printInfo("composed", composed);
 
     // ------------------------------------------------------------------
-    // 3. 撤销 / 重做演示
+    // 3. 弹尾 / 还原演示：popBack 交还顶层标注（绿色圆形），供上层撤销/重做栈编排；
+    //    再把弹出项连同剩余列表 restore 回集合（对应 GUI 重做路径）。
+    //    （会话态撤销已随拆分归 GUI AnnotationEditor，此处仅展示集合级弹尾/还原原语）
     // ------------------------------------------------------------------
-    panel.revoke(); // 撤销最后一个（绿色圆形）
-    std::cout << "after revoke: " << panel.annotations().size() << " shapes\n";
-    panel.redo();   // 重做，恢复绿色圆形
-    std::cout << "after redo:   " << panel.annotations().size() << " shapes\n";
+    std::vector<annotation::Annotation> poppedItems;
+    std::optional<annotation::Annotation> popped = annoSet.popBack();
+    if (popped.has_value()) {
+        std::cout << "popBack -> shape #" << popped->zOrder
+                  << " type=" << geometry::shapeTypeName(popped->shapeType) << "\n";
+    }
+    std::cout << "after popBack: " << annoSet.annotations().size() << " shapes\n";
+    for (const auto& a : annoSet.annotations()) poppedItems.push_back(a); // 剩余项在前
+    if (popped.has_value()) poppedItems.push_back(std::move(*popped));    // 弹出项回顶
+    annoSet.restore(std::move(poppedItems));                              // 整体还原（弹尾不丢）
+    std::cout << "after restore: " << annoSet.annotations().size() << " shapes\n";
 
     // ------------------------------------------------------------------
     // 4. 命中检测演示：判断点 (60, 90) 是否落在某个形状上
     // ------------------------------------------------------------------
-    if (auto idx = panel.hitTest({60, 90})) {
+    if (auto idx = annoSet.hitTest({60, 90})) {
         std::cout << "hitTest(60,90) -> shape #" << *idx
-                  << " type=" << geometry::shapeTypeName(panel.annotations()[*idx].shapeType)
+                  << " type=" << geometry::shapeTypeName(annoSet.annotations()[*idx].shapeType)
                   << "\n";
     } else {
         std::cout << "hitTest(60,90) -> miss\n";

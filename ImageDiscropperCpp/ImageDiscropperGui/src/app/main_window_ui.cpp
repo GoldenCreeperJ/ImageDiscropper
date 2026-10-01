@@ -184,7 +184,7 @@ void MainWindowUi::buildMenus(MainWindow* w) {
     });
 
     // ---- 标注：撤销/重做/删除选中/清除全部/属性定位 ----
-    // 标注撤销/重做复用 Core AnnotationLayer 内建分层快照；快捷键 Ctrl+Z/Y 已统一交给编辑菜单
+    // 标注撤销/重做复用 AnnotationEditor 内建条目级会话态；快捷键 Ctrl+Z/Y 已统一交给编辑菜单
     // （上下文路由：标注上下文时自动转发到此处），故本菜单项不再绑定快捷键，避免冲突。
     QMenu* mAnno = w->menuBar()->addMenu(QStringLiteral("标注(&A)"));
     const QAction* aAnnoUndo = mAnno->addAction(QStringLiteral("撤销标注(&U)"));

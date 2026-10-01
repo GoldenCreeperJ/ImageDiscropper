@@ -8,27 +8,26 @@
 - `preprocess_config.cpp` 只负责数据模型的辅助函数（枚举 ↔ 字符串、默认配置构造、类型标签提取）。
   `PreprocessConfig` 是 `GrayOp / SplitOp / InvertOp / RotateOp / FlipOp / ResizeOp` 的 variant。
 - `preprocess_pipeline.cpp` 只负责按顺序调度各 pixel_ops 算法，是「编排层」，
-  不包含任何具体像素处理代码。
+  不包含任何具体像素处理代码（具体像素核在 `pixel_ops`，融合像素核在本目录私有 `pixel_kernels`）。
 
 **能力要点**：
-- **队列增删移改**：`add / insert / remove / setStep / moveUp / moveDown / clear`——供 GUI 图像页
-  做「添加 / 就地改参 / 删除 / 上下移 / 重置」的声明式编辑（每次编辑由上层从原图重放整条队列物化工作图）。
+- **队列增删移改（公开继承泛型容器）**：`add / insert / remove / setStep / moveUp / moveDown / clear`——
+  存储与「按序增删移改 + 越界钳制/忽略」的边界策略由**公开基类 `core::Pipeline<PreprocessConfig>`** 直接提供（与元素类型无关的骨架，见 [core](../core/README.md)；`setStep` 为域内别名 wrapper、语义＝基类 `replaceAt`），
+  本类不再手写任何转发；供 GUI 图像页做「添加 / 就地改参 / 删除 / 上下移 / 重置」的声明式编辑
+  （每次编辑由上层从原图重放整条队列物化工作图）。
 - **按序执行** `apply(src)`：逐步调 pixel_ops；`resize` 设绝对目标尺寸、`rotate 90/270` 交换宽高，
-  `gray / invert / split / flip` 保持尺寸。
+  `gray / invert / split / flip` 保持尺寸。充当执行层融合的逐像素等价性参照 oracle。
+- **执行层融合入口** `applyExec(src)`：与 `apply` **逐像素完全等价**（含尺寸 / 格式），但先把整条队列压成内部
+  `ExecStep` 计划（绝不落回词表步）再单趟执行——① 连续几何步折为**单次 D4 重排** `remapD4`（闭式逆采样，
+  几何为「灰度亦无损的纯位置置换」）；② 连续色彩步（gray / invert / split）折为**单次位映射** `channelMap`：
+  pre-gray 段任意 Split/Invert 序列合为 `f(v)=(v&K)^J` 一趟完成、`gray` 幂等去重、`gray` 之后 `split` 为死步丢弃、
+  `invert` 按奇偶累积。`ResizeOp` 是**唯一块界**（双线性取整与色彩 / 几何均不可交换），块内步数恒 ≤4，
+  故**像素趟数与队列长度解耦**；灰度之后的死步在计划构建时自动吞除，无需录入拦截。以「载入强解 RGBA、进队为多通道」为前提。
+  > 旧声明层折叠入口 `folded()` 已删除，折叠口径统一收敛到执行层 `applyExec`，不再保留两套折叠。
 - **纯元数据几何推演** `geometryOutput(w, h)`：不碰像素，仅按各步语义推演出 `{输出宽高, 净旋转象限}`，
   供 GUI 计算「几何签名」（geomSig）判定编辑前后是否发生几何失效（尺寸或净旋转变化才清选区 / 标注）。
-- **逐像素等价的同类段规整** `folded()`：返回一个与原队列**逐像素完全一致但趟数更少**的新队列（不改本对象）——
-  对**连续同类段**各自就地规整，段间（含 `ResizeOp`）绝不跨越重排：
-  - 连续几何步折叠为规范的 ≤2 个 D4 步（1 RotateOp + 至多 1 FlipOp，flip 可水平或垂直）——几何折叠逐像素恒等，
-    是因为 pixel_ops 旋转 / 翻转已修为“灰度亦无损的纯位置置换”；
-  - 连续色彩步（gray / invert / split）折叠为规范形：首个 `gray` 前的 `split / invert` 按逐通道位映射 `f(v)=(v&K)^J`
-    合并为至多 `SplitOp{K} + InvertOp{J}`（恒等分量省略）；`gray` 幂等（重复丢弃）；`gray` 之后 `split` 为死步丢弃、
-    `invert` 按奇偶折叠（两次抵消、末尾至多补 1 步）。灰度态在整个队列内单调不回退（跨几何 / resize 段传播），且色彩
-    折叠以“进入队列为多通道（载入器强解 RGBA）”为前提，故 pre-gray 位映射合并逐像素恒等；
-  - `ResizeOp` 及各段之间**原地保留、绝不跨越重排**（`resize` 双线性与 `gray` 截断使色彩 / 几何并非总能交换，调序会改值）。
-  仅用于减少全分辨率重放趟数与吞除死步，不改 `apply / geometryOutput` 语义。
 
-| 文件                        | 职责                                                                          |
-|---------------------------|-----------------------------------------------------------------------------|
-| `preprocess_config.cpp`   | 枚举转字符串、默认参数构造、类型标签提取                                                        |
-| `preprocess_pipeline.cpp` | 队列增删移改与按序执行（调 pixel_ops 完成实际计算）+ `geometryOutput` 几何推演 + `folded()` 逐像素等价折叠 |
+| 文件                        | 职责                                                                                                                |
+|---------------------------|-------------------------------------------------------------------------------------------------------------------|
+| `preprocess_config.cpp`   | 枚举转字符串、默认参数构造、类型标签提取                                                                                              |
+| `preprocess_pipeline.cpp` | 执行与推演：按序执行 `apply`、执行层融合 `applyExec` + `geometryOutput` 几何推演（队列 CRUD 由公开基类 `core::Pipeline<PreprocessConfig>` 提供） |

@@ -135,9 +135,9 @@ idc config --load base.json --annotation '{"type":"text","x":10,"y":10,"text":"h
 - 引擎编排：`engine::runEngine` / `EngineConfig` / `EngineResult`
 - 网格几何：`engine::Grid::build` / `cellAt` / `cellCount`（把 `r,c` 映射为线性 `index`）
 - 区域：`engine::RectRegion` / `horizontalBand` / `verticalBand`
-- 配置存取：`engine::loadEngineConfig` / `saveEngineConfig`（可选 `AnnotationLayer*` 参：加载还原 / 保存附带 SPEC §7 `annotations` 段）
+- 配置存取：`engine::loadEngineConfig` / `saveEngineConfig`（可选 `AnnotationSet*` 参：加载还原 / 保存附带 SPEC §7 `annotations` 段）
 - 标注文本解析：`engine::parseAnnotationsFromJsonText`（内联对象 / 根数组 → `vector<Annotation>`，供 `--annotation` / `--annotations` 复用；CLI 不引 nlohmann/json）
-- 标注烧录：`annotation::AnnotationLayer::burnIn(base)` / `restoreAnnotations` / `annotations()`（把命令行 / 配置标注烧进工作图）
+- 标注烧录：`annotation::AnnotationSet::burnIn(base)` / `restore` / `annotations()`（把命令行 / 配置标注烧进工作图）
 - 图像 I/O：`engine::readImageFile`（解码）/ `writeImageFile`（示例 / 测试造图）
 - 基础类型：`core::Image` / `core::Color` / `kTransparent`
 

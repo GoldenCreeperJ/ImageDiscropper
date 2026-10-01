@@ -192,7 +192,7 @@ EngineResult runEngine(const core::Image& image, const EngineConfig& config) {
 
     // --- FR-1：切割前先应用预处理流水线（旋转/翻转/灰度/反色/色道分离/尺寸），其产出图像
     //     才是切割引擎的真正输入（SPEC §3.1）。无步骤时直接复用原图，避免对大图做多余深拷贝。---
-    const bool hasPreprocess = !config.preprocess.steps().empty();
+    const bool hasPreprocess = !config.preprocess.items().empty();
     const core::Image preprocessed =
         hasPreprocess ? config.preprocess.apply(image) : core::Image{};
     const core::Image& work = hasPreprocess ? preprocessed : image;

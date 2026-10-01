@@ -23,7 +23,7 @@
 #include "core/color.h"
 
 namespace idc::annotation {
-class AnnotationLayer;
+class AnnotationSet;
 }
 
 namespace idc::jsonutil {
@@ -107,11 +107,11 @@ inline double jDouble(const json& v, const double def) {
 namespace idc::annotation {
 
 // 标注段 ↔ JSON 片段（跨模块私有交换，nlohmann::json 不经公共头外泄；实现见 src/annotation/annotation_json.cpp）：
-//   · annotationsSegmentToJson：层内标注 → SPEC §7 annotations 数组（逐条经标注序列化，无形状 / 未知类跳过）。
-//   · annotationsFromSegmentJson：annotations 数组值 → 层（逐条严格校验，任一非法写 annoErr 返回 false；
-//     段缺失 / 非数组 → 清空层，与「配置文件为标注真相源」一致；成功则按 zOrder 稳定排序后 restoreAnnotations）。
+//   · annotationsSegmentToJson：集合内标注 → SPEC §7 annotations 数组（逐条经标注序列化，无形状 / 未知类跳过）。
+//   · annotationsFromSegmentJson：annotations 数组值 → 集合（逐条严格校验，任一非法写 annoErr 返回 false；
+//     段缺失 / 非数组 → 清空集合，与「配置文件为标注真相源」一致；成功则按 zOrder 稳定排序后 restore）。
 // engine_config_json 组装 / 解析整份 §7 文档时调用，二者的实现均落在 annotation 模块，使标注 JSON 归属收口于 annotation。
-nlohmann::json annotationsSegmentToJson(const AnnotationLayer& layer);
-bool annotationsFromSegmentJson(const nlohmann::json& arrValue, AnnotationLayer& layer, std::string* annoErr);
+nlohmann::json annotationsSegmentToJson(const AnnotationSet& set);
+bool annotationsFromSegmentJson(const nlohmann::json& arrValue, AnnotationSet& set, std::string* annoErr);
 
 } // namespace idc::annotation

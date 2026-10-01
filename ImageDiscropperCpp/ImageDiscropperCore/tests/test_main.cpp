@@ -18,13 +18,18 @@
 #include "core/image.h"
 #include "core/point.h"
 #include "engine/engine.h"
-#include "annotation/annotation_layer.h"
+#include "annotation/annotation_set.h"
 #include "annotation/rasterizer.h"
 #include "annotation/shape_factory.h"
 #include "annotation/view_transform.h"
 #include "geometry/shapes.h"
 #include "core/history_manager.h"
+#include "core/pipeline_manager.h"
 #include "preprocess/preprocess_pipeline.h"
+// 跨模块直编（unit_tests 已将 GUI annotation_editor.cpp 编入）：恢复标注会话态断言。
+#include "model/annotation_editor.h"
+// 跨模块直编（unit_tests 已将 GUI preprocess_session.cpp 编入）：预处理会话（零 Qt）的不变式/归一化/缓存断言。
+#include "model/preprocess_session.h"
 
 // ---------------------------------------------------------------------------
 // core 模块测试：颜色运算、图像读写、格式转换
@@ -284,7 +289,7 @@ static void testPixelOps() {
 }
 
 // ---------------------------------------------------------------------------
-// annotation 模块测试：ShapeFactory、Rasterizer、AnnotationLayer、ViewTransform
+// annotation 模块测试：ShapeFactory、Rasterizer、AnnotationSet、ViewTransform
 // ---------------------------------------------------------------------------
 static void testAnnotation() {
     using namespace idc;
@@ -322,101 +327,74 @@ static void testAnnotation() {
     core::Color edge = canvas.getPixel(25, 10);
     CHECK(edge.b > 200 && edge.r < 50);
 
-    // AnnotationLayer：提交形状 + 撤销 + 重做 + 清除
-    annotation::AnnotationLayer panel;
-    panel.setImage(canvas);
-    panel.changeColor(core::kBlue);
-    panel.addAnnotation(std::move(rect));
-    CHECK(panel.annotations().size() == 1);
-    panel.revoke();
-    CHECK(panel.annotations().empty());
-    panel.redo();
-    CHECK(panel.annotations().size() == 1);
-    panel.clear();
-    CHECK(panel.annotations().empty());
-
-    // AnnotationLayer：EDIT 模式下修改选中形状的颜色
-    annotation::ShapeRequest r2;
-    r2.p1 = {10, 10};
-    r2.p2 = {60, 60};
-    r2.type = geometry::ShapeType::RECTANGLE;
-    panel.changeColor(core::kRed);
-    panel.addAnnotation(annotation::buildShape(r2));
-    panel.setEditType(annotation::EditType::EDIT);
-    panel.selectAnnotation(0);
-    panel.changeColor(core::kGreen);
-    CHECK(panel.annotations()[0].color == core::kGreen);
-
-    // AnnotationLayer：删除指定下标标注（removeAnnotation）——加第二个矩形后删 index 0，
-    // 应仅剩原第 2 个；且删除作为新操作会清空重做栈，选中下标同步修正。
-    annotation::ShapeRequest r3;
-    r3.p1 = {70, 70};
-    r3.p2 = {90, 90};
-    r3.type = geometry::ShapeType::RECTANGLE;
-    panel.setEditType(annotation::EditType::DRAW);
-    panel.changeColor(core::kBlue);
-    panel.addAnnotation(annotation::buildShape(r3));
-    CHECK(panel.annotations().size() == 2);
-    panel.selectAnnotation(1);            // 选中第二个
-    panel.removeAnnotation(0);            // 删除第一个
-    CHECK(panel.annotations().size() == 1);
-    CHECK(panel.annotations()[0].color == core::kBlue);      // 剩下的是原第 2 个（蓝色）
-    CHECK(panel.selectedAnnotationIndex().has_value() && *panel.selectedAnnotationIndex() == 0); // 选中下标前移
-    panel.removeAnnotation(99);           // 越界删除应被忽略
-    CHECK(panel.annotations().size() == 1);
-
-    // AnnotationLayer：层序调整（moveAnnotation）——列表下标即 z 序（大＝顶，与 hitTest/burnIn 口径一致）。
-    // 新建独立层，DRAW 模式依次加红/绿/蓝三个矩形（下标 0/1/2）。
-    annotation::AnnotationLayer lay;
-    lay.setImage(canvas);
-    lay.setEditType(annotation::EditType::DRAW);
-    annotation::ShapeRequest mr;
-    mr.type = geometry::ShapeType::RECTANGLE;
-    lay.changeColor(core::kRed);   mr.p1 = {0, 0};   mr.p2 = {10, 10}; lay.addAnnotation(annotation::buildShape(mr));
-    lay.changeColor(core::kGreen); mr.p1 = {20, 20}; mr.p2 = {30, 30}; lay.addAnnotation(annotation::buildShape(mr));
-    lay.changeColor(core::kBlue);  mr.p1 = {40, 40}; mr.p2 = {50, 50}; lay.addAnnotation(annotation::buildShape(mr));
-    CHECK(lay.annotations().size() == 3);
-    CHECK(lay.annotations()[0].color == core::kRed);
-    CHECK(lay.annotations()[2].color == core::kBlue);
-    // zOrder 一等属性：新标注依次置顶，zOrder 恒等于列表下标（0＝最底、大＝顶）。
-    CHECK(lay.annotations()[0].zOrder == 0 && lay.annotations()[1].zOrder == 1 && lay.annotations()[2].zOrder == 2);
-
-    // 选中 index 0（红）→ 移到顶层（to=2）：顺序变 [绿,蓝,红]，选中下标跟随被移动项到 2。
-    lay.selectAnnotation(0);
-    lay.moveAnnotation(0, 2);
-    CHECK(lay.annotations()[0].color == core::kGreen);
-    CHECK(lay.annotations()[1].color == core::kBlue);
-    CHECK(lay.annotations()[2].color == core::kRed);
-    CHECK(lay.selectedAnnotationIndex().has_value() && *lay.selectedAnnotationIndex() == 2);
-    // 重排后 zOrder 已重新规范化＝新下标（红从 0 升至 2）。
-    CHECK(lay.annotations()[0].zOrder == 0 && lay.annotations()[1].zOrder == 1 && lay.annotations()[2].zOrder == 2);
-    CHECK(lay.annotations()[2].color == core::kRed && lay.annotations()[2].zOrder == 2);
-
-    // 移回底层（from=2 → to=0）：恢复 [红,绿,蓝]，选中跟随到 0。
-    lay.moveAnnotation(2, 0);
-    CHECK(lay.annotations()[0].color == core::kRed);
-    CHECK(lay.annotations()[2].color == core::kBlue);
-    CHECK(lay.selectedAnnotationIndex().has_value() && *lay.selectedAnnotationIndex() == 0);
-    CHECK(lay.annotations()[0].zOrder == 0 && lay.annotations()[1].zOrder == 1 && lay.annotations()[2].zOrder == 2);
-
-    // 区间内其它项的选中下标随移动方向平移：选中 index 1（绿）→ moveAnnotation(0,2) 把红移到底，
-    // 结果 [绿,蓝,红]，绿从 1 前移到 0，选中应随之变为 0。
-    lay.selectAnnotation(1);
-    lay.moveAnnotation(0, 2);
-    CHECK(lay.annotations()[0].color == core::kGreen);
-    CHECK(lay.selectedAnnotationIndex().has_value() && *lay.selectedAnnotationIndex() == 0);
-
-    // 越界 / 自移动被忽略，列表不变。
-    lay.moveAnnotation(99, 0);
-    lay.moveAnnotation(1, 1);
-    CHECK(lay.annotations().size() == 3);
-    CHECK(lay.annotations()[0].zOrder == 0 && lay.annotations()[1].zOrder == 1 && lay.annotations()[2].zOrder == 2);
-
-    // removeAnnotation 后剩余项 zOrder 重新规范化＝新下标（删当前 [绿,蓝,红] 的底（index 0），剩 [蓝,红] → zOrder 0/1）。
-    lay.removeAnnotation(0);
-    CHECK(lay.annotations().size() == 2);
-    CHECK(lay.annotations()[0].color == core::kBlue && lay.annotations()[0].zOrder == 0);
-    CHECK(lay.annotations()[1].color == core::kRed && lay.annotations()[1].zOrder == 1);
+    // AnnotationSet：结构操作（add / removeAt / popBack / clear / restore）+ zOrder 不变式 + 命中检测
+    // ——会话态（编辑模式 / 属性模板 / 选中 / 撤销重做）已拆至 GUI AnnotationEditor（下方专项断言，
+    //   经跨模块直编 annotation_editor.cpp 回归）；本段只验无头侧成立的数据 / 合成原语。
+    annotation::AnnotationSet set;
+    {
+        annotation::Annotation empty;
+        CHECK(!set.add(std::move(empty)));                     // 空 shape 拒绝
+    }
+    {
+        annotation::Annotation a;
+        a.shapeType = geometry::ShapeType::RECTANGLE;
+        a.color = core::kBlue;
+        a.shape = std::move(rect);
+        CHECK(set.add(std::move(a)));
+    }
+    CHECK(set.annotations().size() == 1);
+    CHECK(set.annotations()[0].zOrder == 0);
+    CHECK(!set.removeAt(99));                                   // 越界删除忽略
+    CHECK(set.removeAt(0));
+    CHECK(set.annotations().empty());
+    CHECK(!set.popBack());                                      // 空集弹尾 nullopt
+    {
+        std::vector<annotation::Annotation> items;
+        annotation::ShapeRequest rr;
+        rr.type = geometry::ShapeType::RECTANGLE;
+        for (const core::Color& c : {core::kRed, core::kGreen, core::kBlue}) {
+            annotation::Annotation a;
+            a.shapeType = geometry::ShapeType::RECTANGLE;
+            a.color = c;
+            rr.p1 = c == core::kRed ? core::Point2D{0, 0} : c == core::kGreen ? core::Point2D{20, 20} : core::Point2D{40, 40};
+            rr.p2 = c == core::kRed ? core::Point2D{10, 10} : c == core::kGreen ? core::Point2D{30, 30} : core::Point2D{50, 50};
+            a.shape = annotation::buildShape(rr);
+            items.push_back(std::move(a));
+        }
+        set.restore(std::move(items));                          // [红,绿,蓝]，下标即 z 序（大＝顶）
+    }
+    CHECK(set.annotations().size() == 3);
+    CHECK(set.annotations()[0].zOrder == 0 && set.annotations()[1].zOrder == 1 && set.annotations()[2].zOrder == 2);
+    // 命中检测：蓝矩形 (40,40)-(50,50) 内 (45,45) 应命中顶层 index 2
+    if (const auto hit = set.hitTest({45, 45}); hit.has_value()) {
+        CHECK(*hit == 2);
+    } else { CHECK(false); }
+    CHECK(!set.hitTest({200, 200}).has_value());
+    // moveItem：把 index 0（红）移到顶层（to=2）→ [绿,蓝,红]，zOrder 重新规范化＝新下标
+    CHECK(set.moveItem(0, 2));
+    CHECK(set.annotations()[0].color == core::kGreen);
+    CHECK(set.annotations()[1].color == core::kBlue);
+    CHECK(set.annotations()[2].color == core::kRed);
+    CHECK(set.annotations()[0].zOrder == 0 && set.annotations()[1].zOrder == 1 && set.annotations()[2].zOrder == 2);
+    // 移回底层（from=2 → to=0）：恢复 [红,绿,蓝]
+    CHECK(set.moveItem(2, 0));
+    CHECK(set.annotations()[0].color == core::kRed);
+    CHECK(set.annotations()[2].color == core::kBlue);
+    // 越界 / 自移动被忽略，列表不变
+    CHECK(!set.moveItem(99, 0));
+    CHECK(!set.moveItem(1, 1));
+    CHECK(set.annotations().size() == 3);
+    // popBack：弹出顶层（蓝）交还调用方（GUI 撤销据此入重做栈）
+    if (auto popped = set.popBack(); popped.has_value()) {
+        CHECK(popped->color == core::kBlue);
+    } else { CHECK(false); }
+    CHECK(set.annotations().size() == 2);
+    // removeAt 后剩余项 zOrder 重新规范化＝新下标（删 [红,绿] 的底 → 剩 [绿] → zOrder 0）
+    CHECK(set.removeAt(0));
+    CHECK(set.annotations().size() == 1);
+    CHECK(set.annotations()[0].color == core::kGreen && set.annotations()[0].zOrder == 0);
+    set.clear();
+    CHECK(set.annotations().empty());
 
     // Shape::translate：就地平移保留具体类型（不再退化为通用 PATH）。
     // 矩形：平移后 type() 仍为 RECTANGLE，包围盒按 (dx,dy) 偏移、宽高不变。
@@ -470,6 +448,93 @@ static void testAnnotation() {
     CHECK(std::abs(logical.x - 50.0) < 0.5);
     CHECK(std::abs(logical.y - 50.0) < 0.5);
 
+    // ---- AnnotationEditor：编辑会话（GUI 半边，零 Qt，跨模块直编）的会话态断言 ----
+    //   恢复拆分暂删的会话语义：属性模板 / change* 的 EDIT–DRAW 双分支 / 撤销重做条目级编排 /
+    //   选中跟随 / 切模式清选中 / 空 base 合成口径。
+    {
+        using gui::AnnotationEditor;
+        using gui::EditType;
+        auto makeRect = [](const double x0, const double y0, const double x1, const double y1) {
+            annotation::ShapeRequest r;
+            r.type = geometry::ShapeType::RECTANGLE;
+            r.p1 = {x0, y0};
+            r.p2 = {x1, y1};
+            return annotation::buildShape(r);
+        };
+
+        AnnotationEditor ed;
+        // DRAW 模式：change* 作用当前属性模板；填充色初始与边框色联动，显式改填充后断联动。
+        ed.setEditType(EditType::DRAW);
+        ed.changeColor(core::kBlue);                      // 联动 → 填充色也变蓝
+        CHECK(ed.currentColor() == core::kBlue && ed.currentFillColor() == core::kBlue);
+        ed.changeFillColor(core::kRed);                   // 显式改填充 → 断联动
+        ed.changeColor(core::kGreen);                     // 断联动后边框色不再带动填充色
+        CHECK(ed.currentColor() == core::kGreen && ed.currentFillColor() == core::kRed);
+        ed.changeStrokeWidth(0);                          // 线宽下限钳为 1
+        CHECK(ed.currentStrokeWidth() == 1);
+        ed.changeFill(true);
+        CHECK(ed.currentFill());
+
+        // 提交标注走当前模板；撤销弹尾入重做栈、重做回推；撤销后再画新标注清重做栈（切断“未来”）。
+        ed.addAnnotation(makeRect(0, 0, 10, 10));
+        ed.addAnnotation(makeRect(20, 20, 30, 30));
+        CHECK(ed.annotations().size() == 2);
+        CHECK(ed.annotations()[0].color == core::kGreen && ed.annotations()[0].fillColor == core::kRed);
+        ed.revoke();
+        CHECK(ed.annotations().size() == 1);
+        ed.redo();
+        CHECK(ed.annotations().size() == 2);
+        ed.revoke();                                      // 弹尾（20,20）入重做 → 剩 1
+        ed.addAnnotation(makeRect(40, 40, 50, 50));       // 新操作清重做栈
+        ed.redo();                                        // 重做栈已清 → 无变化
+        CHECK(ed.annotations().size() == 2);
+
+        // EDIT 模式：change* 作用选中项、不污染属性模板；切模式清选中。
+        ed.setEditType(EditType::EDIT);                   // 切模式 → 清选中
+        CHECK(!ed.selectedAnnotationIndex().has_value());
+        ed.selectAnnotation(0);
+        ed.changeColor(core::kBlack);                     // 改选中项颜色
+        CHECK(ed.annotations()[0].color == core::kBlack);
+        CHECK(ed.currentColor() == core::kGreen);         // 模板未被选中项编辑污染
+
+        // hitTest 委托集合：命中顶层填充矩形 (40,40)-(50,50) → index 1；EDIT 改其线宽。
+        if (const auto hit = ed.hitTest({45, 45}); hit.has_value()) {
+            ed.selectAnnotation(hit);
+        } else { CHECK(false); }
+        ed.changeStrokeWidth(8);
+        CHECK(ed.selectedAnnotation() != nullptr && ed.selectedAnnotation()->strokeWidth == 8);
+
+        // removeAnnotation：删选中项 → 取消选中；属新操作清重做。
+        const std::size_t sel = ed.selectedAnnotationIndex().value();
+        ed.removeAnnotation(sel);
+        CHECK(!ed.selectedAnnotationIndex().has_value());
+        CHECK(ed.annotations().size() == 1);
+
+        // moveAnnotation：选中下标跟随被移动项。
+        ed.addAnnotation(makeRect(0, 0, 10, 10));         // 现 2 项
+        ed.selectAnnotation(1);                           // 选顶层
+        ed.moveAnnotation(1, 0);                          // 顶 → 底，选中跟随到 0
+        CHECK(ed.selectedAnnotationIndex().has_value() && *ed.selectedAnnotationIndex() == 0);
+
+        // restoreAnnotations：整体替换 + 清重做栈 + 取消选中。
+        std::vector<annotation::Annotation> restoreItems;
+        {
+            annotation::Annotation a;
+            a.shapeType = geometry::ShapeType::RECTANGLE;
+            a.shape = makeRect(60, 60, 70, 70);
+            restoreItems.push_back(std::move(a));
+        }
+        ed.setEditType(EditType::DRAW);
+        ed.selectAnnotation(0);
+        ed.restoreAnnotations(std::move(restoreItems));
+        CHECK(ed.annotations().size() == 1);
+        CHECK(!ed.selectedAnnotationIndex().has_value());
+
+        // burnIn(base)：空 base 退化为 1×1 透明图（与集合口径一致）。
+        const core::Image burned = ed.burnIn(core::Image{});
+        CHECK(burned.width() == 1 && burned.height() == 1);
+    }
+
     std::cout << "[annotation] OK\n";
 }
 
@@ -497,7 +562,7 @@ static void testPreprocess() {
     pipe.moveUp(2);
     // FlipOp 在 PreprocessConfig variant 中的序号是 4
     // （GrayOp=0, SplitOp=1, InvertOp=2, RotateOp=3, FlipOp=4）
-    CHECK(pipe.steps()[1].index() == 4);
+    CHECK(pipe.items()[1].index() == 4);
     pipe.remove(0);
     CHECK(pipe.size() == 2);
 
@@ -702,6 +767,100 @@ static void testPreprocess() {
 }
 
 // ---------------------------------------------------------------------------
+// PreprocessSession 测试（GUI 会话半边，零 Qt，跨模块直编）：geo→color 不变式 / 移动限幅 /
+//   载入归一化 / 有效管线 / geomSig / producesGray / base_ 缓存失效——先于换线验证与控制器 1:1。
+// ---------------------------------------------------------------------------
+static void testPreprocessSession() {
+    using namespace idc;
+    using gui::PreprocessSession;
+    using gui::ResizeTarget;
+
+    // ---- geo→color 不变式追加：几何插几何块尾、色彩落队尾 ----
+    preprocess::PreprocessPipeline p;
+    PreprocessSession::appendKeepingInvariant(p, preprocess::RotateOp{90});   // geo → [R]
+    PreprocessSession::appendKeepingInvariant(p, preprocess::GrayOp{});        // color → [R,G]
+    PreprocessSession::appendKeepingInvariant(p, preprocess::FlipOp{true});    // geo 插几何块尾 → [R,F,G]
+    PreprocessSession::appendKeepingInvariant(p, preprocess::InvertOp{});      // color 队尾 → [R,F,G,I]
+    CHECK(p.size() == 4);
+    CHECK(PreprocessSession::geoBlockLen(p) == 2);                            // 前二为几何块
+    CHECK(preprocess::isGeometryStep(p.items()[0]) && preprocess::isGeometryStep(p.items()[1]));
+    CHECK(!preprocess::isGeometryStep(p.items()[2]) && !preprocess::isGeometryStep(p.items()[3]));
+
+    // ---- 块内换序限幅：同类可移、跨块拒绝、边界与越界守卫 ----
+    CHECK(PreprocessSession::moveWithinBlock(p, 0, true) == true);            // R↔F（同几何块）→ [F,R,G,I]
+    CHECK(std::holds_alternative<preprocess::FlipOp>(p.items()[0])
+              && std::holds_alternative<preprocess::RotateOp>(p.items()[1]));
+    CHECK(PreprocessSession::moveWithinBlock(p, 1, true) == false);           // R(geo) 与 G(color) 跨块 → 不动
+    CHECK(PreprocessSession::moveWithinBlock(p, 0, false) == false);          // 首位上移越界
+    CHECK(PreprocessSession::moveWithinBlock(p, 3, true) == false);           // 末位下移越界
+    CHECK(PreprocessSession::moveWithinBlock(p, 9, true) == false);           // 下标越界
+
+    // ---- 载入归一化：散落 ResizeOp 抽出取最后一个正尺寸、geo 前 color 后、绝不入轻队列 ----
+    preprocess::PreprocessPipeline raw;
+    raw.add(preprocess::GrayOp{});           // color
+    raw.add(preprocess::ResizeOp{100, 50});  // resize1
+    raw.add(preprocess::RotateOp{90});       // geo
+    raw.add(preprocess::ResizeOp{0, 0});     // 非正 → 丢弃
+    raw.add(preprocess::FlipOp{true});       // geo
+    raw.add(preprocess::ResizeOp{200, 120}); // resize2（最后一个正尺寸）
+    raw.add(preprocess::SplitOp{"010"});     // color
+    const auto [steps, resize] = PreprocessSession::normalizeLoaded(raw);
+    CHECK(resize.has_value() && resize->width == 200 && resize->height == 120);
+    CHECK(steps.size() == 4);           // 任何 ResizeOp 都不入轻队列
+    for (const auto& cfg : steps.items())
+        CHECK(!std::holds_alternative<preprocess::ResizeOp>(cfg));
+    // geo 段 [Rotate,Flip] 在前、color 段 [Gray,Split] 在后（各保相对序）。
+    CHECK(std::holds_alternative<preprocess::RotateOp>(steps.items()[0])
+              && std::holds_alternative<preprocess::FlipOp>(steps.items()[1])
+              && std::holds_alternative<preprocess::GrayOp>(steps.items()[2])
+              && std::holds_alternative<preprocess::SplitOp>(steps.items()[3]));
+
+    // ---- 有效管线 = [resize?]+steps（resize 恒置首）与 geomSig 纯元数据推演 ----
+    preprocess::PreprocessPipeline st;
+    st.add(preprocess::RotateOp{90});
+    constexpr std::optional rz = ResizeTarget{60, 40};
+    const auto eff = PreprocessSession::makeEffective(rz, st);
+    CHECK(eff.size() == 2 && std::holds_alternative<preprocess::ResizeOp>(eff.items()[0]));
+    PreprocessSession sess;
+    sess.setResize(ResizeTarget{60, 40});
+    sess.setSteps(st);                       // [Resize60×40, Rotate90]
+    const auto [gw, gh, gq] = sess.geomSig(1000, 1000);   // resize 后 rotate90 → 交换宽高、象限 1
+    CHECK(gw == 40 && gh == 60 && gq == 1);
+
+    // ---- producesGray：任一 GrayOp 使输出恒灰度 ----
+    PreprocessSession gs;
+    CHECK(!gs.producesGray());
+    preprocess::PreprocessPipeline withGray; withGray.add(preprocess::GrayOp{});
+    gs.setSteps(withGray);
+    CHECK(gs.producesGray());
+
+    // ---- base_ 缓存失效（baseDirtyFor：无前缀相等 → 脏）----
+    preprocess::PreprocessPipeline pref1;
+    pref1.add(preprocess::ResizeOp{10, 10});
+    preprocess::PreprocessPipeline pref2;
+    pref2.add(preprocess::ResizeOp{20, 20});
+    PreprocessSession bs;
+    CHECK(bs.baseDirtyFor(pref1));                          // 无缓存 → 脏
+    bs.setBase(core::Image(1, 1, core::ImageFormat::RGBA), pref1);
+    CHECK(!bs.baseDirtyFor(pref1));                         // 同前缀 → 复用
+    CHECK(bs.baseDirtyFor(pref2));                          // 异前缀 → 脏
+    bs.clearBase();
+    CHECK(bs.baseDirtyFor(pref1));                          // 释放后 → 脏
+
+    // ---- clear：会话失效（换图/重置复用），清 steps_/resize_/base_ ----
+    PreprocessSession c;
+    c.setResize(ResizeTarget{5, 5});
+    preprocess::PreprocessPipeline cSteps; cSteps.add(preprocess::GrayOp{});
+    c.setSteps(cSteps);
+    c.setBase(core::Image(1, 1, core::ImageFormat::RGBA), preprocess::PreprocessPipeline{});
+    CHECK(c.hasPreprocess() && c.hasBase());
+    c.clear();
+    CHECK(!c.hasPreprocess() && !c.hasBase() && !c.hasResize());
+
+    std::cout << "[preprocess_session] OK\n";
+}
+
+// ---------------------------------------------------------------------------
 // history 能力测试（原 history 模块、现属 core）：泛型撤销 / 重做栈
 // ---------------------------------------------------------------------------
 static void testHistory() {
@@ -734,6 +893,68 @@ static void testHistory() {
     CHECK(h.undoStack().back() == 99);
 
     std::cout << "[history] OK\n";
+}
+
+// ---------------------------------------------------------------------------
+// pipeline 能力测试：泛型有序队列容器 core::Pipeline<T> 的增/删/移/改 + 越界钳制/忽略边界策略
+//（PreprocessPipeline 的组合骨架；这些策略正是其「非空壳」的核心价值，故直接锁定）
+// ---------------------------------------------------------------------------
+static void testPipeline() {
+    idc::core::Pipeline<int> p;
+    CHECK(p.empty() && p.empty());
+
+    // add 逐字追加。
+    p.add(10); p.add(20); p.add(30);
+    CHECK(p.size() == 3 && !p.empty());
+    CHECK(p.items() == (std::vector{10, 20, 30}));
+
+    // insert：中间位置正常插入；index >= size 钳制为追加队尾。
+    p.insert(1, 15);                                   // → [10,15,20,30]
+    CHECK(p.items() == (std::vector{10, 15, 20, 30}));
+    p.insert(99, 99);                                  // index 越界 → 追加
+    CHECK(p.items() == (std::vector{10, 15, 20, 30, 99}));
+
+    // remove：合法删除；越界忽略（不动不抛）。
+    p.remove(4);                                       // → [10,15,20,30]
+    CHECK(p.size() == 4);
+    p.remove(100);                                     // 越界忽略
+    CHECK(p.size() == 4);
+
+    // replaceAt：就地替换；越界忽略。
+    p.replaceAt(0, 11);
+    CHECK(p.items().front() == 11);
+    p.replaceAt(100, 0);                               // 越界忽略
+    CHECK(p.size() == 4);
+
+    // moveUp：首位/越界忽略；正常与上一项换序。
+    p.moveUp(0);                                       // 首位忽略 → 不变
+    CHECK(p.items() == (std::vector{11, 15, 20, 30}));
+    p.moveUp(2);                                       // 20 上移 → [11,20,15,30]
+    CHECK(p.items() == (std::vector{11, 20, 15, 30}));
+
+    // moveDown：末位/越界忽略；正常与下一项换序。
+    p.moveDown(3);                                     // 末位忽略
+    CHECK(p.items() == (std::vector{11, 20, 15, 30}));
+    p.moveDown(0);                                     // 11 下移 → [20,11,15,30]
+    CHECK(p.items() == (std::vector{20, 11, 15, 30}));
+
+    // operator==：逐条相等比较。
+    idc::core::Pipeline<int> q;
+    q.add(20); q.add(11); q.add(15); q.add(30);
+    CHECK(p == q);
+    q.moveUp(1);
+    CHECK(!(p == q));
+
+    // 范围 for 直接迭代（begin/end 转发到底层 vector）。
+    int sum = 0;
+    for (const int v : p) sum += v;
+    CHECK(sum == 20 + 11 + 15 + 30);
+
+    // clear。
+    p.clear();
+    CHECK(p.empty());
+
+    std::cout << "[pipeline] OK\n";
 }
 
 // ---------------------------------------------------------------------------
@@ -807,7 +1028,9 @@ int main() {
     testPixelOps();
     testAnnotation();
     testPreprocess();
+    testPreprocessSession();  // 预处理会话（零 Qt，跨模块直编）不变式/归一化/baseDirty/签名断言
     testHistory();
+    testPipeline();
     testEngine();          // 引擎数据结构骨架
     testEnginePipeline();  // 引擎流水线功能（SPEC §3）
     testEngineExport();    // 引擎导出落盘（SPEC §4）

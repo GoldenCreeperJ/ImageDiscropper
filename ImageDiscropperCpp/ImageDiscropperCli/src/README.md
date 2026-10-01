@@ -15,7 +15,7 @@
 | `value_parser.cpp`    | 「字符串 → 类型」纯转换与格式校验（严格整数解析、十六进制颜色、枚举、命名模板）                                                                                                              |
 | `cli_error.cpp`       | `reportError` / `makeError`：按三段式格式写 stderr                                                                                                             |
 | `help.cpp`            | 顶层 / 子命令帮助与版本文本；版本来自编译期宏 `IDC_CLI_VERSION` / `IDC_CORE_VERSION`                                                                                        |
-| `job.cpp`             | 执行桥：读图 → `runEngine` → 坍缩校验 → `exportImage` → 退出码映射（三层命令 + config 共用；可选 `AnnotationLayer*` 先烧标注再切割）                                                    |
+| `job.cpp`             | 执行桥：读图 → `runEngine` → 坍缩校验 → `exportImage` → 退出码映射（三层命令 + config 共用；可选 `AnnotationSet*` 先烧标注再切割）                                                      |
 | `annotation_args.cpp` | 命令行标注收集：`hasAnnotationOptions` / `collectAnnotations`（内联对象 + 根数组文件，可重复、累积追加）+ 本地 `readFileText`；解析委托 Core `parseAnnotationsFromJsonText`，本文件不自行解析 JSON |
 | `commands/`           | 一命令一文件：`extract` / `erase` / `grid` / `config`（见该目录 README）                                                                                            |
 

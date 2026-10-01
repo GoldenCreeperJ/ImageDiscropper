@@ -10,7 +10,7 @@
 //     调 Core 段解析，职责与依赖均不同，单列一文件以免污染 value_parser 的纯函数定位（严禁上帝文件）。
 // 说明：--annotation <内联 JSON 对象> 可重复（每次一条标注）；--annotations <file.json> 指向
 //       「根为标注数组（或单对象）」的 JSON 文件（亦可重复）。二者可混用，按先 --annotation（保持出现
-//       顺序）后 --annotations 文件的顺序累积到 out；调用方据此装配 AnnotationLayer 交 job 烧录。
+//       顺序）后 --annotations 文件的顺序累积到 out；调用方据此装配 AnnotationSet 交 job 烧录。
 // ============================================================================
 #pragma once
 

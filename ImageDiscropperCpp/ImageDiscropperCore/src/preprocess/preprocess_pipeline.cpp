@@ -180,51 +180,11 @@ core::Image applyOne(const core::Image& src, const PreprocessConfig& cfg) {
 }
 
 // ---------------------------------------------------------------------------
-// PreprocessPipeline：步骤管理
-// ---------------------------------------------------------------------------
-
-// 追加步骤到队尾。
-void PreprocessPipeline::add(PreprocessConfig cfg) {
-    steps_.push_back(std::move(cfg));
-}
-
-// 在指定位置插入；index 超出范围时追加到队尾。
-void PreprocessPipeline::insert(const std::size_t index, PreprocessConfig cfg) {
-    if (index >= steps_.size()) steps_.push_back(std::move(cfg));
-    else steps_.insert(steps_.begin() + static_cast<std::ptrdiff_t>(index), std::move(cfg));
-}
-
-// 删除指定位置步骤；越界忽略。
-void PreprocessPipeline::remove(const std::size_t index) {
-    if (index >= steps_.size()) return;
-    steps_.erase(steps_.begin() + static_cast<std::ptrdiff_t>(index));
-}
-
-// 就地替换指定位置步骤（编辑参数）；越界忽略。
-void PreprocessPipeline::setStep(const std::size_t index, PreprocessConfig cfg) {
-    if (index >= steps_.size()) return;
-    steps_[index] = std::move(cfg);
-}
-
-// 上移指定位置步骤；已在首位时忽略。
-void PreprocessPipeline::moveUp(const std::size_t index) {
-    if (index == 0 || index >= steps_.size()) return;
-    std::swap(steps_[index], steps_[index - 1]);
-}
-
-// 下移指定位置步骤；已在末位时忽略。
-void PreprocessPipeline::moveDown(const std::size_t index) {
-    if (index + 1 >= steps_.size()) return;
-    std::swap(steps_[index], steps_[index + 1]);
-}
-
-// 清空所有步骤。
-void PreprocessPipeline::clear() { steps_.clear(); }
 
 // 按顺序应用所有步骤到 src，返回结果图像。
 core::Image PreprocessPipeline::apply(const core::Image& src) const {
     core::Image cur = src.clone();
-    for (const auto& cfg : steps_) {
+    for (const auto& cfg : items()) {
         cur = applyOne(cur, cfg);
     }
     return cur;
@@ -234,7 +194,7 @@ core::Image PreprocessPipeline::apply(const core::Image& src) const {
 // 与 apply(src) 逐像素等价（含尺寸/格式）；像素趟数恒 ≤ 块数×4，与队列长度解耦。
 // 计划构建不碰像素；逐步 apply/applyOne 保留不动，充当等价性参照 oracle。
 core::Image PreprocessPipeline::applyExec(const core::Image& src) const {
-    const std::vector<ExecStep> plan = buildExecPlan(steps_, src.isGray());
+    const std::vector<ExecStep> plan = buildExecPlan(items(), src.isGray());
     core::Image cur = src.clone();
     for (const auto& st : plan) {
         cur = applyExecStep(cur, st);
@@ -245,7 +205,7 @@ core::Image PreprocessPipeline::applyExec(const core::Image& src) const {
 // 纯元数据推演：不触碰像素，只按各步语义更新 (w,h) 与净旋转象限。
 PreprocessPipeline::GeometryOut PreprocessPipeline::geometryOutput(const int width, const int height) const {
     int w = width, h = height, rotQuad = 0;
-    for (const auto& cfg : steps_) {
+    for (const auto& cfg : items()) {
         std::visit([&](const auto& op) {
             using T = std::decay_t<decltype(op)>;
             if constexpr (std::is_same_v<T, RotateOp>) {

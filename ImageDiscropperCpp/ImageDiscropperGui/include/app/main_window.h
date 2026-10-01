@@ -116,7 +116,7 @@ private:
 
     // 状态与桥接（单一真相源 + 唯一标注域入口）。
     Document doc_;
-    AnnotationBridge annoBridge_;       // 标注域桥：唯一持有并驱动 Core AnnotationLayer（G-4/G-5）。
+    AnnotationBridge annoBridge_;       // 标注域桥：唯一持有并驱动 AnnotationEditor（其下组合 Core AnnotationSet，G-4/G-5）。
 
     // 控制器（QObject 子对象，本窗口拥有）。
     PreviewController* preview_{nullptr};         // 预览刷新状态机 + 导出预览缓存。

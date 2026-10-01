@@ -18,7 +18,7 @@
 #include <QPainterPath>
 #include <QPointF>
 
-#include "annotation/annotation_layer.h"
+#include "annotation/annotation_set.h"
 #include "geometry/shapes.h"   // AffineTransform / BoundingBox（OBB 手柄拖拽预览用）
 
 namespace idc::gui {
