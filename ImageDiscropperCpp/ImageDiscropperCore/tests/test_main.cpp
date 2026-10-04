@@ -338,7 +338,7 @@ static void testAnnotation() {
     {
         annotation::Annotation a;
         a.shapeType = geometry::ShapeType::RECTANGLE;
-        a.color = core::kBlue;
+        a.style.color = core::kBlue;
         a.shape = std::move(rect);
         CHECK(set.add(std::move(a)));
     }
@@ -355,7 +355,7 @@ static void testAnnotation() {
         for (const core::Color& c : {core::kRed, core::kGreen, core::kBlue}) {
             annotation::Annotation a;
             a.shapeType = geometry::ShapeType::RECTANGLE;
-            a.color = c;
+            a.style.color = c;
             rr.p1 = c == core::kRed ? core::Point2D{0, 0} : c == core::kGreen ? core::Point2D{20, 20} : core::Point2D{40, 40};
             rr.p2 = c == core::kRed ? core::Point2D{10, 10} : c == core::kGreen ? core::Point2D{30, 30} : core::Point2D{50, 50};
             a.shape = annotation::buildShape(rr);
@@ -372,27 +372,27 @@ static void testAnnotation() {
     CHECK(!set.hitTest({200, 200}).has_value());
     // moveItem：把 index 0（红）移到顶层（to=2）→ [绿,蓝,红]，zOrder 重新规范化＝新下标
     CHECK(set.moveItem(0, 2));
-    CHECK(set.annotations()[0].color == core::kGreen);
-    CHECK(set.annotations()[1].color == core::kBlue);
-    CHECK(set.annotations()[2].color == core::kRed);
+    CHECK(set.annotations()[0].style.color == core::kGreen);
+    CHECK(set.annotations()[1].style.color == core::kBlue);
+    CHECK(set.annotations()[2].style.color == core::kRed);
     CHECK(set.annotations()[0].zOrder == 0 && set.annotations()[1].zOrder == 1 && set.annotations()[2].zOrder == 2);
     // 移回底层（from=2 → to=0）：恢复 [红,绿,蓝]
     CHECK(set.moveItem(2, 0));
-    CHECK(set.annotations()[0].color == core::kRed);
-    CHECK(set.annotations()[2].color == core::kBlue);
+    CHECK(set.annotations()[0].style.color == core::kRed);
+    CHECK(set.annotations()[2].style.color == core::kBlue);
     // 越界 / 自移动被忽略，列表不变
     CHECK(!set.moveItem(99, 0));
     CHECK(!set.moveItem(1, 1));
     CHECK(set.annotations().size() == 3);
     // popBack：弹出顶层（蓝）交还调用方（GUI 撤销据此入重做栈）
     if (auto popped = set.popBack(); popped.has_value()) {
-        CHECK(popped->color == core::kBlue);
+        CHECK(popped->style.color == core::kBlue);
     } else { CHECK(false); }
     CHECK(set.annotations().size() == 2);
     // removeAt 后剩余项 zOrder 重新规范化＝新下标（删 [红,绿] 的底 → 剩 [绿] → zOrder 0）
     CHECK(set.removeAt(0));
     CHECK(set.annotations().size() == 1);
-    CHECK(set.annotations()[0].color == core::kGreen && set.annotations()[0].zOrder == 0);
+    CHECK(set.annotations()[0].style.color == core::kGreen && set.annotations()[0].zOrder == 0);
     set.clear();
     CHECK(set.annotations().empty());
 
@@ -479,7 +479,7 @@ static void testAnnotation() {
         ed.addAnnotation(makeRect(0, 0, 10, 10));
         ed.addAnnotation(makeRect(20, 20, 30, 30));
         CHECK(ed.annotations().size() == 2);
-        CHECK(ed.annotations()[0].color == core::kGreen && ed.annotations()[0].fillColor == core::kRed);
+        CHECK(ed.annotations()[0].style.color == core::kGreen && ed.annotations()[0].style.fillColor == core::kRed);
         ed.revoke();
         CHECK(ed.annotations().size() == 1);
         ed.redo();
@@ -494,7 +494,7 @@ static void testAnnotation() {
         CHECK(!ed.selectedAnnotationIndex().has_value());
         ed.selectAnnotation(0);
         ed.changeColor(core::kBlack);                     // 改选中项颜色
-        CHECK(ed.annotations()[0].color == core::kBlack);
+        CHECK(ed.annotations()[0].style.color == core::kBlack);
         CHECK(ed.currentColor() == core::kGreen);         // 模板未被选中项编辑污染
 
         // hitTest 委托集合：命中顶层填充矩形 (40,40)-(50,50) → index 1；EDIT 改其线宽。
@@ -502,7 +502,7 @@ static void testAnnotation() {
             ed.selectAnnotation(hit);
         } else { CHECK(false); }
         ed.changeStrokeWidth(8);
-        CHECK(ed.selectedAnnotation() != nullptr && ed.selectedAnnotation()->strokeWidth == 8);
+        CHECK(ed.selectedAnnotation() != nullptr && ed.selectedAnnotation()->style.strokeWidth == 8);
 
         // removeAnnotation：删选中项 → 取消选中；属新操作清重做。
         const std::size_t sel = ed.selectedAnnotationIndex().value();

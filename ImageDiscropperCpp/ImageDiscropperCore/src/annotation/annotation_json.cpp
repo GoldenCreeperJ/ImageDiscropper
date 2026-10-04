@@ -355,10 +355,10 @@ json annotationToJson(const Annotation& a) {
     if (!a.shape) return nullptr;
     json o = shapeToJson(*a.shape);
     if (o.is_null()) return o;
-    o["color"] = colorToHex(a.color);
-    o["fillColor"] = colorToHex(a.fillColor);
-    o["strokeWidth"] = a.strokeWidth;
-    o["fill"] = a.fillType;
+    o["color"] = colorToHex(a.style.color);
+    o["fillColor"] = colorToHex(a.style.fillColor);
+    o["strokeWidth"] = a.style.strokeWidth;
+    o["fill"] = a.style.fill;
     o["zOrder"] = a.zOrder;   // 叠放次序（0＝最底、大＝顶）：显式落盘，与数组位置一致。
     return o;
 }
@@ -382,10 +382,10 @@ Annotation annotationFromJson(const json& v, std::string& reason, const int fall
     if (const json& zo = at(v, "zOrder"); !zo.is_null() && !zo.is_number_integer()) {
         reason = "zOrder 须为整数"; a.shape.reset(); return a;
     }
-    a.color = colorFromHex(jStr(at(v, "color"), "#FF000000"));
-    a.fillColor = colorFromHex(jStr(at(v, "fillColor"), "#FF000000"));
-    a.strokeWidth = jInt(at(v, "strokeWidth"), 2);
-    a.fillType = jBool(at(v, "fill"), false);
+    a.style.color = colorFromHex(jStr(at(v, "color"), "#FF000000"));
+    a.style.fillColor = colorFromHex(jStr(at(v, "fillColor"), "#FF000000"));
+    a.style.strokeWidth = jInt(at(v, "strokeWidth"), 2);
+    a.style.fill = jBool(at(v, "fill"), false);
     a.zOrder = jInt(at(v, "zOrder"), fallbackZOrder);   // 缺字段回退为数组下标
     return a;
 }

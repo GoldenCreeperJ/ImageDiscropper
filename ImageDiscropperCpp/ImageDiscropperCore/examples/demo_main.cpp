@@ -57,8 +57,8 @@ int main() {
         req.type = geometry::ShapeType::LINE;
         annotation::Annotation a;
         a.shapeType = req.type;
-        a.color = core::kRed;
-        a.strokeWidth = 3;
+        a.style.color = core::kRed;
+        a.style.strokeWidth = 3;
         a.shape = annotation::buildShape(req);
         annoSet.add(std::move(a));
     }
@@ -71,10 +71,10 @@ int main() {
         req.type = geometry::ShapeType::RECTANGLE;
         annotation::Annotation a;
         a.shapeType = req.type;
-        a.color = core::kBlue;
-        a.fillColor = core::kBlue; // 会话中联动模板由 editor 负责，集合侧逐条显式填写
-        a.strokeWidth = 2;
-        a.fillType = true;
+        a.style.color = core::kBlue;
+        a.style.fillColor = core::kBlue; // 会话中联动模板由 editor 负责，集合侧逐条显式填写
+        a.style.strokeWidth = 2;
+        a.style.fill = true;
         a.shape = annotation::buildShape(req);
         annoSet.add(std::move(a));
     }
@@ -87,8 +87,8 @@ int main() {
         req.type = geometry::ShapeType::CIRCLE;
         annotation::Annotation a;
         a.shapeType = req.type;
-        a.color = core::kGreen;
-        a.strokeWidth = 2;
+        a.style.color = core::kGreen;
+        a.style.strokeWidth = 2;
         a.shape = annotation::buildShape(req);
         annoSet.add(std::move(a));
     }

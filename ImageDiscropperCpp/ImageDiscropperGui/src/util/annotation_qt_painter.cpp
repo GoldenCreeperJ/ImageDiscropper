@@ -22,8 +22,8 @@ void paintAnnotation(QPainter& painter,
                      const geometry::AffineTransform& textXf) {
     if (!ann.shape) return;
     painter.setRenderHint(QPainter::Antialiasing, true);
-    const QColor color = toQColor(ann.color);         // 边框 / 描边色（文字亦用此色）
-    const QColor fillColor = toQColor(ann.fillColor);  // 填充色（仅 fillType 为真时作刷）
+    const QColor color = toQColor(ann.style.color);         // 边框 / 描边色（文字亦用此色）
+    const QColor fillColor = toQColor(ann.style.fillColor);  // 填充色（仅 style.fill 为真时作刷）
 
     // 文字：Core TextShape 的 toPath 仅给矩形边界，这里直接绘真实字形（渲染关注点）。
     if (ann.shapeType == geometry::ShapeType::TEXT) {
@@ -46,11 +46,11 @@ void paintAnnotation(QPainter& painter,
     // 非文字：描边（+ 可选填充）调用方给出的世界坐标路径。
     if (worldDrawPath.isEmpty()) return;
     QPen pen(color);
-    pen.setWidthF(ann.strokeWidth);   // 世界单位线宽，随 painter 变换缩放到设备
+    pen.setWidthF(ann.style.strokeWidth);   // 世界单位线宽，随 painter 变换缩放到设备
     pen.setJoinStyle(Qt::RoundJoin);
     pen.setCapStyle(Qt::RoundCap);
     painter.setPen(pen);
-    painter.setBrush(ann.fillType ? QBrush(fillColor) : Qt::NoBrush);
+    painter.setBrush(ann.style.fill ? QBrush(fillColor) : Qt::NoBrush);
     painter.drawPath(worldDrawPath);
 }
 

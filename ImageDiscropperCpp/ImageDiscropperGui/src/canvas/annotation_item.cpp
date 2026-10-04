@@ -52,7 +52,7 @@ void AnnotationItem::rebuildPath() {
     // 取世界路径（已套用形状的非破坏性变换），故缩放/旋转/翻转后的矢量渲染与导出一致。
     path_ = ann_.shape ? toQPainterPath(ann_.shape->worldPath()) : QPainterPath();
     // 余量需容纳旋转手柄（顶边中点外推 handleSize_*3 + 手柄半径/抓取区），故取 handleSize_*5。
-    const qreal margin = static_cast<qreal>(ann_.strokeWidth) + handleSize_ * 5.0 + 4.0;
+    const qreal margin = static_cast<qreal>(ann_.style.strokeWidth) + handleSize_ * 5.0 + 4.0;
     bounds_ = path_.boundingRect().adjusted(-margin, -margin, margin, margin);
 }
 
@@ -78,11 +78,11 @@ QRectF AnnotationItem::boundingRect() const { return bounds_; }
 QPainterPath AnnotationItem::shape() const {
     QPainterPath s;
     if (!path_.isEmpty()) {
-        if (ann_.fillType && ann_.shapeType != geometry::ShapeType::LINE) {
+        if (ann_.style.fill && ann_.shapeType != geometry::ShapeType::LINE) {
             s = path_;
         } else {
             QPainterPathStroker stroker;
-            stroker.setWidth(static_cast<qreal>(ann_.strokeWidth) + handleSize_);
+            stroker.setWidth(static_cast<qreal>(ann_.style.strokeWidth) + handleSize_);
             s = stroker.createStroke(path_);
         }
     }
@@ -304,7 +304,7 @@ void AnnotationItem::updatePreviewBounds() {
     const geometry::AffineTransform xf =
         ann_.shape->obbPreviewTransform(previewSx_, previewSy_, previewRot_);
     const QPainterPath pp = toQPainterPath(xf.applyToPath(ann_.shape->toPath()));
-    const qreal margin = static_cast<qreal>(ann_.strokeWidth) + handleSize_ * 5.0 + 4.0;
+    const qreal margin = static_cast<qreal>(ann_.style.strokeWidth) + handleSize_ * 5.0 + 4.0;
     prepareGeometryChange();
     bounds_ = pp.boundingRect().adjusted(-margin, -margin, margin, margin);
 }

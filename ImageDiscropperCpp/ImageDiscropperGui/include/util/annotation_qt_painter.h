@@ -21,7 +21,7 @@ namespace idc::gui {
 
 // 在当前 painter 变换（世界→设备）下绘制一条标注：
 //   · 非文字形状：用 worldDrawPath（调用方给出的世界坐标路径——普通态＝Shape::worldPath()、
-//     拖拽预览态＝xf.applyToPath(toPath())）按 color/strokeWidth 描边，fillType 为真时用同色填充；
+//     拖拽预览态＝xf.applyToPath(toPath())）按 style.color/style.strokeWidth 描边，style.fill 为真时用同色填充；
 //   · 文字（TEXT）：以 textXf（局部→世界的有效变换）临时叠加到 painter 后绘制真实字形（字号 fontSize）。
 // 仅发绘制指令；不绘选中高亮 / 手柄（图元专属，留在 AnnotationItem）。ann.shape 为空则忽略。
 void paintAnnotation(QPainter& painter,

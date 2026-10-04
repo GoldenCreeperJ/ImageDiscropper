@@ -20,10 +20,7 @@ namespace idc::annotation {
 // 拷贝构造：深拷贝 shape 指针指向的几何对象。
 Annotation::Annotation(const Annotation& o)
     : shape(o.shape ? o.shape->clone() : nullptr),
-      color(o.color),
-      fillColor(o.fillColor),
-      strokeWidth(o.strokeWidth),
-      fillType(o.fillType),
+      style(o.style),
       shapeType(o.shapeType),
       zOrder(o.zOrder) {}
 
@@ -31,10 +28,7 @@ Annotation::Annotation(const Annotation& o)
 Annotation& Annotation::operator=(const Annotation& o) {
     if (this != &o) {
         shape = o.shape ? o.shape->clone() : nullptr;
-        color = o.color;
-        fillColor = o.fillColor;
-        strokeWidth = o.strokeWidth;
-        fillType = o.fillType;
+        style = o.style;
         shapeType = o.shapeType;
         zOrder = o.zOrder;
     }
@@ -120,11 +114,11 @@ std::optional<std::size_t> AnnotationSet::hitTest(const core::Point2D& p) const 
         const geometry::Path path = ps.shape->worldPath();
 
         // 填充且非直线：优先按内部判定
-        if (ps.fillType && ps.shapeType != geometry::ShapeType::LINE) {
+        if (ps.style.fill && ps.shapeType != geometry::ShapeType::LINE) {
             if (path.contains(p.x, p.y)) return i;
         }
         // 其余情况按轮廓距离判定
-        if (const double dist = path.distanceToOutline(p.x, p.y); dist < 5.0 + ps.strokeWidth) return i;
+        if (const double dist = path.distanceToOutline(p.x, p.y); dist < 5.0 + ps.style.strokeWidth) return i;
     }
     return std::nullopt;
 }
@@ -138,12 +132,8 @@ core::Image AnnotationSet::burnIn(const core::Image& base) const {
 
     for (const Annotation& ps : items_) {
         if (!ps.shape) continue;
-        PaintStyle style;
-        style.color = ps.color;
-        style.fillColor = ps.fillColor;
-        style.strokeWidth = ps.strokeWidth;
-        style.fill = ps.fillType;
-        style.antialias = true;
+        PaintStyle style = ps.style;   // 样式快照直接来自内嵌的 PaintStyle
+        style.antialias = true;        // 合成路径固定抗锯齿（与逐条光栅化既有口径一致）
         rasterize(out, *ps.shape, style);
     }
     return out;

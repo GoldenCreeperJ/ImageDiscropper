@@ -46,10 +46,10 @@ idc::annotation::AnnotationSet makeSet() {
         poly->applyObbTransform(1.5, 2.0, 30.0);
         poly->translateWorld(5.0, -7.0); // 变换后移动：xform_ 不动、几何平移。
         a.shapeType = geometry::ShapeType::RECTANGLE;
-        a.color = core::Color(255, 140, 0, 255);
-        a.fillColor = core::Color(0, 0, 0, 64);
-        a.strokeWidth = 3;
-        a.fillType = true;
+        a.style.color = core::Color(255, 140, 0, 255);
+        a.style.fillColor = core::Color(0, 0, 0, 64);
+        a.style.strokeWidth = 3;
+        a.style.fill = true;
         a.shape = std::move(poly);
         items.push_back(std::move(a));
     }
@@ -57,9 +57,9 @@ idc::annotation::AnnotationSet makeSet() {
     {
         annotation::Annotation a;
         a.shapeType = geometry::ShapeType::ELLIPSE;
-        a.color = core::kRed;
-        a.fillColor = core::kRed;
-        a.strokeWidth = 2;
+        a.style.color = core::kRed;
+        a.style.fillColor = core::kRed;
+        a.style.strokeWidth = 2;
         a.shape = std::make_unique<geometry::EllipseShape>(100, 50, 80, 40, geometry::ShapeType::ELLIPSE);
         items.push_back(std::move(a));
     }
@@ -67,8 +67,8 @@ idc::annotation::AnnotationSet makeSet() {
     {
         annotation::Annotation a;
         a.shapeType = geometry::ShapeType::TEXT;
-        a.color = core::kWhite;
-        a.strokeWidth = 1;
+        a.style.color = core::kWhite;
+        a.style.strokeWidth = 1;
         a.shape = std::make_unique<geometry::TextShape>("你好 abc", 33.5, 44.25, 22.5);
         items.push_back(std::move(a));
     }
@@ -82,8 +82,8 @@ idc::annotation::AnnotationSet makeSet() {
         p.cubicTo(50, 0, 60, 30, 70, 5);
         p.closePath();
         a.shapeType = geometry::ShapeType::PATH;
-        a.color = core::kBlue;
-        a.strokeWidth = 4;
+        a.style.color = core::kBlue;
+        a.style.strokeWidth = 4;
         a.shape = std::make_unique<geometry::PathShape>(std::move(p), geometry::ShapeType::PATH);
         items.push_back(std::move(a));
     }
@@ -154,8 +154,8 @@ void testEngineConfigJson() {
     {
         const annotation::Annotation& a = annos[0];
         CHECK(a.shapeType == geometry::ShapeType::RECTANGLE);
-        CHECK(a.color == core::Color(255, 140, 0, 255) && a.fillColor == core::Color(0, 0, 0, 64));
-        CHECK(a.strokeWidth == 3 && a.fillType);
+        CHECK(a.style.color == core::Color(255, 140, 0, 255) && a.style.fillColor == core::Color(0, 0, 0, 64));
+        CHECK(a.style.strokeWidth == 3 && a.style.fill);
         const auto* poly = dynamic_cast<const geometry::PolygonShape*>(a.shape.get());
         CHECK(poly != nullptr);
         if (poly) {
@@ -188,7 +188,7 @@ void testEngineConfigJson() {
     {
         const annotation::Annotation& a = annos[1];
         CHECK(a.shapeType == geometry::ShapeType::ELLIPSE);
-        CHECK(a.color == core::kRed && !a.fillType);
+        CHECK(a.style.color == core::kRed && !a.style.fill);
         const auto* ell = dynamic_cast<const geometry::EllipseShape*>(a.shape.get());
         CHECK(ell != nullptr);
         if (ell) {
@@ -206,7 +206,7 @@ void testEngineConfigJson() {
             CHECK(nearEq(text->x(), 33.5) && nearEq(text->y(), 44.25));
             CHECK(nearEq(text->fontSize(), 22.5));
         }
-        CHECK(annos[2].strokeWidth == 1);
+        CHECK(annos[2].style.strokeWidth == 1);
     }
     // ④ 路径：五类段与全部坐标。
     {
@@ -265,7 +265,7 @@ void testAnnoParseText() {
             out, err));
         CHECK(out.size() == 1 && out[0].shape != nullptr);
         CHECK(out[0].shapeType == geometry::ShapeType::RECTANGLE);
-        CHECK(out[0].strokeWidth == 3 && out[0].fillType);
+        CHECK(out[0].style.strokeWidth == 3 && out[0].style.fill);
         CHECK(err.empty());
     }
 
@@ -292,7 +292,7 @@ void testAnnoParseText() {
             R"J([{"type":"line","points":[[0,0],[1,1]],"strokeWidth":1,"zOrder":5},{"type":"line","points":[[2,2],[3,3]],"strokeWidth":9,"zOrder":0}])J",
             out, err));
         CHECK(out.size() == 2);
-        CHECK(out[0].strokeWidth == 9 && out[1].strokeWidth == 1);
+        CHECK(out[0].style.strokeWidth == 9 && out[1].style.strokeWidth == 1);
         // 批内排序后由调用方（restore）会规范化 zOrder＝下标；此处仅验证相对顺序。
     }
 

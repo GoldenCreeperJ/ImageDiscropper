@@ -310,22 +310,22 @@ core::Image AnnotationBridge::burnIn(const core::Image& base) const {
 // 有选中项则取其属性，否则取当前工具默认（与 Core change* 的 EDIT/DRAW 分支一致）。
 core::Color AnnotationBridge::displayColor() const {
     const annotation::Annotation* a = editor_.selectedAnnotation();
-    return a ? a->color : editor_.currentColor();
+    return a ? a->style.color : editor_.currentColor();
 }
 
 core::Color AnnotationBridge::displayFillColor() const {
     const annotation::Annotation* a = editor_.selectedAnnotation();
-    return a ? a->fillColor : editor_.currentFillColor();
+    return a ? a->style.fillColor : editor_.currentFillColor();
 }
 
 int AnnotationBridge::displayStrokeWidth() const {
     const annotation::Annotation* a = editor_.selectedAnnotation();
-    return a ? a->strokeWidth : editor_.currentStrokeWidth();
+    return a ? a->style.strokeWidth : editor_.currentStrokeWidth();
 }
 
 bool AnnotationBridge::displayFill() const {
     const annotation::Annotation* a = editor_.selectedAnnotation();
-    return a ? a->fillType : editor_.currentFill();
+    return a ? a->style.fill : editor_.currentFill();
 }
 
 // 选中形状的转角圆角半径（取自形状几何）；无选中 / 无形状则取当前默认。

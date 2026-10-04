@@ -17,6 +17,7 @@
 #include <optional>
 #include <vector>
 
+#include "annotation/rasterizer.h" // PaintStyle（内嵌为样式单一真相源）
 #include "core/color.h"
 #include "core/image.h"
 #include "core/point.h"
@@ -30,10 +31,9 @@ namespace idc::annotation {
 // ---------------------------------------------------------------------------
 struct Annotation {
     std::unique_ptr<geometry::Shape> shape;  // 几何数据（多态）
-    core::Color color{core::kBlack};         // 边框 / 描边色
-    core::Color fillColor{core::kBlack};     // 填充色（仅 fillType 为真时用于闭合形状内部）
-    int strokeWidth{2};                       // 线宽
-    bool fillType{false};                     // 是否填充
+    // 渲染样式：内嵌光栅化参数包 PaintStyle 作单一真相源（color / fillColor / strokeWidth /
+    // fill / antialias），消除与 PaintStyle 的字段重复；burnIn 经此快照直接喂给 rasterize。
+    PaintStyle style;
     geometry::ShapeType shapeType{geometry::ShapeType::LINE}; // 形状类型
     // 叠放次序（z 序）属性：0＝最底、越大越靠上。**恒等于其在标注列表中的下标**
     // ——列表下标仍是内存中命中/绘制/选中的唯一真相源（见 hitTest/burnIn），此字段为其显式副本，

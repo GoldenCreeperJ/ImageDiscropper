@@ -52,7 +52,7 @@ annotation::Annotation* AnnotationEditor::editableSelected() {
 // 若当前填充色仍与边框色联动（未显式改过填充色），则同步更新默认填充色，使新标注填充保持旧观感。
 void AnnotationEditor::changeColor(const core::Color& c) {
     if (annotation::Annotation* a = editableSelected()) {
-        a->color = c;
+        a->style.color = c;
     } else {
         currentColor_ = c;
         if (fillColorLinked_) currentFillColor_ = c;
@@ -62,7 +62,7 @@ void AnnotationEditor::changeColor(const core::Color& c) {
 // 修改填充色：EDIT 作用选中项的 fillColor；DRAW 改当前默认填充色并断开与边框色的联动。
 void AnnotationEditor::changeFillColor(const core::Color& c) {
     if (annotation::Annotation* a = editableSelected()) {
-        a->fillColor = c;
+        a->style.fillColor = c;
     } else {
         currentFillColor_ = c;
         fillColorLinked_ = false;   // 用户显式指定填充色后不再跟随边框色
@@ -72,7 +72,7 @@ void AnnotationEditor::changeFillColor(const core::Color& c) {
 // 修改线宽。
 void AnnotationEditor::changeStrokeWidth(const int w) {
     if (annotation::Annotation* a = editableSelected()) {
-        a->strokeWidth = std::max(1, w);
+        a->style.strokeWidth = std::max(1, w);
     } else {
         currentStrokeWidth_ = std::max(1, w);
     }
@@ -81,7 +81,7 @@ void AnnotationEditor::changeStrokeWidth(const int w) {
 // 修改填充开关。
 void AnnotationEditor::changeFill(const bool fill) {
     if (annotation::Annotation* a = editableSelected()) {
-        a->fillType = fill;
+        a->style.fill = fill;
     } else {
         currentFill_ = fill;
     }
@@ -113,10 +113,10 @@ void AnnotationEditor::addAnnotation(std::unique_ptr<geometry::Shape> shape) {
     if (!shape) return;
     annotation::Annotation ps;
     ps.shapeType = shape->type();
-    ps.color = currentColor_;
-    ps.fillColor = currentFillColor_;
-    ps.strokeWidth = currentStrokeWidth_;
-    ps.fillType = currentFill_;
+    ps.style.color = currentColor_;
+    ps.style.fillColor = currentFillColor_;
+    ps.style.strokeWidth = currentStrokeWidth_;
+    ps.style.fill = currentFill_;
     ps.shape = std::move(shape);
     set_.add(std::move(ps));    // add 内部置 zOrder ＝ 尾下标并规范化
     redoStack_.clear();         // 新操作切断“未来”
