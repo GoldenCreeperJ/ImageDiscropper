@@ -26,7 +26,7 @@ void paintAnnotation(QPainter& painter,
     const QColor fillColor = toQColor(ann.style.fillColor);  // 填充色（仅 style.fill 为真时作刷）
 
     // 文字：Core TextShape 的 toPath 仅给矩形边界，这里直接绘真实字形（渲染关注点）。
-    if (ann.shapeType == geometry::ShapeType::TEXT) {
+    if (ann.shape->type() == geometry::ShapeType::TEXT) {
         const auto* ts = dynamic_cast<const geometry::TextShape*>(ann.shape.get());
         if (!ts) return;
         painter.save();

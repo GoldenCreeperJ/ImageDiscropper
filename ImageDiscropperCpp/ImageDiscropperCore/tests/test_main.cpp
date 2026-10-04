@@ -337,7 +337,6 @@ static void testAnnotation() {
     }
     {
         annotation::Annotation a;
-        a.shapeType = geometry::ShapeType::RECTANGLE;
         a.style.color = core::kBlue;
         a.shape = std::move(rect);
         CHECK(set.add(std::move(a)));
@@ -354,7 +353,6 @@ static void testAnnotation() {
         rr.type = geometry::ShapeType::RECTANGLE;
         for (const core::Color& c : {core::kRed, core::kGreen, core::kBlue}) {
             annotation::Annotation a;
-            a.shapeType = geometry::ShapeType::RECTANGLE;
             a.style.color = c;
             rr.p1 = c == core::kRed ? core::Point2D{0, 0} : c == core::kGreen ? core::Point2D{20, 20} : core::Point2D{40, 40};
             rr.p2 = c == core::kRed ? core::Point2D{10, 10} : c == core::kGreen ? core::Point2D{30, 30} : core::Point2D{50, 50};
@@ -520,7 +518,6 @@ static void testAnnotation() {
         std::vector<annotation::Annotation> restoreItems;
         {
             annotation::Annotation a;
-            a.shapeType = geometry::ShapeType::RECTANGLE;
             a.shape = makeRect(60, 60, 70, 70);
             restoreItems.push_back(std::move(a));
         }

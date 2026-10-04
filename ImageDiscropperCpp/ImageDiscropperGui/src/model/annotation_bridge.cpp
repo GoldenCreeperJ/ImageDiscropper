@@ -365,12 +365,12 @@ bool supportsCornerRadiusFor(const geometry::ShapeType t) {
 // 是上一绘制工具的残值（Core 仅在切到非 SELECT 工具时更新）；若据残值置灰，会出现
 // 「用直线后切回选择/移动，填充/圆角控件莫名点不了」的错禁问题。
 bool AnnotationBridge::contextSupportsFill() const {
-    if (const annotation::Annotation* a = editor_.selectedAnnotation()) return supportsFillFor(a->shapeType);
+    if (const annotation::Annotation* a = editor_.selectedAnnotation()) return supportsFillFor(a->shape->type());
     if (tool_ == AnnoTool::SELECT) return true;
     return supportsFillFor(editor_.currentType());
 }
 bool AnnotationBridge::contextSupportsCornerRadius() const {
-    if (const annotation::Annotation* a = editor_.selectedAnnotation()) return supportsCornerRadiusFor(a->shapeType);
+    if (const annotation::Annotation* a = editor_.selectedAnnotation()) return supportsCornerRadiusFor(a->shape->type());
     if (tool_ == AnnoTool::SELECT) return true;
     return supportsCornerRadiusFor(editor_.currentType());
 }

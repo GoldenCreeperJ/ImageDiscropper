@@ -45,7 +45,6 @@ idc::annotation::AnnotationSet makeSet() {
             geometry::ShapeType::RECTANGLE, true, 8.0);
         poly->applyObbTransform(1.5, 2.0, 30.0);
         poly->translateWorld(5.0, -7.0); // 变换后移动：xform_ 不动、几何平移。
-        a.shapeType = geometry::ShapeType::RECTANGLE;
         a.style.color = core::Color(255, 140, 0, 255);
         a.style.fillColor = core::Color(0, 0, 0, 64);
         a.style.strokeWidth = 3;
@@ -56,7 +55,6 @@ idc::annotation::AnnotationSet makeSet() {
     // ② 椭圆（EllipseShape）：恒等变换（transform 段应省略）。
     {
         annotation::Annotation a;
-        a.shapeType = geometry::ShapeType::ELLIPSE;
         a.style.color = core::kRed;
         a.style.fillColor = core::kRed;
         a.style.strokeWidth = 2;
@@ -66,7 +64,6 @@ idc::annotation::AnnotationSet makeSet() {
     // ③ 文字（TextShape）：位置 + 内容 + 字号。
     {
         annotation::Annotation a;
-        a.shapeType = geometry::ShapeType::TEXT;
         a.style.color = core::kWhite;
         a.style.strokeWidth = 1;
         a.shape = std::make_unique<geometry::TextShape>("你好 abc", 33.5, 44.25, 22.5);
@@ -81,7 +78,6 @@ idc::annotation::AnnotationSet makeSet() {
         p.quadTo(30, 20, 40, 10);
         p.cubicTo(50, 0, 60, 30, 70, 5);
         p.closePath();
-        a.shapeType = geometry::ShapeType::PATH;
         a.style.color = core::kBlue;
         a.style.strokeWidth = 4;
         a.shape = std::make_unique<geometry::PathShape>(std::move(p), geometry::ShapeType::PATH);
@@ -153,7 +149,7 @@ void testEngineConfigJson() {
     // ① 矩形：类型/圆角/样式 + 变换整体快照（矩阵与累积参数逐项相等）。
     {
         const annotation::Annotation& a = annos[0];
-        CHECK(a.shapeType == geometry::ShapeType::RECTANGLE);
+        CHECK(a.shape->type() == geometry::ShapeType::RECTANGLE);
         CHECK(a.style.color == core::Color(255, 140, 0, 255) && a.style.fillColor == core::Color(0, 0, 0, 64));
         CHECK(a.style.strokeWidth == 3 && a.style.fill);
         const auto* poly = dynamic_cast<const geometry::PolygonShape*>(a.shape.get());
@@ -187,7 +183,7 @@ void testEngineConfigJson() {
     // ② 椭圆：包围盒与类型。
     {
         const annotation::Annotation& a = annos[1];
-        CHECK(a.shapeType == geometry::ShapeType::ELLIPSE);
+        CHECK(a.shape->type() == geometry::ShapeType::ELLIPSE);
         CHECK(a.style.color == core::kRed && !a.style.fill);
         const auto* ell = dynamic_cast<const geometry::EllipseShape*>(a.shape.get());
         CHECK(ell != nullptr);
@@ -264,7 +260,7 @@ void testAnnoParseText() {
             R"J({"type":"rectangle","x1":0,"y1":0,"x2":10,"y2":10,"color":"#FF112233","fill":true,"strokeWidth":3})J",
             out, err));
         CHECK(out.size() == 1 && out[0].shape != nullptr);
-        CHECK(out[0].shapeType == geometry::ShapeType::RECTANGLE);
+        CHECK(out[0].shape->type() == geometry::ShapeType::RECTANGLE);
         CHECK(out[0].style.strokeWidth == 3 && out[0].style.fill);
         CHECK(err.empty());
     }
@@ -277,8 +273,8 @@ void testAnnoParseText() {
             R"J([{"type":"circle","x1":10,"y1":10,"x2":20,"y2":10},{"type":"text","x":5,"y":5,"text":"hi","fontSize":10}])J",
             out, err));
         CHECK(out.size() == 2);
-        CHECK(out[0].shapeType == geometry::ShapeType::CIRCLE);
-        CHECK(out[1].shapeType == geometry::ShapeType::TEXT);
+        CHECK(out[0].shape->type() == geometry::ShapeType::CIRCLE);
+        CHECK(out[1].shape->type() == geometry::ShapeType::TEXT);
         // 无显式 zOrder 字段 → 回退为数组下标 0/1。
         CHECK(out[0].zOrder == 0 && out[1].zOrder == 1);
     }
@@ -400,7 +396,6 @@ void testAnnoAnchorRoundTrip() {
         req.p2 = p2;
         req.cornerRadius = 3.0;
         annotation::Annotation a;
-        a.shapeType = type;
         a.shape = annotation::buildShape(req);
         const auto* poly = dynamic_cast<const geometry::PolygonShape*>(a.shape.get());
         CHECK(poly != nullptr);
@@ -449,7 +444,6 @@ void testAnnoAnchorRoundTrip() {
         req.p1 = p1;
         req.p2 = p2;
         annotation::Annotation a;
-        a.shapeType = type;
         a.shape = annotation::buildShape(req);
         const auto* ell = dynamic_cast<const geometry::EllipseShape*>(a.shape.get());
         CHECK(ell != nullptr);

@@ -335,7 +335,6 @@ void CanvasScene::updatePendingAnnotation(const AnnotationBridge& model) {
         tmp.style.fillColor = model.currentFillColor();
         tmp.style.strokeWidth = model.currentStrokeWidth();
         tmp.style.fill = model.currentFill();
-        tmp.shapeType = ps->type();
         pendingAnnoItem_->setAnnotation(tmp);
         pendingAnnoItem_->setVisible(true);
     } else if (pendingAnnoItem_) {

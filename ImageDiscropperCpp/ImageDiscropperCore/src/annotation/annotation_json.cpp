@@ -369,7 +369,6 @@ Annotation annotationFromJson(const json& v, std::string& reason, const int fall
     Annotation a;
     a.shape = shapeFromJson(v, reason);
     if (!a.shape) return a;
-    a.shapeType = a.shape->type();
     if (const json& cj = at(v, "color"); cj.is_string() && !isValidHexColor(cj.get<std::string>())) {
         reason = "color 非法十六进制：'" + cj.get<std::string>() + "'"; a.shape.reset(); return a;
     }

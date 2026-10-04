@@ -27,14 +27,13 @@
 namespace idc::annotation {
 
 // ---------------------------------------------------------------------------
-// Annotation：一个已提交的形状记录（几何 + 样式属性）
+// Annotation：一个已提交的形状记录（几何 + 样式）；类型由多态 shape->type() 唯一决定，不再冗余存份。
 // ---------------------------------------------------------------------------
 struct Annotation {
-    std::unique_ptr<geometry::Shape> shape;  // 几何数据（多态）
+    std::unique_ptr<geometry::Shape> shape;  // 几何数据（多态；兼作形状类型真相源 shape->type()）
     // 渲染样式：内嵌光栅化参数包 PaintStyle 作单一真相源（color / fillColor / strokeWidth /
     // fill / antialias），消除与 PaintStyle 的字段重复；burnIn 经此快照直接喂给 rasterize。
     PaintStyle style;
-    geometry::ShapeType shapeType{geometry::ShapeType::LINE}; // 形状类型
     // 叠放次序（z 序）属性：0＝最底、越大越靠上。**恒等于其在标注列表中的下标**
     // ——列表下标仍是内存中命中/绘制/选中的唯一真相源（见 hitTest/burnIn），此字段为其显式副本，
     // 随 SPEC §7 config 的 annotations 段逐条导入/导出，使叠放次序成为可持久化、可手改的一等属性。

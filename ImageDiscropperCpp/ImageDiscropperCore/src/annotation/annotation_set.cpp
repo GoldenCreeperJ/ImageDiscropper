@@ -21,7 +21,6 @@ namespace idc::annotation {
 Annotation::Annotation(const Annotation& o)
     : shape(o.shape ? o.shape->clone() : nullptr),
       style(o.style),
-      shapeType(o.shapeType),
       zOrder(o.zOrder) {}
 
 // 拷贝赋值：先释放旧 shape，再深拷贝。
@@ -29,7 +28,6 @@ Annotation& Annotation::operator=(const Annotation& o) {
     if (this != &o) {
         shape = o.shape ? o.shape->clone() : nullptr;
         style = o.style;
-        shapeType = o.shapeType;
         zOrder = o.zOrder;
     }
     return *this;
@@ -114,7 +112,7 @@ std::optional<std::size_t> AnnotationSet::hitTest(const core::Point2D& p) const 
         const geometry::Path path = ps.shape->worldPath();
 
         // 填充且非直线：优先按内部判定
-        if (ps.style.fill && ps.shapeType != geometry::ShapeType::LINE) {
+        if (ps.style.fill && ps.shape->type() != geometry::ShapeType::LINE) {
             if (path.contains(p.x, p.y)) return i;
         }
         // 其余情况按轮廓距离判定

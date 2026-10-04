@@ -78,7 +78,7 @@ QRectF AnnotationItem::boundingRect() const { return bounds_; }
 QPainterPath AnnotationItem::shape() const {
     QPainterPath s;
     if (!path_.isEmpty()) {
-        if (ann_.style.fill && ann_.shapeType != geometry::ShapeType::LINE) {
+        if (ann_.style.fill && ann_.shape->type() != geometry::ShapeType::LINE) {
             s = path_;
         } else {
             QPainterPathStroker stroker;
@@ -97,7 +97,7 @@ QPainterPath AnnotationItem::shape() const {
 }
 
 void AnnotationItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) {
-    const bool isText = ann_.shapeType == geometry::ShapeType::TEXT;
+    const bool isText = ann_.shape && ann_.shape->type() == geometry::ShapeType::TEXT;
     if (path_.isEmpty() && !isText) return;
     painter->setRenderHint(QPainter::Antialiasing, true);
 

@@ -112,7 +112,6 @@ void AnnotationEditor::changeCornerRadius(const double r) {
 void AnnotationEditor::addAnnotation(std::unique_ptr<geometry::Shape> shape) {
     if (!shape) return;
     annotation::Annotation ps;
-    ps.shapeType = shape->type();
     ps.style.color = currentColor_;
     ps.style.fillColor = currentFillColor_;
     ps.style.strokeWidth = currentStrokeWidth_;

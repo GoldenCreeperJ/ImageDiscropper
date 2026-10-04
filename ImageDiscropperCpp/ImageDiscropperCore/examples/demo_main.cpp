@@ -56,7 +56,6 @@ int main() {
         req.p2 = {100, 80};
         req.type = geometry::ShapeType::LINE;
         annotation::Annotation a;
-        a.shapeType = req.type;
         a.style.color = core::kRed;
         a.style.strokeWidth = 3;
         a.shape = annotation::buildShape(req);
@@ -70,7 +69,6 @@ int main() {
         req.p2 = {180, 70};
         req.type = geometry::ShapeType::RECTANGLE;
         annotation::Annotation a;
-        a.shapeType = req.type;
         a.style.color = core::kBlue;
         a.style.fillColor = core::kBlue; // 会话中联动模板由 editor 负责，集合侧逐条显式填写
         a.style.strokeWidth = 2;
@@ -86,7 +84,6 @@ int main() {
         req.p2 = {80, 90}; // 距离 = 20，作为半径
         req.type = geometry::ShapeType::CIRCLE;
         annotation::Annotation a;
-        a.shapeType = req.type;
         a.style.color = core::kGreen;
         a.style.strokeWidth = 2;
         a.shape = annotation::buildShape(req);
@@ -108,7 +105,7 @@ int main() {
     std::optional<annotation::Annotation> popped = annoSet.popBack();
     if (popped.has_value()) {
         std::cout << "popBack -> shape #" << popped->zOrder
-                  << " type=" << geometry::shapeTypeName(popped->shapeType) << "\n";
+                  << " type=" << geometry::shapeTypeName(popped->shape->type()) << "\n";
     }
     std::cout << "after popBack: " << annoSet.annotations().size() << " shapes\n";
     for (const auto& a : annoSet.annotations()) poppedItems.push_back(a); // 剩余项在前
@@ -121,7 +118,7 @@ int main() {
     // ------------------------------------------------------------------
     if (auto idx = annoSet.hitTest({60, 90})) {
         std::cout << "hitTest(60,90) -> shape #" << *idx
-                  << " type=" << geometry::shapeTypeName(annoSet.annotations()[*idx].shapeType)
+                  << " type=" << geometry::shapeTypeName(annoSet.annotations()[*idx].shape->type())
                   << "\n";
     } else {
         std::cout << "hitTest(60,90) -> miss\n";
