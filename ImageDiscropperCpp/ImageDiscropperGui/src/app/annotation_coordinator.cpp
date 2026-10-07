@@ -91,6 +91,8 @@ void AnnotationCoordinator::connectSignals() {
     connect(annoPropPanel_, &AnnotationPropPanel::stackLowerRequested, this, &AnnotationCoordinator::onAnnoLower);
     connect(annoPropPanel_, &AnnotationPropPanel::stackToFrontRequested, this, &AnnotationCoordinator::onAnnoBringToFront);
     connect(annoPropPanel_, &AnnotationPropPanel::stackBackRequested, this, &AnnotationCoordinator::onAnnoSendToBack);
+    // 一键清除全部标注（属性面板按钮→与标注菜单同一入口 onAnnoClearAll，弹确认后清空）。
+    connect(annoPropPanel_, &AnnotationPropPanel::clearAllRequested, this, &AnnotationCoordinator::onAnnoClearAll);
 }
 
 // 工具面板选择：先收笔未完成的折线/画笔路径，再切换工具（setTool 内部会放弃两点预览）。
@@ -118,10 +120,10 @@ void AnnotationCoordinator::onAnnoSelectionChanged() const {
     annoPropPanel_->syncFromModel();
 }
 
-// 工具变化：同步工具面板按钮组，并按「是否 SELECT」切换画布绘制态门控。
+// 工具变化：同步工具面板形状子行 + 属性面板。绘制态门控（是否进入标注绘制）已由画布四态
+// 模式机接管（CanvasView::canvasMode()==AnnoCreate），故此处不再据工具切 setAnnotationDrawActive。
 void AnnotationCoordinator::onAnnoToolChanged() const {
     toolPanel_->syncFromModel();
-    view_->setAnnotationDrawActive(anno_->currentTool() != AnnoTool::SELECT);
     annoPropPanel_->syncFromModel();
 }
 

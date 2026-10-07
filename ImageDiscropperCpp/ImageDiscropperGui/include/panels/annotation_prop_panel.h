@@ -57,6 +57,8 @@ signals:
     void stackLowerRequested();
     void stackToFrontRequested();
     void stackBackRequested();
+    // 一键清除全部标注（与标注菜单“清除全部标注”同一入口，由协调器弹确认）。
+    void clearAllRequested();
 
 private slots:
     void onPickColor();       // 打开边框色取色器
@@ -88,6 +90,7 @@ private:
     QPushButton* lowerBtn_{nullptr};      // 下移一层
     QPushButton* toFrontBtn_{nullptr};    // 置于顶层
     QPushButton* toBackBtn_{nullptr};     // 置于底层
+    QPushButton* clearAllBtn_{nullptr};   // 清除全部标注（一键）
     // 上次 syncFromModel 时选中形状的绝对变换基准（供 spin 改动把目标绝对值换算为单轴增量）。
     double curObbSx_{1.0};
     double curObbSy_{1.0};

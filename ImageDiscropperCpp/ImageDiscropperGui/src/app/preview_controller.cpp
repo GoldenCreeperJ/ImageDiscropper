@@ -109,6 +109,16 @@ void PreviewController::rebuildPreviewPixmap() {
         lastFitW_ = ow;
         lastFitH_ = oh;
     }
+
+    // 多层画布：刷新各图片图层的落位框（渲染于底图之上、标注之下；拾取拖拽的目标）。
+    // 落位几何由 Core canvas::layerPlacement 现算（此处按当前图层栈 + 画布尺寸 + 选中层下发）；
+    // 非图层画布（单一载入图）或图片图层整体隐藏（Document::imageLayersVisible()==false）则清空落位框。
+    if (doc_->hasLayers() && doc_->imageLayersVisible()) {
+        scene_->updateImageLayers(doc_->layerStack(), doc_->canvasWidth(), doc_->canvasHeight(),
+                                  doc_->selectedLayerId());
+    } else {
+        scene_->clearImageLayers();
+    }
 }
 
 // 跑 Core 预览并刷新画布与状态（CONTRIBUTING.md「分层纪律」 实时预览）。

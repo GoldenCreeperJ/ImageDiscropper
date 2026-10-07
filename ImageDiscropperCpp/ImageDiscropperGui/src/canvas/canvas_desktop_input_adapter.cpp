@@ -26,8 +26,12 @@ constexpr double kWheelZoomFactor = 1.15;
 
 } // namespace
 
-// 按下：中键 / 空格+左键 → 平移；左键（绘制态）→ 标注起笔；左键（普通）→ 先交场景，
-// 无图元接管则起框选带；其余键原样交付场景基类。
+// 按下：中键 / 空格+左键 → 平移；其余左键按当前画布四态模式显式路由（互斥分离）：
+//   · 标注创建 → 起笔绘制；
+//   · 图片拾取 → 仅交付场景（重叠落位框由场景循环选层，非 z 序优先抓取），不起框选、不交标注；
+//   · 标注选取 → 仅交付场景（标注图元 / 选区框手柄抓取），不起框选；
+//   · 框选（默认）→ 先交付场景（选区框手柄优先；此态标注不可交互），无抓取者才起框选带。
+// 其余键原样交付场景基类。
 void DesktopInputAdapter::onPress(CanvasView& view, QMouseEvent* event) {
     const QPoint vp = event->position().toPoint();
 
@@ -38,15 +42,24 @@ void DesktopInputAdapter::onPress(CanvasView& view, QMouseEvent* event) {
         return;
     }
 
-    // 标注绘制态：左键按下即路由到标注绘制（不交付图元 / 不启动橡皮筋选区）。
     if (event->button() == Qt::LeftButton) {
-        if (view.annotationDrawActive()) {
-            view.gestureStrokeBegin(vp);
-        } else {
-            view.dispatchScenePress(event); // 交付场景：选区框移动/缩放手柄优先。
-            if (view.scene() && view.scene()->mouseGrabberItem() == nullptr) {
-                view.gestureMarqueeBegin(vp);   // 无图元接管 → 启动框选新选区。
-            }
+        switch (view.canvasMode()) {
+            case CanvasMode::AnnoCreate:
+                view.gestureStrokeBegin(vp);   // 绘制态：左键起笔（不交付图元 / 不启动框选）。
+                break;
+            case CanvasMode::ImagePick:
+                view.dispatchScenePress(event); // 场景级循环拾取；空白无候选则不做任何选择。
+                break;
+            case CanvasMode::AnnoSelect:
+                view.dispatchScenePress(event); // 仅标注 / 选区框交互；禁框选。
+                break;
+            case CanvasMode::Marquee:
+            default:
+                view.dispatchScenePress(event); // 交付场景：选区框移动/缩放手柄优先。
+                if (view.scene() && view.scene()->mouseGrabberItem() == nullptr) {
+                    view.gestureMarqueeBegin(vp);   // 无图元接管 → 启动框选新选区。
+                }
+                break;
         }
         event->accept();
         return;

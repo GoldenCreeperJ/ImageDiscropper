@@ -20,6 +20,7 @@
 #include "preprocess/preprocess_config.h"
 
 class QComboBox;
+class QGroupBox;
 class QPushButton;
 class QSpinBox;
 class QCheckBox;
@@ -115,6 +116,9 @@ private:
     QPushButton* scaleSizeBtn_{nullptr};  // 按比例缩放。
     QPushButton* clearSizeBtn_{nullptr};  // 清除尺寸。
     QLabel*    currentSizeLabel_{nullptr};// 只读：当前输出尺寸 W×H。
+    QLabel*    targetLabel_{nullptr};     // 只读：当前预处理目标（三元：画布 / 底图 / 选中图片图层），置顶显式标注。
+    QGroupBox* sizeBox_{nullptr};          // 「画布尺寸（Resize）」整区容器（Base 目标禁用：底图不改尺寸）。
+    QGroupBox* geoBox_{nullptr};           // 「几何操作」整区容器（Base 目标禁用：底图仅色彩预处理）。
 
     // 各列表移动后的高亮跟随：非负表示「重建本列表后应选中此行」（被移动项的新行）。
     int geoPendingRow_{-1};
@@ -136,6 +140,7 @@ private:
     QCheckBox* chR_{nullptr};             // 通道 R（反色＝反相它 / 分离＝保留它）。
     QCheckBox* chG_{nullptr};             // 通道 G。
     QCheckBox* chB_{nullptr};             // 通道 B。
+    QWidget*   colorChanRow_{nullptr};    // 「作用通道」整行容器（仅反色/分离显隐）。
     QPushButton* colorAddBtn_{nullptr};   // 添加色彩步骤。
     QPushButton* colorReplaceBtn_{nullptr};// 更新所选色彩。
     QListWidget* colorList_{nullptr};     // 色彩步列表（队列后段）。

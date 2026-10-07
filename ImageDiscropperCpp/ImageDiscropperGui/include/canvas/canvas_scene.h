@@ -14,13 +14,22 @@
 #include <QGraphicsRectItem>
 #include <QGraphicsScene>
 #include <QPixmap>
+#include <QPointF>
 #include <QVector>
 
+#include <cstddef>
+#include <optional>
+#include <vector>
+
+class QGraphicsSceneMouseEvent;
+
+#include "canvas/layer.h"
 #include "canvas/mask_layer.h"
 #include "canvas/grid_layer.h"
 #include "canvas/cell_picker_item.h"
 #include "canvas/selection_rect_item.h"
 #include "canvas/annotation_item.h"
+#include "canvas/image_layer_item.h"
 #include "engine/engine.h"
 
 namespace idc::gui {
@@ -106,6 +115,24 @@ public:
     // 底图图层显隐（图层面板开关）：仅切换 base 图元可见性，不影响导出。
     void setBaseVisible(bool on) const;
 
+    // ---- 图片图层落位框（多层画布，z 位于底图与标注之间）----
+    // 依图层栈（zOrder 升序）与 Core layerPlacement 增量维护落位框图元（按 layerId 对齐）；
+    // 无可呈现位图的层（layerPlacement 返回 nullopt）跳过。selectedId 高亮当前编辑层。
+    void updateImageLayers(const std::vector<canvas::ImageLayer>& layers, int canvasW, int canvasH,
+                           std::optional<int> selectedId);
+    void clearImageLayers();
+    // 仅切换已有落位框的选中高亮框（不重算落位几何）：供选中层变化时廉价刷新。
+    void setImageLayerSelection(std::optional<int> selectedId);
+    // 图层拾取模式：开→落位框登记为拾取候选（点选由场景级循环选层，非 z 序自动抓取，见 mousePressEvent）；
+    //   关→仅示意不可交互（不抢既有交互）。
+    void setImagePickMode(bool on);
+    bool imagePickMode() const { return imagePickMode_; }
+
+    // 标注选取模式（四态模式机之「标注选取」）：开→已提交标注图元接受左键选中 / 拖拽 / 手柄；
+    // 关→标注图元不吃鼠标（Qt::NoButton），使框选 / 拾取手势不被标注抢走（新建中的标注不受影响）。
+    void setAnnotationSelectMode(bool on);
+    bool annotationSelectMode() const { return annotationSelectMode_; }
+
     // ---- 其余图层显隐（图层面板开关；遵循「隐藏图层=不可交互」）----
     // 网格线图层：门控 updateGrid 的 L3 灰色网格可见性（仅置标志，切换后由上层 refreshPreview 重建落地）。
     void setGridVisible(bool on);
@@ -119,6 +146,21 @@ public:
 
     int imageWidth() const { return imgW_; }
     int imageHeight() const { return imgH_; }
+
+protected:
+    // 图层拾取模式的**场景级**命中与拖拽：重叠落位框不再靠 z 序取最顶，而是同点续击沿叠放序
+    //   循环切换选中层（去 z 序依赖，仿 Figma）。非拾取模式 / 拾取点无候选 → 交基类走既有图元交互。
+    void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
+    void mouseMoveEvent(QGraphicsSceneMouseEvent* event) override;
+    void mouseReleaseEvent(QGraphicsSceneMouseEvent* event) override;
+
+private:
+    // 收集 scenePos 处命中的图片图层 id（按 zValue 降序、顶在前；仅拾取模式下的可见图元）。
+    std::vector<int> layerStackAt(const QPointF& scenePos) const;
+    // 依循环态返回本次应选中的图层 id：同点续击沿候选栈下标推进，换点则重置为最顶（下标 0）。
+    int advancePickCycle(const QPointF& scenePos, const std::vector<int>& stack);
+    // 按 id 取回对应的落位框图元（无则 nullptr）。
+    ImageLayerItem* imageLayerItemById(int id) const;
 
 signals:
     // 选区框被用户移动/缩放/拖边（转发自 SelectionRectItem::rectChanged），参数为原图像素坐标矩形。
@@ -142,6 +184,14 @@ signals:
     void annotationTransformed(int index, double sx, double sy, double rotateDeg);
     // 标注：手柄拖拽**进行中**逐帧预览值（转发自 AnnotationItem），仅供属性面板数值实时回显，不写模型。
     void annotationTransformPreview(int index, double sx, double sy, double rotateDeg);
+    // 图片图层：某落位框在拾取模式下被按下（转发自 ImageLayerItem），交上层选中该图层。
+    void imageLayerPressed(int id);
+    // 图片图层：某落位框被拖拽平移（转发自 ImageLayerItem），请求把该图层落位偏移 (dxPx,dyPx)。
+    void imageLayerMoved(int id, int dxPx, int dyPx);
+    // 图片拾取态下点击「画布内非图层处」（底图铺满画布）：请求选中底图（预处理目标切 Base）。
+    void basePickRequested();
+    // 图片拾取态下点击「画布外」：请求取消全部选中（图层/底图/标注），预处理目标回到画布。
+    void pickDeselectRequested();
 
 private:
     QGraphicsPixmapItem* baseItem_{nullptr};
@@ -161,6 +211,13 @@ private:
 
     int imgW_{0};
     int imgH_{0};
+    QVector<ImageLayerItem*> imageLayerItems_;   // 图片图层落位框（按 layerId 对齐，增量维护）
+    bool imagePickMode_{false};                  // 图层拾取模式（默认关）
+    ImageLayerItem* pickDragItem_{nullptr};      // 拾取模式下正被场景驱动的拖拽落位框
+    QPointF lastPickPos_{};                      // 上次拾取命中点（循环判定：同点续击才推进）
+    std::vector<int> lastPickStack_;             // 上次命中的候选层栈（同点判定）
+    std::size_t lastPickIndex_{0};               // 上次在候选栈中的循环下标
+    bool annotationSelectMode_{false};           // 标注选取模式（默认关＝框选态，标注不吃鼠标）
     bool masksVisible_{true};
     bool gridVisible_{true};       // 网格线图层可见性（图层面板开关）
     bool cutLinesVisible_{true};   // 切割线图层可见性（图层面板开关）

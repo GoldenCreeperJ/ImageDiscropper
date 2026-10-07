@@ -19,6 +19,7 @@
 
 #include <QMainWindow>
 
+#include "canvas/canvas_mode.h"
 #include "model/annotation_bridge.h"
 #include "model/document.h"
 
@@ -36,6 +37,7 @@ class ExportPanel;
 class ImagePanel;
 class ToolPanel;
 class LayerPanel;
+class LayerEditPanel;
 class AnnotationPropPanel;
 class StatusBar;
 class PreviewController;
@@ -74,6 +76,10 @@ protected:
 private slots:
     // 文件动作。
     void onOpen();           // 打开图像对话框 → openImageFromPath。
+    void onNew();            // 新建画布（**非破坏性**）：换底图、保留图层/标注/色彩预处理→注入 Document。
+    void onAddImageLayer();  // 图层编辑：从文件添加一个图片图层到当前图层画布（解码→addImageLayer）。
+    void onClearAllLayers(); // 清空全部图片图层（回退单图底图，保留标注/预处理）。
+    void onDestroyAll();     // 一键全部销毁归零：清图层（回底图）+清标注+重置预处理+清选区，仅保留底图。
     void onExport();         // 导出（委托 EngineBridge → Core runEngine + exportImage）。
     void onLoadConfig();     // 文件→加载配置：读 JSON → DocHistory::recordConfigLoad（入栈可撤销）。
     void onSaveConfig();     // 文件→保存配置：把当前 EngineConfig 写为 JSON。
@@ -107,6 +113,10 @@ private:
 
     void buildDesktopUi();     // 桌面骨架装配（MainWindowUi 四步，逐行原迁自原构造）。
     void connectAll();         // 剩余跨件串联（Document/画布交互/历史启用态；其余连接在各控制器内）。
+    // 画布四态互斥模式落地：切视图模式 + 场景图元可交互性（拾取 / 标注选取）+ 进入一态即取消前态选中。
+    void applyCanvasMode(CanvasMode mode);
+    // 状态栏提示：显式回报当前交互模式与当前预处理目标（画布 / 某图片图层）。
+    void updateInteractionHint() const;
     // 同步左侧面板与右侧「参数/导出/图像」页到 Document（blockSignals 防回环）。
     void syncPanels() const;
     // 非模态提示（状态栏 + 提示标签），错误不打断用户。
@@ -133,6 +143,7 @@ private:
     ImagePanel* imagePanel_{nullptr};   // 右侧「图像」页：预处理（FR-1）。
     ToolPanel* toolPanel_{nullptr};             // 左侧「标注工具」组（G-4）。
     LayerPanel* layerPanel_{nullptr};           // 左侧「图层」组（G-5）。
+    LayerEditPanel* layerEditPanel_{nullptr};   // 左侧「图层编辑」组：图片图层列表/落位/画布尺寸（多层画布）。
     AnnotationPropPanel* annoPropPanel_{nullptr}; // 右侧「标注」属性页（G-4）。
     QWidget* rightTabs_{nullptr};       // 右侧多页容器：桌面＝AccordionPanel 折叠式（多节可同开+整栏滚动）/
                                         // 移动端＝QTabWidget 选择式；跨形态访问经双型分发。

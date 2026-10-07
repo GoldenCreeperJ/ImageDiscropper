@@ -5,8 +5,10 @@
 // 分块依据：
 //   - 全局撤销的「双历史」之一（标注历史在 AnnotationBridge/Core），独占一块；
 //   - 启用态经 availabilityChanged 信号回灌 MainWindow 的 aUndo_/aRedo_（控制器不碰菜单动作）。
-// 说明：快照类型为 EngineConfig（与配置加载同构）：capture=buildEngineConfig、restore=applyEngineConfig，
-//       栈顶恒为「当前态」；undo 弹栈顶到重做栈后还原新栈顶，redo 反之。仅快照参数态，不含图像/预处理。
+// 说明：快照类型为 EngineConfig（与配置加载同构）：capture=buildSerializableConfig（声明形）、
+//       restore=applyEngineConfig，栈顶恒为「当前态」；undo 弹栈顶到重做栈后还原新栈顶，redo 反之。
+//       取声明快照形（含 layers 段）使多层画布的图层/逐层 preprocess/z 序/transform 可撤销；
+//       像素不入快照（图层位图仅存内存、按 id 合并回），画布级 preprocess 仍由控制器在配置载入时单独重放。
 // ============================================================================
 #pragma once
 

@@ -100,11 +100,12 @@ void CanvasView::updateHandleSize() {
     if (scene_->cellPickerItem()) scene_->cellPickerItem()->setOverlayScale(hs); // L3 点选阈值/重绘余量同步随缩放换算。
 }
 
-// 标注绘制态门控：开启时左键手势路由到标注绘制（橡皮筋选区让位）；关闭时复位绘制手势态。
-void CanvasView::setAnnotationDrawActive(const bool on) {
-    annotationDrawActive_ = on;
-    if (!on) annoDrawing_ = false;
-    viewport()->setCursor(on ? Qt::CrossCursor : Qt::ArrowCursor);
+// 画布四态互斥模式：切换当前交互态；离开标注创建态时复位拖拽手势标志，并按态设光标。
+void CanvasView::setCanvasMode(const CanvasMode mode) {
+    mode_ = mode;
+    const bool draw = mode == CanvasMode::AnnoCreate;
+    if (!draw) annoDrawing_ = false;
+    viewport()->setCursor(draw ? Qt::CrossCursor : Qt::ArrowCursor);
 }
 
 // 开始平移（手势执行面：置态 + 抓手光标）。
@@ -143,7 +144,7 @@ bool CanvasView::event(QEvent* event) {
 
 // 键盘：空格切换平移预备态；方向键微调选区（Shift 大步）。
 void CanvasView::keyPressEvent(QKeyEvent* event) {
-    if (event->key() == Qt::Key_Escape && annotationDrawActive_) {
+    if (event->key() == Qt::Key_Escape && annotationDrawActive()) {
         emit annoEscape();   // 绘制态 Esc：交上层收笔（折线/画笔）或取消预览
         event->accept();
         return;

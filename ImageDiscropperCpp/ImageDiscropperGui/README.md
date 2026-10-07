@@ -60,7 +60,7 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 ┌───────────────────────────────────────────────────────────────┐
 │ 菜单栏：文件 / 编辑 / 图像 / 标注 / 视图 / 帮助                    │
 ├───────────────────────────────────────────────────────────────┤
-│ 工具栏：打开 导出 | 撤销 重做 | 放大 缩小 适应 | 模式切换(L1/L2/L3) │
+│ 工具栏：新建 打开 导出 | 撤销 重做 | 放大 缩小 适应 | 模式切换(L1/L2/L3)│
 ├──────────┬────────────────────────────────┬───────────────────┤
 │ 左侧面板  │         中央画布                │   右侧面板         │
 │ (约340px)│      (QGraphicsView)           │  (约300px, 选项卡) │
@@ -162,17 +162,18 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 
 ### 图层与烧录
 
-左侧 **图层面板** 提供 7 个显隐开关（按画布 z 序排列；仅影响画布预览，不影响导出结果）：
+左侧 **图层面板** 提供 8 个显隐开关（按画布 z 序排列；除「图片图层」外仅影响画布预览、不影响导出结果——「图片图层」为栈级整体开关，关时所有图片层退出展平合成，预览与导出同步）：
 
-| 图层   | 作用                                       |
-|------|------------------------------------------|
-| 底图   | 显示/隐藏预处理后的图像                             |
-| 标注   | 显示/隐藏标注图层（隐藏后标注不可交互）                     |
-| 遮罩   | 显示/隐藏保留(绿)/删除(红)预览遮罩                     |
-| 网格线  | 显示/隐藏 L3 网格与 L2 多矩形诱导网格线                 |
-| 切割线  | 显示/隐藏贯穿全图的橙色切割线                          |
-| 选取边框 | 显示/隐藏橙色选区框与手柄（含 L3 单元选择高亮；隐藏后不可编辑，需重新勾选） |
-| 单元编号 | 显示/隐藏 L3 自定义排序的单元序号角标                    |
+| 图层   | 作用                                                                                                                           |
+|------|------------------------------------------------------------------------------------------------------------------------------|
+| 底图   | 显示/隐藏预处理后的图像                                                                                                                 |
+| 图片图层 | 显示/隐藏**所有**图片图层（GUI 运行态整体开关 `Document::imageLayersVisible_`、不入配置、非逐子项）；关→重组/导出传空 layers（图片层退出展平合成），**预览与导出同步**只见底图（无图层时该行隐藏） |
+| 标注   | 显示/隐藏标注图层（隐藏后标注不可交互）                                                                                                         |
+| 遮罩   | 显示/隐藏保留(绿)/删除(红)预览遮罩                                                                                                         |
+| 网格线  | 显示/隐藏 L3 网格与 L2 多矩形诱导网格线                                                                                                     |
+| 切割线  | 显示/隐藏贯穿全图的橙色切割线                                                                                                              |
+| 选取边框 | 显示/隐藏橙色选区框与手柄（含 L3 单元选择高亮；隐藏后不可编辑，需重新勾选）                                                                                     |
+| 单元编号 | 显示/隐藏 L3 自定义排序的单元序号角标                                                                                                        |
 
 **烧录开关**位于右侧 **导出页**（「导出时烧录标注」）：勾选后，导出时把标注按矢量合成进像素，标注会**随像素一起被切割**落位到各输出块。
 
@@ -231,16 +232,53 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 - **导出时烧录标注**：勾选后标注合成进像素随切割落位。
 - **重排专属**：列数/行数（0＝自动推导）、单元宽/高（0＝用保留块原尺寸）、填充色、填充顺序（行/列优先 + 蛇形 + 倒序）、「按格数自动」按钮；当 `cols×rows < 保留块数` 或单元尺寸 < 网格单元尺寸时给出内联红字警告 + 导出前弹窗二次确认。
 
+### 新建画布（空白 / 程序生成）
+
+无需外部文件也能从零建一张画布：**文件 → 新建画布…（`Ctrl+N`）**（工具栏「新建」、移动端底部条「新建」同源），
+弹出 `NewCanvasDialog` 采集：
+
+- **尺寸**：宽 × 高（1 .. 65535，默认 1024×768）。
+- **底色**：点击色块弹出取色对话框（开启 alpha 通道）直接选 RGBA——alpha `0` 即全透明画布；**不另设独立数值控件**。
+- **图案**（程序生成）：纯色 / 线性渐变 / 径向渐变 / 棋盘格 / 条纹 / 网格线 / 点阵 / 同心环 / 放射线 / 色相渐变 / 噪声（斜纹已并入条纹、同心方框已并入同心环，均由「方向」下拉选形状；旧「图片」图案已彻底移除）；
+  随类型联动出可用参数（方向（条纹 4 向含↘↗ / 同心环（圆环·方环））、周期/格径/环间距/条纹带间距/色相波长（初值 128）、线宽、点半径，噪声另带种子与配色模式 全彩/灰度/双色），无关行自动收起。**附加图片（可选）**已从图案拆出为独立区块：开关默认关（可纯图案直接导出），勾选后“选择源图” + 适应方式三选（**裁剪**：源图原生贴入图层框、超框自然裁；**拉伸**：源图 resize 铺满图层框、忽略宽高比；**原生**：图层框恒等于源图尺寸）+ 图层框宽高 + 落位 9 锚点（居中 + 8 靠边）/枢轴/自由偏移；未勾图或源图缺失时相应控件禁用/隐藏，适应结果经 `composeCanvas` 两段合成烘入像素。
+- **前景色**（非纯色时）：与底色同走取色对话框选 RGBA（alpha 于对话框内设定，`0` 即图案全透明）；纯色时整行收起。
+- **实时预览**：按小尺寸代理（最长边 ≤ 256、周期等比缩放）即时重绘，避免大图逐像素卡顿；确定时才产全尺寸图。
+- **定稿忙碌框**：渐变/图案类全尺寸逐像素插值在 UI 线程同步执行，大画布可耗时数秒；故 `accept()` 中当总像素 ≥ 2M 时经自由函数 `runInBusyDialog(this, busyOverlay_, …)`（与预处理重采样同一实现，见「预处理与标注数据流」）包一层应用级模态、不可取消的忙碌框，避免用户误以为卡死重复点击；小尺寸直接生成免闪框。`busyOverlay_` 标志由 `MainWindow::onNew()` 依 `PreprocessController::busyOverlayMode()` 下发（与移动端预处理同一形态）：MobileShell 下为 `true` 铺满屏幕作全屏遮罩（SPEC §8.2），桌面为 `false` 居中小框；两者模态阻断语义一致。单边仍受 `kMaxDimension=65535` 约束，但 Core `makePattern` 另按总像素 ≤ 64M（≈256MB RGBA）封顶——超限回空图，对话框提示「尺寸非法」而非崩溃。
+
+**像素生成全在 Core**：对话框采参后经 `EngineBridge::generatePattern` 委托 Core `generate::makePattern`（新增 `generate` 模块），
+GUI 不复现任何图案算法（CONTRIBUTING.md「分层纪律」）。产出画布走与「打开图像」同一收尾链路（`Document::setImage` →
+`AnnotationBridge::setBaseImage` → 撤销会话 `reset` → 状态栏提示），故新建图与载入图后续操作（切割/预处理/标注/导出）完全一致；
+新建图无文件路径（`imagePath_` 置空），导出默认目录/命名退化到通用基名。**生成图须视为「不可重读来源」（`canReloadSource_ = false`）**：
+它不对应磁盘上任何原图文件，将来做「original 换出 / 重载源图」时不得当作可重读文件图处理（详见 GuideLine.md 阶段记录）。
+
+### 多层画布与图层编辑（SPEC §8.2）
+
+> **术语基线见 [SPEC §2.2](../../SPEC.md)（权威定义）**：**画布**（输出边界 / 工作图尺寸）＝ **底图**（基座＝ input 生态位，同构 `canvas::ImageLayer`、钉最底、不入 `layers`）+ 其上叠放的**图层**数组；一张图片按落点分为**底图图片**（入底图、走 §7 `generate` 段、位图靠 `--input`）与**图层图片**（入图层栈、走 `layers` 段、位图靠 assets 引用）。GUI 的「图片图层」是 `ImageLayer` 的界面标签（§2.2 简称「图层」）、「底图 / 标注 / 遮罩 / 网格线」是图层面板的**显示叠加开关**（非 `layers` 数据层），「附加图片」是新建 / 添加对话框的**图片处理交互入口**（非数据层概念）。
+
+**多图层是「画布层」而非「引擎层」概念**——承重不变：`runEngine(const core::Image&, config)` 永远只收**一张展平的画布图 + 空 preprocess**，Grid-Selection-Emit / export / preview / CLI 主链零改动。图层数据模型 `canvas::ImageLayer`（以 `std::vector<ImageLayer>` 数组承载）与合成 `composeCanvas`（依底图 base→叠加层展平：画布无级背景、恒铺全透明底，base 非空先铺 (0,0)，叠加层按 `zOrder` 升序逐层物化 → 按 `transform` 缩放 → 逐像素施 `transform.opacity` 作 alpha 乘子 `a'=(a·opacity+127)/255`（255＝不透明，灰度层因 getPixel 视作 a=255 同样生效）→ 落位 → source-over 写入画布尺寸缓冲、越界自然裁剪）均在 **Core**；`composeCanvas` 另收可选 `materialized`（`unordered_map<layerId, 缩放前物化位图>`）预物化表，命中直取、未命中回退 `materializeLayer`。每层的 `PreprocessSession`（GUI 声明态包装 + `base_` 缓存编排）归 **GUI**。
+
+- **载入触发**：仅当配置携 `layers` 段时 `Document::hasLayers()` 为真，进入图层画布态；左侧「图层编辑」面板（`LayerEditPanel`）方启用编辑，单图态下控件禁用并提示。
+- **图层编辑面板**（`LayerEditPanel`）：列图片图层（按 `zOrder` 升序）、点选切换预处理当前目标、上/下移一层、删除、**添加图片图层**（`onAddImageLayer`：复用 `NewCanvasDialog` 采参——按「附加图片开关」(`producesLayerCanvas()`) 分派：勾选附加图片→对话框**两段合成**（图片按所选适应模式先入图层框、再叠到图案/底色 base，与新建画布同语义）的整幅结果图作 `ImageLayer{File}` 内容、**落位恒等**；未勾图→取 `resultParams()` 产 `ImageLayer{Recipe}`（配方随配置往返、可逐像素复现）；均不撑大画布）、编辑落位 `transform`（画布锚点 + 图片枢轴各 9 向 + 自由 x/y + 目标宽高 + 不透明度 `opacity`）、改画布尺寸。**不透明度 `opacitySpin_` 依当前预处理目标三元路由**（不再“未选即底图”）：Layer 目标→该层 `transform.opacity`（发 `layerTransformRequested`）；Base 目标→底图整体 `Document::baseOpacity`（发 `baseOpacityRequested`→`setBaseOpacity`）；Canvas 目标→画布级 `Document::canvasOpacity`（发 `canvasOpacityRequested`→`setCanvasOpacity` + `PreprocessController::replayCanvasPreprocess`）。控件只要有图层画布即启用、`syncFromDocument` 依当前目标回填对应值（`syncing_` 防回环）；仅乘 alpha、不触发图案重算；Base/Canvas 目标时落位控件禁用、仅透明度可用。面板只发意图信号，`MainWindow` 落 `Document` 声明态 CRUD → `layersChanged` → `PreprocessController::recomposeLayerCanvas` 重组 `working_`。与「图层」面板（`LayerPanel`，画布叠加显示开关）职责不同。
+- **底图（画布基座＝input 生态位）**：由「打开图像」/「新建画布图案」/ 载入图得来，**独立于图层栈（不入 `layers`、不带 `transform`、不可拖拽 / 删除 / 排序）**；`Document::canvasBase()`（图层态→`baseImage_`、单图态→`original_`）在 `recomposeLayerCanvas` 作 base 喂 `composeCanvas` 落底。图层面板「底图」开关（`baseVisibilityChanged`→`CanvasScene::setBaseVisible`）**仅切换画布预览图元可见性、不改导出合成**（导出时底图恒落底）；程序图案底图的配方存于 `baseLayer_`（同构 `canvas::ImageLayer`：纯图案 `recipe` 或新建画布附图片的**内层落位声明**（只存落位、不存路径，位图运行时由 `--input` 供）），随 §7 `generate` 段往返、可复现。**底图整体不透明度**：`Document::baseOpacity_`（运行态 0..255、缺省 255）把整张底图按合成期逐像素 alpha 乘子 `a'=(a·opacity+127)/255` 整体淡出、作用于最终合成（预览与导出一致）；**`composeBase` 不烘焙此值**（内存 `baseLayer_->transform.opacity` 恒归一 255）——透明度恒由 `Document::fadedCanvasBase()`（`canvasBase()` 的 `canvas::applyAlpha` 淡出副本）在 `PreprocessController::recomposeLayerCanvas` / `composeLayerCanvasForExport` 作 `composeCanvas` base 入参时施加（**单一应用点、防双淡**）；真值随 §7 `generate` 段 `opacity` 键往返（保存 `buildSerializableConfig` 回写、载入 `applyEngineConfig` 回填 `baseOpacity_` 并归一声明），旧配置无该键→缺省 255 行为不变。**底图现可于图片拾取态点选为预处理 / 透明度目标**（点画布内非图层处→`CanvasScene::basePickRequested`→`Document::selectBase(true)` 且清 `selectedLayerId_`，与选层互斥；点画布外→`pickDeselectRequested` 取消图层/底图/标注全部选中回画布目标），但仍不入栈 / 不可拖拽 / 改落位 / 删除 / 排序；其**色彩预处理**（仅 gray/invert/split，存运行态 `baseSession_`）与 `baseOpacity_` 一并入 `fadedCanvasBase` 边界单次施加（先跑色彩步 `baseSession_.effectivePipeline().applyExec` 再 `applyAlpha`、`baseImage_` 保持未处理原始像素），色彩步随 §7 `generate` 段 `preprocess` 往返（`buildSerializableConfig` 回写、`applyEngineConfig` 取色彩步入 `baseSession_` 且置空喂 `composeBase` 的底图声明 `preprocess` 以杜绝双应用）。**画布级整体不透明度** `Document::canvasOpacity_`（运行态 0..255、缺省 255）作用于合成 + 画布预处理后的整幅 `working_`，恒在 `commitPipeline::doWork` 末尾 + `composeLayerCanvasForExport` 尾部 `canvas::applyAlpha` 单次施加（working_ 从基准重放、非累加、无双淡），随 §7 顶层 `opacity` 键往返。
+- **叠加图层整体显隐**：所有图片图层由图层面板（`LayerPanel`）的单一开关控制（**GUI 运行态标志 `Document::imageLayersVisible_`、不入 §7 配置**，对标 `layersBurnIn_`）——关→重组/导出时传空图层数组，所有图片层一起退出 `composeCanvas` 展平合成与拾取（仅见底图、落位框一并隐藏；底图不受此门控）；图片图层的交互（拖拽落位）统一由全局四态 ImagePick 门控，**不逐层拆分可见性 / 可交互性**。
+- **预处理按目标三元驱动**：`ImagePanel` 顶部显式标注当前目标（选中图片图层＝「图片图层」、选中底图＝「底图」、否则＝「画布」，由 `Document::preprocessTarget()` 裁决）；队列编辑经 `PreprocessController::commitActive` 落到 `Document::activeSession()`（选中层会话 / 底图 `baseSession_` / 画布会话）。**Base 目标仅开放色彩预处理**——`syncFromDocument` 禁用「几何操作」区（`geoBox_`）与「画布尺寸」区（`sizeBox_`），仅留色彩操作；底图色彩步经 `updateBasePreprocess` 过滤 `isColorStep` 后写 `baseSession_`（`resize_` 恒空），在 `fadedCanvasBase` 边界施加、不烘焙进 `baseImage_`。
+- **不透明度属合成概念、不属像素预处理**：旧 `preprocess::OpacityOp` 已从管线彻底移除（变体仅 `GrayOp/SplitOp/InvertOp/RotateOp/FlipOp/ResizeOp`），改由图层合成期字段 `canvas::ImageTransform.opacity` 承载（逐像素 alpha 乘子），因而灰度图层的不透明度不再因 GRAY 无 alpha 而静默失效；面板「色彩操作」区不再有透明度项，改由图层编辑面板的「不透明度」spin 调节。旧配置里图层 preprocess 内的 `opacity` 步在载入时迁移为 `transform.opacity`（乘算取 `mul+add`、设定取 `add`），顶层 preprocess 的 `opacity` 步丢弃。
+- **逐层物化缓存（拖动不重跑预处理）**：`recomposeLayerCanvas` 先按图层来源签名（kind / 逐层 preprocess / 文件名 / 解码像素布局 / 配方参数 + 目标尺寸，**恒不含 `transform.x/y/anchor/opacity/zOrder`**）刷新 `PreprocessController` 的 `layerMat_` 缓存，再把它作 `composeCanvas` 的 `materialized` 入参——改落位 / 不透明度（拖动、调 opacity）签名不变 → 命中缓存位图、跳过 `materializeLayer`（文件层不重跑 `applyExec`、配方层不重跑 `makePattern`）；仅来源态真变（换图 / 改逐层预处理 / 改配方尺寸）才重跑。大图多图层拖动因此不再逐帧全量物化。
+- **画布尺寸变化只清框选**：`Document::setCanvasSize` 仅清空框选（rect/cells/网格），图片图层与标注保留（可存在于画布外，未被选中即不呈现）——与「图像预处理几何变化清标注/选区」是不同门。
+- **越界与边界（预览不裁剪）**：画布矩形（工作图尺寸）是**导出边界**——图层内容经 `composeCanvas` 落位越界自然裁剪（超画布像素不入展平工作图，与导出同口径）；但**预览不做场景 item-clipping**：`CanvasScene` 构造不设裁剪开关（Qt6 已移除 `QGraphicsView::setItemClippingEnabled`，且产品决定不启用越界裁剪），故标注 `AnnotationItem`（含 OBB 手柄）与图层落位框 `ImageLayerItem` 的矢量渲染皆可越出 `sceneRect`、在视口内自由可见（便于把标注画到画布外编辑）；而图层**像素画面**因烘到画布尺寸的 working 图仍限在画布内——两类越界行为不同属预期取舍。
+- **图片只有 `ImageLayer` 一类**：旧「贴图图案」（`PatternKind::Image`）已彻底移除，图片不再作为一种图案，而只作为「新建画布 / 添加图片」对话框的**可选附加层**（三适应模式：裁剪 / 拉伸 / 原生，经 `composeCanvas` 两段合成烘入像素）；`ImageLayer`（「图片图层」，可指文件）为唯一图片类型。DocHistory 快照切「layers + 完整声明管线」形（对齐 `buildSerializableConfig`），像素不入快照。
+
 ### 配置文件加载 / 保存
 
 - **文件 → 保存配置…**：把当前作业参数（模式、切割、选择集、排序、导出参数，**以及完整的预处理队列 steps**）写为 SPEC §7 schema 的 JSON 文件（`Document::buildSerializableConfig`：携带队列、source 取原图尺寸）。
 - **文件 → 加载配置…**：读取 JSON 反向还原到界面（`PreprocessController::applyLoadedQueue` 把配置里的 preprocess 队列回灌为 Document steps 并重放）；**加载本身可一步撤销**（入同一撤销栈）。
-- 配置**不含图像像素**，仅保存参数态与声明式预处理队列（队列可在重新打开同图时完整重现）。
+- 配置**不含图像像素**，仅保存参数态与声明式预处理队列（队列可在重新打开同图时完整重现）。**例外（多层画布，SPEC §7）**：图层 `ImageLayer` 以**相对文件名**引用图源（不存绝对路径、位图不入配置），可经 CLI `--bundle-assets` 复制进伴随 `<配置名>.assets/` 目录；缺文件降级为占位（宽容读取）。
 
 ### 快捷键列表
 
 | 快捷键                    | 功能                                                |
 |------------------------|---------------------------------------------------|
+| `Ctrl+N`               | 新建画布（空白/程序生成）                                     |
 | `Ctrl+O`               | 打开图像                                              |
 | `Ctrl+S`               | 导出                                                |
 | `Ctrl+Z` / `Ctrl+Y`    | 全局撤销 / 重做（**上下文路由**：标注工具激活或有选中标注时→标注撤销，否则→文档参数撤销） |
@@ -316,9 +354,9 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 ## 已核对的 Core API（均来自实际头文件，非假设）
 
 - 编排：`engine::runEngine(const core::Image&, const EngineConfig&) -> EngineResult{ok,error,kept,collapsible,composition}`（内部 apply preprocess）；`engine::runEngineGeometry(const SourceInfo&, const EngineConfig&)`（仅按尺寸跑几何、忽略 preprocess，供预览）。
-- 预处理：`preprocess::PreprocessConfig = variant<GrayOp,SplitOp,InvertOp,RotateOp,FlipOp,ResizeOp>`；`PreprocessPipeline{add,insert,remove,setStep,moveUp,moveDown,clear,steps,apply,applyExec,geometryOutput(w,h)->GeometryOut{width,height,rotQuad}}`（声明式队列；其存储 + CRUD **公开继承 `core::Pipeline<PreprocessConfig>`**——与元素类型无关的泛型有序步骤队列骨架，GUI 不直调基类接口；`applyExec` 为执行层融合入口，与 `apply` 逐像素等价）。
+- 预处理：`preprocess::PreprocessConfig = variant<GrayOp,SplitOp,InvertOp,RotateOp,FlipOp,ResizeOp>`（不透明度**已不再是像素预处理步**（旧 `OpacityOp` 已删）——上移为图层合成期字段 `canvas::ImageTransform.opacity`，逐像素 alpha 乘子 `a'=(a·opacity+127)/255`，语义属合成概念而非像素变换，且使灰度图层不透明度不再因 GRAY 无 alpha 而失效）；`PreprocessPipeline{add,insert,remove,setStep,moveUp,moveDown,clear,steps,apply,applyExec,geometryOutput(w,h)->GeometryOut{width,height,rotQuad}}`（声明式队列；其存储 + CRUD **公开继承 `core::Pipeline<PreprocessConfig>`**——与元素类型无关的泛型有序步骤队列骨架，GUI 不直调基类接口；`applyExec` 为执行层融合入口，与 `apply` 逐像素等价）。
 - 切割线：`engine::generateCutLines(const CutConfig&, const SourceInfo&) -> CutLineSet`。
-- 配置：`EngineConfig{source,preprocess,cut,selectedCells,order,emitParams}`；
+- 配置：`EngineConfig{source,generate(optional<PatternParams>),preprocess,cut,selectedCells,order,emitParams}`；
   `CutConfig{tier,generator(RECT/HORIZONTAL_LINE/VERTICAL_LINE/MULTI_RECT/GRID),rect,rects,grid,polarity}`。
 - 配置存取：`engine::saveEngineConfig(path, cfg[, annotations])` / `engine::loadEngineConfig(path, out&[, annotations])`（SPEC §7 schema JSON，可选标注层指针：保存附带 `annotations` 段、加载还原到该层（缺段＝清空）；nlohmann 在 Core 侧 PRIVATE）。
 - 撤销历史：`core::HistoryManager<T>{push,popToRedo,popFromRedo,top,canUndo,canRedo,undoSize,clearAll}`（模板头实现，原 `history` 模块已并入 `core`；GUI 以 `T=EngineConfig` 实例化）。
@@ -329,13 +367,14 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
   `Fragment{region,index,kind,row,col}`。
 - I/O 与处理：`engine::readImageFile`（统一解码为 RGBA）；`core::Image::{resized,colorAt}`（通用像素原语）+ `preprocess::applyOne/applyExec`（预处理像素核与执行层融合）；`core::Image{width,height,empty,getPixel,inBounds,...}`；
   `core::Color{r,g,b,a}`。
+- 生成（「新建」画布内容，GUI 经 `EngineBridge::generatePattern` 委托）：`generate::makePattern(width, height, PatternParams) -> core::Image`（恒 RGBA；单边 > `kMaxDimension=65535` 或总像素 > `kMaxTotalPixels=64M` 均回空图，分配前短路）；`PatternParams{kind, background(含 alpha), foreground(含 alpha), orientation, period, lineWidth, dotRadius, seed, noiseMode}`、`PatternKind{Solid,LinearGradient,RadialGradient,Checkerboard,Stripes,GridLines,DotGrid,Concentric,RadialRays,HueGradient,Noise}`（斜纹已并入 `Stripes`、同心方框已并入 `Concentric`；旧 `Image` 图案与 `ImageScale` 已彻底移除）、`Orientation{Horizontal,Vertical,DiagonalDown↘,DiagonalUp↗}`、`ImageAnchor{9 锚点：center + 8 靠边；仅图层落位 `canvas::ImageTransform` 使用}`、`NoiseMode{FullColor,Grayscale,TwoColor}`（`seed`/`noiseMode` 仅 `Noise` 生效，噪声按 `seed`+尺寸经确定性整数哈希逐像素生成，同种子恒同图；`makePattern` 无输入图，图片由 GUI 侧「附加图片」区块选源图后经 `composeCanvas` 两段合成叠加；`generate` 模块；CLI 的 `new` 子命令、`--size` 生成源与 `config --load` 的 generate 段画布源亦复用）。
 - 标注：`geometry::Shape::worldPath()/obbPreviewTransform/applyObbTransform/translateWorld/restoreTransformState`；`annotation::AnnotationSet`（数据/命中/合成 `hitTest/burnIn(base)`，经 `AnnotationEditor` 组合；会话态 `revoke/redo/removeAnnotation/restoreAnnotations` 归 `AnnotationEditor`）。
 
 ## 布局与交互要点
 
 ### 布局结构与响应式规则
 
-- 顶层 `QSplitter` 水平三分：**左侧 `QScrollArea`（竖排 LeftPanel + ToolPanel + LayerPanel）** | **中央 `CanvasView`** | **右侧 `QScrollArea` 包裹的 `AccordionPanel`（参数页 / 导出页 / 图像页 / 标注页）**。
+- 顶层 `QSplitter` 水平三分：**左侧 `QScrollArea`（竖排 LeftPanel + ToolPanel + LayerPanel + LayerEditPanel）** | **中央 `CanvasView`** | **右侧 `QScrollArea` 包裹的 `AccordionPanel`（参数页 / 导出页 / 图像页 / 标注页）**。
 - **左侧面板最小宽 340px**（容纳 3 列标注工具）、**右侧面板约 300px**，均可随 `QSplitter` 拖拽调整且不可折叠消失；中央画布占最大空间、伸缩优先。
 - 左侧用 `QScrollArea` 包裹，窗口变窄/内容变高时出现纵向滚动条而不挤压画布。
 - 右侧用 `AccordionPanel` 折叠分组（**多节可同时展开**，整栏外套 `QScrollArea` 滚动触达，横向不出滚动条）；**输出预览缩略图仅在「导出」节展开时才渲染**（决策 #12 按需渲染；`PreviewController` 对两型容器双型分发）。
@@ -401,7 +440,7 @@ scheduleHistoryCapture（500ms 防抖）──► docHistory_ 压入 EngineConfi
 - **选中跟随**：上/下移某步后，`ImagePanel` 记住被移动项的新下标（`pendingSelectRow_`），`syncFromDocument` 重建列表后据此高亮跟随，而非停留在原下标（那会指向被换上来的另一操作）。
 - **配置载入归一化**：`applyLoadedQueue(pipeline)` 把散落的 `ResizeOp` 抽出为独立 `resize_`（多个取最后一个正尺寸），其余按序进轻队列——旧配置载入即归一化为「resize 首位 + 轻操作在后」。序列化仍复用 `preprocess` 数组（`buildSerializableConfig` 把 resize 恒置于首元素），**不改 Core/CLI/§7 schema**。
 - 入队的 `cfg` 是轻操作 `PreprocessConfig = variant<GrayOp,SplitOp,InvertOp,RotateOp,FlipOp>`（`steps_` 绝不含 `ResizeOp`）。
-- 大图缩放/重采样经 `runWithBusyDialog(text, op)`：应用级模态、不可取消的 `QProgressDialog`，配 `busyResample_` 重入守卫（仅 resize 重采样路径触发）。
+- 大图缩放/重采样经 `runWithBusyDialog(text, op)`：应用级模态、不可取消的 `QProgressDialog`，配 `busyResample_` 重入守卫（仅 resize 重采样路径触发）。该成员现委托自由函数 `runInBusyDialog(parent, fullscreen, text, op)`（`idc::gui` 命名空间，预处理成员与 `NewCanvasDialog` 定稿生成共用同一单点实现；`fullscreen && parent` 时铺满主屏作移动端全屏遮罩，SPEC §8.2）。
 - **标注随框选隐柄**：`CanvasView::gestureMarqueeBegin`（空白处起框）发 `marqueeStarted` → `AnnotationCoordinator` 若当前有选中则 `clearSelection()`，使标注 OBB 手柄随框选即时消失（点选/拖动标注由图元接管、不走 marquee）。
 - 标注（`AnnotationCoordinator` 编排）：每个 Core `Annotation` 对应一个 `AnnotationItem`（`QGraphicsObject`），用 `Shape::worldPath()`→`QPainterPath`
   矢量叠加绘制（z=`kAnnotation`）；OBB 非破坏性变换（决策 #9）与烧录仅在导出时发生（决策 #8）；

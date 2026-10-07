@@ -30,6 +30,7 @@
 #include "app/annotation_coordinator.h"
 #include "app/doc_history.h"
 #include "app/main_window_ui.h"
+#include "app/new_canvas_dialog.h"
 #include "app/preprocess_controller.h"
 #include "app/preview_controller.h"
 #include "app/status_bar.h"
@@ -39,9 +40,11 @@
 #include "model/engine_bridge.h"
 #include "panels/export_panel.h"
 #include "panels/image_panel.h"
+#include "panels/layer_edit_panel.h"
 #include "panels/layer_panel.h"
 #include "panels/left_panel.h"
 #include "panels/param_panel.h"
+#include "panels/tool_panel.h"
 
 // 版本号经 CMake 编译期宏注入；独立配置本目录时回退占位版本（与构建说明一致）。
 #ifndef IDC_GUI_VERSION
@@ -209,6 +212,7 @@ void MainWindow::initCore() {
     annotation_->setView(view_);
     annotation_->setToolPanel(toolPanel_);
     annotation_->setLayerPanel(layerPanel_);
+    layerPanel_->setDocument(&doc_);   // 「图层」面板图片图层单开关数据源（整体显隐读写）。
     annotation_->setAnnoPropPanel(annoPropPanel_);
     annotation_->setExportPanel(exportPanel_);
     annotation_->setPreviewController(preview_);
@@ -226,7 +230,7 @@ void MainWindow::initCore() {
     syncPanels();
     preview_->refreshPreview();
     history_->reset();               // 以初始参数态为撤销基线（内部发 availabilityChanged → 动作置灰）。
-    notify(QStringLiteral("请打开一张图像开始（Ctrl+O）。"), false);
+    updateInteractionHint();         // 初始态提示：默认「框选」模式 + 预处理目标（启动时四态面板已默认勾选框选）。
 }
 
 // 串联剩余跨件信号槽：Document 信号、画布交互意图、历史启用态回灌与标注上下文触发
@@ -235,6 +239,8 @@ void MainWindow::initCore() {
 void MainWindow::connectAll() {
     connect(&doc_, &Document::imageChanged, this, &MainWindow::onImageChanged);
     connect(&doc_, &Document::changed, this, &MainWindow::onDocChanged);
+    // 多层画布：图层栈/画布尺寸声明变 → 控制器 composeCanvas 重组展平底图（再叠画布预处理→working_）。
+    connect(&doc_, &Document::layersChanged, preprocess_, &PreprocessController::recomposeLayerCanvas);
 
     connect(view_, &CanvasView::rubberSelect, this, &MainWindow::onRubberSelect);
     connect(view_, &CanvasView::nudgeSelection, this, &MainWindow::onNudge);
@@ -250,14 +256,129 @@ void MainWindow::connectAll() {
     connect(scene_, &CanvasScene::cellReordered, this, &MainWindow::onCellReordered);
 
     connect(exportPanel_, &ExportPanel::exportRequested, this, &MainWindow::onExport);
+    // 「导出」面板图片图层烧录开关 → Document::setLayersBurnIn（导出时读，纯 GUI 运行态、不入配置）；初始同步一次（默认开）。
+    connect(exportPanel_, &ExportPanel::layersBurnInChanged, this,
+            [this](const bool on) { doc_.setLayersBurnIn(on); });
+    exportPanel_->setLayersBurnInChecked(doc_.layersBurnIn());
     connect(param_, &ParamPanel::rectSelected, this, &MainWindow::onRectSelected);
 
     connect(history_, &DocHistory::availabilityChanged, this, &MainWindow::onHistoryAvailabilityChanged);
+
+    // 图层编辑面板（多层画布）：意图信号 → Document 声明态 CRUD（均发 layersChanged → 控制器重组）。
+    // 图层「选中」由画布拾取承担（见下方 scene_ imageLayerPressed）；面板上/下移/删除以当前拾取层为作用对象。
+    connect(layerEditPanel_, &LayerEditPanel::layerMoveRequested, this,
+            [this](const int id, const bool up) { doc_.moveLayerZOrder(id, up); });
+    connect(layerEditPanel_, &LayerEditPanel::layerMoveEdgeRequested, this,
+            [this](const int id, const bool toTop) { doc_.moveLayerToEdge(id, toTop); });
+    connect(layerEditPanel_, &LayerEditPanel::layerRemoveRequested, this,
+            [this](const int id) { doc_.removeLayer(id); });
+    connect(layerEditPanel_, &LayerEditPanel::layerTransformRequested, this,
+            [this](const int id, const canvas::ImageTransform &t) {
+                if (const canvas::ImageLayer* layer = doc_.layerById(id)) {
+                    canvas::ImageLayer updated = *layer;
+                    updated.transform = t;
+                    doc_.updateLayer(id, updated);
+                }
+            });
+    connect(layerEditPanel_, &LayerEditPanel::canvasSizeRequested, this,
+            [this](const int width, const int height) { doc_.setCanvasSize(width, height); });
+    connect(layerEditPanel_, &LayerEditPanel::addImageRequested, this, &MainWindow::onAddImageLayer);
+    connect(layerEditPanel_, &LayerEditPanel::clearAllLayersRequested, this, &MainWindow::onClearAllLayers);
+    // 不透明度目标＝底图（Base）时驱动底图整体透明度（→ setBaseOpacity → layersChanged 重组以淡出底图）。
+    connect(layerEditPanel_, &LayerEditPanel::baseOpacityRequested, this,
+            [this](const int opacity) { doc_.setBaseOpacity(opacity); });
+    // 不透明度目标＝画布（Canvas）时驱动画布级整体透明度（→ setCanvasOpacity 发 changed，随后重放 working_）。
+    connect(layerEditPanel_, &LayerEditPanel::canvasOpacityRequested, this,
+            [this](const int opacity) {
+                doc_.setCanvasOpacity(opacity);
+                preprocess_->replayCanvasPreprocess();   // 重算 working_（画布级透明度经 commitPipeline 产出边界施加）。
+            });
+    // 「图层」面板图片图层单开关：显示 → Document::setImageLayersVisible（落运行态标志 imageLayersVisible_，发 layersChanged 重组）。
+    connect(layerPanel_, &LayerPanel::imageLayerVisibilityChanged, this,
+            [this](const bool visible) { doc_.setImageLayersVisible(visible); });
+    // 画布四态互斥模式（「交互模式」面板顶部按钮）→ 落地：切视图模式 + 场景图元可交互性 + 取消前态选中。
+    connect(toolPanel_, &ToolPanel::modeChanged, this, [this](const CanvasMode mode) { applyCanvasMode(mode); });
+    // 画布上拾取图片图层（转发自 ImageLayerItem）：按下选中该层（预处理目标切到该层）并刷新当前态提示。
+    connect(scene_, &CanvasScene::imageLayerPressed, this, [this](const int id) {
+        doc_.selectLayer(id);
+        updateInteractionHint();
+    });
+    // 图片拾取态点画布内非图层处 → 选中底图（预处理目标切 Base）；点画布外 → 取消全部选中（回画布目标）。
+    connect(scene_, &CanvasScene::basePickRequested, this, [this] {
+        doc_.selectBase(true);   // 选底图与选层互斥（selectBase 内部已清 selectedLayerId_）
+        updateInteractionHint();
+    });
+    connect(scene_, &CanvasScene::pickDeselectRequested, this, [this] {
+        doc_.selectLayer(std::nullopt);
+        doc_.selectBase(false);
+        if (annoBridge_.selectedIndex()) annoBridge_.clearSelection();
+        updateInteractionHint();
+    });
+    connect(scene_, &CanvasScene::imageLayerMoved, this, [this](const int id, const int dx, const int dy) {
+        if (const canvas::ImageLayer* layer = doc_.layerById(id)) {
+            canvas::ImageLayer updated = *layer;
+            updated.transform.x += dx;
+            updated.transform.y += dy;
+            doc_.updateLayer(id, updated);   // → layersChanged → recomposeLayerCanvas → working_ → 落位框回灌。
+        }
+    });
     // 标注上下文变化（模型 changed/selectionChanged/toolChanged）→ 重算撤销/重做启用态：
     // 与原标注槽内三处 updateUndoRedoEnabled() 调用同源触发，改在 MainWindow 侧统一连接。
     connect(&annoBridge_, &AnnotationBridge::changed, history_, &DocHistory::updateEnabled);
     connect(&annoBridge_, &AnnotationBridge::selectionChanged, history_, &DocHistory::updateEnabled);
     connect(&annoBridge_, &AnnotationBridge::toolChanged, history_, &DocHistory::updateEnabled);
+}
+
+// 画布四态互斥模式落地（计划 Phase 4）：任一时刻只处一态——
+//   · 切视图模式（CanvasView 据此路由左键手势）+ 场景图元可交互性（拾取框 / 标注图元）；
+//   · 进入一态即取消前态选中：标注相关态清标注选中、非图片相关态清选中层（回到「画布」预处理目标）。
+void MainWindow::applyCanvasMode(const CanvasMode mode) {
+    view_->setCanvasMode(mode);
+    scene_->setImagePickMode(mode == CanvasMode::ImagePick);
+    scene_->setAnnotationSelectMode(mode == CanvasMode::AnnoSelect);
+    switch (mode) {
+        case CanvasMode::Marquee:
+            if (doc_.selectedLayerId()) doc_.selectLayer(std::nullopt);      // 图片→画布
+            if (doc_.baseSelected()) doc_.selectBase(false);                 // 底图→画布
+            if (annoBridge_.selectedIndex()) annoBridge_.clearSelection();   // 清标注选中
+            break;
+        case CanvasMode::ImagePick:
+            if (annoBridge_.selectedIndex()) annoBridge_.clearSelection();   // 离开标注态清标注选中
+            break;
+        case CanvasMode::AnnoSelect:
+            if (doc_.selectedLayerId()) doc_.selectLayer(std::nullopt);      // 关键：选中图片后可切回画布
+            if (doc_.baseSelected()) doc_.selectBase(false);                 // 离开图片拾取态：底图→画布
+            // 选取态必须把标注工具切到 SELECT（→ AnnotationEditor EDIT 模式）：属性写回 change* 仅在 EDIT
+            // 作用选中项，否则从绘制态（DRAW）切回时，选中标注能显示属性却改不动（颜色/填充/粗细/圆角落回默认）。
+            if (annoBridge_.currentTool() != AnnoTool::SELECT) annoBridge_.setTool(AnnoTool::SELECT);
+            break;
+        case CanvasMode::AnnoCreate:
+            if (doc_.selectedLayerId()) doc_.selectLayer(std::nullopt);
+            if (doc_.baseSelected()) doc_.selectBase(false);                 // 离开图片拾取态：底图→画布
+            if (annoBridge_.selectedIndex()) annoBridge_.clearSelection();
+            if (annoBridge_.currentTool() == AnnoTool::SELECT) annoBridge_.setTool(AnnoTool::RECT);  // 绘制态需一个形状
+            break;
+    }
+    updateInteractionHint();
+}
+
+// 状态栏提示：显式回报当前交互模式与当前预处理目标（画布 / 某图片图层）。
+void MainWindow::updateInteractionHint() const {
+    if (!status_) return;
+    QString modeName;
+    switch (view_->canvasMode()) {
+        case CanvasMode::Marquee:    modeName = QStringLiteral("框选"); break;
+        case CanvasMode::ImagePick:  modeName = QStringLiteral("图片拾取"); break;
+        case CanvasMode::AnnoSelect: modeName = QStringLiteral("标注选取"); break;
+        case CanvasMode::AnnoCreate: modeName = QStringLiteral("标注绘制"); break;
+    }
+    QString target;
+    switch (doc_.preprocessTarget()) {
+        case PreprocessTarget::Layer:  target = QStringLiteral("图片图层"); break;
+        case PreprocessTarget::Base:   target = QStringLiteral("底图"); break;
+        case PreprocessTarget::Canvas: target = QStringLiteral("画布"); break;
+    }
+    status_->setHint(QStringLiteral("交互模式：%1  |  预处理目标：%2").arg(modeName, target));
 }
 
 // 同步左侧面板与右侧「参数/导出/图像」页 + 工具栏模式动作到 Document。
@@ -266,6 +387,8 @@ void MainWindow::syncPanels() const {
     param_->syncFromDocument();
     exportPanel_->syncFromDocument();
     imagePanel_->syncFromDocument();
+    layerEditPanel_->syncFromDocument();
+    layerPanel_->syncFromDocument();   // 图片图层行：随图层栈增删 / 逐层 visible 回同步（blockSignals 防回环）。
     // 灰度启停智能：队列已产出灰度时置灰菜单「黑白」（与面板冗余判定同源；色道分离仅存于面板，已在面板内禁用）。
     if (aGrayMenu_) aGrayMenu_->setEnabled(doc_.hasImage() && !doc_.preprocessProducesGray());
     if (modeActionL1_) modeActionL1_->setChecked(doc_.mode() == engine::Tier::L1);
@@ -311,6 +434,100 @@ void MainWindow::onOpen() {
         QStringLiteral("图像 (*.png *.jpg *.jpeg *.bmp *.webp *.gif *.tga);;所有文件 (*)"));
     if (path.isEmpty()) return;
     openImageFromPath(path);
+}
+
+// 新建：**非破坏性**——以对话框生成的扁平画布为新底图（input 生态位），保留现有图层/标注/色彩预处理，
+//   仅剥除会改变尺寸的 resize+几何预处理（防重放改变新底图尺寸）。同尺寸新建不再清空图层/标注/预处理。
+//   注入链路：捕获标注 → Document::resetBaseWith（换底图/剥 resize+几何/尺寸变则清框选）→ 单图态补重放色彩预处理
+//   → 复位标注会话到新工作图 → 回填原标注（始终保留）→ 换撤销会话。新建图无文件路径，imagePath_ 置空。
+void MainWindow::onNew() {
+    NewCanvasDialog dlg(this);
+    dlg.setBusyOverlayMode(preprocess_->busyOverlayMode());   // 移动端忙碌框铺满屏幕（SPEC §8.2 形态同构）。
+    if (dlg.exec() != QDialog::Accepted) return;
+    core::Image img = dlg.resultImage();
+    if (img.empty()) { notify(QStringLiteral("新建失败：尺寸非法"), true); return; }
+
+    auto captured = annoBridge_.annotations();   // 复制当前标注（矢量坐标，独立于底图像素）。
+    const bool hadLayers = doc_.hasLayers();
+    doc_.resetBaseWith(std::move(img), dlg.resultBaseLayer());   // 换底图、留存底图声明（图案/附图片落位）、保留图层/色彩预处理、剥 resize+几何；图层态发 layersChanged 自动重组。
+    if (!hadLayers) preprocess_->replayCanvasPreprocess();     // 单图态：底图换后补算保留的色彩预处理（图层态已由 recompose 完成）。
+    annoBridge_.setBaseImage(doc_.working());                 // 复位标注会话到新工作图（会清空集合）。
+    if (!captured.empty()) annoBridge_.replaceAnnotations(std::move(captured));   // 回填原标注（始终保留，尺寸变亦留）。
+    history_->reset();                        // 换底图开新撤销会话。
+    syncPanels();
+    notify(QStringLiteral("已新建：%1（保留图层/标注/色彩预处理）").arg(dlg.summary()), false);
+}
+
+// 图层编辑「添加图片」：复用「新建画布」对话框采参，往现有画布追加一个图片图层（决策 4：不撑大，
+// 超出画布部分合成时自然裁剪）。无图层画布但已有单图时先起图层画布（ensureLayerCanvas）。
+//   · 勾选附加图片 路 → File 层：携「适应 + 图片相对图层」内层落位烘进图层框的像素（图层内容）+ 外层「图层相对底图」落位作 transform，另携源图相对名 provenance（位图不入配置、无法由配方复现）。
+//   · 未勾选（纯图案）路 → Recipe 层：携 PatternParams，合成时按 transform 尺寸经 makePattern 现算（配方入 config、可导出、可复现）。
+// id / zOrder 由 Document::addImageLayer 统一分配。
+void MainWindow::onAddImageLayer() {
+    if (!doc_.hasImage()) {
+        notify(QStringLiteral("请先打开或新建一张图像，再添加图片图层。"), true);
+        return;
+    }
+    doc_.ensureLayerCanvas();   // 单图→图层画布（已有图层时无操作）。
+    NewCanvasDialog dlg(this);
+    dlg.setAddLayerMode(doc_.canvasWidth(), doc_.canvasHeight());   // 宽高预填真实画布（可改＝图层扁平尺寸）。
+    dlg.setBusyOverlayMode(preprocess_->busyOverlayMode());
+    if (dlg.exec() != QDialog::Accepted) return;
+
+    canvas::ImageLayer layer;
+    if (dlg.producesLayerCanvas()) {
+        // 附加图片路：取对话框构造的可序列化 File 层（原始源 + 两级落位 + 图层框底色），仅补 fileName（相对名作 provenance、供落 assets）。
+        layer = dlg.resultLayer();
+        if (const QString& srcPath = dlg.imageSourcePath(); !srcPath.isEmpty())
+            layer.fileName = QFileInfo(srcPath).fileName().toStdString();
+    } else {
+        // 未勾附加图片的程序化图案：作 Recipe 层——recipe 可序列化供 config 导出、合成时 makePattern 现算（与对话框预览逐像素一致）。
+        layer.sourceKind = canvas::LayerSourceKind::Recipe;
+        layer.recipe = dlg.resultParams();
+        const core::Image& generated = dlg.resultImage();
+        layer.transform.width = generated.width();    // 目标尺寸＝对话框生成的图案尺寸。
+        layer.transform.height = generated.height();
+    }
+    const int newId = doc_.addImageLayer(std::move(layer));   // → layersChanged → recomposeLayerCanvas → working_ → 落位框刷新。
+    doc_.selectLayer(newId);                                  // 新层设为当前预处理/编辑目标。
+    toolPanel_->setMode(CanvasMode::ImagePick);               // 切图片拾取态：落位框即时可拾取 / 拖拽且高亮。
+    notify(QStringLiteral("已添加图片图层（已切到「图片拾取」，可在画布上拖拽落位框）"), false);
+}
+
+// 清空全部图片图层：弹确认后回退为单图底图态（保留底图/标注/预处理声明），随后在新基准上重放色彩预处理。
+void MainWindow::onClearAllLayers() {
+    if (!doc_.hasLayers()) { notify(QStringLiteral("当前无图片图层可清空"), true); return; }
+    if (const auto ret = QMessageBox::question(this, QStringLiteral("清空全部图层"),
+            QStringLiteral("确定要清空全部 %1 个图片图层吗？将回退为单图底图态（保留底图、标注与预处理）。")
+                .arg(doc_.layerCount()),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        ret != QMessageBox::Yes) return;
+    doc_.clearAllLayersToBase();            // original_ 还原为纯底图 + 清栈；发 imageChanged。
+    preprocess_->replayCanvasPreprocess();   // 在还原后的底图上重放保留的色彩预处理。
+    if (doc_.selectedLayerId()) doc_.selectLayer(std::nullopt);
+    toolPanel_->setMode(CanvasMode::Marquee);   // 离开图片拾取态。
+    syncPanels();
+    notify(QStringLiteral("已清空全部图片图层（保留底图/标注/预处理）"), false);
+}
+
+// 一键全部销毁归零：清图层（回底图）+ 清全部标注 + 重置全部预处理（含几何/resize）+ 清选区，仅保留底图。
+void MainWindow::onDestroyAll() {
+    if (!doc_.hasImage()) { notify(QStringLiteral("无图像可归零"), true); return; }
+    if (const auto ret = QMessageBox::question(this, QStringLiteral("全部销毁归零"),
+            QStringLiteral("将清空：图片图层（回退底图）、全部标注、全部预处理、选区。\n保留：底图本身。确定继续？"),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        ret != QMessageBox::Yes) return;
+    if (doc_.hasLayers()) doc_.clearAllLayersToBase();   // 回退单图底（original_=base）。
+    doc_.resetPreprocess();                              // 清画布预处理（含 resize/几何），working_=original_。
+    annoBridge_.setBaseImage(doc_.working());            // 复位标注会话＝清空全部标注 + 重置重做栈。
+    doc_.clearRect();
+    doc_.clearRects();
+    doc_.clearCells();
+    if (doc_.selectedLayerId()) doc_.selectLayer(std::nullopt);
+    toolPanel_->setMode(CanvasMode::Marquee);
+    history_->reset();
+    syncPanels();
+    notify(QStringLiteral("已全部销毁归零（保留底图）"), false);
 }
 
 // 从给定路径载入图像（委托 EngineBridge → Core readImageFile），成功后建预览并刷新。
@@ -454,11 +671,16 @@ void MainWindow::onExport() {
 #endif
     }
 
-    // 导出烧录（G-4）：开关开且有标注时，以当前工作图为底逐个调 Core rasterize 合成标注，
-    // 再送引擎切割（标注随像素被切开，CONTRIBUTING.md「分层纪律」）；否则直接送工作图。
+    // 导出烧录（G-4）：
+    //   · 图片图层（多层画布）——由「导出面板·烧录图片图层」开关独立决定是否并入，与图层面板「显示」（仅影响预览 working_）正交；
+    //     composeLayerCanvasForExport 与当前预览态一致时内部直接复用 working_，否则无副作用地现算另一形态。
+    //   · 标注——开关开且有标注时以当前导出基准逐个调 Core rasterize 合成（标注随像素被切开）。
     core::Image exportSrc = doc_.working();
+    if (doc_.hasLayers()) {
+        exportSrc = preprocess_->composeLayerCanvasForExport(doc_.layersBurnIn());
+    }
     if (annoBridge_.burnInEnabled() && annoBridge_.count() > 0) {
-        exportSrc = annoBridge_.burnIn(doc_.working());
+        exportSrc = annoBridge_.burnIn(exportSrc);
     }
 
     if (QString err; EngineBridge::exportResult(exportSrc, cfg, path, err)) {
@@ -492,6 +714,8 @@ void MainWindow::onImageChanged() const {
 // 参数变更：刷新预览并同步面板。
 void MainWindow::onDocChanged() const {
     preview_->refreshPreview();
+    // 选中层变化时刷新画布落位框高亮（不重算几何）；非图层画布时无落位框，为空操作。
+    scene_->setImageLayerSelection(doc_.hasLayers() ? doc_.selectedLayerId() : std::optional<int>{});
     // 拖拽选区（单矩形或多矩形）期间跳过面板/工具栏全量回同步：模式/极性/格式/质量/命名等均与 rect 无关，
     // 逐帧 syncPanels 是纯浪费且加剧拖拽卡顿；释放时会照常同步一次。
     if (!scene_->isDraggingSelection() && !scene_->isDraggingMultiRect()) syncPanels();
@@ -671,6 +895,49 @@ void MainWindow::onLoadConfig() {
     // 标注先收进临时集合：若直接灌真实层，随后的 applyLoadedQueue 尺寸门（维度变→清标注）会误清刚载入的标注。
     annotation::AnnotationSet loadedAnno;
     if (QString err; !EngineBridge::loadConfig(path, cfg, err, &loadedAnno)) { notify(QStringLiteral("加载配置失败：%1").arg(err), true); return; }
+    // 文件层解码注入（Phase 2/4）：配置的 layers 只存相对文件名、位图不入配置，
+    // 按 <配置名>.assets/<相对名> 现解码填充 decodedPixels，须在 recordConfigLoad 前完成
+    //（applyEngineConfig 内 emit layersChanged → 控制器立即 composeCanvas 用上解码像素）。
+    // 越界防护：仅接受 assets 目录内的直接相对名；缺文件/越界 → 保持空像素（Core 合成降级占位），不阻断载入。
+    if (cfg.layers.has_value()) {
+        const QFileInfo cfgInfo(path);
+        const QString assetsDir = cfgInfo.absolutePath() + u'/' + cfgInfo.completeBaseName() + QStringLiteral(".assets");
+        for (auto& layer : *cfg.layers) {
+            if (layer.sourceKind != canvas::LayerSourceKind::File || layer.fileName.empty()) continue;
+            const QString rel = QString::fromStdString(layer.fileName);
+            if (rel.contains(QStringLiteral("..")) || rel.contains(u'/') || rel.contains(QDir::separator())) continue;
+            core::Image px;
+            if (QString err; EngineBridge::loadImage(assetsDir + u'/' + rel, px, err))
+                layer.decodedPixels = std::move(px);
+        }
+    }
+    // ---- 底图（input 生态位）像素重生：applyEngineConfig 只还原 baseLayer_＝cfg.base、不碰 baseImage_，像素重生尽在于此。
+    //      Recipe 底：composeBase 按 source 尺寸现生成图案（逐像素复现，与旧 generate 段等价）；
+    //      File 底：按 cfg.base.file 相对名从 <config>.assets 解码注入 decodedPixels 后 composeBase 展平（缺文件降级）；
+    //      cfg.base 缺省：外部打开图＝恒等底图（layers 态复用当前原图、单图态走 original_），外部用法不变。----
+    auto rebuildBase = [&](core::Image& flat) -> bool {
+        if (!cfg.base.has_value()) return false;
+        canvas::ImageLayer base = *cfg.base;
+        if (base.sourceKind == canvas::LayerSourceKind::File && !base.fileName.empty()) {
+            const QFileInfo cfgInfo(path);
+            const QString assetsDir = cfgInfo.absolutePath() + u'/' + cfgInfo.completeBaseName() + QStringLiteral(".assets");
+            if (const QString rel = QString::fromStdString(base.fileName); !rel.contains(QStringLiteral("..")) && !rel.contains(u'/') && !rel.contains(QDir::separator())) {
+                core::Image px;
+                if (QString err; EngineBridge::loadImage(assetsDir + u'/' + rel, px, err))
+                    base.decodedPixels = std::move(px);   // 缺文件/越界→保持空像素，composeBase 降级为底色。
+            }
+        }
+        base.preprocess.clear();   // 底图色彩预处理不烘焙 baseImage_：改由 fadedCanvasBase 边界施加（applyEngineConfig 已提入 baseSession_），杜绝双应用。
+        flat = EngineBridge::composeBase(base, cfg.source.width, cfg.source.height);
+        return !flat.empty();
+    };
+    if (cfg.layers.has_value()) {
+        if (core::Image genBase; rebuildBase(genBase)) doc_.setBaseImage(std::move(genBase));
+        else if (!doc_.original().empty()) doc_.setBaseImage(doc_.original());   // 无底图声明：复用当前已打开原图作基座（GUI 无 --input 通道）。
+    } else if (core::Image genBase; rebuildBase(genBase)) {
+        // 无图层、程序/附图底图：作为单一载入图回归 original_（layersActive_ 假，canvasBase() 走 original_）。
+        doc_.setImage(std::move(genBase), QString{});
+    }
     history_->recordConfigLoad(cfg);   // 还原切割/选择/排序/导出参数（预处理队列为空 preprocess，不在此步处理）。
     // 预处理队列单独从 original_ 重放物化（过尺寸门）：压栈快照走 buildEngineConfig（运行态，preprocess 恒空），
     // 不是传入的 cfg，故撤销参数不会覆盖队列。

@@ -1,19 +1,20 @@
 # panels/ — 模式/极性、参数、导出、图像与标注面板
 
-七个 QWidget 面板，均**不直接调 Core 几何/光栅化**。模式/参数/导出面板只读写 `Document`（用户操作 → 写回 Document →
+八个 QWidget 面板，均**不直接调 Core 几何/光栅化**。模式/参数/导出面板只读写 `Document`（用户操作 → 写回 Document →
 Document 发 `changed()` → app 层 `PreviewController` 刷新预览；反向同步用 `blockSignals` 防回环）。
 （例外：图像处理面板是**声明式预处理队列编辑器**，只发队列意图信号，由 `PreprocessController` 经 EngineBridge 调 Core 从原图重放物化工作图；标注工具/图层/属性面板发意图信号，由 `AnnotationCoordinator` 写回 `AnnotationBridge`。）
 
-| 文件                              | 职责                                                                                                                                                                                      |
-|---------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `accordion_panel.{h,cpp}`       | **桌面右侧多页容器**：AccordionPanel（多节可同时展开，整栏外套 QScrollArea 滚动触达）；标题按钮 checkable + 前缀 ▾/▸                                                                                                      |
-| `left_panel.{h,cpp}`            | 左侧：模式切换 L1/L2/L3、极性开关（保留绿 / 删除红）（工具/图层已迁出）                                                                                                                                              |
-| `param_panel.{h,cpp}`           | 右侧「参数」页：QStackedWidget 分 L1/L2/L3 三页；堆叠容器高度只随当前页（PageSizedStack 关 heightForWidth + reflowStack 钳 min=max + 根布局尾部 stretch 保顶对齐（移动端 tab 页），规避 SizeAll 下隐藏页撑高/居中）                          |
-| `export_panel.{h,cpp}`          | 右侧「导出」页：输出模式、目录/文件、格式、质量、命名、**导出时烧录标注开关**、**输出图像预览缩略图**、导出按钮                                                                                                                            |
-| `image_panel.{h,cpp}`           | 右侧「图像」页：**声明式预处理队列编辑器**（几何/色彩两独立列表 + 顶部独立 Resize 区 + 重置），发 stepAppend/Replace/Remove/Move/reset 队列信号                                                                                    |
-| `tool_panel.{h,cpp}`            | 左侧「标注工具」组：选择/各形状/多线段/文字/画笔互斥按钮                                                                                                                                                          |
-| `layer_panel.{h,cpp}`           | 左侧「图层」组：底图/标注/遮罩/网格线/切割线/选取边框/单元编号显示开关（按 z 序；标注烧录开关已迁至导出面板）                                                                                                                             |
-| `annotation_prop_panel.{h,cpp}` | 右侧「标注」属性页：颜色/粗细/填充/文字/字号+ 叠放区（上移/下移一层、置顶/置底，仅选中标注可用，层序控件已从标注菜单与 Ctrl+Shift 快捷键迁入）+ 变换区（缩放%/旋转° 显示选中形状的**绝对累积变换**、含负=翻转，**改动即生效无应用按钮**，作用于当前选中标注；`setTransformPreview` 与画布 OBB 手柄拖拽实时联动） |
+| 文件                              | 职责                                                                                                                                                                                                                                                                                                                             |
+|---------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `accordion_panel.{h,cpp}`       | **桌面右侧多页容器**：AccordionPanel（多节可同时展开，整栏外套 QScrollArea 滚动触达）；标题按钮 checkable + 前缀 ▾/▸                                                                                                                                                                                                                                             |
+| `left_panel.{h,cpp}`            | 左侧：模式切换 L1/L2/L3、极性开关（保留绿 / 删除红）（工具/图层已迁出）                                                                                                                                                                                                                                                                                     |
+| `param_panel.{h,cpp}`           | 右侧「参数」页：QStackedWidget 分 L1/L2/L3 三页；堆叠容器高度只随当前页（PageSizedStack 关 heightForWidth + reflowStack 钳 min=max + 根布局尾部 stretch 保顶对齐（移动端 tab 页），规避 SizeAll 下隐藏页撑高/居中）                                                                                                                                                                 |
+| `export_panel.{h,cpp}`          | 右侧「导出」页：输出模式、目录/文件、格式、质量、命名、**导出时烧录标注开关**、**输出图像预览缩略图**、导出按钮                                                                                                                                                                                                                                                                   |
+| `image_panel.{h,cpp}`           | 右侧「图像」页：**声明式预处理队列编辑器**（几何/色彩两独立列表 + 顶部独立 Resize 区 + 重置），发 stepAppend/Replace/Remove/Move/reset 队列信号                                                                                                                                                                                                                           |
+| `tool_panel.{h,cpp}`            | 左侧「标注工具」组：选择/各形状/多线段/文字/画笔互斥按钮                                                                                                                                                                                                                                                                                                 |
+| `layer_panel.{h,cpp}`           | 左侧「图层」组：底图/标注/遮罩/网格线/切割线/选取边框/单元编号显示开关（按 z 序；标注烧录开关已迁至导出面板）                                                                                                                                                                                                                                                                    |
+| `layer_edit_panel.{h,cpp}`      | 左侧「图层编辑」组（**多层画布**，SPEC §8.2）：列图片图层（按 `zOrder` 升序）+ 点选切换预处理当前目标 + 上/下移/删除 + 添加图片图层（复用 `NewCanvasDialog`：未勾附加图→程序图案产 `recipe` 层；勾选附加图→对话框**两段合成**（图片按适应模式先入图层框、再叠到图案/底色 base，落位恒等）整幅结果入 `file` 层；不撑大）+ 编辑落位 `transform`（画布锚点 + 图片枢轴 9 向 + 自由 x/y + 目标宽高）+ 改画布尺寸（仅清框选）；仅 `hasLayers()` 下启用；发意图信号交 `MainWindow` 落 `Document` CRUD |
+| `annotation_prop_panel.{h,cpp}` | 右侧「标注」属性页：颜色/粗细/填充/文字/字号+ 叠放区（上移/下移一层、置顶/置底，仅选中标注可用，层序控件已从标注菜单与 Ctrl+Shift 快捷键迁入）+ 变换区（缩放%/旋转° 显示选中形状的**绝对累积变换**、含负=翻转，**改动即生效无应用按钮**，作用于当前选中标注；`setTransformPreview` 与画布 OBB 手柄拖拽实时联动）                                                                                                                                        |
 
 ## left_panel
 
@@ -78,6 +79,8 @@ Document 发 `changed()` → app 层 `PreviewController` 刷新预览；反向�
 
 发信号：`stepAppendRequested(PreprocessConfig)` / `stepReplaceRequested(int,cfg)` / `stepRemoveRequested(int)` / `stepMoveRequested(int,bool down)` / `resetRequested()`（index 均为底层**扁平下标**，均不持真相）。
 
+**按目标驱动**（多层画布，SPEC §8.2）：面板顶部 `targetLabel_` 显式标注当前预处理目标——选中图片图层时＝「图片图层 #id」，否则＝「画布」；队列编辑意图经 `PreprocessController::commitActive`（及 `activeSteps`/`activeResize` 读取）落到 `Document::activeSession()`（选中层会话，否则画布会话），不再固定绑定单一预处理队列。
+
 - `setDocument(Document*)` 绑定会话状态源；`syncFromDocument()`：无图时整板禁用；从 Document 反向同步时按类型把 `steps` 重分为几何段 / 色彩段重建两列表文本（上/下移后靠 `pendingSelectRow_` 使高亮跟随被移动项）、把 `resizeW_`・`resizeH_` 回灌为当前输出尺寸（`blockSignals` 防联动回调）、
   **工作图为灰度（黑白后）时禁用「黑白」与「色道分离」**（灰度无 R/G/B 可分、黑白幂等），反色保持可用；按 `hasPreprocess()`/选中态启停按钮。
 - 「颜色选取（取色器）」与标注属性（描边/填充色）强相关，已由 `annotation_prop_panel` 统一提供（见下）。
@@ -101,6 +104,17 @@ Document 发 `changed()` → app 层 `PreviewController` 刷新预览；反向�
 - 网格线/切割线/选取边框的落地：`AnnotationCoordinator` 把信号分派到 `CanvasScene::setGridVisible`（仅置标志）/`setCutLinesVisible`/`setSelectionVisible`，三者均随后调 `PreviewController::refreshPreview` 重建落地（L3 网格依 `gridVisible_`、L2 诱导切割线依 `cutLinesVisible_`、L3 单元选择高亮依 `selectionVisible_`）；选取边框隐藏同时禁用选区拖拽交互（`SelectionRectItem::setBorderVisible` 切 `setAcceptedMouseButtons`）。
 - `syncFromModel()`：标注显示开关 = `layerVisible()`（`blockSignals` 防回环）。
 - **各图层的「隐藏」仅切换画布预览可见性与交互性，不影响导出**（见 Gui README「图层与烧录」）。
+
+## layer_edit_panel
+
+左侧「图层编辑」组（**多层画布**，SPEC §8.2）。管理 `Document` 内的图片图层数组（`std::vector<canvas::ImageLayer>`），与上面 `layer_panel`（画布叠加图层显示开关）职责不同。面板**只发意图信号、不持真相**，由 `MainWindow` 落到 `Document` 声明态 CRUD。
+
+- **仅在 `Document::hasLayers()`（载入含 `layers` 段的图层画布配置）下启用编辑**；单图态下控件禁用并以 `hintLabel_` 显式提示。
+- **图片图层列表**（`layerList_`）：`syncFromDocument()` 按 `zOrder` 升序重建，行文本含来源（配方 / 文件 `<name>` / 空占位），`item->setData(Qt::UserRole, id)` 携带层 id；`currentListLayerId()` 取当前行。点选行发 `layerSelectRequested(id)` → `doc_.selectLayer` → 切换预处理当前目标。
+- **上/下移一层、删除、添加图片图层**：发 `layerMoveRequested(id, up)`/`layerRemoveRequested(id)`/`addImageRequested()`；`MainWindow` 分别落 `moveLayerZOrder`/`removeLayer`/`onAddImageLayer`（据对话框「附加图片开关」(`producesLayerCanvas()`) 分派：勾选→两段合成整幅结果作 `ImageLayer{File}` 内容、**落位恒等**；未勾→取 `resultParams()` 产 `recipe` 层；均不撑大画布）。
+- **落位 `transform` 编辑区**（`anchorCombo_`/`pivotCombo_` 各 9 向、`posX/Y`/`width/heightSpin_`、`applyTransformBtn_`）：「画布锚点（`inCanvasAnchor`）+ 图片枢轴（`layerPivot`）+ 自由 x/y + 目标宽高（≤0 用原生）」，组装 `canvas::ImageTransform` 发 `layerTransformRequested(id, transform)`；枚举↔combo index 直接 `static_cast`（与 `generate::ImageAnchor` 序一致）。
+- **画布尺寸区**（`canvasW/HSpin_` + `applyCanvasBtn_`）：发 `canvasSizeRequested(w, h)` → `doc_.setCanvasSize`（**仅清框选**，图片图层与标注保留）。
+- `syncing_` 标志在回填控件时抑制 `currentRowChanged`/`valueChanged` 等信号回环；`setControlsEnabled` 按 `hasLayerCanvas`（列表/添加/尺寸）与 `hasSelection`（移/删/transform）分组启停。
 
 ## annotation_prop_panel
 

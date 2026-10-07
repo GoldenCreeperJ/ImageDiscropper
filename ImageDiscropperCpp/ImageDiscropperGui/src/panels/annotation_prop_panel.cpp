@@ -175,11 +175,17 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     stackGroup_->setEnabled(false);   // 初始无选中→置灰
     root->addWidget(stackGroup_);
 
+    // ---- 一键清除全部标注（作用于全体，不依赖选中；协调器弹确认后清空并保留可撤销）----
+    clearAllBtn_ = new QPushButton(QStringLiteral("清除全部标注"), this);
+    clearAllBtn_->setToolTip(QStringLiteral("清除画布上全部标注矢量（不影响底图/图层/预处理；可经「撤销标注」回退）。"));
+    root->addWidget(clearAllBtn_);
+
     root->addStretch(1);
 
     // 控件变更 → 面板意图信号。
     connect(colorBtn_, &QPushButton::clicked, this, &AnnotationPropPanel::onPickColor);
     connect(fillColorBtn_, &QPushButton::clicked, this, &AnnotationPropPanel::onPickFillColor);
+    connect(clearAllBtn_, &QPushButton::clicked, this, &AnnotationPropPanel::clearAllRequested);
     connect(strokeSpin_, &QSpinBox::valueChanged, this, &AnnotationPropPanel::strokeChanged);
     connect(fillCheck_, &QCheckBox::toggled, this, &AnnotationPropPanel::fillChanged);
     connect(textEdit_, &QLineEdit::editingFinished,

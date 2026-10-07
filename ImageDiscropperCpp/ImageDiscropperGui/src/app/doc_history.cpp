@@ -29,13 +29,15 @@ void DocHistory::setStatusBar(StatusBar* status) { status_ = status; }
 // 参数变更同时驱动防抖历史采集（与 onDocChanged 刷新并行，互不干扰）。
 void DocHistory::start() {
     connect(doc_, &Document::changed, this, &DocHistory::scheduleCapture);
+    // 图层栈/画布尺寸声明态变更同样驱动防抖采集：快照为声明形（含 layers+各层管线），与 changed 同频合并入栈。
+    connect(doc_, &Document::layersChanged, this, &DocHistory::scheduleCapture);
 }
 
 // 清空历史并以当前参数态为唯一基线（构造/换图后调用；栈顶＝当前态，undoSize==1 时不可撤销）。
 void DocHistory::reset() {
     timer_.stop();
     history_.clearAll();
-    history_.push(doc_->buildEngineConfig());
+    history_.push(doc_->buildSerializableConfig());
     updateEnabled();
 }
 
@@ -45,7 +47,7 @@ void DocHistory::recordConfigLoad(const engine::EngineConfig& cfg) {
     suppress_ = true;
     doc_->applyEngineConfig(cfg);   // 触发 changed → refreshPreview + syncPanels（还原期间不采集历史）。
     suppress_ = false;
-    history_.push(doc_->buildEngineConfig()); // 新态压栈（其下即载入前态），维持「栈顶＝当前态」不变式。
+    history_.push(doc_->buildSerializableConfig()); // 新态压栈（其下即载入前态），维持「栈顶＝当前态」不变式。
     updateEnabled();
 }
 
@@ -98,7 +100,7 @@ void DocHistory::scheduleCapture() {
 // 防抖到点：把当前参数态快照压入历史（栈顶＝当前态），并刷新撤销/重做启用态。
 void DocHistory::captureNow() {
     if (suppress_) return;
-    history_.push(doc_->buildEngineConfig());
+    history_.push(doc_->buildSerializableConfig());
     updateEnabled();
 }
 

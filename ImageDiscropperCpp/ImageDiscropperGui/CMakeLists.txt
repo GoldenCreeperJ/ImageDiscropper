@@ -103,11 +103,13 @@ set(IDC_GUI_MODEL_SRC
         include/model/annotation_editor.h
         include/model/document.h
         include/model/engine_bridge.h
+        include/model/layer_session_store.h
         include/model/preprocess_session.h
         src/model/annotation_bridge.cpp
         src/model/annotation_editor.cpp
         src/model/document.cpp
         src/model/engine_bridge.cpp
+        src/model/layer_session_store.cpp
         src/model/preprocess_session.cpp
 )
 
@@ -126,6 +128,7 @@ set(IDC_GUI_CANVAS_SRC
         include/canvas/cell_picker_item.h
         include/canvas/selection_rect_item.h
         include/canvas/annotation_item.h
+        include/canvas/image_layer_item.h
         src/canvas/canvas_desktop_input_adapter.cpp
         src/canvas/canvas_touch_input_adapter.cpp
         src/canvas/canvas_scene.cpp
@@ -135,6 +138,7 @@ set(IDC_GUI_CANVAS_SRC
         src/canvas/cell_picker_item.cpp
         src/canvas/selection_rect_item.cpp
         src/canvas/annotation_item.cpp
+        src/canvas/image_layer_item.cpp
 )
 
 # panels：左侧模式/极性面板与标注工具/图层面板、右侧参数/导出/图像/标注属性面板。
@@ -146,6 +150,7 @@ set(IDC_GUI_PANELS_SRC
         include/panels/image_panel.h
         include/panels/tool_panel.h
         include/panels/layer_panel.h
+        include/panels/layer_edit_panel.h
         include/panels/annotation_prop_panel.h
         src/panels/accordion_panel.cpp
         src/panels/left_panel.cpp
@@ -154,6 +159,7 @@ set(IDC_GUI_PANELS_SRC
         src/panels/image_panel.cpp
         src/panels/tool_panel.cpp
         src/panels/layer_panel.cpp
+        src/panels/layer_edit_panel.cpp
         src/panels/annotation_prop_panel.cpp
 )
 
@@ -164,6 +170,7 @@ set(IDC_GUI_APP_SRC
         include/app/doc_history.h
         include/app/main_window.h
         include/app/main_window_ui.h
+        include/app/new_canvas_dialog.h
         include/app/preprocess_controller.h
         include/app/preview_controller.h
         include/app/status_bar.h
@@ -171,6 +178,7 @@ set(IDC_GUI_APP_SRC
         src/app/doc_history.cpp
         src/app/main_window.cpp
         src/app/main_window_ui.cpp
+        src/app/new_canvas_dialog.cpp
         src/app/preprocess_controller.cpp
         src/app/preview_controller.cpp
         src/app/status_bar.cpp

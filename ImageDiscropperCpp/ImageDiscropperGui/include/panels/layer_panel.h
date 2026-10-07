@@ -20,8 +20,15 @@ class QCheckBox;
 
 namespace idc::gui {
 
+class Document;
+
 // ---------------------------------------------------------------------------
-// LayerPanel：各图层显示/隐藏。
+// LayerPanel：各图层显示/隐藏。每层一行「名称  显示」复选框，一行一开关，无逐子项拆分：
+//   底图 / 图片图层 / 标注 / 遮罩 / 网格线 / 切割线 / 选取边框 / 单元编号（画布 z 序：底图 < 图片图层 < 标注）。
+//   图片图层是「所有图片」合成的单一层，用一个开关整体控制其显隐：
+//   · 显示开关以 Document 整体可见态为真相→落到运行态标志 imageLayersVisible_（不入配置），**仅影响画布预览**（重组当前 working_ 与落位框显隐）；
+//     导出是否并入叠加层由导出面板「烧录图片图层」开关独立决定（对标标注的「显示 / 烧录」两开关，二者正交）；
+//   · 交互（拖拽落位框）统一由全局四态 ImagePick 模式机控制，面板不逐层拆分。
 // ---------------------------------------------------------------------------
 class LayerPanel : public QWidget {
     Q_OBJECT
@@ -30,8 +37,12 @@ public:
 
     // 绑定标注模型（用于反向同步标注可见态）。
     void setModel(AnnotationBridge* model);
+    // 绑定图层数据源（供「图片图层」整体开关读取显隐态 / 反向同步勾选态）。
+    void setDocument(Document* doc);
     // 从模型反向同步：标注显示开关 = layerVisible()（blockSignals 防回环）。
     void syncFromModel() const;
+    // 从 Document 反向同步「图片图层」整体开关：行常驻可见且始终可用；勾选态取整体可见态（blockSignals 防回环）。
+    void syncFromDocument() const;
     // 外部（视图菜单 / 右键「切换预览遮罩」）改动遮罩显隐后，反向同步遮罩复选框（blockSignals 防回环）。
     void setMaskVisible(bool visible) const;
 
@@ -50,10 +61,14 @@ signals:
     void numberVisibilityChanged(bool visible);
     // 标注图层显示/隐藏。
     void annotationVisibilityChanged(bool visible);
+    // 图片图层整体显隐切换（一个开关控所有图片图层，仅影响预览；MainWindow → Document::setImageLayersVisible → layersChanged 重组预览）。
+    void imageLayerVisibilityChanged(bool visible);
 
 private:
     AnnotationBridge* model_{nullptr};
+    Document* doc_{nullptr};
     QCheckBox* baseVisible_{nullptr};
+    QCheckBox* imageVisible_{nullptr};   // 图片图层整体显隐（单开关，行位于底图与标注之间）
     QCheckBox* maskVisible_{nullptr};
     QCheckBox* gridVisible_{nullptr};
     QCheckBox* cutLineVisible_{nullptr};

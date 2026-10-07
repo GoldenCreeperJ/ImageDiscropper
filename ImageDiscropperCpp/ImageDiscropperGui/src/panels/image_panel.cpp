@@ -57,8 +57,13 @@ ImagePanel::ImagePanel(QWidget* parent) : QWidget(parent) {
     root->setContentsMargins(8, 8, 8, 8);   // 面板内边距 8px。
     root->setSpacing(12);                    // 分组间距 12px。
 
+    // ---- 顶部当前预处理目标标注（未选图层＝画布；选中图片图层＝该层）----
+    targetLabel_ = new QLabel(QStringLiteral("当前目标：画布"), this);
+    targetLabel_->setToolTip(QStringLiteral("预处理编辑作用于当前目标（三元）：选中图片图层时作用于该层，拾取到底图时作用于底图（仅色彩），否则作用于画布。"));
+    root->addWidget(targetLabel_);
+
     // ---- 画布尺寸（Resize）独立区：常驻、恒最先重放、不入队列 ----
-    auto* sizeBox = new QGroupBox(QStringLiteral("画布尺寸"), this);
+    auto* sizeBox = sizeBox_ = new QGroupBox(QStringLiteral("画布尺寸"), this);
     auto* sizeGrid = new QGridLayout(sizeBox);
     sizeGrid->setSpacing(6);
 
@@ -99,7 +104,7 @@ ImagePanel::ImagePanel(QWidget* parent) : QWidget(parent) {
     root->addWidget(sizeBox);
 
     // ================= 几何操作区（旋转 / 翻转）=================
-    auto* geoBox = new QGroupBox(QStringLiteral("几何操作"), this);
+    auto* geoBox = geoBox_ = new QGroupBox(QStringLiteral("几何操作"), this);
     auto* geoGrid = new QGridLayout(geoBox);
     geoGrid->setSpacing(6);
 
@@ -131,7 +136,7 @@ ImagePanel::ImagePanel(QWidget* parent) : QWidget(parent) {
     geoGrid->addLayout(geoBtnRow, 3, 0, 1, 4);
 
     geoList_ = new QListWidget(geoBox);
-    geoList_->setToolTip(QStringLiteral("几何操作队列（旋转 / 翻转，resize 产物上先于色彩应用）。选中后可删除 / 上下移动 / 更新。"));
+    geoList_->setToolTip(QStringLiteral("几何操作队列（旋转 / 翻转，在缩放结果之后、色彩操作之前应用）。选中后可删除 / 上下移动 / 更新。"));
     geoGrid->addWidget(geoList_, 4, 0, 1, 4);
 
     auto* geoEditRow = new QHBoxLayout();
@@ -155,14 +160,22 @@ ImagePanel::ImagePanel(QWidget* parent) : QWidget(parent) {
     colorGrid->addWidget(new QLabel(QStringLiteral("操作类型"), colorBox), 0, 0);
     colorGrid->addWidget(colorTypeCombo_, 0, 1, 1, 3);
 
-    chR_ = new QCheckBox(QStringLiteral("R"), colorBox);
-    chG_ = new QCheckBox(QStringLiteral("G"), colorBox);
-    chB_ = new QCheckBox(QStringLiteral("B"), colorBox);
-    for (QCheckBox* c : {chR_, chG_, chB_}) c->setChecked(true);
-    colorGrid->addWidget(new QLabel(QStringLiteral("作用通道"), colorBox), 1, 0);
-    colorGrid->addWidget(chR_, 1, 1);
-    colorGrid->addWidget(chG_, 1, 2);
-    colorGrid->addWidget(chB_, 1, 3);
+    // 「作用通道」整行容器（仅反色 / 分离显隐）。
+    colorChanRow_ = new QWidget(colorBox);
+    {
+        auto* h = new QHBoxLayout(colorChanRow_);
+        h->setContentsMargins(0, 0, 0, 0);
+        h->addWidget(new QLabel(QStringLiteral("作用通道"), colorChanRow_));
+        chR_ = new QCheckBox(QStringLiteral("R"), colorChanRow_);
+        chG_ = new QCheckBox(QStringLiteral("G"), colorChanRow_);
+        chB_ = new QCheckBox(QStringLiteral("B"), colorChanRow_);
+        for (QCheckBox* c : {chR_, chG_, chB_}) c->setChecked(true);
+        h->addWidget(chR_);
+        h->addWidget(chG_);
+        h->addWidget(chB_);
+        h->addStretch(1);
+    }
+    colorGrid->addWidget(colorChanRow_, 1, 0, 1, 4);
 
     auto* colorBtnRow = new QHBoxLayout();
     colorAddBtn_ = new QPushButton(QStringLiteral("添加色彩步骤"), colorBox);
@@ -171,11 +184,11 @@ ImagePanel::ImagePanel(QWidget* parent) : QWidget(parent) {
     colorReplaceBtn_->setToolTip(QStringLiteral("用当前配置就地替换色彩列表中选中的步骤。"));
     colorBtnRow->addWidget(colorAddBtn_);
     colorBtnRow->addWidget(colorReplaceBtn_);
-    colorGrid->addLayout(colorBtnRow, 2, 0, 1, 4);
+    colorGrid->addLayout(colorBtnRow, 3, 0, 1, 4);
 
     colorList_ = new QListWidget(colorBox);
     colorList_->setToolTip(QStringLiteral("色彩操作队列（黑白 / 反色 / 分离，在几何产物上应用）。选中后可删除 / 上下移动 / 更新。"));
-    colorGrid->addWidget(colorList_, 3, 0, 1, 4);
+    colorGrid->addWidget(colorList_, 4, 0, 1, 4);
 
     auto* colorEditRow = new QHBoxLayout();
     colorDelBtn_ = new QPushButton(QStringLiteral("删除"), colorBox);
@@ -184,7 +197,7 @@ ImagePanel::ImagePanel(QWidget* parent) : QWidget(parent) {
     colorEditRow->addWidget(colorDelBtn_);
     colorEditRow->addWidget(colorUpBtn_);
     colorEditRow->addWidget(colorDownBtn_);
-    colorGrid->addLayout(colorEditRow, 4, 0, 1, 4);
+    colorGrid->addLayout(colorEditRow, 5, 0, 1, 4);
     root->addWidget(colorBox);
 
     // ---- 重置 ----
@@ -228,15 +241,16 @@ void ImagePanel::onGeoTypeChanged(const int index) const {
     geoReplaceBtn_->setEnabled(has && geoList_->currentRow() >= 0);
 }
 
-// ---- 色彩区：类型启停（反色 / 分离→通道；黑白→无通道），叠加灰度产出智能禁用 ----
+// ---- 色彩区：类型启停（反色 / 分离→通道；黑白→通道隐藏），叠加灰度产出智能禁用 ----
 void ImagePanel::onColorTypeChanged(const int index) const {
     const bool has = doc_ && doc_->hasImage();
-    const bool chan = has && (index == kInvert || index == kSplit);
-    chR_->setEnabled(chan);
-    chG_->setEnabled(chan);
-    chB_->setEnabled(chan);
+    const bool chan = index == kInvert || index == kSplit;
+    if (colorChanRow_) colorChanRow_->setVisible(chan);
+    chR_->setEnabled(has && chan);
+    chG_->setEnabled(has && chan);
+    chB_->setEnabled(has && chan);
     // 队列已产出灰度时，「黑白」(冗余) 与「色道分离」(对灰度无操作) 不可再入队 / 替换。
-    const bool blocked = has && doc_->preprocessProducesGray() && (index == kGray || index == kSplit);
+    const bool blocked = has && doc_->activeSession().producesGray() && (index == kGray || index == kSplit);
     colorAddBtn_->setEnabled(has && !blocked);
     colorAddBtn_->setToolTip(blocked ? QStringLiteral("队列已产出灰度：重复「黑白」属冗余、「色道分离」对灰度图为无操作，故不可添加。")
                                      : QStringLiteral("把上面配置好的色彩操作追加到色彩列表末尾（恒在几何块之后）。"));
@@ -342,7 +356,7 @@ void ImagePanel::onClearResizeClicked() { emit resizeClearedRequested(); }
 int ImagePanel::geoRowCount() const {
     if (!doc_) return 0;
     int n = 0;
-    for (const auto& cfg : doc_->steps().items()) {
+    for (const auto& cfg : doc_->activeSession().steps().items()) {
         if (!isGeo(cfg)) break;   // 几何块在前，遇首个色彩即止
         ++n;
     }
@@ -364,7 +378,7 @@ int ImagePanel::colorFlatIndex() const {
 void ImagePanel::onGeoSelectionChanged() {
     const int row = geoList_->currentRow();
     if (row >= 0 && doc_) {
-        if (const auto& steps = doc_->steps().items(); static_cast<std::size_t>(row) < steps.size()) loadGeoIntoControls(steps[static_cast<std::size_t>(row)]);
+        if (const auto& steps = doc_->activeSession().steps().items(); static_cast<std::size_t>(row) < steps.size()) loadGeoIntoControls(steps[static_cast<std::size_t>(row)]);
     }
     const bool has = doc_ && doc_->hasImage();
     geoReplaceBtn_->setEnabled(has && row >= 0);
@@ -378,7 +392,7 @@ void ImagePanel::onGeoSelectionChanged() {
 void ImagePanel::onColorSelectionChanged() {
     const int row = colorList_->currentRow();
     if (row >= 0 && doc_) {
-        const auto& steps = doc_->steps().items();
+        const auto& steps = doc_->activeSession().steps().items();
         if (const auto flat = static_cast<std::size_t>(geoRowCount() + row); flat < steps.size()) loadColorIntoControls(steps[flat]);
     }
     const bool has = doc_ && doc_->hasImage();
@@ -452,6 +466,23 @@ void ImagePanel::syncFromDocument() {
     setEnabled(has);
     if (!has) return;
 
+    // ---- 顶部目标标注：三元（图片图层 / 底图 / 画布）----
+    if (targetLabel_) {
+        QString t;
+        switch (doc_->preprocessTarget()) {
+            case PreprocessTarget::Layer:  t = QStringLiteral("图片图层"); break;
+            case PreprocessTarget::Base:   t = QStringLiteral("底图"); break;
+            case PreprocessTarget::Canvas: t = QStringLiteral("画布"); break;
+        }
+        targetLabel_->setText(QStringLiteral("当前目标：%1").arg(t));
+    }
+
+    // 底图（Base）目标：仅开放色彩预处理——禁用「几何操作」区与「画布尺寸（Resize）」区
+    //（几何/resize 会改画布尺寸、破坏图层/标注坐标基准）；Layer/Canvas 目标维持全部可用。
+    const bool baseTarget = doc_->preprocessTarget() == PreprocessTarget::Base;
+    if (geoBox_) geoBox_->setEnabled(!baseTarget);
+    if (sizeBox_) sizeBox_->setEnabled(!baseTarget);
+
     // ---- 尺寸区：只读回显当前输出尺寸；尺寸框默认取当前输出宽高（阻断联动回调避免抖动）----
     if (currentSizeLabel_)
         currentSizeLabel_->setText(QStringLiteral("当前输出尺寸: %1×%2").arg(doc_->width()).arg(doc_->height()));
@@ -462,7 +493,7 @@ void ImagePanel::syncFromDocument() {
 
     // ---- 按类型拆分队列到两个列表（几何块 / 色彩块）----
     std::vector<preprocess::PreprocessConfig> geoSteps, colorSteps;
-    for (const auto& cfg : doc_->steps().items())
+    for (const auto& cfg : doc_->activeSession().steps().items())
         (isGeo(cfg) ? geoSteps : colorSteps).push_back(cfg);
 
     // 重建列表：阻断选中信号避免回灌抖动；记住各列选中行。若本次源于「上/下移」（pending 有效），
@@ -487,12 +518,12 @@ void ImagePanel::syncFromDocument() {
     colorList_->blockSignals(false);
     colorPendingRow_ = -1;
 
-    resetBtn_->setEnabled(doc_->hasPreprocess());
+    resetBtn_->setEnabled(doc_->activeSession().hasPreprocess());
 
     // 灰度启停智能：队列产出灰度后禁用色彩下拉中「黑白」「色道分离」两项（冗余 / 对灰度无操作）；
     // 若当前停在被禁项且无步骤选中，回退到首个始终可用的「色道反色」，避免停留在禁用态。
     if (const auto* model = qobject_cast<QStandardItemModel*>(colorTypeCombo_->model())) {
-        const bool grayOut = doc_->preprocessProducesGray();
+        const bool grayOut = doc_->activeSession().producesGray();
         for (const int idx : {kGray, kSplit}) {
             if (QStandardItem* it = model->item(idx)) {
                 it->setEnabled(!grayOut);

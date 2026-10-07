@@ -45,7 +45,7 @@ LeftPanel::LeftPanel(QWidget* parent) : QWidget(parent) {
 
     // ---- 模式切换分组 ----
     auto* modeBox = new QGroupBox(QStringLiteral("模式"), this);
-    auto* modeLay = new QVBoxLayout(modeBox);
+    auto* modeLay = new QHBoxLayout(modeBox);
     modeLay->setSpacing(6); // 控件间距 6px。
     modeGroup_ = new QButtonGroup(this);
     modeGroup_->setExclusive(true);
@@ -77,7 +77,7 @@ LeftPanel::LeftPanel(QWidget* parent) : QWidget(parent) {
 
     // ---- 极性开关分组 ----
     auto* polBox = new QGroupBox(QStringLiteral("保留 / 删除"), this);
-    auto* polLay = new QVBoxLayout(polBox);
+    auto* polLay = new QHBoxLayout(polBox);
     polLay->setSpacing(6);
     polarityGroup_ = new QButtonGroup(this);
     polarityGroup_->setExclusive(true);

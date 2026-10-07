@@ -15,11 +15,16 @@
 
 #include <QString>
 
+#include <unordered_map>
+#include <vector>
+
 #include "core/image.h"
 #include "engine/engine.h"
 #include "preprocess/preprocess_pipeline.h"
 
 namespace idc::annotation { class AnnotationSet; } // 配置 annotations 段的可选读写集合（前置声明免 include 扩散）
+namespace idc::generate { struct PatternParams; }  // 程序化图案生成参数（新建对话框经此搬运，前置声明免 include 扩散）
+namespace idc::canvas { struct ImageLayer; }   // 多层画布单层（composeCanvas、materializeLayer 桥接，前置声明免 include 扩散）
 
 namespace idc::gui {
 
@@ -71,6 +76,28 @@ public:
     // 供 PreprocessController 从 original_ 重放 steps_ 得到 working_。
     // GUI 不自实现任何逐步分派/折叠——流水线语义（含 ResizeOp/旋转）全由 Core 承担（CONTRIBUTING.md「分层纪律」）。
     static core::Image applyPipeline(const core::Image& src, const preprocess::PreprocessPipeline& pipeline);
+
+    // 程序化生成新图（委托 Core generate::makePattern）：GUI「文件→新建」对话框采集尺寸/底色(含 alpha)/
+    // 前景色/图案参数后调用，产出初始画布交 Document。非法尺寸返回空图（empty()）。像素生成全在 Core。
+    static core::Image generatePattern(int width, int height, const generate::PatternParams& params);
+
+    // 多层画布展平（委托 Core canvas::composeCanvas）：画布先铺全透明底再落**底图 base**（非空则 source-over 铺于 (0,0)），
+    // 再按 zOrder 逐层物化叠加 layers（std::vector<ImageLayer>：配方现算 / 文件用已解码像素 / 空占位跳过，各层先跑其 preprocess）
+    // → 缩放 → source-over 落位到 width×height RGBA 缓冲（越界自然裁剪）。base 缺省为空＝仅透明底 + 叠加层。
+    // 整体显隐由调用方以「传空 layers」实现（Core 不持显隐态）。
+    // 产物即「展平后的画布图」，作为 Document 的 original_ 喂给后续画布级预处理→工作图→引擎（引擎仍只收一张展平图）。
+    // materialized（可选）：预物化位图表（key＝layer.id，value＝materializeLayer 缩放前产物）；命中则 composeCanvas
+    // 直取、跳过该层 materializeLayer（改 transform 免于重跑逐层预处理），未命中回退现算。
+    static core::Image composeCanvas(const std::vector<canvas::ImageLayer>& layers, int width, int height, const core::Image& base = {},
+                                     const std::unordered_map<int, core::Image>* materialized = nullptr);
+
+    // 单层物化（委托 Core canvas::materializeLayer）：配方→makePattern / 文件→已解码像素 / 空→空图，再跑该层 preprocess。
+    // 不含缩放落位，供 GUI 按 (layerId, 源/预处理签名) 缓存物化位图、改 transform 只重组不重跑预处理。
+    static core::Image materializeLayer(const canvas::ImageLayer& layer);
+
+    // 底图展平（委托 Core canvas::composeBase）：把同构的底图 canvas::ImageLayer 展平为 width×height 像素。
+    //   纯图案底图按 source 尺寸现算（与旧 generate 段口径一致）；文件底图依赖 decodedPixels 已注入（本桥不解盘）。
+    static core::Image composeBase(const canvas::ImageLayer& base, int width, int height);
 };
 
 } // namespace idc::gui

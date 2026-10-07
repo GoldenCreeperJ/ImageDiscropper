@@ -19,6 +19,8 @@
 #include <QGraphicsView>
 #include <QPoint>
 
+#include "canvas/canvas_mode.h"
+
 class QRubberBand;
 class QContextMenuEvent;
 class QMouseEvent;
@@ -45,10 +47,14 @@ public:
     void resetZoom();
     void fitToWindow();
 
-    // 标注绘制态门控（G-4）：为 true 时左键手势路由到标注绘制（橡皮筋选区让位）；
-    // 为 false 时维持既有选区 / 单元交互（标注 SELECT 工具下标注图元仍自行响应选中 / 拖动）。
-    void setAnnotationDrawActive(bool on);
-    bool annotationDrawActive() const { return annotationDrawActive_; }
+    // 画布四态互斥模式（计划 Phase 4）：设定当前交互态并复位非绘制态手势标志、切换光标。
+    // 标注创建态（AnnoCreate）等价于旧的「绘制态门控」：其余三态左键手势不再进入标注绘制。
+    void setCanvasMode(CanvasMode mode);
+    CanvasMode canvasMode() const { return mode_; }
+
+    // 标注绘制态门控（G-4）：现为「当前模式是否为标注创建」的派生查询——
+    // 为 true 时左键手势路由到标注绘制（橡皮筋选区让位）；为 false 时维持框选 / 拾取 / 选取交互。
+    bool annotationDrawActive() const { return mode_ == CanvasMode::AnnoCreate; }
 
     // ——交互状态查询（供输入适配器路由，语义与原视图内部标志一致）——
     bool panArmed() const { return spacePan_; }          // 空格按住（平移预备态）
@@ -154,8 +160,8 @@ private:
     QPoint rubberStart_;      // 框选起点（视口坐标）
     QRubberBand* rubberBand_{nullptr};
 
-    bool annotationDrawActive_{false};  // 标注绘制态门控（绘制工具激活时为 true）
-    bool annoDrawing_{false};           // 正处于标注绘制拖拽手势中
+    CanvasMode mode_{CanvasMode::Marquee};  // 当前画布交互模式（四态互斥；默认框选）
+    bool annoDrawing_{false};               // 正处于标注绘制拖拽手势中
 };
 
 } // namespace idc::gui

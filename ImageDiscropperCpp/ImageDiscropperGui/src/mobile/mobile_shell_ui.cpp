@@ -49,6 +49,7 @@
 #include "panels/annotation_prop_panel.h"
 #include "panels/export_panel.h"
 #include "panels/image_panel.h"
+#include "panels/layer_edit_panel.h"
 #include "panels/layer_panel.h"
 #include "panels/left_panel.h"
 #include "panels/param_panel.h"
@@ -218,11 +219,13 @@ void MobileShellUi::buildCentral(MainWindow* w) {
     w->imagePanel_ = new ImagePanel(w);
     w->toolPanel_ = new ToolPanel(w);
     w->layerPanel_ = new LayerPanel(w);
+    w->layerEditPanel_ = new LayerEditPanel(w);
     w->annoPropPanel_ = new AnnotationPropPanel(w);
     w->left_->setDocument(&w->doc_);
     w->param_->setDocument(&w->doc_);
     w->exportPanel_->setDocument(&w->doc_);
     w->imagePanel_->setDocument(&w->doc_);
+    w->layerEditPanel_->setDocument(&w->doc_);
     w->toolPanel_->setModel(&w->annoBridge_);
     w->layerPanel_->setModel(&w->annoBridge_);
     w->annoPropPanel_->setModel(&w->annoBridge_);
@@ -247,6 +250,7 @@ void MobileShellUi::buildDrawer(MainWindow* w) {
     groupLayout->addWidget(w->left_);
     groupLayout->addWidget(w->toolPanel_);
     groupLayout->addWidget(w->layerPanel_);
+    groupLayout->addWidget(w->layerEditPanel_);
     groupLayout->addStretch(1);
     auto* groupScroll = new QScrollArea(w);
     groupScroll->setWidgetResizable(true);
@@ -271,7 +275,7 @@ void MobileShellUi::buildDrawer(MainWindow* w) {
 
     tabs->addTab(scrollPage(w->param_), QStringLiteral("参数"));
     tabs->addTab(scrollPage(w->exportPanel_), QStringLiteral("导出"));
-    tabs->addTab(scrollPage(w->imagePanel_), QStringLiteral("图像"));
+    tabs->addTab(scrollPage(w->imagePanel_), QStringLiteral("预处理"));
     tabs->addTab(scrollPage(w->annoPropPanel_), QStringLiteral("标注"));
     w->rightTabs_ = tabs;
 
@@ -353,6 +357,7 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
         return a;
     };
 
+    addAct(QStringLiteral("新建"), &MainWindow::onNew);
     addAct(QStringLiteral("打开"), &MainWindow::onOpen);
     addAct(QStringLiteral("导出"), &MainWindow::onExport);
 

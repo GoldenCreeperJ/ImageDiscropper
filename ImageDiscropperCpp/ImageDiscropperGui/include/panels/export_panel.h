@@ -51,12 +51,16 @@ public:
 
     // 反向同步「导出时烧录标注」复选框（由 MainWindow 依 AnnotationBridge::burnInEnabled 回灌；blockSignals 防回环）。
     void setBurnInChecked(bool on) const;
+    // 反向同步「导出时烧录图片图层」复选框（由 MainWindow 依 Document::layersBurnIn 回灌；blockSignals 防回环）。
+    void setLayersBurnInChecked(bool on) const;
 
 signals:
     // 请求导出（MainWindow 负责路径校验与调用 EngineBridge）。
     void exportRequested();
     // 导出时是否烧录标注（写回 AnnotationBridge::setBurnIn；原属图层面板，现归入导出选项）。
     void burnInChanged(bool on);
+    // 导出时是否烧录图片图层（写回 Document::setLayersBurnIn；仅影响导出、与图层面板「显示」仅预览正交）。
+    void layersBurnInChanged(bool on);
 
 private slots:
     void onModeChanged(int index);
@@ -109,6 +113,7 @@ private:
     QLabel* previewLabel_{nullptr};   // 输出图像预览缩略图（导出前预览）
     QLabel* infoLabel_{nullptr};      // 导出前文字信息（画布尺寸/保留块数）
     QCheckBox* burnIn_{nullptr};      // 导出时烧录标注（把标注合成进像素随切割）
+    QCheckBox* layersBurnIn_{nullptr}; // 导出时烧录图片图层（把叠加图片图层并入像素随切割；对标 burnIn_）
     QPushButton* exportBtn_{nullptr};
 
     // 合并重排参数控件（仅「合并重排」模式显示；FR-L3.7）。

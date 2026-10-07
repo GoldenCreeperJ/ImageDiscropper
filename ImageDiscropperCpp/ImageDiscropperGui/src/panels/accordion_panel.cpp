@@ -29,7 +29,7 @@ QString headerGlyph(const bool expanded) {
 AccordionPanel::AccordionPanel(QWidget* parent) : QWidget(parent) {
     body_ = new QVBoxLayout(this);
     body_->setContentsMargins(0, 0, 0, 0);
-    body_->setSpacing(0);   // 节与节紧贴，分隔感由标题按钮底边线承担。
+    body_->setSpacing(8);   // 节与节之间留 8px 间距（各 panel 间可见 gap）；标题底边线仍保留作分节描边。
     body_->addStretch(1);   // 尾部吸收剩余空间；addSection 经 insertWidget 插在它之前。
 }
 

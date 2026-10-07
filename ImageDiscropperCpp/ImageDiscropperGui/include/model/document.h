@@ -14,12 +14,16 @@
 
 #include <QObject>
 
+#include <cstdint>
 #include <optional>
+#include <unordered_map>
 #include <vector>
 
+#include "canvas/layer.h"
 #include "core/color.h"
 #include "core/image.h"
 #include "engine/engine.h"
+#include "model/layer_session_store.h"
 #include "model/preprocess_session.h"
 #include "preprocess/preprocess_pipeline.h"
 
@@ -43,6 +47,17 @@ enum class L2Sub {
 // 独立画布尺寸 ResizeTarget 已迁至 model/preprocess_session.h（供零 Qt 会话对象独立编译），
 // 经上方 include 传递可见；Document 及各调用点无需改动引用。
 
+// 共享预处理面板的「当前目标」（三元）：
+//   • 选中某图片图层时为该层（逐层预处理，几何 + 色彩）；
+//   • 图层态下拾取到「底图（画布基座）」时为目标 Base（仅开放色彩预处理，几何/resize 禁用）；
+//   • 否则（未在任何拾取态 / 点击落在画布外）为画布 Canvas（画布级预处理 + 画布级透明度）。
+// 三者各持一份预处理声明态与一份不透明度（见 activePreprocessSession / transform.opacity / baseOpacity / canvasOpacity）。
+enum class PreprocessTarget {
+    Canvas,  // 画布级预处理（作用于展平后的画布图，产出喂引擎的工作图）+ canvasOpacity
+    Layer,   // 逐层预处理（作用于选中图片图层，物化后再落位进画布）+ transform.opacity
+    Base,    // 底图（画布基座）：仅色彩预处理（几何/resize 禁用，不改画布尺寸/坐标基准）+ baseOpacity
+};
+
 // ---------------------------------------------------------------------------
 // Document：会话状态单一真相源（QObject，便于信号驱动刷新）。
 // ---------------------------------------------------------------------------
@@ -55,12 +70,21 @@ public:
     // 载入新图像：original_ 与 working_ 均置为 img（新图无预处理，工作图=原图），
     // 记录路径、清空选区，发 imageChanged()。
     void setImage(core::Image img, QString path);
+    // 新建语义（**非破坏性**）：以新扁平底图 flat 替换画布基座，保留图层栈/每层会话与画布级**色彩预处理**，
+    //   清空 resize 与**几何预处理**（防重放改变尺寸）；**不触碰标注**（由调用方捕获后回填）；
+    //   尺寸不变则保留框选、尺寸变化则清框选。图层态发 layersChanged（交控制器重组重放色彩预处理），
+    //   单图态发 imageChanged（工作图先置为 flat，调用方随后经重放补算色彩预处理）。
+    void resetBaseWith(core::Image flat, std::optional<canvas::ImageLayer> baseLayer);
     const core::Image& original() const { return original_; }
     const core::Image& working() const { return working_; }
     bool hasImage() const { return !working_.empty(); }
     int width() const { return working_.width(); }
     int height() const { return working_.height(); }
     const QString& imagePath() const { return imagePath_; }
+
+    // 重组后回灌「展平后的画布底图」为 original_（多层画布专用）：仅换原图基准、保留画布级预处理会话声明（steps_/resize_），
+    // 但失效其 base_ 重放缓存（基准已变）。不碰 working_、不发信号——由控制器随后走 commitPipeline 重放产出新 working_。
+    void setOriginalImage(core::Image composedCanvas);
 
     // ---- 预处理工作图（FR-1；独立 resize + 声明式轻操作队列）----
     // 模型：original_（不可变）→ resize_（可选，恒最先重放、从原图重采样）→ steps_（可排序轻操作队列，绝不含 ResizeOp）
@@ -109,6 +133,99 @@ public:
     void clearBase() { preprocess_.clearBase(); }
     // 候选前缀是否需要重烤：无缓存，或已缓存 basePath_ 与之逐字段不等 → true。供 commitPipeline 提交前判 baseDirty。
     bool baseDirtyFor(const preprocess::PreprocessPipeline& prefix) const { return preprocess_.baseDirtyFor(prefix); }
+
+    // ---- 多层画布（Phase 3-4：画布层概念，引擎零改动）----
+    // 画布由「底图（input 生态位，不入 layers、无 transform）」+「叠加图片图层栈」展平得来：layersActive_ 为真时，
+    // original_ 恒为 composeCanvas(layers_, canvasW, canvasH, baseImage_) 的产物（由 PreprocessController 经
+    // EngineBridge 物化回灌），其上再叠画布级预处理（preprocess_）得 working_。底图 baseImage_ 独立保留，供重组。
+    // 单一载入图（无图层）时 layersActive_ 为假，canvasBase() 即 original_——既有链路完全不变。
+    bool hasLayers() const { return layersActive_; }
+    const std::vector<canvas::ImageLayer>& layerStack() const { return layers_; }
+    int canvasWidth() const { return canvasWidth_; }
+    int canvasHeight() const { return canvasHeight_; }
+    // 画布底图（input 生态位）：图层画布态返回独立保留的 baseImage_，单图态返回 original_。供控制器 composeCanvas 取底。
+    const core::Image& canvasBase() const { return layersActive_ ? baseImage_ : original_; }
+    // 画布底图声明（同构 canvas::ImageLayer）：可空＝无生成底图（外部文件图 / 纯色底）。随 §7 generate 段往返。
+    const std::optional<canvas::ImageLayer>& baseLayer() const { return baseLayer_; }
+    void setBaseLayer(std::optional<canvas::ImageLayer> l) { baseLayer_ = std::move(l); }  // onNew 底图声明（图案/附图片落位）留存
+    // 显式设底图像素（配置载入时按 generate 段重生底图后回灌；不改 layersActive_ / 声明态）。
+    void setBaseImage(core::Image img) { baseImage_ = std::move(img); }
+
+    // ---- 底图整体不透明度（0..255，255＝不透明）----
+    //   与图层自身 transform.opacity 正交：它是「底图（画布基座）」的整体淡出，恒在合成边界施加
+    //   （见 fadedCanvasBase），不烘焙进 baseImage_ 像素、也不落 baseLayer_ 声明（内存声明恒存 255）。
+    //   随 §7 generate 段往返（保存回填 config.base->transform.opacity、载入归一内存声明为 255）。
+    std::uint8_t baseOpacity() const { return baseOpacity_; }
+    void setBaseOpacity(int opacity);   // 相等早退；否则置值后发 layersChanged（图层态重组）+ changed()（刷新面板）。
+    // 按 baseOpacity_ 淡出的画布底图副本（供 PreprocessController 图层态 recompose / 导出重算作 composeCanvas 的 base 入参）。
+    //   canvasBase() 保持原样（几何等其它用途）；淡出只此一处施加，避免与 composeBase 双淡。
+    core::Image fadedCanvasBase() const;
+
+    // ---- 画布级整体不透明度（0..255，255＝不透明）----
+    //   三元目标之一（Canvas）的透明度：作用于合成 + 画布预处理后的整幅工作图，与图层 transform.opacity、
+    //   底图 baseOpacity 正交。恒在产出边界（PreprocessController commitPipeline / 导出重算）逐像素 applyAlpha 施加一次，
+    //   不烘焙进缓存位图（working_ 每次从基准重放、非累加 → 无重复淡出）。随 §7 顶层 opacity 键往返。
+    int canvasOpacity() const { return canvasOpacity_; }
+    // 相等早退；否则置值后发 changed()（刷新面板 / 历史采集）——重算 working_ 由调用方（MainWindow）随后走 replayCanvasPreprocess。
+    void setCanvasOpacity(int opacity);
+
+    // ---- 底图（画布基座）可选中 + 底图色彩预处理 ----
+    //   底图作为可选中对象（图片拾取态下点画布内非图层处）：与 selectLayer 互斥（选底图清选中层、选层清底图选中）。
+    bool baseSelected() const { return baseSelected_; }
+    void selectBase(bool on);   // 置真时清 selectedLayerId_；发 changed()（切换预处理当前目标）。
+    // 底图色彩预处理声明态（恒不含几何/resize）：供共享预处理面板按目标驱动（activeSession 路由到 baseSession_）。
+    //   updateBasePreprocess 只留色彩步、发 layersChanged（交控制器以 fadedCanvasBase 重组预览）；底图色彩预处理仅图层态生效。
+    preprocess::PreprocessPipeline basePreprocess() const { return baseSession_.steps(); }
+    bool updateBasePreprocess(const preprocess::PreprocessPipeline &colorSteps);   // 过滤至色彩步后写 baseSession_；内容未变早退返回 false。
+
+    // 当前拾取的图片图层（nullopt＝未选中→预处理目标为底图或画布）。
+    std::optional<int> selectedLayerId() const { return selectedLayerId_; }
+    void selectLayer(std::optional<int> id);            // 设选中态并发 changed（清 baseSelected_；切换预处理当前目标）
+    const canvas::ImageLayer* layerById(int id) const;  // 只读取层（越界/无→nullptr）
+    int layerCount() const { return static_cast<int>(layers_.size()); }
+
+    // 预处理当前目标三元路由：选中图层→Layer；否则选中底图→Base；否则→Canvas。
+    PreprocessTarget preprocessTarget() const {
+        if (selectedLayerId_.has_value()) return PreprocessTarget::Layer;
+        if (baseSelected_) return PreprocessTarget::Base;
+        return PreprocessTarget::Canvas;
+    }
+    // 当前目标的声明态会话（画布 preprocess_ 或选中图层会话）；供共享预处理面板按目标驱动。
+    PreprocessSession& activeSession();
+    const PreprocessSession& activeSession() const;
+    // 图层会话库（每层声明态会话 + 物化签名 + 物化位图）：供 PreprocessController 驱动刷新与 composeCanvas 取位图缓存。
+    LayerSessionStore& layerSessions() { return layerSessions_; }
+    const LayerSessionStore& layerSessions() const { return layerSessions_; }
+
+    // ---- 图层声明态 CRUD（纯改栈、不跑像素；重算工作图由控制器接 layersChanged 触发重组）----
+    // 起一个图层画布（新建画布 / 以单图起图层编辑）：置 layersActive_、设尺寸、留存底图 base、清空旧叠加层与会话。
+    // base 为空＝无底图（仅透明底）；非空＝画布基座（input 生态位，不入 layers）。画布无级背景（新画布底色已烤入 base 像素）。
+    void beginLayerCanvas(int width, int height, core::Image base = {});
+    int  addImageLayer(canvas::ImageLayer layer);   // 追加，分配递增 id 与置顶 zOrder；返回新 id
+    bool removeLayer(int id);                       // 删除某层（连带回收其会话）
+    bool moveLayerZOrder(int id, bool up);          // 与相邻层交换 zOrder（上/下移一层）
+    bool moveLayerToEdge(int id, bool toTop);       // 移至顶层（zOrder = 当前最大 +1）/ 底层（最小 −1）
+    bool updateLayer(int id, const canvas::ImageLayer& layer); // 就地替换（transform/z/preprocess 编辑）
+    // 图片图层「显示」开关（图层面板）：**仅影响画布预览**——纯 GUI 运行态标志（不入 §7 配置、不随存盘往返），
+    //   交 recomposeLayerCanvas 决定当前 working_ 是否叠入图片图层（隐藏时传空 layers，仅留底图）。
+    //   导出是否并入叠加层由下方「烧录」开关独立决定，二者正交。值未变则短路，否则发 layersChanged 交控制器重组预览。
+    void setImageLayersVisible(bool visible);
+    bool imageLayersVisible() const { return imageLayersVisible_; }
+    // 图片图层「烧录」开关（导出面板）：**仅影响导出**——导出时是否把叠加图片图层并入像素随切割。
+    // 纯 GUI 运行期标志（对标 AnnotationBridge::burnInEnabled），不入 §7 配置、不随存盘往返，默认开。
+    bool layersBurnIn() const { return layersBurnIn_; }
+    void setLayersBurnIn(const bool on) { layersBurnIn_ = on; }
+    void clearLayers();                             // 回退到无图层（单一图态）
+    // 清空全部图片图层并回退为单图底图态：original_ 还原为纯底图 baseImage_、清 layers_/会话/画布尺寸，
+    //   **保留画布级预处理声明与标注**（工作图随后由调用方重放色彩预处理）。仅图层态有效，否则早退返回 false。
+    bool clearAllLayersToBase();
+    // 声明画布尺寸：更新 canvasW/H 并发 layersChanged（交控制器重组）。尺寸变化只清框选、不清图层/标注（决策 3）。
+    void setCanvasSize(int width, int height);
+
+    // 确保当前处于图层画布态（供「添加图片图层」在无图层画布时也能进入图层编辑）：
+    //   已是图层画布 → 直接返回 true；有单张载入图 → 以当前原图为**画布底图**（input 生态位，不入 layers、
+    //   无 transform）进入图层编辑态后返回 true；无图 → 返回 false。
+    bool ensureLayerCanvas();
 
     // ---- 模式与极性 ----
     engine::Tier mode() const { return mode_; }
@@ -228,6 +345,9 @@ signals:
     void imageChanged();
     // 任意参数变更：仅需刷新预览与状态栏（不重建底图）。
     void changed();
+    // 图层栈/画布尺寸声明态变更（addImageLayer/removeLayer/move/update/setCanvasSize/beginLayerCanvas）：
+    // 需 PreprocessController 接此信号走 composeCanvas 重算 original_（再叠画布预处理→working_）。
+    void layersChanged();
 
 private:
     core::Image original_;   // 原始载入图（RGBA）——始终不变，供队列重放与「重置预处理」还原
@@ -236,6 +356,23 @@ private:
     // Document 组合持有作单一真相源；读写经上方转委托方法暴露，Controller 经 Document 驱动（见 preprocess_session.h）。
     PreprocessSession preprocess_;
     QString imagePath_;
+
+    // 多层画布声明态（Phase 3-4）：layersActive_ 为真时 original_ 由下方底图 + 叠加层栈展平而来。
+    core::Image baseImage_;                                  // 画布底图像素（input 生态位；overlays 之下的基座，不随重组刷新）
+    std::optional<canvas::ImageLayer> baseLayer_;            // 底图声明（同构 ImageLayer，钉住最底：图案配方或文件+落位），随 §7 generate 段往返
+    std::uint8_t baseOpacity_{255};                          // 底图整体不透明度（0..255，255＝不透明）：合成边界淡出用，内存 baseLayer_ 声明恒存 255
+    bool baseSelected_{false};                               // 底图是否被选中（图片拾取态点画布内非图层处）；与 selectedLayerId_ 互斥
+    PreprocessSession baseSession_;                          // 底图色彩预处理声明态（steps_ 仅色彩、resize_ 恒 nullopt）；fadedCanvasBase 边界施加、不烘焙进 baseImage_
+    std::uint8_t canvasOpacity_{255};                        // 画布级整体不透明度（0..255）：产出边界 applyAlpha 施加一次、影响预览与导出，随 §7 顶层 opacity 往返
+    std::vector<canvas::ImageLayer> layers_;                   // 叠加图片图层数组（声明态；**不含底图**；直接以数组承载）
+    bool imageLayersVisible_{true};                            // 图片图层整体显隐（纯 GUI 运行态，不入配置；对标 layersBurnIn_）
+    bool layersActive_{false};                               // 是否为图层画布（新建画布 / 载入含 layers 的配置）
+    bool layersBurnIn_{true};                                // 图片图层「烧录」导出开关（纯 GUI 运行态，对标标注 burnInEnabled；不入配置）
+    int canvasWidth_{0};                                     // 声明画布宽（layersActive_ 下有效）
+    int canvasHeight_{0};                                    // 声明画布高
+    std::optional<int> selectedLayerId_;                     // 当前拾取的图片图层 id（nullopt＝无）
+    int nextLayerId_{1};                                     // 递增图层 id 发号器（跨会话稳定标识）
+    LayerSessionStore layerSessions_;                        // 每层预处理声明态 + 物化签名 + 物化位图（按 layerId，单点生命周期）
 
     engine::Tier mode_{engine::Tier::L1};
     engine::Polarity polarity_{engine::Polarity::KEEP};

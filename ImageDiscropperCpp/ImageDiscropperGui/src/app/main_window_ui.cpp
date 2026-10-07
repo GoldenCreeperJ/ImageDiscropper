@@ -32,6 +32,7 @@
 #include "panels/export_panel.h"
 #include "panels/image_panel.h"
 #include "panels/layer_panel.h"
+#include "panels/layer_edit_panel.h"
 #include "panels/left_panel.h"
 #include "panels/param_panel.h"
 #include "panels/tool_panel.h"
@@ -55,7 +56,7 @@ void selectRightPage(QWidget* container, QWidget* page) {
 }
 } // namespace
 
-// 装配中央区：左面板 | 画布 | 右侧折叠面板（参数 / 导出 / 图像 / 标注）。
+// 装配中央区：左面板 | 画布 | 右侧折叠面板（预处理 / 图片 / 标注 / 参数 / 导出）。
 void MainWindowUi::buildCentral(MainWindow* w) {
     w->scene_ = new CanvasScene(w);
     w->view_ = new CanvasView(w->scene_, w);
@@ -66,11 +67,13 @@ void MainWindowUi::buildCentral(MainWindow* w) {
     w->imagePanel_ = new ImagePanel(w);
     w->toolPanel_ = new ToolPanel(w);
     w->layerPanel_ = new LayerPanel(w);
+    w->layerEditPanel_ = new LayerEditPanel(w);
     w->annoPropPanel_ = new AnnotationPropPanel(w);
     w->left_->setDocument(&w->doc_);
     w->param_->setDocument(&w->doc_);
     w->exportPanel_->setDocument(&w->doc_);
     w->imagePanel_->setDocument(&w->doc_);
+    w->layerEditPanel_->setDocument(&w->doc_);
     w->toolPanel_->setModel(&w->annoBridge_);
     w->layerPanel_->setModel(&w->annoBridge_);
     w->annoPropPanel_->setModel(&w->annoBridge_);
@@ -79,19 +82,21 @@ void MainWindowUi::buildCentral(MainWindow* w) {
     // 页面即面板本体（栏内布局自适应宽度，横向不出滚动条）。
     // 移动端抽屉另用 QTabWidget 选择式（见 mobile/mobile_shell.cpp）。
     auto* accordion = new AccordionPanel(w);
+    accordion->addSection(w->layerEditPanel_, QStringLiteral("图片"));
+    accordion->addSection(w->imagePanel_, QStringLiteral("预处理"));
+    accordion->addSection(w->annoPropPanel_, QStringLiteral("标注"));
     accordion->addSection(w->param_, QStringLiteral("参数"));
     accordion->addSection(w->exportPanel_, QStringLiteral("导出"));
-    accordion->addSection(w->imagePanel_, QStringLiteral("图像"));
-    accordion->addSection(w->annoPropPanel_, QStringLiteral("标注"));
     w->rightTabs_ = accordion;   // 控制器/菜单经双型分发访问（成员多态 QWidget*）。
     auto* rightScroll = new QScrollArea(w);
     rightScroll->setWidgetResizable(true);
     rightScroll->setFrameShape(QFrame::NoFrame);
     rightScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     rightScroll->setWidget(accordion);
-    rightScroll->setMinimumWidth(340); // 可拖拽调宽；下限对齐初始宽度，避免坐标行/按钮被挤到错位。
+    rightScroll->setMinimumWidth(375); // 可拖拽调宽；下限对齐初始宽度，避免坐标行/按钮被挤到错位。
 
     // 左侧容器：模式/极性(LeftPanel) + 标注工具(ToolPanel) + 图层(LayerPanel) 竖排，可滚动避免拥挤。
+    // （图层编辑已移到右侧折叠栏「图片」节。）
     auto* leftContainer = new QWidget(w);
     auto* leftLayout = new QVBoxLayout(leftContainer);
     leftLayout->setContentsMargins(0, 0, 0, 0);
@@ -105,7 +110,7 @@ void MainWindowUi::buildCentral(MainWindow* w) {
     leftScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     leftScroll->setWidget(leftContainer);
     // 左面板最小宽：标注工具为 3 列网格（含「等腰直角三角形」等宽标签），需足够宽才不拥挤/截断。
-    leftScroll->setMinimumWidth(340);
+    leftScroll->setMinimumWidth(330);
 
     auto* split = new QSplitter(Qt::Horizontal, w);
     split->addWidget(leftScroll);
@@ -116,7 +121,7 @@ void MainWindowUi::buildCentral(MainWindow* w) {
     split->setStretchFactor(2, 0);   // 右面板：窗口整体缩放时不抢空间
     split->setChildrenCollapsible(false); // 禁止把面板拖到 0 而完全折叠消失
     split->setHandleWidth(6);             // 稍宽的分隔条，拖拽手感更明显
-    split->setSizes({340, 860, 300});     // 初始宽度（左面板预留足够容纳标注工具网格；此后可自由拖拽）
+    split->setSizes({330, 860, 375});     // 初始宽度（左面板预留足够容纳标注工具网格；此后可自由拖拽）
     w->setCentralWidget(split);
 }
 
@@ -124,6 +129,10 @@ void MainWindowUi::buildCentral(MainWindow* w) {
 void MainWindowUi::buildMenus(MainWindow* w) {
     // ---- 文件 ----
     QMenu* mFile = w->menuBar()->addMenu(QStringLiteral("文件(&F)"));
+    QAction* aNew = mFile->addAction(QStringLiteral("新建画布(&N)…"));
+    aNew->setShortcut(QKeySequence::New);
+    aNew->setToolTip(QStringLiteral("新建一张空白/程序生成画布（尺寸、底色含透明度、图案）；Ctrl+N。"));
+    QObject::connect(aNew, &QAction::triggered, w, &MainWindow::onNew);
     QAction* aOpen = mFile->addAction(QStringLiteral("打开图像(&O)"));
     aOpen->setShortcut(QKeySequence::Open);
     QObject::connect(aOpen, &QAction::triggered, w, &MainWindow::onOpen);
@@ -133,10 +142,10 @@ void MainWindowUi::buildMenus(MainWindow* w) {
     mFile->addSeparator();
     // 配置文件加载/保存（FR-L3.8）：复用 Core loadEngineConfig/saveEngineConfig（SPEC §7 schema）。
     QAction* aLoadCfg = mFile->addAction(QStringLiteral("加载配置(&L)…"));
-    aLoadCfg->setToolTip(QStringLiteral("从 JSON 配置文件还原切割/排序/导出参数；可撤销。"));
+    aLoadCfg->setToolTip(QStringLiteral("从配置文件还原切割/排序/导出参数；可撤销。"));
     QObject::connect(aLoadCfg, &QAction::triggered, w, &MainWindow::onLoadConfig);
     QAction* aSaveCfg = mFile->addAction(QStringLiteral("保存配置(&C)…"));
-    aSaveCfg->setToolTip(QStringLiteral("把当前切割/排序/导出参数存为 JSON 配置文件，可复用于同尺寸图像。"));
+    aSaveCfg->setToolTip(QStringLiteral("把当前切割/排序/导出参数存为配置文件，可复用于同尺寸图像。"));
     QObject::connect(aSaveCfg, &QAction::triggered, w, &MainWindow::onSaveConfig);
     mFile->addSeparator();
     const QAction* aExit = mFile->addAction(QStringLiteral("退出(&X)"));
@@ -156,8 +165,13 @@ void MainWindowUi::buildMenus(MainWindow* w) {
     QAction* aClear = mEdit->addAction(QStringLiteral("清除选区(&C)"));
     aClear->setShortcut(QKeySequence(Qt::Key_Escape));
     QObject::connect(aClear, &QAction::triggered, w, &MainWindow::onClearCut);
+    mEdit->addSeparator();
+    // 一键全部销毁归零：清图层（回底图）+全部标注+全部预处理+选区，仅保留底图。
+    QAction* aDestroyAll = mEdit->addAction(QStringLiteral("全部销毁归零(&Z)"));
+    aDestroyAll->setToolTip(QStringLiteral("清空图片图层（回退底图）+全部标注+全部预处理+选区，仅保留底图。"));
+    QObject::connect(aDestroyAll, &QAction::triggered, w, &MainWindow::onDestroyAll);
 
-    // ---- 图像（预处理 FR-1：旋转/翻转/黑白/反色/重置；完整控件见右侧「图像」页）----
+    // ---- 图像（预处理 FR-1：旋转/翻转/黑白/反色/重置；完整控件见右侧「预处理」页）----
     QMenu* mImage = w->menuBar()->addMenu(QStringLiteral("图像(&I)"));
     const QAction* aRotL = mImage->addAction(QStringLiteral("左转 90°"));
     QObject::connect(aRotL, &QAction::triggered, w, [w] { w->preprocess_->onRotate(-90); });
@@ -178,9 +192,19 @@ void MainWindowUi::buildMenus(MainWindow* w) {
     mImage->addSeparator();
     const QAction* aResetPre = mImage->addAction(QStringLiteral("重置预处理"));
     QObject::connect(aResetPre, &QAction::triggered, w, [w] { w->preprocess_->onResetPreprocess(); });
-    const QAction* aImagePanel = mImage->addAction(QStringLiteral("图像处理面板（缩放/尺寸/色道）…"));
+    const QAction* aImagePanel = mImage->addAction(QStringLiteral("预处理面板（缩放/尺寸/色道）…"));
     QObject::connect(aImagePanel, &QAction::triggered, w, [w] {
         if (w->rightTabs_ && w->imagePanel_) selectRightPage(w->rightTabs_, w->imagePanel_);
+    });
+    mImage->addSeparator();
+    // 多层画布入口：从文件添加一个图片图层（无图层画布时以当前图为底自动起图层画布）。
+    QAction* aAddImageLayer = mImage->addAction(QStringLiteral("添加图片图层…"));
+    aAddImageLayer->setToolTip(QStringLiteral("从文件添加一个图片图层到画布（单图态下自动以当前图为底起图层画布）。"));
+    QObject::connect(aAddImageLayer, &QAction::triggered, w, &MainWindow::onAddImageLayer);
+    QAction* aLayerEditPanel = mImage->addAction(QStringLiteral("图层编辑面板…"));
+    aLayerEditPanel->setToolTip(QStringLiteral("定位到右侧「图片」面板（图层列表/落位/不透明度/画布尺寸）。"));
+    QObject::connect(aLayerEditPanel, &QAction::triggered, w, [w] {
+        if (w->rightTabs_ && w->layerEditPanel_) selectRightPage(w->rightTabs_, w->layerEditPanel_);
     });
 
     // ---- 标注：撤销/重做/删除选中/清除全部/属性定位 ----
@@ -237,7 +261,7 @@ void MainWindowUi::buildMenus(MainWindow* w) {
     const QAction* aAbout = mHelp->addAction(QStringLiteral("关于"));
     QObject::connect(aAbout, &QAction::triggered, w, [w] {
         QMessageBox::about(w, QStringLiteral("关于"),
-            QStringLiteral("ImageDiscropper GUI %1\n基于统一 Grid-Selection-Emit 引擎（Core %2）。\n"
+            QStringLiteral("ImageDiscropper GUI %1\n基于统一 Grid-Selection-Emit 引擎（内核 %2）。\n"
                            "L1/L2/L3 共用同一代码路径，模式仅为参数预设。")
                 .arg(QStringLiteral(IDC_GUI_VERSION), QStringLiteral(IDC_CORE_VERSION)));
     });
@@ -248,6 +272,8 @@ void MainWindowUi::buildToolbar(MainWindow* w) {
     QToolBar* tb = w->addToolBar(QStringLiteral("主工具栏"));
     tb->setMovable(false);
 
+    const QAction* aNew = tb->addAction(QStringLiteral("新建"));
+    QObject::connect(aNew, &QAction::triggered, w, &MainWindow::onNew);
     const QAction* aOpen = tb->addAction(QStringLiteral("打开"));
     QObject::connect(aOpen, &QAction::triggered, w, &MainWindow::onOpen);
     const QAction* aExport = tb->addAction(QStringLiteral("导出"));
@@ -281,6 +307,11 @@ void MainWindowUi::buildToolbar(MainWindow* w) {
     QObject::connect(w->modeActionL1_, &QAction::triggered, w, [w] { w->onModeAction(1); });
     QObject::connect(w->modeActionL2_, &QAction::triggered, w, [w] { w->onModeAction(2); });
     QObject::connect(w->modeActionL3_, &QAction::triggered, w, [w] { w->onModeAction(3); });
+    tb->addSeparator();
+    // 一键全部销毁归零（与编辑菜单同槽）。
+    QAction* aDestroyAllTb = tb->addAction(QStringLiteral("全部归零"));
+    aDestroyAllTb->setToolTip(QStringLiteral("一键全部销毁归零：清图层/标注/预处理/选区，仅保留底图。"));
+    QObject::connect(aDestroyAllTb, &QAction::triggered, w, &MainWindow::onDestroyAll);
     // 遮罩切换已迁入左侧「图层」面板（成为正式图层项）；视图菜单与画布右键仍保留快捷切换。
 }
 

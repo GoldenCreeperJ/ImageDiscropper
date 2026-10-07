@@ -6,9 +6,12 @@
 // ============================================================================
 #include "canvas/canvas_scene.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <vector>
 
+#include <QGraphicsSceneMouseEvent>
 #include <QTransform>
 
 #include "canvas/z_order.h"
@@ -32,6 +35,8 @@ int nearest(const std::vector<int>& vals, const int target) {
 } // namespace
 
 // 构造：空场景。底图与选区框在 setBaseImage 时惰性创建。
+// 【越界行为】不做越界裁剪：图层落位框与标注矢量均可绘制到画布（sceneRect）之外，视口内自由可见
+//   （Qt6 已移除 QGraphicsView::setItemClippingEnabled，且产品决定不保留“两者都裁”）。故本构造无需额外开关。
 CanvasScene::CanvasScene(QObject* parent) : QGraphicsScene(parent) {}
 
 // 设置底图并同步场景矩形与选区边界。
@@ -87,6 +92,7 @@ void CanvasScene::clearAll() {
     clearCutLines();
     clearMultiRects();
     clearAnnotations();
+    clearImageLayers();
     if (baseItem_) { removeItem(baseItem_); delete baseItem_; baseItem_ = nullptr; }
     if (selItem_) { removeItem(selItem_); delete selItem_; selItem_ = nullptr; }
     if (pickerItem_) { removeItem(pickerItem_); delete pickerItem_; pickerItem_ = nullptr; }
@@ -289,6 +295,8 @@ void CanvasScene::updateAnnotations(const AnnotationBridge& model) {
     while (annoItems_.size() < n) {
         auto* it = new AnnotationItem();
         it->setHandleSize(annoHandleSize_);
+        // 依当前标注选取模式决定图元是否吃左键（默认框选态＝不吃，手势落到视图框选）。
+        it->setAcceptedMouseButtons(annotationSelectMode_ ? Qt::LeftButton : Qt::NoButton);
         addItem(it);
         connect(it, &AnnotationItem::pressed, this, &CanvasScene::annotationSelectRequested);
         connect(it, &AnnotationItem::moveRequested, this, [this, it](const double dx, const double dy) {
@@ -388,6 +396,187 @@ void CanvasScene::setSelectionVisible(const bool on) {
     selectionVisible_ = on;
     if (selItem_) selItem_->setBorderVisible(on);
     for (SelectionRectItem* it : multiRectItems_) it->setBorderVisible(on);
+}
+
+// ===========================================================================
+// 图片图层落位框（多层画布：底图之上、标注之下的可拾取框）
+// ===========================================================================
+
+// 依 Document 图层栈增量维护每个图片图层的落位框图元。
+// 【拖拽安全】仿 updateMultiRects：按 layerId 对齐增删，绝不 clear+重建（否则会在拖拽中删除
+// 正在处理鼠标事件的图元→崩溃）；且跳过对正在拖拽者的几何回设（其位置由手势维护，释放才回灌）。
+// 落位矩形来自 Core canvas::layerPlacement（GUI 不自算锚点/枢轴/缩放，CONTRIBUTING.md「分层纪律」）。
+// 无可呈现位图（layerPlacement 返回 nullopt）的层：已有图元仅隐藏（不删，规避拖拽期删除风险），否则跳过。
+void CanvasScene::updateImageLayers(const std::vector<canvas::ImageLayer>& layers,
+                                    const int canvasW, const int canvasH,
+                                    const std::optional<int> selectedId) {
+    // 收缩：删除已不在 layers 中的图元（按 id 匹配；防御：绝不删除正在拖拽者）。
+    for (int i = imageLayerItems_.size() - 1; i >= 0; --i) {
+        ImageLayerItem* it = imageLayerItems_[i];
+        const bool stillPresent = std::any_of(layers.begin(), layers.end(),
+                                              [it](const canvas::ImageLayer& l) { return l.id == it->layerId(); });
+        if (stillPresent) continue;
+        if (it->isDragging()) continue;
+        imageLayerItems_.remove(i);
+        removeItem(it);
+        delete it;
+    }
+    // 扩张 + 刷新：逐层确保有对应图元，再按 Core 落位刷新几何与选中态。
+    for (const canvas::ImageLayer& l : layers) {
+        ImageLayerItem* it = nullptr;
+        for (ImageLayerItem* cand : imageLayerItems_) {
+            if (cand->layerId() == l.id) { it = cand; break; }
+        }
+        const auto p = canvas::layerPlacement(l, canvasW, canvasH);
+        if (!p) {
+            if (it) it->setVisible(false);   // 空位图：隐藏既有图元，不删除。
+            continue;
+        }
+        if (!it) {
+            it = new ImageLayerItem();
+            it->setLayerId(l.id);
+            // 拾取按下 / 拖拽平移转发为场景信号，交 MainWindow 写回 Document（场景不认识 Document）。
+            connect(it, &ImageLayerItem::pressed, this, &CanvasScene::imageLayerPressed);
+            connect(it, &ImageLayerItem::moved, this, &CanvasScene::imageLayerMoved);
+            // 新图元交互态：拾取模式开即为循环选层候选；z 恒用常规落位层序（拾取不靠抬层）。
+            it->setInteractive(imagePickMode_);
+            it->setZValue(zorder::kImageLayer);
+            addItem(it);
+            imageLayerItems_.append(it);
+        }
+        it->setVisible(true);
+        if (!it->isDragging()) it->setPlacement(QRectF(p->x, p->y, p->width, p->height));
+        it->setSelectedFrame(selectedId.has_value() && selectedId == l.id);
+    }
+}
+
+// 清空全部图片图层落位框图元。QGraphicsItem 析构会自动从场景移除。
+void CanvasScene::clearImageLayers() {
+    for (ImageLayerItem* it : imageLayerItems_) { removeItem(it); delete it; }
+    imageLayerItems_.clear();
+}
+
+// 仅切换已有落位框的选中高亮（不重算 layerPlacement）：选中层变化时廉价刷新（跳过正在拖拽者）。
+void CanvasScene::setImageLayerSelection(const std::optional<int> selectedId) {
+    for (ImageLayerItem* it : imageLayerItems_) {
+        if (it->isDragging()) continue;
+        it->setSelectedFrame(selectedId.has_value() && selectedId == it->layerId());
+    }
+}
+
+// 图层拾取模式：切换全部落位框的可拾取标志（不再动 z 序——拾取纯由四态模式 + 场景级循环选层，与叠放先后无关）。
+// 开→落位框登记为拾取候选（点选由本场景 mousePressEvent 循环路由，非 z 序自动抓取）；
+// 关→全部退出候选（仅示意），并放弃进行中的场景级拖拽、复位循环态（重入从最顶层重新开始）。
+void CanvasScene::setImagePickMode(const bool on) {
+    imagePickMode_ = on;
+    if (!on) { pickDragItem_ = nullptr; lastPickStack_.clear(); lastPickIndex_ = 0; }
+    for (ImageLayerItem* it : imageLayerItems_) it->setInteractive(on);
+}
+
+// 收集 scenePos 处命中的图片图层落位框 id，按叠放序「顶在前」返回。去 z 序自动抓取依赖：本函数
+//   自行遍历候选图元做几何命中，不依赖 Qt 把按下事件递给最顶图元；仅拾取模式下可见且登记的候选入栈。
+std::vector<int> CanvasScene::layerStackAt(const QPointF& scenePos) const {
+    struct Hit { int id; double z; int order; };
+    std::vector<Hit> hits;
+    for (int i = 0; i < imageLayerItems_.size(); ++i) {
+        const ImageLayerItem* it = imageLayerItems_[i];
+        if (!it->isVisible() || !it->interactive()) continue;
+        if (!it->placement().contains(scenePos)) continue;
+        hits.push_back({it->layerId(), it->zValue(), i});
+    }
+    // 顶在前：zValue 降序；同 z 则后加入者（绘制在上）在前，保证叠放序确定。
+    std::sort(hits.begin(), hits.end(), [](const Hit& a, const Hit& b) {
+        if (a.z != b.z) return a.z > b.z;
+        return a.order > b.order;
+    });
+    std::vector<int> stack;
+    stack.reserve(hits.size());
+    for (const Hit& h : hits) stack.push_back(h.id);
+    return stack;
+}
+
+// 依循环态决定本次应选中的图层 id：同点（容差内）续击且候选栈不变 → 沿栈向下推进一位（到底回顶，仿 Figma
+//   连击选层）；换点或栈变化 → 重置为最顶（下标 0）。记录本次命中点/栈/下标供下次比较。
+int CanvasScene::advancePickCycle(const QPointF& scenePos, const std::vector<int>& stack) {
+    if (stack.empty()) return -1;
+    constexpr double kSamePointTol = 3.0;   // 场景单位：近似同点判定（连击微抖容忍）。
+    const bool sameSpot = !lastPickStack_.empty()
+                          && std::hypot(scenePos.x() - lastPickPos_.x(), scenePos.y() - lastPickPos_.y()) <= kSamePointTol
+                          && lastPickStack_ == stack;
+    std::size_t idx = 0;
+    if (sameSpot) idx = (lastPickIndex_ + 1) % stack.size();
+    lastPickPos_ = scenePos;
+    lastPickStack_ = stack;
+    lastPickIndex_ = idx;
+    return stack[idx];
+}
+
+// 按 id 取回对应的落位框图元（无则 nullptr）。
+ImageLayerItem* CanvasScene::imageLayerItemById(const int id) const {
+    for (ImageLayerItem* it : imageLayerItems_) if (it->layerId() == id) return it;
+    return nullptr;
+}
+
+// 场景级按下：拾取模式下重叠落位框靠循环选层（layerStackAt + advancePickCycle），而非 z 序自动抓取。
+//   命中候选 → 推进循环选中对应层并起拖（beginDrag 内发 pressed → imageLayerPressed）；
+//   未命中任何层 → 按落点路由：画布内（底图铺满）发 basePickRequested 选中底图、画布外发 pickDeselectRequested 取消全部；
+//   图片拾取态恒 accept、不落基类（杜绝残余框选/默认抓取，四态互斥）；非拾取模式 / 非左键 → 交基类。
+void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent* event) {
+    if (imagePickMode_ && event->button() == Qt::LeftButton) {
+        if (const std::vector<int> stack = layerStackAt(event->scenePos()); !stack.empty()) {
+            if (ImageLayerItem* it = imageLayerItemById(advancePickCycle(event->scenePos(), stack))) {
+                pickDragItem_ = it;
+                it->beginDrag(event->scenePos());
+                event->accept();
+                return;
+            }
+        }
+        // 未命中可拖图层：复位循环态，再按落点分派底图选中 / 取消全部选中（坐实四态互斥）。
+        lastPickStack_.clear();
+        lastPickIndex_ = 0;
+        if (const QPointF p = event->scenePos(); p.x() >= 0 && p.y() >= 0 && p.x() < imgW_ && p.y() < imgH_)
+            emit basePickRequested();
+        else
+            emit pickDeselectRequested();
+        event->accept();
+        return;
+    }
+    QGraphicsScene::mousePressEvent(event);
+}
+
+// 场景级移动：拾取拖拽期驱动当前被拖落位框（dragMove 仅视觉位移），否则交基类。
+void CanvasScene::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
+    if (pickDragItem_) {
+        pickDragItem_->dragMove(event->scenePos());
+        event->accept();
+        return;
+    }
+    QGraphicsScene::mouseMoveEvent(event);
+}
+
+// 场景级释放：结束拾取拖拽（dragEnd 内一次性发 moved → imageLayerMoved），清空拖拽句柄，否则交基类。
+void CanvasScene::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
+    if (pickDragItem_) {
+        pickDragItem_->dragEnd(event->scenePos());
+        pickDragItem_ = nullptr;
+        event->accept();
+        return;
+    }
+    QGraphicsScene::mouseReleaseEvent(event);
+}
+
+// 标注选取模式：切换全部已提交标注图元的左键可交互性（预览图元恒不可交互，不受影响）。
+// 开→标注可点选 / 拖拽 / 手柄；关→标注不吃鼠标，框选 / 拾取手势不被抢走。
+void CanvasScene::setAnnotationSelectMode(const bool on) {
+    annotationSelectMode_ = on;
+    const auto annoButtons = on ? Qt::LeftButton : Qt::NoButton;
+    for (AnnotationItem* it : annoItems_) it->setAcceptedMouseButtons(annoButtons);
+    // 标注选取态：z 位于标注之上（选区 60 / 单元 / 多矩形）的覆盖图元改吃无鼠标，使被这些框盖住的标注
+    //   也能点中（否则顶图元抢占按下事件、下方标注收不到）；退态恢复其可交互（仅左键，与既有语义一致）。
+    const auto overlayButtons = on ? Qt::NoButton : Qt::LeftButton;
+    if (selItem_) selItem_->setAcceptedMouseButtons(overlayButtons);
+    for (SelectionRectItem* it : multiRectItems_) it->setAcceptedMouseButtons(overlayButtons);
+    if (pickerItem_) pickerItem_->setAcceptedMouseButtons(overlayButtons);
 }
 
 } // namespace idc::gui

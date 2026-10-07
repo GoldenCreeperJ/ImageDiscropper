@@ -187,6 +187,13 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     burnIn_->setToolTip(QStringLiteral("勾选后，导出时把标注画进图像（随图像一起被切割）；不勾选则导出的图像不含标注。"));
     root->addWidget(burnIn_);
 
+    // 导出时烧录图片图层（对标「导出时烧录标注」）：勾选后导出把叠加图片图层并入像素（随图像一起被切割）。
+    // 与图层面板的「显示」开关正交——后者仅控画布预览，本开关只影响导出结果。默认勾选（保持“导出含图层”的现有行为）。
+    layersBurnIn_ = new QCheckBox(QStringLiteral("导出时烧录图片"), this);
+    layersBurnIn_->setChecked(true);
+    layersBurnIn_->setToolTip(QStringLiteral("勾选后，导出时把叠加图片图层并入图像（随图像一起被切割）；不勾选则导出仅含底图/背景，不含图片图层。此开关与图层面板的「显示」（仅预览）相互独立。"));
+    root->addWidget(layersBurnIn_);
+
     // 导出按钮。
     exportBtn_ = new QPushButton(QStringLiteral("导出"), this);
     exportBtn_->setToolTip(QStringLiteral("按当前参数导出（Ctrl+S）。"));
@@ -204,6 +211,7 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     connect(fileBtn_, &QPushButton::clicked, this, &ExportPanel::onBrowseFile);
     connect(exportBtn_, &QPushButton::clicked, this, &ExportPanel::exportRequested);
     connect(burnIn_, &QCheckBox::toggled, this, &ExportPanel::burnInChanged);
+    connect(layersBurnIn_, &QCheckBox::toggled, this, &ExportPanel::layersBurnInChanged);
     // 重排参数：列/行共用一个槽、单元宽/高共用一个槽（信号多出的 int 参数自动丢弃）。
     connect(mergeCols_, &QSpinBox::valueChanged, this, &ExportPanel::onMergeGridEdited);
     connect(mergeRows_, &QSpinBox::valueChanged, this, &ExportPanel::onMergeGridEdited);
@@ -323,6 +331,15 @@ void ExportPanel::setBurnInChecked(const bool on) const {
     burnIn_->blockSignals(true);
     burnIn_->setChecked(on);
     burnIn_->blockSignals(false);
+}
+
+// 反向同步「导出时烧录图片图层」复选框（MainWindow 依 Document::layersBurnIn 回灌）。
+// blockSignals 防止回灌时再触发 layersBurnInChanged 造成回环。
+void ExportPanel::setLayersBurnInChecked(const bool on) const {
+    if (!layersBurnIn_) return;
+    layersBurnIn_->blockSignals(true);
+    layersBurnIn_->setChecked(on);
+    layersBurnIn_->blockSignals(false);
 }
 
 // 输出模式变更 → 写回 Document + 切换字段可见性。

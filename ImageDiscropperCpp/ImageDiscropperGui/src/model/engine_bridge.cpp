@@ -9,6 +9,8 @@
 #include "engine/image_io.h" // readImageFile（loadImage 委托 Core 解码）。
 #include "annotation/annotation_set.h" // AnnotationSet（save/load 可选标注集合透传，配置为真相源）。
 #include "engine/engine_config_json.h" // saveEngineConfig/loadEngineConfig（配置文件存取）。
+#include "generate/pattern.h" // makePattern（generatePattern 委托 Core 程序化生成）。
+#include "canvas/layer.h"     // composeCanvas（多层画布展平，委托 Core canvas 层）。
 
 namespace idc::gui {
 
@@ -106,6 +108,28 @@ bool EngineBridge::loadConfig(const QString& path, engine::EngineConfig& out, QS
 core::Image EngineBridge::applyPipeline(const core::Image& src,
                                        const preprocess::PreprocessPipeline& pipeline) {
     return pipeline.applyExec(src);
+}
+
+// 程序化生成新图（委托 Core generate::makePattern）：新建对话框采参后取得初始画布；像素生成全在 Core。
+core::Image EngineBridge::generatePattern(const int width, const int height, const generate::PatternParams& params) {
+    return generate::makePattern(width, height, params);
+}
+
+// 多层画布展平：委托 Core canvas::composeCanvas（先落底图 base、再逐层叠加→缩放→source-over 落位，越界裁剪全在 Core）。
+// materialized 透传：命中预物化位的图层直接取用、跳过 Core materializeLayer（改 transform 不重跑预处理）。
+core::Image EngineBridge::composeCanvas(const std::vector<canvas::ImageLayer>& layers, const int width, const int height, const core::Image& base,
+                                       const std::unordered_map<int, core::Image>* materialized) {
+    return canvas::composeCanvas(layers, width, height, base, materialized);
+}
+
+// 单层物化：委托 Core canvas::materializeLayer（配方现算 / 文件解码像素 / 空→空图，再跑该层 preprocess）。
+core::Image EngineBridge::materializeLayer(const canvas::ImageLayer& layer) {
+    return canvas::materializeLayer(layer);
+}
+
+// 底图展平：委托 Core canvas::composeBase（纯图案底按 source 尺寸现算；文件底转调 composeCanvas 两段合成）。
+core::Image EngineBridge::composeBase(const canvas::ImageLayer& base, const int width, const int height) {
+    return canvas::composeBase(base, width, height);
 }
 
 } // namespace idc::gui
