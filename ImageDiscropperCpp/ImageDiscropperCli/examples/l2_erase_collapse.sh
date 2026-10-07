@@ -4,9 +4,9 @@
 # 作用：演示 L2「反向剔除」模式（erase）+ 坍缩合并（--merge collapse）——极性恒 remove，
 #       沿贯穿全图的切割线抽掉中缝、两侧对接，输出尺寸变小为 (W−Δx)×(H−Δy)。
 #       覆盖：单矩形十字切割、横带剔除、竖带剔除、多矩形并集剔除。
-# 约定（examples/README.md 约定）：使用仓库内示例图片 examples/sample.png；输出到系统临时目录，
+# 约定（examples/README.md 约定）：使用仓库内示例图片 assets/sample.png（仓库根）；输出到系统临时目录，
 #       不污染仓库；每一步带中文注释。
-# 前置：需先构建出 idc；sample.png 需自备（建议 ≥ 640×480，见 examples/README.md）。
+# 前置：需先构建出 idc；sample.png 已随仓库提供（仓库根 assets/，≥ 640×480）。
 # ============================================================================
 set -euo pipefail
 
@@ -28,7 +28,7 @@ fi
 IDC="${IDC:-idc}"
 
 # --- 输入图与临时输出目录。---
-IMG="${SCRIPT_DIR}/sample.png"
+IMG="${SCRIPT_DIR}/../../../assets/sample.png"
 OUT="$(mktemp -d)"
 trap 'echo "输出目录：${OUT}"' EXIT
 

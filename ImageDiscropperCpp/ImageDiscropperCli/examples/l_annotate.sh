@@ -6,9 +6,9 @@
 #       覆盖两种载体：
 #         · --annotation '<内联 JSON 对象>'：一条 SPEC §7 annotations 元素，可重复；
 #         · --annotations <file.json>      ：文件根为标注数组，可多条，可重复。
-# 约定（examples/README.md）：使用仓库内示例图片 examples/sample.png；输出到系统临时目录，
+# 约定（examples/README.md）：使用仓库内示例图片 assets/sample.png（仓库根）；输出到系统临时目录，
 #       不污染仓库；每一步带中文注释。
-# 前置：需先构建出可执行文件 idc；sample.png 需自备（建议 ≥ 640×480）。
+# 前置：需先构建出可执行文件 idc；sample.png 已随仓库提供（仓库根 assets/，≥ 640×480）。
 # ============================================================================
 set -euo pipefail
 
@@ -29,7 +29,7 @@ if [ -z "${IDC}" ]; then
 fi
 IDC="${IDC:-idc}"
 
-IMG="${SCRIPT_DIR}/sample.png"
+IMG="${SCRIPT_DIR}/../../../assets/sample.png"
 ANNOS="${SCRIPT_DIR}/sample_annotations.json"
 OUT="$(mktemp -d)"
 trap 'echo "输出目录：${OUT}"' EXIT

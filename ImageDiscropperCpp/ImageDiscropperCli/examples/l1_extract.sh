@@ -3,9 +3,9 @@
 # 文件：examples/l1_extract.sh
 # 作用：演示 L1「标准提取」模式（extract）——极性恒 keep，保留选框 / 带，坍缩输出单图。
 #       覆盖三种几何：中心矩形（--rect）、水平带（--hband）、垂直带（--vband）。
-# 约定（examples/README.md 约定）：使用仓库内示例图片 examples/sample.png；输出到系统临时目录，
+# 约定（examples/README.md 约定）：使用仓库内示例图片 assets/sample.png（仓库根）；输出到系统临时目录，
 #       不污染仓库；每一步带中文注释。
-# 前置：需先在仓库根构建出可执行文件 idc（CLion 或 cmake --build）；sample.png 需自备
+# 前置：需先在仓库根构建出可执行文件 idc（CLion 或 cmake --build）；sample.png 已随仓库提供（仓库根 assets/）
 #       （建议尺寸 ≥ 640×480，否则脚本内坐标可能越界，见 examples/README.md）。
 # ============================================================================
 set -euo pipefail
@@ -28,7 +28,7 @@ fi
 IDC="${IDC:-idc}"
 
 # --- 输入图（仓库内示例图片，硬编码路径）与临时输出目录（不污染仓库）。---
-IMG="${SCRIPT_DIR}/sample.png"
+IMG="${SCRIPT_DIR}/../../../assets/sample.png"
 OUT="$(mktemp -d)"
 trap 'echo "输出目录：${OUT}"' EXIT
 

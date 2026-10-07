@@ -4,9 +4,9 @@
 # 作用：演示 L2「反向剔除」模式（erase）+ 分离导出（缺省，--output-dir）——把保留的各块
 #       分别裁剪编码后写入目标文件夹（不打包压缩），文件按命名模板 {name}_{index:03d} 生成。
 #       单矩形十字切割保留四角 → 输出文件夹内 4 张图。
-# 约定（examples/README.md 约定）：使用仓库内示例图片 examples/sample.png；输出到系统临时目录，
+# 约定（examples/README.md 约定）：使用仓库内示例图片 assets/sample.png（仓库根）；输出到系统临时目录，
 #       不污染仓库；每一步带中文注释。
-# 前置：需先构建出 idc；sample.png 需自备（建议 ≥ 640×480，见 examples/README.md）。
+# 前置：需先构建出 idc；sample.png 已随仓库提供（仓库根 assets/，≥ 640×480）。
 # ============================================================================
 set -euo pipefail
 
@@ -28,7 +28,7 @@ fi
 IDC="${IDC:-idc}"
 
 # --- 输入图与临时输出目录。---
-IMG="${SCRIPT_DIR}/sample.png"
+IMG="${SCRIPT_DIR}/../../../assets/sample.png"
 OUT="$(mktemp -d)"
 trap 'echo "输出目录：${OUT}"' EXIT
 
