@@ -17,6 +17,7 @@
 #include "core/color.h"
 #include "core/image.h"
 #include "core/point.h"
+#include "core/composite.h"   // core::compositeOver（source-over 共享真相源，canvas 测试直接验证）
 #include "engine/engine.h"
 #include "annotation/annotation_set.h"
 #include "annotation/rasterizer.h"
@@ -26,6 +27,8 @@
 #include "core/history_manager.h"
 #include "core/pipeline_manager.h"
 #include "preprocess/preprocess_pipeline.h"
+#include "generate/pattern.h"
+#include "canvas/layer.h"   // 多层画布：ImageLayer / composeCanvas / materializeLayer
 // 跨模块直编（unit_tests 已将 GUI annotation_editor.cpp 编入）：恢复标注会话态断言。
 #include "model/annotation_editor.h"
 // 跨模块直编（unit_tests 已将 GUI preprocess_session.cpp 编入）：预处理会话（零 Qt）的不变式/归一化/缓存断言。
@@ -672,6 +675,9 @@ static void testPreprocess() {
     // 跨 gray 色彩不合并：gray 前后 invert 分属多通道位映射 / 灰度态整幅翻两侧，均保留。
     { preprocess::PreprocessPipeline q; q.add(InvertOp{}); q.add(GrayOp{}); q.add(InvertOp{}); checkFold(q); }
 
+    // 注：不透明度不再是预处理步（旧 OpacityOp / channelMapAlpha 融合核已移除），
+    //     改由图层合成期 ImageTransform.opacity 承载，相关断言见 testCanvas。
+
     // ---- applyExec：执行层融合专项（channelMap 四态 / 几何跨 gray 合并 / GRAY 输入 / 种子随机性质）----
     // channelMap 强制255 四态（K=000∧J=111）：单 op 词表不可表达，仅 Split("000")+Invert("111") 两步可达；
     // execPlan 折成单次 channelMap，逐像素仍与两步 apply 一致（alpha 字节保留）。
@@ -726,8 +732,8 @@ static void testPreprocess() {
         q.add(FlipOp{false});
         checkExecOn(q, gbase);
     }
-    // 种子随机性质测试：200 条随机队列（六类 op 全参与、掩码含全0/非3长、角度含负值）× 三张基图轮换，
-    // 每条断言 applyExec 与逐步 apply 逐像素等价（含尺寸/格式；resize 块界交错路径同时被压到）。
+    // 种子随机性质测试：200 条随机队列（六类 op 全参与、掩码含全0/非3长、角度含负值），
+    // 每条断言 applyExec 与逐步 apply 逐像素等价（含尺寸/格式；resize 块界交错、gray 相邻序均被压到）。
     std::mt19937 rng(20260927);
     const std::array<const core::Image*, 3> bases = {&fbase, &ebase, &gbase};
     auto randMask = [&rng] {
@@ -961,7 +967,7 @@ static void testEngine() {
     using namespace idc::engine;
 
     // RectRegion：左闭右开的宽高、面积与包含判定
-    RectRegion r(10, 20, 30, 50);
+    constexpr RectRegion r(10, 20, 30, 50);
     CHECK(r.width() == 20 && r.height() == 30);
     CHECK(r.area() == 600);
     CHECK(r.contains(10, 20) && !r.contains(30, 50)); // 右/下边界不含
@@ -1017,12 +1023,386 @@ static void testEngine() {
 }
 
 // ---------------------------------------------------------------------------
+// generate 模块测试：程序化图案生成（新建图像）——尺寸/透明/非法/各类型关键像素
+// ---------------------------------------------------------------------------
+static void testGenerate() {
+    using namespace idc;
+    using namespace idc::generate;
+
+    // 非法尺寸：<=0 或超上限 → 空图
+    CHECK(makePattern(0, 10, PatternParams{}).empty());
+    CHECK(makePattern(-1, 10, PatternParams{}).empty());
+    CHECK(makePattern(generate::kMaxDimension + 1, 10, PatternParams{}).empty());
+
+    // 总像素封顶（≤kMaxTotalPixels）：单边均合法但宽×高超限 → 空图（分配前短路，不 OOM）。
+    CHECK(makePattern(generate::kMaxDimension, generate::kMaxDimension, PatternParams{}).empty()); // 65535² ≫ 64M
+    CHECK(makePattern(8001, 8000, PatternParams{}).empty());   // 64,008,000 > 64,000,000
+    CHECK(!makePattern(4000, 4000, PatternParams{}).empty());  // 16M ≪ 64M，正常产出
+
+    // Solid：整张填底色，alpha 直写
+    PatternParams solid;
+    solid.kind = PatternKind::Solid;
+    solid.background = core::Color(10, 20, 30, 128);
+    const core::Image s = makePattern(4, 3, solid);
+    CHECK(!s.empty() && s.width() == 4 && s.height() == 3 && s.format() == core::ImageFormat::RGBA);
+    CHECK(s.getPixel(0, 0) == core::Color(10, 20, 30, 128));
+    CHECK(s.getPixel(3, 2) == core::Color(10, 20, 30, 128));
+
+    // 透明底（alpha=0）：像素 alpha 恒为 0
+    PatternParams trans = solid;
+    trans.background = core::kTransparent;
+    const core::Image t = makePattern(2, 2, trans);
+    CHECK(t.getPixel(1, 1).a == 0);
+
+    // 线性渐变（水平）：起点=bg、终点=fg，中点插值介于两者
+    PatternParams lg;
+    lg.kind = PatternKind::LinearGradient;
+    lg.orientation = Orientation::Horizontal;
+    lg.background = core::Color(0, 0, 0, 255);
+    lg.foreground = core::Color(200, 0, 0, 255);
+    const core::Image l = makePattern(5, 1, lg);
+    CHECK(l.getPixel(0, 0).r == 0);
+    CHECK(l.getPixel(4, 0).r == 200);
+    CHECK(l.getPixel(2, 0).r == 100);   // 中点线性插值
+
+    // 径向渐变：中心=bg、四角=fg
+    PatternParams rg;
+    rg.kind = PatternKind::RadialGradient;
+    rg.background = core::Color(0, 0, 0, 255);
+    rg.foreground = core::Color(0, 0, 255, 255);
+    const core::Image r = makePattern(3, 3, rg);
+    CHECK(r.getPixel(1, 1).b == 0);          // 中心＝bg
+    CHECK(r.getPixel(0, 0).b == 255);        // 角落＝fg
+
+    // 棋盘格：(0,0) 为背景、(period,0) 为前景（奇偶交替）
+    PatternParams cb;
+    cb.kind = PatternKind::Checkerboard;
+    cb.background = core::kWhite;
+    cb.foreground = core::kBlack;
+    cb.period = 2;
+    const core::Image c = makePattern(4, 4, cb);
+    CHECK(c.getPixel(0, 0) == core::kWhite);
+    CHECK(c.getPixel(2, 0) == core::kBlack);
+    CHECK(c.getPixel(0, 2) == core::kBlack);
+
+    // 网格线：格点 (0,0) 为前景线、区内 (5,5) 为背景
+    PatternParams gl;
+    gl.kind = PatternKind::GridLines;
+    gl.background = core::kWhite;
+    gl.foreground = core::kRed;
+    gl.period = 10;
+    gl.lineWidth = 1;
+    const core::Image g = makePattern(20, 20, gl);
+    CHECK(g.getPixel(0, 0) == core::kRed);
+    CHECK(g.getPixel(5, 5) == core::kWhite);
+
+    // 参数钳位：period<=0 钳到 2，仍可正常生成非空图
+    PatternParams clamp;
+    clamp.kind = PatternKind::Checkerboard;
+    clamp.period = 0;
+    CHECK(!makePattern(4, 4, clamp).empty());
+
+    // 斜纹已合进条纹（↘ 沿 x−y，DiagonalDown）：主对角 x==y 恒 v=0 → 偶带=背景；(2,0) v=2 → 奇带=前景
+    PatternParams ds;
+    ds.kind = PatternKind::Stripes;
+    ds.orientation = Orientation::DiagonalDown;
+    ds.background = core::kWhite;
+    ds.foreground = core::kBlack;
+    ds.period = 2;
+    const core::Image d = makePattern(4, 4, ds);
+    CHECK(d.getPixel(0, 0) == core::kWhite && d.getPixel(1, 1) == core::kWhite && d.getPixel(3, 3) == core::kWhite);
+    CHECK(d.getPixel(2, 0) == core::kBlack);
+
+    // 同心方框已合进同心环（orientation=Vertical → 切比雪夫方环）：中心在环上=前景；(2,0) 距中心 2、周期 4 → 环间=背景
+    PatternParams rr;
+    rr.kind = PatternKind::Concentric;
+    rr.orientation = Orientation::Vertical;
+    rr.background = core::kWhite;
+    rr.foreground = core::kBlack;
+    rr.period = 4;
+    rr.lineWidth = 1;
+    const core::Image rrImg = makePattern(5, 5, rr);
+    CHECK(rrImg.getPixel(2, 2) == core::kBlack);   // 中心方环
+    CHECK(rrImg.getPixel(2, 0) == core::kWhite);    // 环间空白
+
+    // 色相渐变：coord=0 → H=0 → 纯红、不透明
+    PatternParams hg;
+    hg.kind = PatternKind::HueGradient;
+    hg.orientation = Orientation::Horizontal;
+    hg.period = 100;
+    const core::Image h = makePattern(4, 1, hg);
+    CHECK(h.getPixel(0, 0).r == 255 && h.getPixel(0, 0).g == 0 && h.getPixel(0, 0).b == 0 && h.getPixel(0, 0).a == 255);
+
+    // 噪声：同 seed+同尺寸恒同图（逐像素一致）；异 seed → 至少一处不同。全彩不透明。
+    PatternParams nz;
+    nz.kind = PatternKind::Noise;
+    nz.noiseMode = NoiseMode::FullColor;
+    nz.seed = 1234;
+    const core::Image n1 = makePattern(16, 16, nz);
+    const core::Image n2 = makePattern(16, 16, nz);           // 同参数
+    CHECK(!n1.empty() && n1.getPixel(0, 0).a == 255);
+    bool same = true;
+    for (int y = 0; y < 16 && same; ++y)
+        for (int x = 0; x < 16; ++x) { if (n1.getPixel(x, y) != n2.getPixel(x, y)) { same = false; break; } }
+    CHECK(same);                                              // 确定性：恒同图
+    nz.seed = 5678;                                          // 换种子
+    const core::Image n3 = makePattern(16, 16, nz);
+    bool anyDiff = false;
+    for (int y = 0; y < 16 && !anyDiff; ++y)
+        for (int x = 0; x < 16; ++x) { if (n1.getPixel(x, y) != n3.getPixel(x, y)) { anyDiff = true; break; } }
+    CHECK(anyDiff);                                          // 异种子应产异图
+
+    // 灰度噪声：R==G==B
+    PatternParams ng;
+    ng.kind = PatternKind::Noise;
+    ng.noiseMode = NoiseMode::Grayscale;
+    ng.seed = 42;
+    const core::Image gray = makePattern(8, 8, ng);
+    const core::Color gp = gray.getPixel(3, 3);
+    CHECK(gp.r == gp.g && gp.g == gp.b && gp.a == 255);
+
+    // 旧「贴图图案 PatternKind::Image / ImageScale」已彻底移除：图片落位统一走 composeCanvas
+    //   两段合成（见 testCanvas 的 File 层缩放/锚点落位/越界裁剪用例），此处不再有用例。
+
+    std::cout << "[generate] OK\n";
+}
+
+// ---------------------------------------------------------------------------
+// canvas 模块测试：composeCanvas（z 序 / source-over / 越界裁剪 / 锚点+枢轴+自由落位 /
+//   配方与文件层 / 逐层预处理）与层不透明度 transform.opacity（合成期 alpha 乘子 / 灰度层亦生效）。
+// ---------------------------------------------------------------------------
+static void testCanvas() {
+    using namespace idc;
+    using namespace idc::canvas;
+
+    auto solid = [](const int w, const int h, const core::Color& c) {
+        core::Image im(w, h, core::ImageFormat::RGBA);
+        im.fill(c);
+        return im;
+    };
+    constexpr core::Color red{255, 0, 0, 255};
+    constexpr core::Color blue{0, 0, 255, 255};
+    constexpr core::Color green{0, 255, 0, 255};
+
+    // ---- z 序：顶层不透明覆盖底层（B 2×2 居中盖住 A 4×4 的中央）----
+    {
+        std::vector<ImageLayer> st;
+        ImageLayer a; a.sourceKind = LayerSourceKind::File; a.decodedPixels = solid(4, 4, red); a.zOrder = 0; a.id = 1;
+        ImageLayer b; b.sourceKind = LayerSourceKind::File; b.decodedPixels = solid(2, 2, blue); b.zOrder = 1; b.id = 2;
+        st = {b, a};   // 故意乱序存入，验证合成按 zOrder 而非内存序
+        const core::Image out = composeCanvas(st, 4, 4);
+        CHECK(out.width() == 4 && out.height() == 4);
+        CHECK(out.getPixel(0, 0) == red);          // 角落露出底层
+        CHECK(out.getPixel(1, 1) == blue);         // 2×2 居中偏移 (1,1) 起，被顶层覆盖
+        CHECK(out.getPixel(2, 2) == blue);
+    }
+
+    // ---- 图片图层整体显隐已下沉到调用方：传空 layers → 仅底图（透明）；传全层 → 顶层覆盖中央 ----
+    {
+        ImageLayer a; a.sourceKind = LayerSourceKind::File; a.decodedPixels = solid(4, 4, red); a.zOrder = 0; a.id = 1;
+        ImageLayer b; b.sourceKind = LayerSourceKind::File; b.decodedPixels = solid(2, 2, blue); b.zOrder = 1; b.id = 2;
+        const std::vector layers{a, b};
+        const core::Image hidden = composeCanvas({}, 4, 4);            // GUI 隐藏态传空 → 仅透明底
+        CHECK(hidden.getPixel(1, 1).a == 0);
+        const core::Image shown = composeCanvas(layers, 4, 4);         // 可见态传全层 → 顶层 blue 覆盖中央
+        CHECK(shown.getPixel(1, 1) == blue);
+        CHECK(layerPlacement(b, 4, 4).has_value());    // layerPlacement 不读显隐（整体门控归 GUI）
+    }
+
+    // ---- source-over：半透明顶层（a=128）与不透明红底混合 → r≈127、结果不透明 ----
+    {
+        constexpr core::Color semi{0, 0, 0, 128};
+        const core::Color composited = core::compositeOver(red, semi);
+        CHECK(composited.r == 127 && composited.g == 0 && composited.b == 0 && composited.a == 255);
+        std::vector<ImageLayer> st;
+        ImageLayer a; a.sourceKind = LayerSourceKind::File; a.decodedPixels = solid(4, 4, red); a.zOrder = 0;
+        ImageLayer b; b.sourceKind = LayerSourceKind::File; b.decodedPixels = solid(4, 4, semi); b.zOrder = 1;
+        st = {a, b};
+        const core::Image out = composeCanvas(st, 4, 4);
+        CHECK(out.getPixel(0, 0) == core::Color(127, 0, 0, 255));
+    }
+
+    // ---- 越界裁剪：图层整体落在画布外（自由偏移 +10,+10）→ 不写入、不崩溃 ----
+    {
+        std::vector<ImageLayer> st;
+        ImageLayer a; a.sourceKind = LayerSourceKind::File; a.decodedPixels = solid(4, 4, red); a.zOrder = 0;
+        ImageLayer c; c.sourceKind = LayerSourceKind::File; c.decodedPixels = solid(2, 2, green); c.zOrder = 1;
+        c.transform.inCanvasAnchor = generate::ImageAnchor::TopLeft;   // 锚左上，枢轴左上，再 +10,+10 → 全出界
+        c.transform.layerPivot = generate::ImageAnchor::TopLeft;
+        c.transform.x = 10; c.transform.y = 10;
+        st = {a, c};
+        const core::Image out = composeCanvas(st, 4, 4);
+        CHECK(out.getPixel(3, 3) == red);          // 出界层未覆盖任何像素
+    }
+
+    // ---- 锚点 + 枢轴落位：TopRight 锚 + TopLeft 枢轴 → 图层左上角对齐画布右上角 ----
+    {
+        std::vector<ImageLayer> st;
+        // 画布恒透明底（composeCanvas 无级背景）
+        ImageLayer b; b.sourceKind = LayerSourceKind::File; b.decodedPixels = solid(2, 2, blue); b.zOrder = 0;
+        b.transform.inCanvasAnchor = generate::ImageAnchor::TopRight;   // 画布点 = (W, 0) = (4,0)
+        b.transform.layerPivot = generate::ImageAnchor::TopLeft;        // 图层点 = (0,0) → offset=(4,0)
+        st = {b};
+        const core::Image out = composeCanvas(st, 4, 4);
+        // offset=(4,0)：图层完全在 x≥4 之外（画布宽 4，列 0..3）→ 全裁掉，画布保持透明。
+        CHECK(out.getPixel(3, 0).a == 0);
+        // 改枢轴为 TopRight（图层点=(2,0)）→ offset=(2,0)，覆盖 (2,0)-(3,1)。
+        st[0].transform.layerPivot = generate::ImageAnchor::TopRight;   // st 存的是副本，须改入库那份
+        const core::Image out2 = composeCanvas(st, 4, 4);
+        CHECK(out2.getPixel(2, 0) == blue && out2.getPixel(3, 1) == blue);
+        CHECK(out2.getPixel(1, 0).a == 0);
+    }
+
+    // ---- 配方层：recipe 经 makePattern 现算（Solid 绿 2×2），居中入 4×4 ----
+    {
+        std::vector<ImageLayer> st;
+        ImageLayer rl; rl.sourceKind = LayerSourceKind::Recipe;
+        generate::PatternParams pp; pp.kind = generate::PatternKind::Solid; pp.background = green;
+        rl.recipe = pp; rl.transform.width = 2; rl.transform.height = 2; rl.zOrder = 0;
+        st = {rl};
+        const core::Image out = composeCanvas(st, 4, 4);
+        CHECK(out.getPixel(1, 1) == green);   // 居中偏移 (1,1)
+        CHECK(out.getPixel(0, 0).a == 0);     // 画布外区域透明
+    }
+
+    // ---- 逐层预处理物化：File 层不透明红 + Invert → materialize 反色、alpha 不变（预处理不再含不透明度）----
+    {
+        ImageLayer a; a.sourceKind = LayerSourceKind::File; a.decodedPixels = solid(2, 2, red);
+        a.preprocess.add(preprocess::InvertOp{"111"});
+        const core::Image mat = materializeLayer(a);
+        CHECK(mat.getPixel(0, 0) == core::Color(0, 255, 255, 255));
+    }
+
+    // ---- layerPlacement 落位矩形（拾取几何，与 composeCanvas 同口径）----
+    {
+        // 默认 Center/Center/(0,0)：File 4×4 入 8×8 画布 → 居中 offset=(2,2)。
+        ImageLayer a; a.sourceKind = LayerSourceKind::File; a.decodedPixels = solid(4, 4, red); a.id = 1;
+        const auto p = layerPlacement(a, 8, 8);
+        CHECK(p.has_value() && p->x == 2 && p->y == 2 && p->width == 4 && p->height == 4);
+        // TopLeft 锚 + TopLeft 枢轴 → offset=(0,0)；叠加自由偏移 +10,+10 → (10,10)（越界不裁剪，矩形如实返回）。
+        a.transform.inCanvasAnchor = generate::ImageAnchor::TopLeft;
+        a.transform.layerPivot = generate::ImageAnchor::TopLeft;
+        const auto p0 = layerPlacement(a, 8, 8);
+        CHECK(p0->x == 0 && p0->y == 0);
+        a.transform.x = 10; a.transform.y = 10;
+        const auto p1 = layerPlacement(a, 8, 8);
+        CHECK(p1->x == 10 && p1->y == 10 && p1->width == 4 && p1->height == 4);
+        // 目标宽高缩放：4×4 → 6×6，Center 入 8×8 → offset=(1,1)、尺寸 6×6。
+        ImageLayer s; s.sourceKind = LayerSourceKind::File; s.decodedPixels = solid(4, 4, blue);
+        s.transform.width = 6; s.transform.height = 6;
+        const auto ps = layerPlacement(s, 8, 8);
+        CHECK(ps->x == 1 && ps->y == 1 && ps->width == 6 && ps->height == 6);
+        // 无可呈现位图（空占位）→ nullopt（合成与拾取跳过）。
+        ImageLayer e; e.sourceKind = LayerSourceKind::Empty;
+        CHECK(!layerPlacement(e, 8, 8).has_value());
+    }
+
+    // ---- 层不透明度（合成期 alpha 乘子 a'=(a·opacity+127)/255）：透明底上直接读出乘子结果，RGB 不动 ----
+    {
+        auto composeOne = [](const core::Color& srcPx, const int opacity) {
+            // 透明底
+            ImageLayer a; a.sourceKind = LayerSourceKind::File;
+            a.decodedPixels = core::Image(1, 1, core::ImageFormat::RGBA);
+            a.decodedPixels.setPixel(0, 0, srcPx);
+            a.transform.opacity = opacity;
+            const std::vector st = {a};
+            return composeCanvas(st, 1, 1).getPixel(0, 0);
+        };
+        // 源 alpha=200, opacity=128 → (200·128+127)/255 = 100（floor），叠透明底 → alpha 100、RGB 不变
+        CHECK(composeOne(core::Color(9, 9, 9, 200), 128) == core::Color(9, 9, 9, 100));
+        // opacity=255 → 恒等（alpha 200）
+        CHECK(composeOne(core::Color(9, 9, 9, 200), 255).a == 200);
+        // opacity=0 → 全透明
+        CHECK(composeOne(core::Color(9, 9, 9, 200), 0).a == 0);
+    }
+
+    // ---- 灰度层不透明度（Gap 2：GRAY 无 alpha 通道，层 opacity 仍生效，getPixel 视作 a=255）----
+    {
+        std::vector<ImageLayer> st;   // 透明底
+        ImageLayer a; a.sourceKind = LayerSourceKind::File;
+        core::Image g(2, 2, core::ImageFormat::GRAY); g.fill(core::Color(50, 50, 50, 255));
+        a.decodedPixels = g;
+        a.transform.opacity = 128;   // (255·128+127)/255 = 128
+        st = {a};
+        const core::Image out = composeCanvas(st, 2, 2);
+        CHECK(out.getPixel(0, 0) == core::Color(50, 50, 50, 128));
+    }
+
+    // ---- 预物化表（materialized，缺口 1 缓存契约）----
+    {
+        // 单层 File：解码像素红 + Invert 预处理（materializeLayer 会反色成青）。
+        // 命中预物化表时 composeCanvas 直取表内位图、跳过 materializeLayer，故喂入的位图原样落位。
+        ImageLayer a; a.id = 7; a.sourceKind = LayerSourceKind::File;
+        a.decodedPixels = solid(2, 2, red);
+        a.preprocess.add(preprocess::InvertOp{"111"});
+        a.transform.inCanvasAnchor = generate::ImageAnchor::TopLeft;
+        a.transform.layerPivot = generate::ImageAnchor::TopLeft;
+        std::vector<ImageLayer> st; st = {a};
+
+        // ① 无表：现算 materializeLayer → 红反色成青（与 L1341 段同口径）。
+        const core::Image noCache = composeCanvas(st, 2, 2);
+        CHECK(noCache.getPixel(0, 0) == core::Color(0, 255, 255, 255));
+
+        // ② 命中缓存表：以「缩放前」绿色位图为物化产物 → compose 直取、不重跑 Invert → 落位仍绿（证缓存生效）。
+        const std::unordered_map<int, core::Image> cache{{7, solid(2, 2, green)}};
+        const core::Image cached = composeCanvas(st, 2, 2, core::Image{}, &cache);
+        CHECK(cached.getPixel(0, 0) == green);
+
+        // ③ 表内命中但为空图 → 回退现算（等同无表）：护栏防把「空占位」误当已物化结果。
+        const std::unordered_map<int, core::Image> cacheEmpty{{7, core::Image{}}};
+        const core::Image coreImageFallback = composeCanvas(st, 2, 2, core::Image{}, &cacheEmpty);
+        CHECK(coreImageFallback.getPixel(0, 0) == core::Color(0, 255, 255, 255));
+
+        // ④ 表内 id 不匹配（层 7 不在表）→ 回退现算，与无表一致。
+        const std::unordered_map<int, core::Image> cacheMiss{{9, solid(2, 2, green)}};
+        const core::Image miss = composeCanvas(st, 2, 2, core::Image{}, &cacheMiss);
+        CHECK(miss.getPixel(0, 0) == core::Color(0, 255, 255, 255));
+    }
+
+    // ---- composeBase（底图同构 ImageLayer 展平，SPEC §7 generate 段）----
+    {
+        // Recipe 底（纯图案、无内层落位）：按 source 尺寸现算图案、铺满画布（与旧 generate 段口径一致）。
+        ImageLayer base;
+        base.sourceKind = LayerSourceKind::Recipe;
+        generate::PatternParams pp;
+        pp.kind = generate::PatternKind::Solid;
+        pp.background = green;
+        base.recipe = pp;   // transform 恒等（width/height=0），不走 materializeLayer 的尺寸回归
+        const core::Image pat = composeBase(base, 4, 4);
+        CHECK(pat.width() == 4 && pat.height() == 4);
+        CHECK(pat.getPixel(0, 0) == green && pat.getPixel(3, 3) == green);
+
+        // File 底 + 内层落位：composeBase 内部转调 composeCanvas({base},w,h)，二者逐像素等价（委托契约）。
+        ImageLayer fb;
+        fb.sourceKind = LayerSourceKind::File;
+        fb.decodedPixels = solid(2, 2, red);
+        fb.hasImagePlacement = true;
+        fb.boxWidth = 4; fb.boxHeight = 4;
+        fb.imageFit = ImageFit::Crop;
+        fb.imageAnchor = generate::ImageAnchor::TopLeft;
+        fb.imagePivot = generate::ImageAnchor::TopLeft;
+        const core::Image viaBase = composeBase(fb, 4, 4);
+        const core::Image viaCanvas = composeCanvas({fb}, 4, 4);
+        CHECK(viaBase.width() == 4 && viaBase.height() == 4);
+        CHECK(viaBase.getPixel(0, 0) == red);           // 源图左上对齐图层框左上（TopLeft 锚/枢轴）
+        CHECK(viaBase.getPixel(2, 2).a == 0);           // 图层框越源部分透明
+        for (int y = 0; y < 4; ++y)
+            for (int x = 0; x < 4; ++x)
+                CHECK(viaBase.getPixel(x, y) == viaCanvas.getPixel(x, y));
+    }
+
+    std::cout << "[canvas] OK\n";
+}
+
+// ---------------------------------------------------------------------------
 // main：依次执行所有测试段
 // ---------------------------------------------------------------------------
 int main() {
     testCore();
     testGeometry();
     testPixelOps();
+    testGenerate();
+    testCanvas();
     testAnnotation();
     testPreprocess();
     testPreprocessSession();  // 预处理会话（零 Qt，跨模块直编）不变式/归一化/baseDirty/签名断言

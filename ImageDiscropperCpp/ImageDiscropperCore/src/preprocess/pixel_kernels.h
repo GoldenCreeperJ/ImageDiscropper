@@ -13,8 +13,11 @@
 #pragma once
 
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "core/image.h"
+#include "preprocess/preprocess_config.h"  // 声明层类型（与预处理参数单一真相源对齐）
 
 namespace idc::preprocess {
 
@@ -37,7 +40,8 @@ core::Image splitChannels(const core::Image& src, const std::string& mask = "111
 
 // 融合位映射核：逐通道执行 f(v) = (v & K[c]) ^ J[c]，一步覆盖 直通(10)/反色(11)/强制0(00)/强制255(01) 四态。
 // k / j 均为长度 3 的 '0'/'1' 串（R/G/B）：k 长度非 3 归一 "111"（AND 恒等），**j 长度非 3 归一 "000"（XOR 恒等）**。
-// alpha 始终原样保留。仅对多通道图有意义：GRAY 图防御性返回副本（灰度态取反请走 invertChannels 的 gray 分支）。
+// alpha 字节原样拷贝保留（不透明度不再是预处理步，已上移为图层合成期参数）。仅对多通道图有意义：
+// GRAY 图防御性返回副本（灰度态取反请走 invertChannels 的 gray 分支）。
 // splitChannels / invertChannels 的多通道路径即本核的 (K,"000") / ("111",J) 特例；
 // execPlan 把任意 Split/Invert 序列折成单次 channelMap，是「(v&K)^J 融合」的落点。
 core::Image channelMap(const core::Image& src, const std::string& k, const std::string& j);

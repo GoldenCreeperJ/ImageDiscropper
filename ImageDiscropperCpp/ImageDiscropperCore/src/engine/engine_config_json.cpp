@@ -21,6 +21,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <optional>
 #include <string>
@@ -136,6 +137,142 @@ RemainderPolicy remainderFromName(const std::string& s) {
     return RemainderPolicy::DISCARD;
 }
 
+// 图案类型 / 方向 ↔ 短横线小写串（与 CLI `--pattern` / `--orientation` 取值同一套 token）。
+// 命名为 gen*Token 以避免与 generate::patternKindName 产 ADL 歧义。
+const char* genKindToken(const generate::PatternKind k) {
+    switch (k) {
+        case generate::PatternKind::Solid: return "solid";
+        case generate::PatternKind::LinearGradient: return "linear-gradient";
+        case generate::PatternKind::RadialGradient: return "radial-gradient";
+        case generate::PatternKind::Checkerboard: return "checkerboard";
+        case generate::PatternKind::Stripes: return "stripes";
+        case generate::PatternKind::GridLines: return "grid-lines";
+        case generate::PatternKind::DotGrid: return "dot-grid";
+        case generate::PatternKind::Concentric: return "concentric";
+        case generate::PatternKind::RadialRays: return "radial-rays";
+        case generate::PatternKind::HueGradient: return "hue-gradient";
+        case generate::PatternKind::Noise: return "noise";
+    }
+    return "solid";
+}
+generate::PatternKind genKindFromToken(const std::string& s) {
+    if (s == "linear-gradient") return generate::PatternKind::LinearGradient;
+    if (s == "radial-gradient") return generate::PatternKind::RadialGradient;
+    if (s == "checkerboard") return generate::PatternKind::Checkerboard;
+    if (s == "stripes") return generate::PatternKind::Stripes;
+    if (s == "grid-lines") return generate::PatternKind::GridLines;
+    if (s == "dot-grid") return generate::PatternKind::DotGrid;
+    if (s == "concentric") return generate::PatternKind::Concentric;
+    if (s == "radial-rays") return generate::PatternKind::RadialRays;
+    if (s == "hue-gradient") return generate::PatternKind::HueGradient;
+    if (s == "noise") return generate::PatternKind::Noise;
+    return generate::PatternKind::Solid;
+}
+const char* genOrientationToken(const generate::Orientation o) {
+    switch (o) {
+        case generate::Orientation::Horizontal: return "horizontal";
+        case generate::Orientation::Vertical: return "vertical";
+        case generate::Orientation::DiagonalDown: return "diagonal-down";
+        case generate::Orientation::DiagonalUp: return "diagonal-up";
+    }
+    return "horizontal";
+}
+generate::Orientation genOrientationFromToken(const std::string& s) {
+    if (s == "vertical") return generate::Orientation::Vertical;
+    if (s == "diagonal-down") return generate::Orientation::DiagonalDown;
+    if (s == "diagonal-up") return generate::Orientation::DiagonalUp;
+    return generate::Orientation::Horizontal;
+}
+
+// 噪声配色模式 ↔ 串（仅 Noise 用）。
+const char* genNoiseToken(const generate::NoiseMode m) {
+    switch (m) {
+        case generate::NoiseMode::FullColor: return "full-color";
+        case generate::NoiseMode::Grayscale: return "grayscale";
+        case generate::NoiseMode::TwoColor: return "two-color";
+    }
+    return "full-color";
+}
+generate::NoiseMode genNoiseFromToken(const std::string& s) {
+    if (s == "grayscale") return generate::NoiseMode::Grayscale;
+    if (s == "two-color") return generate::NoiseMode::TwoColor;
+    return generate::NoiseMode::FullColor;
+}
+
+// 落位锚点 ↔ 串：图层 transform（inCanvasAnchor/layerPivot）用。「贴图图案」已移除，
+//   旧配置里的 imageAnchor/imagePivot 键因对应字段不存在而被宽容读取自然忽略。
+const char* genAnchorToken(const generate::ImageAnchor a) {
+    switch (a) {
+        case generate::ImageAnchor::TopLeft: return "top-left";
+        case generate::ImageAnchor::TopCenter: return "top-center";
+        case generate::ImageAnchor::TopRight: return "top-right";
+        case generate::ImageAnchor::MiddleLeft: return "middle-left";
+        case generate::ImageAnchor::Center: return "center";
+        case generate::ImageAnchor::MiddleRight: return "middle-right";
+        case generate::ImageAnchor::BottomLeft: return "bottom-left";
+        case generate::ImageAnchor::BottomCenter: return "bottom-center";
+        case generate::ImageAnchor::BottomRight: return "bottom-right";
+    }
+    return "center";
+}
+generate::ImageAnchor genAnchorFromToken(const std::string& s) {
+    if (s == "top-left") return generate::ImageAnchor::TopLeft;
+    if (s == "top-center") return generate::ImageAnchor::TopCenter;
+    if (s == "top-right") return generate::ImageAnchor::TopRight;
+    if (s == "middle-left") return generate::ImageAnchor::MiddleLeft;
+    if (s == "middle-right") return generate::ImageAnchor::MiddleRight;
+    if (s == "bottom-left") return generate::ImageAnchor::BottomLeft;
+    if (s == "bottom-center") return generate::ImageAnchor::BottomCenter;
+    if (s == "bottom-right") return generate::ImageAnchor::BottomRight;
+    return generate::ImageAnchor::Center;
+}
+
+// ImageFit ↔ token（内层源图→图层框适应方式）。
+const char* imageFitToken(const canvas::ImageFit f) {
+    switch (f) {
+        case canvas::ImageFit::Crop: return "crop";
+        case canvas::ImageFit::Stretch: return "stretch";
+        case canvas::ImageFit::Native: return "native";
+    }
+    return "crop";
+}
+canvas::ImageFit imageFitFromToken(const std::string& s) {
+    if (s == "stretch") return canvas::ImageFit::Stretch;
+    if (s == "native") return canvas::ImageFit::Native;
+    return canvas::ImageFit::Crop;
+}
+
+// ---------------------------------------------------------------------------
+// PatternParams ↔ JSON：顶层 generate 段与每个 layers[i].source.recipe 共用同一映射，
+//   避免两处各写一份造成字段漂移。位图恒不入配置。
+// ---------------------------------------------------------------------------
+json patternParamsToJson(const generate::PatternParams& g) {
+    json gen;
+    gen["kind"] = genKindToken(g.kind);
+    gen["background"] = colorToHex(g.background);
+    gen["foreground"] = colorToHex(g.foreground);
+    gen["orientation"] = genOrientationToken(g.orientation);
+    gen["period"] = g.period;
+    gen["lineWidth"] = g.lineWidth;
+    gen["dotRadius"] = g.dotRadius;
+    gen["seed"] = g.seed;
+    gen["noiseMode"] = genNoiseToken(g.noiseMode);
+    return gen;
+}
+generate::PatternParams patternParamsFromJson(const json& gen) {
+    generate::PatternParams g;
+    g.kind = genKindFromToken(jStr(at(gen, "kind"), "solid"));
+    g.background = colorFromHex(jStr(at(gen, "background"), "#FFFFFFFF"));
+    g.foreground = colorFromHex(jStr(at(gen, "foreground"), "#FF000000"));
+    g.orientation = genOrientationFromToken(jStr(at(gen, "orientation"), "horizontal"));
+    g.period = jInt(at(gen, "period"), 32);
+    g.lineWidth = jInt(at(gen, "lineWidth"), 1);
+    g.dotRadius = jInt(at(gen, "dotRadius"), 2);
+    g.seed = jInt(at(gen, "seed"), 0);
+    g.noiseMode = genNoiseFromToken(jStr(at(gen, "noiseMode"), "full-color"));
+    return g;
+}
+
 // ---------------------------------------------------------------------------
 // 矩形 / 网格 / optional<int> 子对象映射。
 // ---------------------------------------------------------------------------
@@ -205,7 +342,189 @@ bool preprocessFromJson(const json& v, preprocess::PreprocessConfig& out) {
     if (op == "rotate") { RotateOp s; s.angle = jInt(at(v, "deg"), 0); out = s; return true; }
     if (op == "flip") { FlipOp s; s.horizontal = jStr(at(v, "axis"), "horizontal") == "horizontal"; out = s; return true; }
     if (op == "resize") { ResizeOp s; s.width = jInt(at(v, "width"), 0); s.height = jInt(at(v, "height"), 0); out = s; return true; }
+    // 旧 "opacity" 步已不再是预处理（不透明度上移为图层合成期参数）：这里不再识别→未知 op 返回 false 被调用方跳过
+    //（图层预处理内的旧 opacity 步由 layerFromJson 专门迁移到 transform.opacity；顶层画布级旧 opacity 无对应→丢弃）。
     return false;
+}
+
+// ---------------------------------------------------------------------------
+// std::vector<canvas::ImageLayer> ↔ SPEC §7 layers 段（可选，直接以数组承载）。每层：{ source, transform, zOrder, preprocess }。
+//   source：{ recipe: {...PatternParams...} } | { file: "相对名" } | 缺省（空占位）。decodedPixels 不入配置。
+//   transform：{ inCanvasAnchor, layerPivot, x, y, width, height }。
+// ---------------------------------------------------------------------------
+const char* layerSourceKindToken(const canvas::LayerSourceKind k) {
+    switch (k) {
+        case canvas::LayerSourceKind::Recipe: return "recipe";
+        case canvas::LayerSourceKind::File: return "file";
+        case canvas::LayerSourceKind::Empty: break;
+    }
+    return "empty";
+}
+
+canvas::LayerSourceKind layerSourceKindFromStr(const std::string& s) {
+    if (s == "recipe") return canvas::LayerSourceKind::Recipe;
+    if (s == "file") return canvas::LayerSourceKind::File;
+    return canvas::LayerSourceKind::Empty;
+}
+
+json layerToJson(const canvas::ImageLayer& layer) {
+    json o;
+    json source;
+    source["kind"] = layerSourceKindToken(layer.sourceKind);
+    if (layer.sourceKind == canvas::LayerSourceKind::Recipe && layer.recipe)
+        source["recipe"] = patternParamsToJson(*layer.recipe);
+    else if (layer.sourceKind == canvas::LayerSourceKind::File)
+        source["file"] = layer.fileName;   // 仅存相对名；像素不入配置（缺失时上层降级为占位）。
+    o["source"] = source;
+
+    json t;
+    t["inCanvasAnchor"] = genAnchorToken(layer.transform.inCanvasAnchor);
+    t["layerPivot"] = genAnchorToken(layer.transform.layerPivot);
+    t["x"] = layer.transform.x;
+    t["y"] = layer.transform.y;
+    t["width"] = layer.transform.width;
+    t["height"] = layer.transform.height;
+    t["opacity"] = layer.transform.opacity;   // 合成期 alpha 乘子（0..255）。
+    o["transform"] = t;
+
+    o["zOrder"] = layer.zOrder;
+
+    // 内层两级落位（仅启用时写入；缺省段在旧配置中不存在 → 读取端默认 hasImagePlacement=false）。
+    if (layer.hasImagePlacement) {
+        json ip;
+        ip["fit"] = imageFitToken(layer.imageFit);
+        ip["boxWidth"] = layer.boxWidth;
+        ip["boxHeight"] = layer.boxHeight;
+        ip["imageAnchor"] = genAnchorToken(layer.imageAnchor);
+        ip["imagePivot"] = genAnchorToken(layer.imagePivot);
+        ip["x"] = layer.imageX;
+        ip["y"] = layer.imageY;
+        if (layer.boxBackdrop) ip["backdrop"] = patternParamsToJson(*layer.boxBackdrop);
+        o["imagePlacement"] = ip;
+    }
+
+    json pre = json::array();
+    for (const preprocess::PreprocessConfig& step : layer.preprocess.items())
+        pre.push_back(preprocessToJson(step));
+    o["preprocess"] = pre;
+    return o;
+}
+
+canvas::ImageLayer layerFromJson(const json& v) {
+    canvas::ImageLayer layer;
+    const json& source = at(v, "source");
+    layer.sourceKind = layerSourceKindFromStr(jStr(at(source, "kind"), "empty"));
+    if (layer.sourceKind == canvas::LayerSourceKind::Recipe) {
+        if (const json& r = at(source, "recipe"); r.is_object()) layer.recipe = patternParamsFromJson(r);
+        else layer.sourceKind = canvas::LayerSourceKind::Empty;   // 声明 recipe 却无 recipe 体→降级空占位
+    } else if (layer.sourceKind == canvas::LayerSourceKind::File) {
+        layer.fileName = jStr(at(source, "file"), "");
+    }
+
+    const json& t = at(v, "transform");
+    layer.transform.inCanvasAnchor = genAnchorFromToken(jStr(at(t, "inCanvasAnchor"), "center"));
+    layer.transform.layerPivot = genAnchorFromToken(jStr(at(t, "layerPivot"), "center"));
+    layer.transform.x = jInt(at(t, "x"), 0);
+    layer.transform.y = jInt(at(t, "y"), 0);
+    layer.transform.width = jInt(at(t, "width"), 0);
+    layer.transform.height = jInt(at(t, "height"), 0);
+    layer.transform.opacity = std::clamp(jInt(at(t, "opacity"), 255), 0, 255);
+
+    layer.zOrder = jInt(at(v, "zOrder"), 0);
+
+    // 内层两级落位（可选段）：存在则启用 hasImagePlacement，缺失保持关闭（旧配置）。
+    if (v.contains("imagePlacement")) {
+        const json& ip = v["imagePlacement"];
+        layer.hasImagePlacement = true;
+        layer.imageFit = imageFitFromToken(jStr(at(ip, "fit"), "crop"));
+        layer.boxWidth = jInt(at(ip, "boxWidth"), 0);
+        layer.boxHeight = jInt(at(ip, "boxHeight"), 0);
+        layer.imageAnchor = genAnchorFromToken(jStr(at(ip, "imageAnchor"), "center"));
+        layer.imagePivot = genAnchorFromToken(jStr(at(ip, "imagePivot"), "center"));
+        layer.imageX = jInt(at(ip, "x"), 0);
+        layer.imageY = jInt(at(ip, "y"), 0);
+        if (ip.contains("backdrop")) layer.boxBackdrop = patternParamsFromJson(ip["backdrop"]);
+    }
+
+    if (const json& pre = at(v, "preprocess"); pre.is_array()) {
+        for (const json& step : pre) {
+            // 旧配置迁移：图层预处理内的 "opacity" 步→折叠为 transform.opacity（不再当预处理步）。
+            if (jStr(at(step, "op"), "") == "opacity") {
+                const int mul = std::clamp(jInt(at(step, "mul"), 255), 0, 255);
+                const int add = std::clamp(jInt(at(step, "add"), 0), 0, 255);
+                layer.transform.opacity = std::clamp(mul == 0 ? add : mul + add, 0, 255);   // 乘算≈mul、设定≈add（有损近似）。
+                continue;
+            }
+            if (preprocess::PreprocessConfig cfg; preprocessFromJson(step, cfg)) layer.preprocess.add(cfg);
+        }
+    }
+    return layer;
+}
+
+// ---------------------------------------------------------------------------
+// 底图 canvas::ImageLayer ↔ SPEC §7「generate」段（同构序列化）。
+//   键名仍叫 "generate"（不破外部/CLI 选项名）。底图不外传文件：来源恒为程序图案（recipe）或
+//   运行时 --input 提供的位图。纯图案底图（有 recipe、无内层落位）仅写图案键，与旧 generate
+//   逐字段等价（向后兼容）；带落位（把外部输入图 / 图案按落位摆入画布）在图案键之外追加
+//   fit/boxWidth/boxHeight/imageAnchor/imagePivot/x/y/backdrop 键——**不写 file 路径**：保配置为纯
+//   处理配方、可跨不同 --input 批处理复用（路径一旦入配置会使底图被钉死、批处理结果恒同）。位图恒不入配置。
+//   底图钉住最底：transform 恒等、zOrder 固定、不入本段（读取端复位默认）。
+// ---------------------------------------------------------------------------
+json baseToJson(const canvas::ImageLayer& base) {
+    json gen;
+    // 图案键（仅当有配方）：与旧 generate 等价；无配方（纯落位 / 外部图底）→ 不写顶层图案键。
+    if (base.recipe) gen.update(patternParamsToJson(*base.recipe));
+    // 底图整体不透明度（合成期 alpha 乘子 0..255）：随段写入 opacity 键，供 GUI 载入回填 baseOpacity、
+    //   CLI 在边界施加淡出。旧配置无此键 → baseFromJson 读缺省 255，行为不变。
+    gen["opacity"] = base.transform.opacity;
+    // 底图色彩预处理步（仅色彩合法：gray/invert/split；几何/resize 会改画布尺寸，写出时过滤掉）。
+    //   缺省空 → 不写 preprocess 键（旧配置无此键 → baseFromJson 读为空）。
+    json pre = json::array();
+    for (const preprocess::PreprocessConfig& step : base.preprocess.items())
+        if (preprocess::isColorStep(step)) pre.push_back(preprocessToJson(step));
+    if (!pre.empty()) gen["preprocess"] = pre;
+    // 内层落位（把外部输入图 / 图案按落位摆入画布时启用）：追加 fit/box*/image* + backdrop 图案；不写文件路径。
+    if (base.hasImagePlacement) {
+        gen["fit"] = imageFitToken(base.imageFit);
+        gen["boxWidth"] = base.boxWidth;
+        gen["boxHeight"] = base.boxHeight;
+        gen["imageAnchor"] = genAnchorToken(base.imageAnchor);
+        gen["imagePivot"] = genAnchorToken(base.imagePivot);
+        gen["x"] = base.imageX;
+        gen["y"] = base.imageY;
+        if (base.boxBackdrop) gen["backdrop"] = patternParamsToJson(*base.boxBackdrop);
+    }
+    return gen;
+}
+canvas::ImageLayer baseFromJson(const json& gen) {
+    canvas::ImageLayer base;   // transform 恒等、zOrder=0（底位）、sourceKind 默认：均为 ImageLayer 默认。
+    // 底图整体不透明度：读 opacity（缺省 255）→ transform.opacity；上层（GUI Document / CLI config）据此在合成边界施加淡出。
+    base.transform.opacity = std::clamp(jInt(at(gen, "opacity"), 255), 0, 255);
+    // 底图色彩预处理（可选 preprocess 数组）：仅接受色彩步（gray/invert/split），几何/resize 步忽略
+    //   （底图预处理不改画布尺寸 / 坐标基准；还原端遇非法几何步静默丢弃）。旧配置无此段 → 空。
+    if (const json& preArr = at(gen, "preprocess"); preArr.is_array()) {
+        for (const json& step : preArr) {
+            if (preprocess::PreprocessConfig cfg; preprocessFromJson(step, cfg) && preprocess::isColorStep(cfg)) base.preprocess.add(cfg);
+        }
+    }
+    // 图案键存在（含 "kind"）→ 解析配方并置 Recipe；否则 recipe 留空（底图为运行时 --input 位图，仅存落位参数）。
+    if (gen.contains("kind")) {
+        base.sourceKind = canvas::LayerSourceKind::Recipe;
+        base.recipe = patternParamsFromJson(gen);   // 旧配置仅图案键 → 与旧 generate 等价。
+    }
+    // 内层落位（存在任一落位键即启用）。
+    if (gen.contains("fit") || gen.contains("boxWidth") || gen.contains("imageAnchor")) {
+        base.hasImagePlacement = true;
+        base.imageFit = imageFitFromToken(jStr(at(gen, "fit"), "crop"));
+        base.boxWidth = jInt(at(gen, "boxWidth"), 0);
+        base.boxHeight = jInt(at(gen, "boxHeight"), 0);
+        base.imageAnchor = genAnchorFromToken(jStr(at(gen, "imageAnchor"), "center"));
+        base.imagePivot = genAnchorFromToken(jStr(at(gen, "imagePivot"), "center"));
+        base.imageX = jInt(at(gen, "x"), 0);
+        base.imageY = jInt(at(gen, "y"), 0);
+        if (gen.contains("backdrop")) base.boxBackdrop = patternParamsFromJson(gen["backdrop"]);
+    }
+    return base;
 }
 
 // ---------------------------------------------------------------------------
@@ -217,6 +536,9 @@ json engineConfigToJson(const EngineConfig& config, const annotation::Annotation
 
     // source：原图尺寸。
     root["source"] = json{{"width", config.source.width}, {"height", config.source.height}};
+
+    // opacity：画布级整体不透明度（顶层可选键，0..255，255＝不透明）。缺省 255 时仍写出（观感一致、无歧义）。
+    root["opacity"] = config.canvasOpacity;
 
     // preprocess：基础图像处理步骤数组。
     json pre = json::array();
@@ -274,6 +596,19 @@ json engineConfigToJson(const EngineConfig& config, const annotation::Annotation
     emit["keepMetadata"] = config.emitParams.keepMetadata;
     root["emit"] = emit;
 
+    // generate：底图描述（可选段）——缺省省略（表示用外部输入图，非生成底图）。
+    //   底图＝同构 canvas::ImageLayer：纯图案底图序列化与旧「generate」逐字段等价；带落位时追加
+    //   fit/box*/image*/backdrop 键（**不含 file 路径**，外部图凭运行时 --input 供给以保批处理复用）。尺寸恒取 source.width/height。
+    if (config.base.has_value())
+        root["generate"] = baseToJson(*config.base);
+
+    // layers：多层画布（可选段）——缺省省略（表示单一输入图/生成源，无图层）。直接以数组承载。
+    if (config.layers.has_value()) {
+        json arr = json::array();
+        for (const canvas::ImageLayer& layer : *config.layers) arr.push_back(layerToJson(layer));
+        root["layers"] = arr;
+    }
+
     // annotations：标注列表（可选段）——集合为空或无标注时省略，保持旧文件观感不变。
     // 段内逐条序列化实现归属 annotation 模块（经 json_common.h 交换 JSON 片段）。
     if (annoSet != nullptr && !annoSet->annotations().empty())
@@ -293,6 +628,9 @@ bool engineConfigFromJson(const json& value, EngineConfig& out, annotation::Anno
     const json& src = at(value, "source");
     out.source.width = jInt(at(src, "width"), 0);
     out.source.height = jInt(at(src, "height"), 0);
+
+    // opacity（顶层可选键）：画布级整体不透明度，缺省 255、夹 [0,255]（旧配置无键 → 不透明、行为不变）。
+    out.canvasOpacity = std::clamp(jInt(at(value, "opacity"), 255), 0, 255);
 
     // preprocess。
     out.preprocess.clear();
@@ -361,6 +699,18 @@ bool engineConfigFromJson(const json& value, EngineConfig& out, annotation::Anno
     out.emitParams.mergeOrder.reverse = jBool(at(arrange, "reverse"), false);
     out.emitParams.mergeOrder.snake = jBool(at(arrange, "snake"), false);
 
+    // generate（可选段）：缺段或非对象 → 无底图（std::nullopt）。解析为同构 canvas::ImageLayer。
+    if (const json& gen = at(value, "generate"); gen.is_object())
+        out.base = baseFromJson(gen);   // 位图 / 外部文件不入配置：落位底图源图由上层凭运行时 --input 注入 decodedPixels。
+
+    // layers（可选段）：缺段 → 无图层（std::nullopt）。直接以数组承载（不再兼容旧对象形）。
+    if (const json& ls = at(value, "layers"); ls.is_array()) {
+        std::vector<canvas::ImageLayer> layers;
+        for (const json& lv : ls) layers.push_back(layerFromJson(lv));
+        // 注：File 层的 decodedPixels 不经配置还原（位图不入配置）；由上层（CLI/GUI）按相对名从 assets 解码注入。
+        out.layers = std::move(layers);
+    }
+
     // annotations：传入集合指针才处理（段缺失/非数组 → 清空，与“配置为真相源”语义一致）。
     // 逐条严格校验、任一非法即整档载入失败（不静默丢弃）——重建逻辑归属 annotation 模块
     // （经 json_common.h 交换 JSON 片段，annoErr 回传逐条原因）。
@@ -379,7 +729,7 @@ bool saveEngineConfig(const std::string& path, const EngineConfig& config,
                       const annotation::AnnotationSet* annotations) {
     if (path.empty()) return false;
     const std::string text = engineConfigToJson(config, annotations).dump(2); // 缩进 2 空格美化。
-    std::ofstream ofs(path, std::ios::trunc);
+    std::ofstream ofs(std::filesystem::u8path(path), std::ios::trunc);   // path 按 UTF-8 → 宽字符开，中文 / 非 ASCII 路径可写。
     if (!ofs) return false; // E-8：无法创建/写入（目录不存在或被占用）。
     ofs << text;
     ofs.close();
@@ -391,7 +741,7 @@ bool saveEngineConfig(const std::string& path, const EngineConfig& config,
 bool loadEngineConfig(const std::string& path, EngineConfig& out,
                       annotation::AnnotationSet* annotations, std::string* annoErr) {
     if (path.empty()) return false;
-    std::ifstream ifs(path, std::ios::binary);
+    std::ifstream ifs(std::filesystem::u8path(path), std::ios::binary);   // path 按 UTF-8 → 宽字符开，中文 / 非 ASCII 路径可读。
     if (!ifs) return false; // E-8：文件不存在或不可读。
     try {
         const json value = json::parse(ifs); // 直接从流解析；语法错误抛 parse_error。

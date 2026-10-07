@@ -21,7 +21,9 @@
 
 #include <algorithm>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
+#include <iterator>
 
 namespace idc::engine {
 namespace {
@@ -81,11 +83,19 @@ bool encodeWebP(const core::Image& image, const int quality, std::vector<std::ui
 // 从文件解码图像为 core::Image（统一加载为 RGBA，4 通道）；成功返回 true 并填充 out。
 // 底层用 stb_image，支持 PNG/JPEG/BMP/WebP/GIF/TGA 等；path 为空 / 文件不存在 / 无法读取 /
 // 格式不支持时返回 false（对应 CLI 输入文件错误 / E-8）。
+// path 按 UTF-8 解析：经 std::filesystem::u8path→宽字符路径打开后从内存解码，绕开 stb 内部
+// fopen 的窄字符（Windows 系统 ANSI 码页）限制——中文 / 非 ASCII 文件名亦可正确读取。
 bool readImageFile(const std::string& path, core::Image& out) {
     if (path.empty()) return false;
+    std::ifstream in(std::filesystem::u8path(path), std::ios::binary);
+    if (!in) return false;
+    const std::vector bytes((std::istreambuf_iterator(in)), std::istreambuf_iterator<char>());
+    if (bytes.empty()) return false;
     int w = 0, h = 0, channels = 0;
     // 强制按 RGBA（4 通道）加载，与 core::Image 的 RGBA 布局一致，便于后续统一处理。
-    unsigned char* data = stbi_load(path.c_str(), &w, &h, &channels, 4);
+    unsigned char* data = stbi_load_from_memory(
+        reinterpret_cast<const unsigned char*>(bytes.data()), static_cast<int>(bytes.size()),
+        &w, &h, &channels, 4);
     if (data == nullptr || w <= 0 || h <= 0) {
         stbi_image_free(data); // data 可能为 nullptr，stbi_image_free 对 nullptr 安全。
         return false;          // 解码失败：文件不存在 / 非图像 / 不支持的格式。
@@ -129,38 +139,18 @@ bool encodeImageToMemory(const core::Image& image, const ExportFormat format,
 }
 
 // 将图像编码并写入文件；成功返回 true。支持 PNG/JPEG/BMP（stb）与 WebP（libwebp）；写盘失败（E-8）返回 false。
+// 先统一编码到内存，再经 std::filesystem::u8path→宽字符路径落盘：绕开 stbi_write_* 内部 fopen 的
+// 窄字符（Windows 系统 ANSI 码页）限制——中文 / 非 ASCII 导出路径亦可正确写入。
 bool writeImageFile(const std::string& path, const core::Image& image,
                     const ExportFormat format, const int quality, const core::Color& jpegBg) {
     if (image.empty() || path.empty()) return false;
-    const int w = image.width();
-    const int h = image.height();
-
-    switch (format) {
-        case ExportFormat::PNG: {
-            const std::vector<std::uint8_t> rgba = toRGBABuffer(image);
-            return stbi_write_png(path.c_str(), w, h, 4, rgba.data(), w * 4) != 0;
-        }
-        case ExportFormat::BMP: {
-            const std::vector<std::uint8_t> rgb = toRGBBuffer(image, jpegBg);
-            return stbi_write_bmp(path.c_str(), w, h, 3, rgb.data()) != 0;
-        }
-        case ExportFormat::JPEG: {
-            const std::vector<std::uint8_t> rgb = toRGBBuffer(image, jpegBg);
-            const int q = std::clamp(quality, 1, 100);
-            return stbi_write_jpg(path.c_str(), w, h, 3, rgb.data(), q) != 0;
-        }
-        case ExportFormat::WEBP: {
-            std::vector<std::uint8_t> buf;
-            if (!encodeWebP(image, quality, buf)) return false; // 编码失败。
-            std::ofstream ofs(path, std::ios::binary | std::ios::trunc);
-            if (!ofs) return false;                             // E-8：无法创建/写入。
-            ofs.write(reinterpret_cast<const char*>(buf.data()),
-                      static_cast<std::streamsize>(buf.size()));
-            ofs.close();
-            return !ofs.fail();
-        }
-    }
-    return false;
+    std::vector<std::uint8_t> buf;
+    if (!encodeImageToMemory(image, format, quality, jpegBg, buf)) return false; // 编码失败。
+    std::ofstream ofs(std::filesystem::u8path(path), std::ios::binary | std::ios::trunc);
+    if (!ofs) return false;                                                      // E-8：无法创建/写入。
+    ofs.write(reinterpret_cast<const char*>(buf.data()), static_cast<std::streamsize>(buf.size()));
+    ofs.close();
+    return !ofs.fail();
 }
 
 } // namespace idc::engine

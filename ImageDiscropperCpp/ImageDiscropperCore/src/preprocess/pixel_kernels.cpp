@@ -127,8 +127,8 @@ core::Image remapD4(const core::Image& src, int quad, const bool flipH) {
 
 // 融合位映射核：逐通道 f(v) = (v & K[c]) ^ J[c]，一步覆盖 直通/反色/强制0/强制255 四态。
 // 归一口径与 split/invert 完全一致：k 长度非 3 → "111"（AND 恒等）；**j 长度非 3 → "000"（XOR 恒等）**，
-// 切勿照搬 normMask3 把 J 也归成 "111"（会凭空翻转语义）。alpha 字节原样保留；GRAY 防御性返回副本。
-// 性能：同原色彩核——单遍「拷贝 + 变换」，每通道 AND/XOR 常量在循环外折好，循环体直写三通道、无内层循环。
+// 切勿照搬 normMask3 把 J 也归成 "111"（会凭空翻转语义）。alpha 字节原样拷贝（不透明度已不再是预处理步）；
+// GRAY/空图防御性返回副本。性能：单遍「拷贝 + 变换」，每通道 AND/XOR 常量在循环外折好，循环体直写、无内层循环。
 core::Image channelMap(const core::Image& src, const std::string& k, const std::string& j) {
     if (src.empty() || src.isGray()) return src.clone();
     core::Image out(src.width(), src.height(), src.format());
@@ -143,12 +143,13 @@ core::Image channelMap(const core::Image& src, const std::string& k, const std::
         ka[c] = km[c] == '1' ? 0xFF : 0x00;
         ja[c] = jm[c] == '1' ? 0xFF : 0x00;
     }
+
     const std::size_t bpp = core::bytesPerPixel(out.format());   // RGB=3 / RGBA=4
     for (std::size_t i = 0; i + bpp <= n; i += bpp) {
         d[i + 0] = static_cast<std::uint8_t>(s[i + 0] & ka[0] ^ ja[0]);
         d[i + 1] = static_cast<std::uint8_t>(s[i + 1] & ka[1] ^ ja[1]);
         d[i + 2] = static_cast<std::uint8_t>(s[i + 2] & ka[2] ^ ja[2]);
-        if (bpp == 4) d[i + 3] = s[i + 3];
+        if (bpp == 4) d[i + 3] = s[i + 3];   // RGBA：alpha 原样拷贝。
     }
     return out;
 }

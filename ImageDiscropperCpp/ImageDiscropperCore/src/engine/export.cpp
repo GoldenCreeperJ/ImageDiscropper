@@ -110,11 +110,11 @@ bool ensureDirectory(const fs::path& dir) {
 // outputDir 不存在则自动创建（含多级父目录）；创建失败返回 false（E-8）。
 bool exportSeparate(const Composition& composition, const core::Image& source,
                     const std::string& outputDir) {
-    const fs::path dir(outputDir);
+    const fs::path dir = fs::u8path(outputDir);   // outputDir 按 UTF-8 解析为宽字符路径（中文 / 非 ASCII 目录可建）。
     if (!ensureDirectory(dir)) return false; // E-8：文件夹不存在且无法创建。
 
-    // 命名模板 {name} 取文件夹名（无法取得时回退 "region"）。
-    std::string name = dir.filename().string();
+    // 命名模板 {name} 取文件夹名（无法取得时回退 "region"）；取 u8string 保证非 ASCII 文件夹名作命名代币时仍为 UTF-8。
+    std::string name = dir.filename().u8string();
     if (name.empty() || name == "." || name == "..") name = "region";
 
     const ExportFormat fmt = composition.format;
@@ -126,7 +126,7 @@ bool exportSeparate(const Composition& composition, const core::Image& source,
         const core::Image sub =
             source.crop(p.source.left, p.source.top, p.source.right, p.source.bottom);
         const int idx = p.index >= 0 ? p.index : i; // 优先用单元序号命名。
-        if (const fs::path file = dir / (applyNaming(composition.naming, name, idx, p.row, p.col) + ext); !writeImageFile(file.string(), sub, fmt, composition.quality, core::kTransparent))
+        if (const fs::path file = dir / fs::u8path(applyNaming(composition.naming, name, idx, p.row, p.col) + ext); !writeImageFile(file.u8string(), sub, fmt, composition.quality, core::kTransparent))
             allOk = false;
         ++i;
     }
@@ -137,7 +137,7 @@ bool exportSeparate(const Composition& composition, const core::Image& source,
 // 父目录不存在时自动创建（与分离导出行为一致）。
 bool exportMerged(const Composition& composition, const core::Image& source,
                   const std::string& outputPath) {
-    const fs::path outPath(outputPath);
+    const fs::path outPath = fs::u8path(outputPath);   // outputPath 按 UTF-8 解析为宽字符路径（中文 / 非 ASCII 父目录可建）。
     if (const fs::path parent = outPath.parent_path(); !parent.empty() && !ensureDirectory(parent)) return false; // E-8：父目录不可创建。
 
     bool known = false;

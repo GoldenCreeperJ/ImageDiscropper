@@ -15,10 +15,13 @@
 // ============================================================================
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "core/image.h"
+#include "canvas/layer.h"          // canvas::ImageLayer（可选「layers」段：多层画布展平后作为引擎输入）
+#include "generate/pattern.h"      // generate::PatternParams（底图/图层的 recipe、boxBackdrop 图案配方字段）
 #include "engine/composition.h"
 #include "engine/cut_line.h"
 #include "engine/export.h"
@@ -78,11 +81,17 @@ struct CutConfig {
 // ---------------------------------------------------------------------------
 struct EngineConfig {
     SourceInfo source;                          // 原图尺寸
+    std::optional<canvas::ImageLayer> base;     // SPEC §7 可选「generate」段：底图＝与图层同构的 canvas::ImageLayer，仅角色为「钉住最底、不可拖/不可改落位」。sourceKind==Recipe＝纯程序图案底图（配方落 recipe、transform 恒等，序列化后与旧 generate 逐字段等价）；sourceKind==File＝新建画布附带图片底图（凭 fileName 引用 assets + 内层图片落位）。位图恒不入配置。存在＝由 composeBase 展平得源画布，代替外部输入图。
+    std::optional<std::vector<canvas::ImageLayer>> layers;   // SPEC §7 可选「layers」段：多层画布直接以数组承载（存在＝由 composeCanvas 展平得工作图，引擎仍只收一张展平图）
     preprocess::PreprocessPipeline preprocess;  // 切割前的基础图像处理（FR-1）
     CutConfig cut;                              // 切割配置
     std::vector<int> selectedCells;             // 显式选择集 S（单元序号）；空 = L1/L2 由生成器自动推导
     SequenceParams order;                       // 排序策略（FR-L3.5）
     CompositionParams emitParams;               // 导出/合成配置（SPEC §4；成员名避开 Qt emit 关键字宏）
+    // 画布级整体不透明度（0..255，255＝不透明）：SPEC §7 顶层可选「opacity」键。作用于合成 + 画布预处理后
+    //   的整幅工作图（逐像素 alpha 乘子，与 composeCanvas 逐层不透明度同口径），影响预览与导出；缺省 255（向后兼容）。
+    //   不入位图、恒在产出边界（applyAlpha）施加一次，不烘焙进缓存像素。
+    int canvasOpacity{255};
 };
 
 // ===========================================================================

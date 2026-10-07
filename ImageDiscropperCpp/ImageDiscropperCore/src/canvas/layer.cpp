@@ -1,0 +1,255 @@
+// ============================================================================
+// 文件：src/canvas/layer.cpp
+// 作用：实现 canvas/layer.h——materializeLayer（叠加层物化）与 composeCanvas（多层画布合成）。
+// 分块依据：物化（配方现算 / 文件解码像素 / 逐层预处理）与合成（缩放 → 定位 → source-over 落位）
+//           两段职责分离，供 GUI 按 (layerId, preprocess 签名) 缓存物化结果、改 transform 只重组。
+// 说明：合成写入 width×height 的 RGBA 缓冲，越界像素写入时被边界判定自然裁掉（导出即舍弃）；
+//       source-over 复用 core::compositeOver（单一真相源）。
+//       底图 base（画布基座）先于叠加层铺于 (0,0)、不受图片图层显隐开关门控（它是画布本身）。
+// ============================================================================
+#include "canvas/layer.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <numeric>
+#include <vector>
+
+#include "core/composite.h"
+
+namespace idc::canvas {
+namespace {
+
+// 3×3 锚点 → 归一化位置分数 (fx,fy)∈{0,0.5,1}²。TopLeft=(0,0)、Center=(0.5,0.5)、BottomRight=(1,1)。
+void anchorFraction(const generate::ImageAnchor a, double& fx, double& fy) {
+    switch (a) {
+        case generate::ImageAnchor::TopLeft:      fx = 0.0; fy = 0.0; break;
+        case generate::ImageAnchor::TopCenter:    fx = 0.5; fy = 0.0; break;
+        case generate::ImageAnchor::TopRight:     fx = 1.0; fy = 0.0; break;
+        case generate::ImageAnchor::MiddleLeft:   fx = 0.0; fy = 0.5; break;
+        case generate::ImageAnchor::Center:       fx = 0.5; fy = 0.5; break;
+        case generate::ImageAnchor::MiddleRight:  fx = 1.0; fy = 0.5; break;
+        case generate::ImageAnchor::BottomLeft:   fx = 0.0; fy = 1.0; break;
+        case generate::ImageAnchor::BottomCenter: fx = 0.5; fy = 1.0; break;
+        case generate::ImageAnchor::BottomRight:  fx = 1.0; fy = 1.0; break;
+    }
+}
+
+// 图层落位左上偏移：把「图层枢轴点」对齐到「画布锚点」，再叠加自由偏移 (x,y)。
+//   画布锚点（画布坐标）= (fx_c·W, fy_c·H)；图层枢轴点（图层坐标）= (fx_p·pw, fy_p·ph)。
+//   offset = round(画布锚点 − 图层枢轴点) + (x,y)。center/center/(0,0) → 居中。
+void placementOffset(const ImageTransform& t, const int canvasW, const int canvasH,
+                     const int layerW, const int layerH, int& ox, int& oy) {
+    double cfx, cfy, pfx, pfy;
+    anchorFraction(t.inCanvasAnchor, cfx, cfy);
+    anchorFraction(t.layerPivot, pfx, pfy);
+    const double ax = cfx * canvasW;
+    const double ay = cfy * canvasH;
+    const double px = pfx * layerW;
+    const double py = pfy * layerH;
+    ox = static_cast<int>(std::llround(ax - px)) + t.x;
+    oy = static_cast<int>(std::llround(ay - py)) + t.y;
+}
+
+} // namespace
+
+// 物化单层「预处理后位图」（不含缩放/落位）。配方按 transform 目标尺寸现算图案；文件用注入的解码像素；
+// 空/缺 → 空图（合成时跳过）。随后跑该层 preprocess.applyExec（与 GUI 会话物化同口径）。
+core::Image materializeLayer(const ImageLayer& layer) {
+    core::Image base;
+    switch (layer.sourceKind) {
+        case LayerSourceKind::Recipe:
+            if (layer.recipe) {
+                base = generate::makePattern(layer.transform.width, layer.transform.height, *layer.recipe);
+            }
+            break;
+        case LayerSourceKind::File:
+            base = layer.decodedPixels;   // 上层解码注入；未注入即空图（占位/降级）
+            break;
+        case LayerSourceKind::Empty:
+        default:
+            break;
+    }
+    if (base.empty()) return core::Image{};
+    if (layer.preprocess.empty()) return base;
+    return layer.preprocess.applyExec(base);
+}
+
+namespace {
+
+// 合成期缩放：目标宽高均 > 0 且与物化尺寸不同才重采样（配方已在物化时按目标尺寸生成，此处自然跳过）。
+//   composeCanvas 与 layerPlacement 共用，保证落位尺寸口径一致（单一真相源）。
+core::Image scaleToTarget(core::Image placed, const ImageLayer& layer) {
+    if (placed.empty()) return placed;
+    const int tw = layer.transform.width;
+    const int th = layer.transform.height;
+    if (tw > 0 && th > 0 && (placed.width() != tw || placed.height() != th)) {
+        placed = placed.resized(tw, th);
+    }
+    return placed;
+}
+
+// 内层：源图→图层框。以 boxBackdrop 图案（空→透明）铺 boxWidth×boxHeight 的底，再将解码源按 imageFit +
+//   内层锚点/枢轴/偏移 source-over 落入、越框裁剪。fit==Stretch 先重采样铺满框；图域框非法则退回原生源（交给外层）。
+core::Image composeIntoBox(const ImageLayer& layer, const core::Image& src) {
+    const int bw = layer.boxWidth;
+    const int bh = layer.boxHeight;
+    if (bw <= 0 || bh <= 0 || bw > generate::kMaxDimension || bh > generate::kMaxDimension) return src;
+    core::Image box = layer.boxBackdrop ? generate::makePattern(bw, bh, *layer.boxBackdrop) : core::Image{};
+    if (box.empty()) {
+        box = core::Image(bw, bh, core::ImageFormat::RGBA);
+        box.fill(core::Color(0, 0, 0, 0));   // 无底色图案（或 makePattern 失败）→ 透明底
+    }
+    if (src.empty()) return box;
+    core::Image placed = layer.imageFit == ImageFit::Stretch ? src.resized(bw, bh) : src;
+    // 内层落位复用 placementOffset（宽高留 0＝不缩放，已在 placed 体现）。
+    ImageTransform inner;
+    inner.inCanvasAnchor = layer.imageAnchor;
+    inner.layerPivot = layer.imagePivot;
+    inner.x = layer.imageX;
+    inner.y = layer.imageY;
+    int ox = 0;
+    int oy = 0;
+    placementOffset(inner, bw, bh, placed.width(), placed.height(), ox, oy);
+    for (int y = 0; y < placed.height(); ++y) {
+        for (int x = 0; x < placed.width(); ++x) {
+            const int dx = ox + x;
+            const int dy = oy + y;
+            if (dx < 0 || dy < 0 || dx >= bw || dy >= bh) continue;   // 越框自然裁剪
+            box.setPixel(dx, dy, core::compositeOver(box.getPixel(dx, dy), placed.getPixel(x, y)));
+        }
+    }
+    return box;
+}
+
+// 物化 + 内层图层框合成 + 合成期缩放（供 layerPlacement 拾取几何与 composeCanvas 无缓存回退共用）。
+core::Image scaledForPlacement(const ImageLayer& layer) {
+    core::Image mat = materializeLayer(layer);
+    if (layer.hasImagePlacement) mat = composeIntoBox(layer, mat);
+    return scaleToTarget(mat, layer);
+}
+
+// 逐像素 alpha 乘子：a' = (a·opacity + 127) / 255（整数四舍五入，与旧 OpacityOp 乘算同口径）。
+core::Color scaleAlpha(const core::Color& c, const int opacity) {
+    return core::Color(c.r, c.g, c.b, static_cast<std::uint8_t>((c.a * opacity + 127) / 255));
+}
+
+} // namespace
+
+// 整体淡出 RGBA 图：逐像素复用 scaleAlpha（合成期同款 alpha 乘子）。非 RGBA / 空图 / opacity>=255 → 恒等早退。
+//   供合成边界（GUI fadedCanvasBase、CLI 底图解出后）施加底图整体不透明度，与 composeCanvas 逐层不透明度同口径。
+void applyAlpha(core::Image& image, const std::uint8_t opacity) {
+    if (image.empty() || opacity >= 255) return;
+    if (image.format() != core::ImageFormat::RGBA) return;   // 无 alpha 通道→不改（避免灰度/彩色底格式漂移）
+    for (int y = 0; y < image.height(); ++y)
+        for (int x = 0; x < image.width(); ++x)
+            image.setPixel(x, y, scaleAlpha(image.getPixel(x, y), opacity));
+}
+
+core::Image composeCanvas(const std::vector<ImageLayer>& layers, const int width, const int height, const core::Image& base,
+                          const std::unordered_map<int, core::Image>* materialized) {
+    // 非法尺寸 / 超护栏 → 空图（与 makePattern 同口径，护栏在分配前短路）。
+    if (width <= 0 || height <= 0 || width > generate::kMaxDimension || height > generate::kMaxDimension ||
+        static_cast<long long>(width) * static_cast<long long>(height) > generate::kMaxTotalPixels) {
+        return core::Image{};
+    }
+
+    core::Image canvas(width, height, core::ImageFormat::RGBA);
+    canvas.fill(core::Color(0, 0, 0, 0));   // 画布无级背景，恒铺全透明底（base 与叠加层source-over 于其上）。
+
+    // 底图（画布基座，input 生态位）：非空则 source-over 铺于 (0,0)，按 w×h 自然裁剪 / 留空。
+    // 无 transform、不缩放——它是画布本身，恒在所有叠加层之下。
+    if (!base.empty()) {
+        const int bw = base.width();
+        const int bh = base.height();
+        const int limX = std::min(bw, width);
+        const int limY = std::min(bh, height);
+        for (int y = 0; y < limY; ++y) {
+            for (int x = 0; x < limX; ++x) {
+                canvas.setPixel(x, y, core::compositeOver(canvas.getPixel(x, y), base.getPixel(x, y)));
+            }
+        }
+    }
+
+    // 按 zOrder 升序稳定合成（同 zOrder 维持原相对顺序）。
+    std::vector<std::size_t> order(layers.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::stable_sort(order.begin(), order.end(), [&layers](const std::size_t a, const std::size_t b) {
+        return layers[a].zOrder < layers[b].zOrder;
+    });
+
+    for (const std::size_t i : order) {
+        const ImageLayer& layer = layers[i];
+        // 物化取用：预物化表命中则直取（跳过 materializeLayer，避免拖动时重跑预处理），否则现算。
+        core::Image tmp;
+        const core::Image* mat = nullptr;
+        if (materialized != nullptr) {
+            if (const auto it = materialized->find(layer.id); it != materialized->end() && !it->second.empty())
+                mat = &it->second;
+        }
+        if (mat == nullptr) {
+            tmp = materializeLayer(layer);
+            mat = &tmp;
+        }
+        // 内层：启用两级落位的层先把解码源合成进图层框（越框裁剪），再走外层 transform 落位。
+        core::Image box;
+        const core::Image* src = mat;
+        if (layer.hasImagePlacement) {
+            box = composeIntoBox(layer, *mat);
+            src = &box;
+        }
+        if (src->empty()) continue;
+        core::Image placed = scaleToTarget(*src, layer);
+        if (placed.empty()) continue;
+
+        const int pw = placed.width();
+        const int ph = placed.height();
+        const int opacity = layer.transform.opacity;
+        int ox = 0;
+        int oy = 0;
+        placementOffset(layer.transform, width, height, pw, ph, ox, oy);
+
+        for (int y = 0; y < ph; ++y) {
+            for (int x = 0; x < pw; ++x) {
+                const int dx = ox + x;
+                const int dy = oy + y;
+                if (dx < 0 || dy < 0 || dx >= width || dy >= height) continue;   // 越出画布自然裁剪
+                core::Color src = placed.getPixel(x, y);
+                if (opacity < 255) src = scaleAlpha(src, std::clamp(opacity, 0, 255));   // 层不透明度（灰度层亦生效）
+                canvas.setPixel(dx, dy, core::compositeOver(canvas.getPixel(dx, dy), src));
+            }
+        }
+    }
+    return canvas;
+}
+
+core::Image composeBase(const ImageLayer& base, const int width, const int height,
+                        const std::unordered_map<int, core::Image>* materialized) {
+    // 纯图案底图（Recipe 且无内层落位）：按画布(source)尺寸现算图案，与旧「generate」段口径逐字节一致。
+    //   不走 materializeLayer（其 Recipe 分支用 transform.width/height 现算，恒等 transform 尺寸为 0 会得空图）。
+    if (base.sourceKind == LayerSourceKind::Recipe && base.recipe && !base.hasImagePlacement) {
+        core::Image pat = generate::makePattern(width, height, *base.recipe);
+        if (pat.empty()) return core::Image{};
+        return base.preprocess.empty() ? pat : base.preprocess.applyExec(pat);
+    }
+    // 文件底图 / 带内层落位：当作单元素 layers、空底、transform 恒等，转调 composeCanvas 复用两段合成。
+    //   composeCanvas 会按元素 transform.opacity 施乘，故此处把 opacity 归一 255——底图整体透明度一律
+    //   由调用方在合成边界经 applyAlpha 施加（单一应用点，防双淡）。
+    ImageLayer normalized = base;
+    normalized.transform.opacity = 255;
+    return composeCanvas({normalized}, width, height, {}, materialized);
+}
+
+std::optional<LayerPlacement> layerPlacement(const ImageLayer& layer, const int canvasWidth, const int canvasHeight) {
+    const core::Image placed = scaledForPlacement(layer);
+    if (placed.empty()) return std::nullopt;
+    const int pw = placed.width();
+    const int ph = placed.height();
+    if (pw <= 0 || ph <= 0) return std::nullopt;
+    int ox = 0;
+    int oy = 0;
+    placementOffset(layer.transform, canvasWidth, canvasHeight, pw, ph, ox, oy);
+    return LayerPlacement{ ox, oy, pw, ph };
+}
+
+} // namespace idc::canvas

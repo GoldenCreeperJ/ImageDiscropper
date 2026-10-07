@@ -6,7 +6,7 @@
 
 **分块依据**：
 - `preprocess_config.cpp` 只负责数据模型的辅助函数（枚举 ↔ 字符串、默认配置构造、类型标签提取）。
-  `PreprocessConfig` 是 `GrayOp / SplitOp / InvertOp / RotateOp / FlipOp / ResizeOp` 的 variant。
+  `PreprocessConfig` 是 `GrayOp / SplitOp / InvertOp / RotateOp / FlipOp / ResizeOp / OpacityOp` 的 variant。
 - `preprocess_pipeline.cpp` 只负责按顺序调度各 pixel_ops 算法，是「编排层」，
   不包含任何具体像素处理代码（具体像素核在 `pixel_ops`，融合像素核在本目录私有 `pixel_kernels`）。
 
@@ -21,7 +21,7 @@
   `ExecStep` 计划（绝不落回词表步）再单趟执行——① 连续几何步折为**单次 D4 重排** `remapD4`（闭式逆采样，
   几何为「灰度亦无损的纯位置置换」）；② 连续色彩步（gray / invert / split）折为**单次位映射** `channelMap`：
   pre-gray 段任意 Split/Invert 序列合为 `f(v)=(v&K)^J` 一趟完成、`gray` 幂等去重、`gray` 之后 `split` 为死步丢弃、
-  `invert` 按奇偶累积。`ResizeOp` 是**唯一块界**（双线性取整与色彩 / 几何均不可交换），块内步数恒 ≤4，
+  `invert` 按奇偶累积；③ `opacity`（alpha 仿射 `a' = a·mul + add`）不并入 `channelMap`（无法用 RGB 位映射 `(v&K)^J` 表达），在块内以独立 `applyAlpha` 趟发射、并作块内局部屏障（保序于 `gray`，GRAY/RGB 无 alpha 输入为空操作）。`ResizeOp` 是**唯一块界**（双线性取整与色彩 / 几何均不可交换），块内步数恒 ≤4，
   故**像素趟数与队列长度解耦**；灰度之后的死步在计划构建时自动吞除，无需录入拦截。以「载入强解 RGBA、进队为多通道」为前提。
   > 旧声明层折叠入口 `folded()` 已删除，折叠口径统一收敛到执行层 `applyExec`，不再保留两套折叠。
 - **纯元数据几何推演** `geometryOutput(w, h)`：不碰像素，仅按各步语义推演出 `{输出宽高, 净旋转象限}`，

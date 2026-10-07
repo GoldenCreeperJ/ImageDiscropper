@@ -20,6 +20,8 @@ enum class PreprocessType {
     ROTATE,  // 旋转（90 / 180 / 270）
     FLIP,    // 翻转（水平 / 垂直）
     RESIZE,  // 尺寸调整（目标宽高，重采样）
+    // 注：不透明度不再是像素预处理步——它上移为图层合成期参数（canvas::ImageTransform.opacity），
+    //     语义上属合成概念而非像素变换，且使灰度图层的不透明度不再因 GRAY 无 alpha 而静默失效。
 };
 
 // 将 PreprocessType 转换为字符串，便于日志与序列化。
@@ -70,6 +72,7 @@ struct ResizeOp {
 // PreprocessConfig：使用 std::variant 组合所有操作类型
 // 顺序即为 variant index 顺序（GrayOp=0, SplitOp=1, InvertOp=2, RotateOp=3,
 // FlipOp=4, ResizeOp=5），修改时请同步更新相关测试。
+// 不透明度已从本管线移除（旧 OpacityOp）：改由 canvas::ImageTransform.opacity 承载（合成期 alpha 乘子）。
 // ---------------------------------------------------------------------------
 using PreprocessConfig = std::variant<
     GrayOp, SplitOp, InvertOp, RotateOp, FlipOp, ResizeOp

@@ -115,6 +115,34 @@ void testEngineConfigJson() {
     cfg.emitParams.cols = 3;
     cfg.emitParams.padColor = core::Color(0, 0, 0, 0);
 
+    // 多层画布 layers 段：一配方层（带逐层 preprocess + transform）+ 一文件层（仅相对名/落位）。
+    {
+        std::vector<canvas::ImageLayer> st;
+        canvas::ImageLayer l0;
+        l0.id = 7;
+        l0.sourceKind = canvas::LayerSourceKind::Recipe;
+        generate::PatternParams pp;
+        pp.kind = generate::PatternKind::Checkerboard;
+        pp.period = 4;
+        pp.background = core::kWhite;
+        pp.foreground = core::kBlack;
+        l0.recipe = pp;
+        l0.transform.width = 8; l0.transform.height = 8;
+        l0.transform.inCanvasAnchor = generate::ImageAnchor::TopLeft;
+        l0.transform.opacity = 180;   // 层不透明度（合成期 alpha 乘子）：验证往返。
+        l0.zOrder = 0;
+        l0.preprocess.add(preprocess::GrayOp{});
+        canvas::ImageLayer l1;
+        l1.id = 9;
+        l1.sourceKind = canvas::LayerSourceKind::File;
+        l1.fileName = "sub/a.png";   // 相对名（含子目录）；像素不入配置
+        l1.transform.x = 3; l1.transform.y = -2;
+        l1.transform.layerPivot = generate::ImageAnchor::BottomRight;
+        l1.zOrder = 1;
+        st = {l0, l1};
+        cfg.layers = st;
+    }
+
     annotation::AnnotationSet layer = makeSet();
 
     // ---- 往返：带标注保存 → 全新对象加载。----
@@ -133,6 +161,30 @@ void testEngineConfigJson() {
     CHECK(got.cut.grid.cellWidth == 100 && got.cut.grid.remainder == engine::RemainderPolicy::PAD);
     CHECK(got.selectedCells.size() == 2 && got.selectedCells[1] == 4);
     CHECK(got.emitParams.layout == engine::MergeLayout::REARRANGE && got.emitParams.cols == 3);
+
+    // layers 段往返：配方层（含逐层 preprocess + transform）/ 文件层（仅相对名，像素不入配置）。
+    CHECK(got.layers.has_value());
+    if (got.layers.has_value()) {
+        const auto& layers = *got.layers;
+        CHECK(layers.size() == 2);
+        if (layers.size() == 2) {
+            const canvas::ImageLayer& r0 = layers[0];
+            CHECK(r0.sourceKind == canvas::LayerSourceKind::Recipe);
+            CHECK(r0.recipe.has_value() && r0.recipe->kind == generate::PatternKind::Checkerboard && r0.recipe->period == 4);
+            CHECK(r0.transform.width == 8 && r0.transform.height == 8);
+            CHECK(r0.transform.inCanvasAnchor == generate::ImageAnchor::TopLeft);
+            CHECK(r0.transform.opacity == 180);   // 不透明度往返一致
+            CHECK(r0.zOrder == 0 && r0.preprocess.size() == 1);
+            CHECK(std::holds_alternative<preprocess::GrayOp>(r0.preprocess.items()[0]));
+            const canvas::ImageLayer& r1 = layers[1];
+            CHECK(r1.sourceKind == canvas::LayerSourceKind::File);
+            CHECK(r1.fileName == "sub/a.png");
+            CHECK(r1.decodedPixels.empty());   // 像素不经配置还原
+            CHECK(r1.transform.x == 3 && r1.transform.y == -2);
+            CHECK(r1.transform.layerPivot == generate::ImageAnchor::BottomRight);
+            CHECK(r1.zOrder == 1);
+        }
+    }
 
     // 标注数量与顺序一致。
     CHECK(gotLayer.annotations().size() == 4);
@@ -242,6 +294,196 @@ void testEngineConfigJson() {
         std::ifstream ifs(emptyFile);
         const std::string text((std::istreambuf_iterator(ifs)), std::istreambuf_iterator<char>());
         CHECK(text.find("\"annotations\"") == std::string::npos);
+    }
+
+    // ---- 旧配置迁移：图层 preprocess 内 "opacity" 步 → transform.opacity（mul!=0 取 mul+add，mul==0 取 add）；
+    //      顶层画布级 "opacity" 步无对应 → 丢弃（preprocessFromJson 未知 op 返回 false 被跳过）。----
+    {
+        const fs::path legacyFile = dir / "legacy.json";
+        std::ofstream ofs(legacyFile);
+        ofs << R"J({
+  "source": {"width": 10, "height": 10},
+  "preprocess": [ {"op": "opacity", "mul": 200, "add": 0} ],
+  "layers": [
+    { "source": {"kind": "empty"}, "transform": {}, "zOrder": 0,
+      "preprocess": [ {"op": "gray"}, {"op": "opacity", "mul": 128, "add": 10} ] },
+    { "source": {"kind": "empty"}, "transform": {"opacity": 255}, "zOrder": 1,
+      "preprocess": [ {"op": "opacity", "mul": 0, "add": 90} ] }
+  ]
+})J";
+        ofs.close();
+        engine::EngineConfig legacy;
+        CHECK(engine::loadEngineConfig(legacyFile.string(), legacy));
+        CHECK(legacy.preprocess.size() == 0);   // 顶层 opacity 步丢弃
+        if (legacy.layers.has_value() && legacy.layers->size() == 2) {
+            const auto& L0 = (*legacy.layers)[0];
+            CHECK(L0.preprocess.size() == 1);   // 仅 gray 保留，opacity 迁移出去
+            CHECK(std::holds_alternative<preprocess::GrayOp>(L0.preprocess.items()[0]));
+            CHECK(L0.transform.opacity == 138);  // mul=128→mul+add=138
+            const auto& L1 = (*legacy.layers)[1];
+            CHECK(L1.preprocess.size() == 0);
+            CHECK(L1.transform.opacity == 90);   // mul=0→取 add=90
+        } else {
+            CHECK(false);
+        }
+    }
+
+    // ---- 底图 generate 段（同构 ImageLayer）往返：纯图案底（与旧 generate 逐字段等价）+ 落位声明底（不存文件路径）+ 旧配置兼容。----
+    {
+        // ① 纯图案 Recipe 底：序列化后 generate 段仅图案键（无 file/落位），解析回 recipe。
+        const fs::path patFile = dir / "base_pattern.json";
+        engine::EngineConfig pc;
+        pc.source = engine::SourceInfo{64, 48};
+        canvas::ImageLayer pb;
+        pb.sourceKind = canvas::LayerSourceKind::Recipe;
+        generate::PatternParams ppp;
+        ppp.kind = generate::PatternKind::Stripes;
+        ppp.period = 6;
+        pb.recipe = ppp;
+        pc.base = pb;
+        CHECK(engine::saveEngineConfig(patFile.string(), pc));
+        {
+            std::ifstream ifs(patFile);
+            const std::string text((std::istreambuf_iterator(ifs)), std::istreambuf_iterator<char>());
+            CHECK(text.find("\"generate\"") != std::string::npos);
+            CHECK(text.find("\"file\"") == std::string::npos);   // 纯图案底不含 file/落位键
+        }
+        engine::EngineConfig pg;
+        CHECK(engine::loadEngineConfig(patFile.string(), pg));
+        CHECK(pg.base.has_value());
+        if (pg.base.has_value()) {
+            CHECK(pg.base->sourceKind == canvas::LayerSourceKind::Recipe);
+            CHECK(pg.base->recipe.has_value() && pg.base->recipe->kind == generate::PatternKind::Stripes && pg.base->recipe->period == 6);
+            CHECK(!pg.base->hasImagePlacement);
+            CHECK(pg.base->fileName.empty());
+            CHECK(pg.base->transform.opacity == 255);   // 底图整体不透明度：默认 255 往返（无显式赋值时）
+        }
+
+        // ② 落位声明底（携内层落位 + backdrop）：仅落位键往返；文件路径与位图均不入配置（运行时由 --input 供位图）。
+        const fs::path fileBase = dir / "base_file.json";
+        engine::EngineConfig fc;
+        fc.source = engine::SourceInfo{200, 100};
+        canvas::ImageLayer fb;
+        fb.sourceKind = canvas::LayerSourceKind::File;
+        fb.fileName = "photo.png";
+        fb.hasImagePlacement = true;
+        fb.imageFit = canvas::ImageFit::Stretch;
+        fb.boxWidth = 200; fb.boxHeight = 100;
+        fb.imageAnchor = generate::ImageAnchor::TopLeft;
+        fb.imagePivot = generate::ImageAnchor::BottomRight;
+        fb.imageX = 7; fb.imageY = -3;
+        generate::PatternParams back;
+        back.kind = generate::PatternKind::Solid;
+        back.background = core::Color(10, 20, 30, 255);
+        fb.boxBackdrop = back;
+        fb.decodedPixels = core::Image(2, 2, core::ImageFormat::RGBA);   // 位图不入配置：往返后应为空。
+        fb.transform.opacity = 64;   // 底图整体不透明度（非默认）：验证随 generate 段 opacity 键往返。
+        fc.base = fb;
+        CHECK(engine::saveEngineConfig(fileBase.string(), fc));
+        engine::EngineConfig fg;
+        CHECK(engine::loadEngineConfig(fileBase.string(), fg));
+        CHECK(fg.base.has_value());
+        if (fg.base.has_value()) {
+            const canvas::ImageLayer& b = *fg.base;
+            CHECK(b.sourceKind == canvas::LayerSourceKind::Empty);   // 无配方→不回退为 File（底图仅存落位声明）
+            CHECK(b.fileName.empty());                               // 文件路径不入配置
+            CHECK(b.decodedPixels.empty());   // 位图不经配置还原
+            CHECK(b.hasImagePlacement);
+            CHECK(b.imageFit == canvas::ImageFit::Stretch);
+            CHECK(b.boxWidth == 200 && b.boxHeight == 100);
+            CHECK(b.imageAnchor == generate::ImageAnchor::TopLeft);
+            CHECK(b.imagePivot == generate::ImageAnchor::BottomRight);
+            CHECK(b.imageX == 7 && b.imageY == -3);
+            CHECK(b.boxBackdrop.has_value() && b.boxBackdrop->background == core::Color(10, 20, 30, 255));
+            CHECK(b.transform.opacity == 64);   // 底图整体不透明度往返一致
+        }
+
+        // ③ 旧配置向后兼容：仅图案键的 generate 段 → Recipe 底（等价旧行为）。
+        const fs::path legacyGen = dir / "legacy_gen.json";
+        {
+            std::ofstream ofs(legacyGen);
+            ofs << R"J({"source":{"width":16,"height":16},"generate":{"kind":"grid-lines","period":8}})J";
+        }
+        engine::EngineConfig lg;
+        CHECK(engine::loadEngineConfig(legacyGen.string(), lg));
+        CHECK(lg.base.has_value() && lg.base->sourceKind == canvas::LayerSourceKind::Recipe);
+        if (lg.base.has_value()) {
+            CHECK(lg.base->recipe.has_value() && lg.base->recipe->kind == generate::PatternKind::GridLines && lg.base->recipe->period == 8);
+            CHECK(!lg.base->hasImagePlacement);
+            CHECK(lg.base->transform.opacity == 255);   // 旧配置无 opacity 键 → 缺省 255（行为不变）
+        }
+    }
+
+    // ---- 画布级顶层 opacity（EngineConfig::canvasOpacity）往返：非默认值命中 + 读侧越界钳制 + 旧配置无键缺省 255。----
+    {
+        const fs::path canvasOpFile = dir / "canvas_opacity.json";
+        engine::EngineConfig cc;
+        cc.source = engine::SourceInfo{32, 32};
+        cc.canvasOpacity = 96;
+        CHECK(engine::saveEngineConfig(canvasOpFile.string(), cc));
+        {
+            std::ifstream ifs(canvasOpFile);
+            const std::string text((std::istreambuf_iterator(ifs)), std::istreambuf_iterator<char>());
+            CHECK(text.find("\"opacity\"") != std::string::npos);   // 顶层 opacity 键写出
+        }
+        engine::EngineConfig cg;
+        CHECK(engine::loadEngineConfig(canvasOpFile.string(), cg));
+        CHECK(cg.canvasOpacity == 96);   // 画布级不透明度往返一致
+
+        // 读侧越界钳制：opacity 300 → 夹为 255。
+        const fs::path clampFile = dir / "canvas_opacity_clamp.json";
+        {
+            std::ofstream ofs(clampFile);
+            ofs << R"J({"source":{"width":8,"height":8},"opacity":300})J";
+        }
+        engine::EngineConfig clamped;
+        CHECK(engine::loadEngineConfig(clampFile.string(), clamped));
+        CHECK(clamped.canvasOpacity == 255);
+
+        // 旧配置无顶层 opacity → 缺省 255（向后兼容、行为不变）；旧 generate 段无 preprocess → 底图预处理为空。
+        const fs::path legacyNoOp = dir / "legacy_no_opacity.json";
+        {
+            std::ofstream ofs(legacyNoOp);
+            ofs << R"J({"source":{"width":8,"height":8},"generate":{"kind":"solid"}})J";
+        }
+        engine::EngineConfig noOp;
+        CHECK(engine::loadEngineConfig(legacyNoOp.string(), noOp));
+        CHECK(noOp.canvasOpacity == 255);
+        CHECK(noOp.base.has_value() && noOp.base->preprocess.size() == 0);
+    }
+
+    // ---- 底图 generate 段 preprocess（色彩步）往返：仅色彩步保留、几何/resize 步写出时被过滤（底图预处理不改画布尺寸）。----
+    {
+        const fs::path basePreFile = dir / "base_preprocess.json";
+        engine::EngineConfig bp;
+        bp.source = engine::SourceInfo{40, 40};
+        canvas::ImageLayer pb;
+        pb.sourceKind = canvas::LayerSourceKind::Recipe;
+        generate::PatternParams ppp;
+        ppp.kind = generate::PatternKind::Solid;
+        pb.recipe = ppp;
+        pb.preprocess.add(preprocess::GrayOp{});                        // 色彩步：保留
+        pb.preprocess.add(preprocess::InvertOp{std::string("110")});    // 色彩步：保留
+        pb.preprocess.add(preprocess::RotateOp{90});                    // 几何步：写出时被过滤
+        bp.base = pb;
+        CHECK(engine::saveEngineConfig(basePreFile.string(), bp));
+        {
+            std::ifstream ifs(basePreFile);
+            const std::string text((std::istreambuf_iterator(ifs)), std::istreambuf_iterator<char>());
+            CHECK(text.find("\"preprocess\"") != std::string::npos);
+            CHECK(text.find("\"rotate\"") == std::string::npos);   // 几何步不写出
+        }
+        engine::EngineConfig bg;
+        CHECK(engine::loadEngineConfig(basePreFile.string(), bg));
+        CHECK(bg.base.has_value());
+        if (bg.base.has_value()) {
+            CHECK(bg.base->preprocess.size() == 2);   // 仅色彩步还原
+            if (bg.base->preprocess.size() == 2) {
+                CHECK(std::holds_alternative<preprocess::GrayOp>(bg.base->preprocess.items()[0]));
+                CHECK(std::holds_alternative<preprocess::InvertOp>(bg.base->preprocess.items()[1]));
+                CHECK(std::get<preprocess::InvertOp>(bg.base->preprocess.items()[1]).mask == "110");
+            }
+        }
     }
 
     fs::remove_all(dir, ec);

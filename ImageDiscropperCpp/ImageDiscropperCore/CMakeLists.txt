@@ -66,6 +66,16 @@ set(IDC_PREPROCESS_SRC
         src/preprocess/pixel_kernels.cpp
 )
 
+# generate：程序化图案生成（「新建画布」画布内容工厂；纯像素生成，无 GUI 依赖）
+set(IDC_GENERATE_SRC
+        src/generate/pattern.cpp
+)
+
+# canvas：多层画布数据模型与合成（ImageLayer/composeCanvas，纯像素零 GUI）
+set(IDC_CANVAS_SRC
+        src/canvas/layer.cpp
+)
+
 # engine：Grid-Selection-Emit 统一引擎（SPEC §1）——切割线 / 网格 / 切分 /
 #         选择极性 / 排序 / 合成 / 导出 / 图像编码(stb+libwebp) / JSON 配置(nlohmann) / 顶层编排。
 set(IDC_ENGINE_SRC
@@ -86,6 +96,8 @@ add_library(image_discropper_core STATIC
     ${IDC_GEOMETRY_SRC}
     ${IDC_ANNOTATION_SRC}
     ${IDC_PREPROCESS_SRC}
+    ${IDC_GENERATE_SRC}
+    ${IDC_CANVAS_SRC}
     ${IDC_ENGINE_SRC}
 )
 
@@ -123,6 +135,8 @@ if(IDC_BUILD_TESTS)
             ../ImageDiscropperGui/src/model/annotation_editor.cpp
             # 跨模块直编：GUI 的预处理会话（零 Qt 依赖）——供 geo→color 不变式/归一化/baseDirty/签名回归。
             ../ImageDiscropperGui/src/model/preprocess_session.cpp
+            # 跨模块直编：GUI 的图层会话库（零 Qt 依赖）——供每层会话路由/物化签名比对/按 id 生命周期回收回归。
+            ../ImageDiscropperGui/src/model/layer_session_store.cpp
     )
     target_link_libraries(unit_tests PRIVATE image_discropper_core)
     # 仅为直编 annotation_editor.cpp 与 test_main 引 model/annotation_editor.h 开放 GUI include 根。
