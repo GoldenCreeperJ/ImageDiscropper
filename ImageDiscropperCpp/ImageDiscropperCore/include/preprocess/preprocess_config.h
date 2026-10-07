@@ -20,8 +20,6 @@ enum class PreprocessType {
     ROTATE,  // 旋转（90 / 180 / 270）
     FLIP,    // 翻转（水平 / 垂直）
     RESIZE,  // 尺寸调整（目标宽高，重采样）
-    // 注：不透明度不再是像素预处理步——它上移为图层合成期参数（canvas::ImageTransform.opacity），
-    //     语义上属合成概念而非像素变换，且使灰度图层的不透明度不再因 GRAY 无 alpha 而静默失效。
 };
 
 // 将 PreprocessType 转换为字符串，便于日志与序列化。

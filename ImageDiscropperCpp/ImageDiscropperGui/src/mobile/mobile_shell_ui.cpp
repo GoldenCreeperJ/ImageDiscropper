@@ -14,6 +14,7 @@
 #include "mobile/mobile_shell_ui.h"
 
 #include <functional>
+#include <initializer_list>
 #include <utility>
 
 #include <QAction>
@@ -233,7 +234,8 @@ void MobileShellUi::buildCentral(MainWindow* w) {
     w->setCentralWidget(w->view_);   // 桌面是 QSplitter 三分；移动端画布独占中央区。
 }
 
-// 抽屉：桌面三栏折叠为五页选项卡，停靠底部、初始隐藏，由工具条「面板」按钮开合。
+// 抽屉：桌面八分区折叠为六页选项卡（标注工具并入「模式」、图片/图层编辑并入「图层」，
+//       与桌面左栏 + 右栏折叠节的分区归属一一对齐），停靠底部、初始隐藏，由工具条「面板」按钮开合。
 // rightTabs_ 回填同一成员 → PreviewController 的「错误定位到某页」逻辑自动沿用
 //（页面经滚动包裹后的兼容比较已做在 preview_controller 的 showingExportPage）。
 void MobileShellUi::buildDrawer(MainWindow* w) {
@@ -250,7 +252,6 @@ void MobileShellUi::buildDrawer(MainWindow* w) {
     groupLayout->addWidget(w->left_);
     groupLayout->addWidget(w->toolPanel_);
     groupLayout->addWidget(w->layerPanel_);
-    groupLayout->addWidget(w->layerEditPanel_);
     groupLayout->addStretch(1);
     auto* groupScroll = new QScrollArea(w);
     groupScroll->setWidgetResizable(true);
@@ -273,10 +274,11 @@ void MobileShellUi::buildDrawer(MainWindow* w) {
         return sa;
     };
 
-    tabs->addTab(scrollPage(w->param_), QStringLiteral("参数"));
-    tabs->addTab(scrollPage(w->exportPanel_), QStringLiteral("导出"));
+    tabs->addTab(scrollPage(w->layerEditPanel_), QStringLiteral("图片"));
     tabs->addTab(scrollPage(w->imagePanel_), QStringLiteral("预处理"));
     tabs->addTab(scrollPage(w->annoPropPanel_), QStringLiteral("标注"));
+    tabs->addTab(scrollPage(w->param_), QStringLiteral("参数"));
+    tabs->addTab(scrollPage(w->exportPanel_), QStringLiteral("导出"));
     w->rightTabs_ = tabs;
 
     auto* drawer = new QDockWidget(QStringLiteral("面板"), w);

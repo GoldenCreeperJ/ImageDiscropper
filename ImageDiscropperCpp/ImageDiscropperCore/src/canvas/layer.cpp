@@ -82,8 +82,7 @@ namespace {
 core::Image scaleToTarget(core::Image placed, const ImageLayer& layer) {
     if (placed.empty()) return placed;
     const int tw = layer.transform.width;
-    const int th = layer.transform.height;
-    if (tw > 0 && th > 0 && (placed.width() != tw || placed.height() != th)) {
+    if (const int th = layer.transform.height; tw > 0 && th > 0 && (placed.width() != tw || placed.height() != th)) {
         placed = placed.resized(tw, th);
     }
     return placed;
@@ -101,7 +100,7 @@ core::Image composeIntoBox(const ImageLayer& layer, const core::Image& src) {
         box.fill(core::Color(0, 0, 0, 0));   // 无底色图案（或 makePattern 失败）→ 透明底
     }
     if (src.empty()) return box;
-    core::Image placed = layer.imageFit == ImageFit::Stretch ? src.resized(bw, bh) : src;
+    const core::Image placed = layer.imageFit == ImageFit::Stretch ? src.resized(bw, bh) : src;
     // 内层落位复用 placementOffset（宽高留 0＝不缩放，已在 placed 体现）。
     ImageTransform inner;
     inner.inCanvasAnchor = layer.imageAnchor;

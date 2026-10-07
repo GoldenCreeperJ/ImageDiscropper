@@ -35,7 +35,7 @@ namespace {
 constexpr double kPi = 3.14159265358979323846;
 
 // 在 [0,1] 参数 t 下对两色逐通道（含 alpha）线性插值，四舍五入到 8 位。
-inline core::Color lerp(const core::Color& a, const core::Color& b, double t) {
+core::Color lerp(const core::Color& a, const core::Color& b, double t) {
     t = std::clamp(t, 0.0, 1.0);
     auto chan = [t](const std::uint8_t x, const std::uint8_t y) {
         return static_cast<std::uint8_t>(std::lround(x + (static_cast<double>(y) - x) * t));
@@ -44,7 +44,7 @@ inline core::Color lerp(const core::Color& a, const core::Color& b, double t) {
 }
 
 // 向下取整除（floor division）：p>0 时对负 v 也给出正确的带号（供斜纹奇偶判定）。
-inline int floorDiv(const int v, const int p) {
+int floorDiv(const int v, const int p) {
     int q = v / p;
     if (v % p != 0 && v < 0) --q;   // p>0（已钳 ≥2），余数符号同被除数。
     return q;
@@ -52,7 +52,7 @@ inline int floorDiv(const int v, const int p) {
 
 // 确定性 32 位整数哈希（splitmix/murmur 混合常量）：同 (seed,x,y,salt) 恒同值，
 //   与迭代顺序无关、跨编译器/跨语言（Rust 按同常量同位宽复现）可逐像素对拍。
-inline std::uint32_t hash32(const std::uint32_t seed, const int x, const int y, const std::uint32_t salt) {
+std::uint32_t hash32(const std::uint32_t seed, const int x, const int y, const std::uint32_t salt) {
     std::uint32_t h = seed
                       ^ (static_cast<std::uint32_t>(x) * 0x9E3779B9u)
                       ^ (static_cast<std::uint32_t>(y) * 0x85EBCA6Bu)

@@ -47,7 +47,7 @@ inline constexpr auto kStripName = "mobileStrip";     // 工具条内滑动条�
 class MobileShellUi {
 public:
     static void buildCentral(MainWindow* w);      // scene_/view_ + 7 面板（原样复用，尚未入容器）
-    static void buildDrawer(MainWindow* w);       // rightTabs_（五页）入底部 QDockWidget（隐藏）
+    static void buildDrawer(MainWindow* w);       // rightTabs_（六页）入底部 QDockWidget（隐藏）
     static void buildStatus(MainWindow* w);       // StatusBar 紧凑模式（模式/块数/缩放，§8.3）
     static void buildBottomBar(MainWindow* w);    // 底部工具条 + 模式动作 + 无键盘补偿按钮
     /// initCore 之后调用：开启预处理忙碌全屏遮罩（SPEC §8.2 移动端形态；friend 访问 preprocess_）。

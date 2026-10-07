@@ -11,7 +11,7 @@
 
 | 文件                      | 声明                          | 职责                                                                                                                                                                     |
 |-------------------------|-----------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `mobile_shell.h`        | `MobileShell`（`MainWindow`） | 移动端顶层壳：经保护构造换装骨架（画布独占中央区 + 底部工具条 + 五页抽屉 + 紧凑状态栏），`initCore()` 共用桌面接线序列；`resizeEvent` 宽高比翻转时仅重排抽屉（竖屏底部/横屏右侧，状态无损）；公共面继承 `openImageFromPath`                             |
+| `mobile_shell.h`        | `MobileShell`（`MainWindow`） | 移动端顶层壳：经保护构造换装骨架（画布独占中央区 + 底部工具条 + 六页抽屉 + 紧凑状态栏），`initCore()` 共用桌面接线序列；`resizeEvent` 宽高比翻转时仅重排抽屉（竖屏底部/横屏右侧，状态无损）；公共面继承 `openImageFromPath`                             |
 | `mobile_shell_ui.h`     | `MobileShellUi`（纯静态建造者）     | 移动端骨架建造者声明（`MainWindow` 的 friend，与桌面 `MainWindowUi` 同模式、同拆分纪律）：五个装配方法签名 + 触控样式表与部件名常量（`kTouchChromeStyle`/`kDrawerName` 等，壳与建造者共用）                                     |
 | `mobile_step_pad.h`     | `StepPadWidget`             | 8 向步进盘（方向键微调的触控等价物）：3×3 网格、×1/×10 倍率、按钮 ≥44pt，只发 `nudgeRequested` 意图信号                                                                                                 |
 | `android_media_store.h` | 自由函数集（`idc::gui`）           | Android 媒体库发布层（SPEC §8.3 形态差异）：本地文件 → MediaStore 无 pending 直插 + fd 流式写入相册公共目录（Pictures/ImageDiscropper）；头文件平台中立——QJniObject 依赖隔离在 .cpp 的 `Q_OS_ANDROID` 内，桌面无调用者不编 JNI |
