@@ -18,3 +18,14 @@ CMakeUserPresets.json
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# 图标派生资产（不入库：CI icons job 动态生成；本地构建前跑一次 assets/icons/regenerate.sh 生成，
+# 已忽略故 status 恒干净。母版 assets/icon.svg 与生成脚本/手工 xml 仍入库）
+/assets/icon.png
+/assets/icons/windows/
+/assets/icons/mac/
+/assets/icons/linux/
+/assets/icons/ios/
+/assets/icons/android/
+/ImageDiscropperCpp/packaging/android/res/mipmap-*/
+!/ImageDiscropperCpp/packaging/android/res/mipmap-anydpi-v26/

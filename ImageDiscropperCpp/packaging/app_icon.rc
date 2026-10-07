@@ -1,0 +1,10 @@
+// ============================================================================
+// app_icon.rc
+// Windows resource script: embeds the multi-size app icon
+// (assets/icons/windows/idc.ico, 16/20/24/32/40/48/64/128/256, BMP/DIB entries)
+// into idc_gui.exe for taskbar / Explorer / installer display.
+// Relative paths resolve against this file's directory.
+// Regeneration steps: assets/icons/README.md.
+// NOTE: keep this file ASCII-only (rc.exe codepage safety).
+// ============================================================================
+IDI_ICON1 ICON "../../assets/icons/windows/idc.ico"

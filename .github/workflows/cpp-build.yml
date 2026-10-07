@@ -38,6 +38,18 @@ jobs:
         with:
           ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
 
+      # 图标产物落地：派生物不入库（.gitignore），icons job（ci/cd/verify 均已接入）
+      # 产出的 icon-products 是构建腿图标的**唯一来源**，在此解包落回树内。
+      # 必须早于 configure：app_icon.rc / resources.qrc / make_icns.sh / android res
+      # 都在配置与构建期读取这些文件；产物缺失即报错（没有提交版可回退；
+      # download-artifact v5+ 找不到匹配产物时步骤默认失败，无需也无法用 if-no-files-found——
+      # 该参数仅 upload-artifact 支持）。
+      - name: Download generated icons
+        uses: actions/download-artifact@v8
+        with:
+          name: icon-products
+          path: .
+
       # 现场克隆钉死基线的 vcpkg（不依赖 runner 镜像自带的 vcpkg：版本随镜像漂移、
       # 且带不可丢弃的镜像补丁）；基线 SHA 与 vcpkg.json 的 builtin-baseline 同步维护。
       - name: Set up vcpkg
@@ -124,6 +136,13 @@ jobs:
           call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64
           cmake --preset ${{ inputs.preset }}
           cmake --build build/${{ inputs.preset }}
+
+      - name: Generate macOS app icon (idc.icns)
+        # 方案 B：icns 不在仓库内提交，由 macos 腿在 configure 前用 iconutil 现生成——
+        # GUI CMakeLists 检测到 idc.icns 存在即注入 bundle Resources（见 assets/icons/make_icns.sh）。
+        if: ${{ startsWith(inputs.preset, 'macos') }}
+        shell: bash
+        run: bash assets/icons/make_icns.sh
 
       - name: Configure and build (Linux/macOS)
         if: runner.os != 'Windows'

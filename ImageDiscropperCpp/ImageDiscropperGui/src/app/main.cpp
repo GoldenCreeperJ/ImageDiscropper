@@ -18,6 +18,7 @@
 // ============================================================================
 #include <QApplication>
 #include <QCommandLineParser>
+#include <QIcon>
 
 #include <memory>
 
@@ -42,11 +43,13 @@ Q_IMPORT_PLUGIN(QXcbIntegrationPlugin)
 #endif
 
 int main(int argc, char* argv[]) {
-    const QApplication app(argc, argv);
+    const QApplication app(argc, argv);   // 非 const：setWindowIcon 需要可写对象。
     QApplication::setApplicationName(QStringLiteral("ImageDiscropperGui"));
     QApplication::setApplicationDisplayName(QStringLiteral("ImageDiscropper"));
     QApplication::setApplicationVersion(QStringLiteral(IDC_GUI_VERSION));
     QApplication::setOrganizationName(QStringLiteral("ImageDiscropper"));
+    // 窗口/任务栏图标（qrc 内嵌 256px；Linux 裸二进制分发的主要载体，Windows 任务栏亦受益）。
+    QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/app_icon.png")));
 
     // 解析命令行：位置参数视为待打开的图像路径（可选，便于文件关联启动）。
     QCommandLineParser parser;

@@ -284,7 +284,8 @@ endforeach()
 # macOS 发布形态：各可执行以 .app 捆绑包输出（CD 打包为 zip 分发，按名取 idc_gui.app）。
 # 非 Apple 平台忽略该属性；idc_gui_mobile 同样 bundle（mac 预览免弹终端窗），
 # bundle 标识符按目标名区分（com.imagediscropper.idc_gui / .idc_gui_mobile），互不冲突。
-# 无自定义图标（缺省为系统默认图标，正式分发如需图标后续补 icns）。
+# 应用图标：源为仓库根 assets/icon.png（1024），派生尺寸与 idc.icns 生成步骤见 assets/icons/README.md
+# （make_icns.sh，需 macOS iconutil）。icns 已生成时自动注入 bundle Resources，未生成则退回系统默认图标。
 foreach(_idc_exe ${_idc_gui_exes})
     set_target_properties(${_idc_exe} PROPERTIES
             MACOSX_BUNDLE TRUE
@@ -294,6 +295,39 @@ foreach(_idc_exe ${_idc_gui_exes})
             MACOSX_BUNDLE_SHORT_VERSION_STRING "${IDC_GUI_VERSION}"
     )
 endforeach()
+set(_idc_icns "${CMAKE_CURRENT_SOURCE_DIR}/../../assets/icons/mac/idc.icns")
+if(APPLE AND EXISTS "${_idc_icns}")
+    foreach(_idc_exe ${_idc_gui_exes})
+        set_target_properties(${_idc_exe} PROPERTIES MACOSX_BUNDLE_ICON_FILE "idc.icns")
+        target_sources(${_idc_exe} PRIVATE "${_idc_icns}")
+        set_source_files_properties("${_idc_icns}" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+    endforeach()
+endif()
+
+# Windows 发布形态：多尺寸 .ico（assets/icons/windows/idc.ico，BMP/DIB 条目）经资源脚本嵌入 exe，
+# 供任务栏 / 资源管理器 / 安装器（installer.iss 的 exe 图标）显示。
+# 双产物都嵌：idc_gui_mobile（移动预览 exe）同样需要 exe 图标。
+if(WIN32)
+    foreach(_idc_exe ${_idc_gui_exes})
+        target_sources(${_idc_exe} PRIVATE ../packaging/app_icon.rc)
+    endforeach()
+endif()
+
+# 窗口/任务栏图标（全桌面平台，Linux 裸二进制分发的主要载体）：qrc 嵌入 256px 图标，
+# main.cpp 经 setWindowIcon 挂到 QApplication。
+foreach(_idc_exe ${_idc_gui_exes})
+    target_sources(${_idc_exe} PRIVATE ../packaging/resources.qrc)
+endforeach()
+
+# Android 发布形态：包源目录（packaging/android/，含 AndroidManifest 与 mipmap 启动器图标——
+# 旧版 mipmap + 自适应 anydpi-v26 前后景，母版派生见 assets/icons/README.md）。
+# androiddeployqt 以其为模板生成 APK；未设置时回退 Qt 默认模板（机器人图标）。
+if(ANDROID)
+    foreach(_idc_exe ${_idc_gui_exes})
+        set_target_properties(${_idc_exe} PROPERTIES
+                QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../packaging/android")
+    endforeach()
+endif()
 
 # include 根、版本宏与 Qt/Core 链接均已由 idc_gui_common 的 PUBLIC 要求传递（见上方目标编排）。
 

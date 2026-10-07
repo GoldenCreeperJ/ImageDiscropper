@@ -58,7 +58,8 @@
 - 产物形态（双可执行）：桌面一次构建产出 `idc_gui`（纯桌面，不含任何移动码）与
   `idc_gui_mobile`（本目录源 + `IDC_GUI_HAS_MOBILE`/`IDC_GUI_FORCE_MOBILE` 宏，双击即移动骨架，
   无需命令行）；是否额外产出 `idc_gui_mobile` 由 CMake 开关 `IDC_GUI_MOBILE` 控制（默认 ON）。
-  Android/iOS 不读该开关：只出单目标 `idc_gui`（common+移动壳合体），既有打包脚本零改动。
+  Android/iOS 不读该开关：只出单目标 `idc_gui`（common+移动壳合体），打包脚本零改动
+  （androiddeployqt 流程不变；包源目录经 `QT_ANDROID_PACKAGE_SOURCE_DIR` 指向 `packaging/android`）。
   两目标共享 `idc_gui_common`（OBJECT 库，main.cpp 各编一份）；切换开关后若 mocs 残留
   LNK2019，删构建目录 `ImageDiscropperGui/idc_gui*_autogen` 重建。
 - 运行时选壳：`idc_gui_mobile`/Android 恒为移动骨架；`idc_gui` 恒为桌面——无命令行分支，
@@ -76,7 +77,10 @@ Java 侧关 fd 防 fdsan；文件名可自定义、留空自动命名、同名�
 SAF 自定义目录已整体移除，「浏览…」移动端禁用）；min API 29；CI 移动腿与 APK alpha 签名链全绿。
 
 **待办（未验证 / 未实现，不得按已完成理解）**：SPEC §8.3 验收全清单（每项能力纯触屏 + 双方向全流程）；
-配置存取往返与旋转观感真机实测；Android 启动器图标缺失（Qt 默认模板无图标）；
+配置存取往返与旋转观感真机实测；Android 启动器图标**尚未生效**——接线（`packaging/android`
+模板 + CMake `QT_ANDROID_PACKAGE_SOURCE_DIR` + CI 产物链，详见 `assets/icons/README.md`）
+已备于工作区但未随提交进入任何构建，当前 APK 仍为 Qt 默认模板图标；提交并走通
+android 腿后仍需真机核对显示观感；
 iOS（AppIcon、签名、真机）完全未验证，需 Apple 账号；SPEC §8.3「辅助放大 / 吸附 for dense
 targets」未实现（现仅 12px 抓取带）。
 

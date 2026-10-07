@@ -1,0 +1,8 @@
+<RCC>
+    <!-- 应用图标资源：窗口/任务栏图标（Linux 裸二进制分发的主要载体；Windows/macOS 亦经 setWindowIcon 受益）。
+         母版与派生见 assets/icons/README.md。 -->
+    <qresource prefix="/">
+        <!-- qrc 相对路径以本文件所在目录（packaging/）为基准：../../ = 仓库根。 -->
+        <file alias="icons/app_icon.png">../../assets/icons/windows/icon-256.png</file>
+    </qresource>
+</RCC>

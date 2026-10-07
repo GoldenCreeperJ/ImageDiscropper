@@ -46,7 +46,8 @@ ImageDiscropper/
 │   ├── ImageDiscropperCore/     #   Core：Grid-Selection-Emit 统一引擎 + 基础图像处理（静态库）
 │   ├── ImageDiscropperCli/      #   CLI：命令行薄壳（可执行 idc）
 │   └── ImageDiscropperGui/      #   GUI：Qt 6 桌面前端（可执行 idc_gui）
-└── ImageDiscropperRust/         # Rust 实现（规划中，尚未开始）
+├── ImageDiscropperRust/         # Rust 实现（规划中，尚未开始）
+└── assets/                      # 共享资产：icon.svg 图标母版 + icons/ 派生脚本（派生物不入库）+ sample.png 样例图
 ```
 
 ```text
@@ -62,12 +63,14 @@ CLI ──────┘
 - CMake ≥ 3.28 + 支持 C++17 的编译器（MSVC / MinGW / Clang）
 - [vcpkg](https://vcpkg.io)（清单模式自动安装，无需手动 `vcpkg install`）：把环境变量 `VCPKG_ROOT` 指向 vcpkg 根目录即可
 - 依赖清单见 [`ImageDiscropperCpp/vcpkg.json`](ImageDiscropperCpp/vcpkg.json)（`stb` / `libwebp` / `nlohmann-json` / `qtbase`）
+- **应用图标派生物（GUI / 移动端构建必需）**：首次构建前运行一次 `bash assets/icons/regenerate.sh`（依赖 Inkscape 1.4.3 / ffmpeg / python3）。图标 png/ico **不入库**，`app_icon.rc`、`resources.qrc`、Android 模板在构建期引用它们——**不生成会构建报错**；改 `assets/icon.svg` 后需重跑。详见 [`assets/icons/README.md`](assets/icons/README.md)
 
 ### 构建（Windows / Linux / macOS）
 
 推荐用 CMake Presets（首次配置会按清单自动安装依赖，其中 `qtbase` 较慢）：
 
 ```bash
+bash assets/icons/regenerate.sh   # 图标派生物不入库：首次构建/改 icon.svg 后必跑，否则 GUI/移动端构建报错
 cd ImageDiscropperCpp
 cmake --preset windows-debug   # Windows：Ninja + MSVC（Debug；Release 用 windows-release，静态 Qt 单文件）
 cmake --build build/windows-debug
@@ -90,7 +93,7 @@ ctest --test-dir build
 产物位于构建目录 `bin/`：`idc(.exe)`、`idc_gui(.exe)`、`demo(.exe)`。
 （CLion 用户可直接以 `ImageDiscropperCpp/` 为 CMake 源目录打开工程，CLion 会识别 Presets。）
 
-每次提交由 GitHub Actions（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）自动验证：**桌面三平台 Release 构建 + 全套测试 + 移动双端（Android / iOS）构建打包**（依赖缓存命中后分钟级）；其余验证手动运行（[`.github/workflows/cpp-verify.yml`](.github/workflows/cpp-verify.yml)。
+每次提交由 GitHub Actions（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）自动验证：**桌面三平台 Release 构建 + 全套测试 + 移动双端（Android / iOS）构建打包**（依赖缓存命中后分钟级）；**应用图标亦由 CI 动态构建并经产物流转供给各构建腿**（仓库仅提交 svg 母版，细节见 [`assets/icons/README.md`](assets/icons/README.md)）；其余验证手动运行（[`.github/workflows/cpp-verify.yml`](.github/workflows/cpp-verify.yml)）。
 
 无需构建 GUI 应用时可跳过：`cmake --preset windows-debug -DIDC_BUILD_GUI=OFF`（qtbase 依赖仍会安装）。
 

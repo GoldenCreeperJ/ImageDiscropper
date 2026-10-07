@@ -1,0 +1,90 @@
+# 图标动态构建 + 产物流转：由 ci.yml（每次 CI 运行）、cd.yml（每次发布）、cpp-verify.yml
+# （手动验证）无条件调用。本 job 是图标产物的唯一生产者——**派生资产不入库**（已
+# gitignore），管线内所需图标全部来自本 job：
+#   · 构建按输入缓存：key = hash(icon.svg, regenerate.sh)，未变则恢复上次构建产物、
+#     跳过重跑（regenerate.sh 已验证确定性，缓存产物 ≡ 新鲜构建）；
+#   · 上传 artifact `icon-products`，各构建腿（cpp-build.yml）下载落地——
+#     派生物不入库后，CI/CD 构建腿的图标**唯一来源**就是本产物；
+#   · 失败 → job 红，下游 needs 腿被跳过。
+# 缓存策略（三层，各司其职）：
+#   · 产物缓存（icon-products-*）：key = hash(svg, 脚本)。命中即免构建；不用
+#     restore-keys——前缀回退会取到旧 svg 的产物。失败轮次 post 步骤仍会存
+#     （内容 = 该 key 的规范输出，语义自洽，不污染后续）。
+#   · 产物不走 cache 走 artifact：cache 承载「免重建」，artifact 承载「生产者→消费者」。
+name: icons-ci
+
+on:
+  workflow_call:
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04   # 钉死 runner 镜像：预装工具与系统库宇宙随镜像版本固定，防静默漂移
+    steps:
+      - uses: actions/checkout@v6
+
+      # 产物缓存：key = hash(svg, 脚本)。命中 = 该输入组合的规范生成物已在工作区，
+      - name: Restore icon products cache
+        id: iconcache
+        uses: actions/cache@v5
+        with:
+          # 只缓存派生子目录：整目录缓存会连带覆盖提交版脚本/README/手工 xml。
+          path: |
+            assets/icon.png
+            assets/icons/android/
+            assets/icons/ios/
+            assets/icons/linux/
+            assets/icons/mac/
+            assets/icons/windows/
+            ImageDiscropperCpp/packaging/android/res/mipmap-mdpi/
+            ImageDiscropperCpp/packaging/android/res/mipmap-hdpi/
+            ImageDiscropperCpp/packaging/android/res/mipmap-xhdpi/
+            ImageDiscropperCpp/packaging/android/res/mipmap-xxhdpi/
+            ImageDiscropperCpp/packaging/android/res/mipmap-xxxhdpi/
+          key: icon-products-${{ hashFiles('assets/icon.svg', 'assets/icons/regenerate.sh') }}
+
+      - name: Fetch and unpack icon toolchain
+        if: steps.iconcache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p /tmp/icontools && cd /tmp/icontools
+          # Inkscape 1.4.3 官方 AppImage；免 FUSE 解包（runner 无 libfuse2），
+          # squashfs-root/AppRun 即可执行入口。
+          curl -fsSL -o inkscape.AppImage \
+            "https://media.inkscape.org/dl/resources/file/Inkscape-e7c3feb-x86_64.AppImage"
+          chmod +x inkscape.AppImage
+          ./inkscape.AppImage --appimage-extract >/dev/null
+          rm inkscape.AppImage
+          # ffmpeg 8.0.1 静态构建（johnvansickle）；curl -f：404 立即红而非拿到错误页。
+          curl -fsSL -o ffmpeg.tar.xz \
+            "https://johnvansickle.com/ffmpeg/old-releases/ffmpeg-8.0.1-amd64-static.tar.xz"
+          tar -xJf ffmpeg.tar.xz
+          mv ffmpeg-8.0.1-amd64-static ffmpeg
+          rm ffmpeg.tar.xz
+
+      # 原地重跑全流程（脚本按自身位置推导仓库根，输出即写回 checkout）。
+      - name: Regenerate icons in place (products cache miss)
+        if: steps.iconcache.outputs.cache-hit != 'true'
+        run: |
+          INKSCAPE=/tmp/icontools/squashfs-root/AppRun \
+            FFMPEG=/tmp/icontools/ffmpeg/ffmpeg PYTHON=python3 \
+            bash assets/icons/regenerate.sh
+
+      # 图标产物：供构建腿下载落地（cpp-build.yml 的 Download generated
+      # icons 步骤）——派生物不入库，构建腿的图标唯一来源即本产物。
+      - name: Upload generated icon products
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: icon-products
+          path: |
+            assets/icon.png
+            assets/icons/android/
+            assets/icons/ios/
+            assets/icons/linux/
+            assets/icons/mac/
+            assets/icons/windows/
+            ImageDiscropperCpp/packaging/android/res/mipmap-mdpi/
+            ImageDiscropperCpp/packaging/android/res/mipmap-hdpi/
+            ImageDiscropperCpp/packaging/android/res/mipmap-xhdpi/
+            ImageDiscropperCpp/packaging/android/res/mipmap-xxhdpi/
+            ImageDiscropperCpp/packaging/android/res/mipmap-xxxhdpi/
+          if-no-files-found: error

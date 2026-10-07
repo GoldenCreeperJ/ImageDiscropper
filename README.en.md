@@ -47,7 +47,8 @@ ImageDiscropper/
 │   ├── ImageDiscropperCore/     #   Core: Grid-Selection-Emit engine + basic image processing (static library)
 │   ├── ImageDiscropperCli/      #   CLI: thin command-line shell (executable idc)
 │   └── ImageDiscropperGui/      #   GUI: Qt 6 desktop frontend (executable idc_gui)
-└── ImageDiscropperRust/         # Rust implementation (planned, not started yet)
+├── ImageDiscropperRust/         # Rust implementation (planned, not started yet)
+└── assets/                      # shared assets: icon.svg master + icons/ derivation scripts (derivatives not committed) + sample.png
 ```
 
 ```text
@@ -63,12 +64,14 @@ CLI ──────┘
 - CMake ≥ 3.28 + a C++17 compiler (MSVC / MinGW / Clang)
 - [vcpkg](https://vcpkg.io) (manifest mode installs everything automatically — no manual `vcpkg install`): point the `VCPKG_ROOT` environment variable at your vcpkg directory
 - The dependency manifest lives in [`ImageDiscropperCpp/vcpkg.json`](ImageDiscropperCpp/vcpkg.json) (`stb` / `libwebp` / `nlohmann-json` / `qtbase`)
+- **App icon derivatives (required for GUI / mobile builds)**: run `bash assets/icons/regenerate.sh` once before the first build (requires Inkscape 1.4.3 / ffmpeg / python3). Icon pngs/ico are **not committed** — `app_icon.rc`, `resources.qrc` and the Android template reference them at build time, so **builds fail without generating them**; re-run after changing `assets/icon.svg`. See [`assets/icons/README.md`](assets/icons/README.md).
 
 ### Build (Windows / Linux / macOS)
 
 CMake Presets are the recommended path (the first configure installs dependencies from the manifest; `qtbase` takes a while):
 
 ```bash
+bash assets/icons/regenerate.sh   # icon derivatives are not committed: required before the first build / after changing icon.svg, or GUI/mobile builds fail
 cd ImageDiscropperCpp
 cmake --preset windows-debug   # Windows: Ninja + MSVC (Debug; windows-release = static Qt, single file)
 cmake --build build/windows-debug
@@ -91,7 +94,7 @@ ctest --test-dir build
 Binaries land in the build directory's `bin/`: `idc(.exe)`, `idc_gui(.exe)`, `demo(.exe)`.
 (CLion users can open `ImageDiscropperCpp/` directly as the CMake source directory; CLion picks up the presets.)
 
-Every push is verified by GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): **three-platform desktop Release builds plus the full test suite plus both mobile target builds (Android / iOS packaging)** (minute-level with a warm dependency cache); other verification runs manually ([`.github/workflows/cpp-verify.yml`](.github/workflows/cpp-verify.yml)).
+Every push is verified by GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): **three-platform desktop Release builds plus the full test suite plus both mobile target builds (Android / iOS packaging)** (minute-level with a warm dependency cache); **app icons are likewise built dynamically in CI and piped to the build legs as products** (only the svg master is committed — see [`assets/icons/README.md`](assets/icons/README.md)); other verification runs manually ([`.github/workflows/cpp-verify.yml`](.github/workflows/cpp-verify.yml)).
 
 To skip building the GUI app: `cmake --preset windows-debug -DIDC_BUILD_GUI=OFF` (qtbase is still installed).
 

@@ -14,7 +14,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # 图标产物生产者：派生物不入库，验证腿的图标唯一来源是 icon-products 产物。
+  icons:
+    uses: ./.github/workflows/icons-ci.yml
+
   debug-all:
+    needs: icons
     strategy:
       fail-fast: false
       matrix:

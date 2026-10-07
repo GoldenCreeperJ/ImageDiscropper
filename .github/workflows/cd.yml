@@ -76,6 +76,11 @@ jobs:
             git push origin "refs/tags/${{ inputs.tag }}"
             echo "已创建标签 ${{ inputs.tag }}（指向当前 HEAD）"
           fi
+  # 图标每次发布完整构建一遍（icons-ci = regenerate.sh 全流程 + 闸门 + 产物上传
+  # icon-products 供发布腿落地——派生物不入库，发布腿图标唯一来源即此产物）。
+  # 分钟级，先于发布腿完成。
+  icons:
+    uses: ./.github/workflows/icons-ci.yml
 
   # 各实现的发布入口（新实现在此追加：job + dispatch 布尔输入）。
   # 标签路由在下方 with 中现算：prerelease = Release 类型；scope = 产物范围。
@@ -83,7 +88,9 @@ jobs:
   #   · 手动触发可选 scope 覆盖（如移动端未验收时收窄为 desktop）
   #   · v*-rc*（预留）→ 桌面候选版：在 scope 表达式中加 rc 分支即得
   cpp:
-    needs: prepare
+    # needs icons：发布腿消费 icons job 产出的 icon-products；比对失败则本 job 被跳过，
+    # 发布中止（闸门语义）。
+    needs: [prepare, icons]
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.build-cpp }}
     uses: ./.github/workflows/cpp-cd.yml
     secrets: inherit   # Android 签名密钥经两层可复用工作流传递（secrets 不自动继承）
@@ -93,7 +100,7 @@ jobs:
       scope: ${{ github.event_name != 'workflow_dispatch' && 'all' || inputs.scope }}
 
   release:
-    needs: [cpp]
+    needs: [cpp, icons]
     runs-on: ubuntu-latest
     steps:
       # 全量历史 + 标签：release note 生成需要两次标签间的提交记录

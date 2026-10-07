@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.qtproject.example.ImageDiscropper"
+    android:installLocation="auto"
+    android:versionCode="-- %%ANDROID_VERSION_CODE%% --"
+    android:versionName="-- %%ANDROID_VERSION_NAME%% --">
+
+    <!-- 权限与特性：跟随 Qt 官方模板最小集（相机/存储等按需在此扩展）。 -->
+    <uses-sdk android:minSdkVersion="-- %%ANDROID_MIN_SDK_VERSION%% --"
+              android:targetSdkVersion="-- %%ANDROID_TARGET_SDK_VERSION%% --" />
+    <supports-screens android:anyDensity="true"
+                      android:largeScreens="true"
+                      android:normalScreens="true"
+                      android:smallScreens="true" />
+
+    <application android:name="org.qtproject.qt.android.bindings.QtApplication"
+                 android:hardwareAccelerated="true"
+                 android:requestLegacyExternalStorage="true"
+                 android:allowBackup="true"
+                 android:label="-- %%APP_NAME%% --"
+                 android:extractNativeLibs="true"
+                 android:icon="@mipmap/ic_launcher">
+        <activity android:name="org.qtproject.qt.android.bindings.QtActivity"
+                  android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|layoutDirection|locale|fontScale|keyboard|keyboardHidden|navigation|mcc|mnc|density"
+                  android:label="-- %%APP_NAME%% --"
+                  android:launchMode="singleTop"
+                  android:screenOrientation="unspecified"
+                  android:exported="true"
+                  android:theme="@android:style/Theme.Material.Light.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <meta-data android:name="android.app.lib_name" android:value="-- %%INSERT_APP_LIB_NAME%% --"/>
+            <meta-data android:name="android.app.arguments" android:value="-- %%INSERT_APP_ARGUMENTS%% --"/>
+        </activity>
+    </application>
+</manifest>

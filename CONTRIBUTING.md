@@ -9,6 +9,7 @@
 
 ```bash
 # 依赖：CMake ≥ 3.28 + C++17 编译器 + vcpkg（设置环境变量 VCPKG_ROOT；包由 vcpkg.json 清单自动安装）
+bash assets/icons/regenerate.sh    # 图标派生物不入库：首次克隆/改 icon.svg 后必跑，否则 GUI/移动端构建报错（见 assets/icons/README.md）
 cd ImageDiscropperCpp
 cmake --preset windows-debug
 cmake --build build/windows-debug

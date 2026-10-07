@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=ImageDiscropper
+GenericName=Image Cut & Extract Tool
+Comment=图像区域提取、反向剔除与网格分割工具
+Exec=idc_gui
+Icon=imagediscropper
+Terminal=false
+Categories=Graphics;2DGraphics;RasterGraphics;
+StartupNotify=true
