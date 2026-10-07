@@ -31,6 +31,7 @@ This project is primarily AI-led (~99%), and the documentation is AI-generated a
 - **Axiom**: cut lines are **full-span straight lines across the whole image**, not segments — the fundamental premise that separates this tool from conventional cropping.
 - **Three export styles**: separate (one file per kept block) / collapse (join remaining blocks after removing whole rows/columns) / rearrange (fill blocks into a new canvas by an explicit sequence).
 - **Pre-processing layer**: rotate, flip, resize, grayscale, invert, channel split; independent vector **annotation layer** (optional burn-in at export).
+- **Multi-layer canvas model**: a **canvas** (output boundary & working-image size) = a **base** (the underlay, from an opened image / generation / pattern) plus an array of **layers** stacked above it. An image is placed either as a **base image** (into the base, via the `generate` section, bitmap supplied by `--input`) or a **layer image** (into the layer stack, via the `layers` section, bitmap referenced from assets). Authoritative terms: [`SPEC.md`](SPEC.md) §2.2.
 - **Local processing, lossless first** (NFR-1/2): images never leave your machine; cutting is pure pixel relocation — only JPEG output is lossy.
 - **GUI + CLI frontends**: Qt 6 desktop app (live preview, draggable cut lines, undo/redo) plus the `idc` command line (scriptable, config-driven).
 
