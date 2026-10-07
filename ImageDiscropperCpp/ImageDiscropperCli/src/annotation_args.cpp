@@ -7,6 +7,7 @@
 // ============================================================================
 #include "annotation_args.h"
 
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 
@@ -16,9 +17,9 @@
 namespace idc::cli {
 namespace {
 
-// 读取整个文本文件到 outText；文件不存在或不可读返回 false。
+// 读取整个文本文件到 outText；文件不存在或不可读返回 false。path 按 UTF-8 → 宽字符开（中文 / 非 ASCII 路径可读）。
 bool readFileText(const std::string& path, std::string& outText) {
-    const std::ifstream ifs(path, std::ios::binary);
+    const std::ifstream ifs(std::filesystem::u8path(path), std::ios::binary);
     if (!ifs) return false;
     std::ostringstream ss;
     ss << ifs.rdbuf();

@@ -117,6 +117,17 @@ void testValueParser() {
         CHECK(!parseFormat("tiff", f, err) && !err.empty());       // 不支持
     }
 
+    // ---- parseQuality：有损质量 0~100 整数（越界 / 非整数失败）。----
+    {
+        int q = 0;
+        CHECK(parseQuality("90", q, err) && q == 90);
+        CHECK(parseQuality("0", q, err) && q == 0);                 // 下边界
+        CHECK(parseQuality("100", q, err) && q == 100);             // 上边界
+        CHECK(!parseQuality("101", q, err) && !err.empty());        // 越上界
+        CHECK(!parseQuality("-1", q, err) && !err.empty());         // 负数
+        CHECK(!parseQuality("abc", q, err) && !err.empty());        // 非整数
+    }
+
     // ---- parseSort：row-major / column-major / custom。----
     {
         idc::engine::SortStrategy s;

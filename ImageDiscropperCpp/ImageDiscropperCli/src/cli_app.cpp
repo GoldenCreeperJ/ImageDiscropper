@@ -86,9 +86,10 @@ int cliMain(const std::vector<std::string>& args) {
         if (cmd == "erase") return cmdErase(tokens, go);
         if (cmd == "grid") return cmdGrid(tokens, go);
         if (cmd == "config") return cmdConfig(tokens, go);
+        if (cmd == "new") return cmdNew(tokens, go);
 
         reportError(makeError(ExitCode::ArgError, "未知命令：'" + cmd + "'", "",
-                              "可用命令：extract / erase / grid / config；用 idc --help 查看用法"));
+                              "可用命令：extract / erase / grid / config / new；用 idc --help 查看用法"));
         return toInt(ExitCode::ArgError);
     } catch (const std::exception& e) {
         // 未预期异常统一兜底为内部错误（5），避免向用户抛出裸异常栈。

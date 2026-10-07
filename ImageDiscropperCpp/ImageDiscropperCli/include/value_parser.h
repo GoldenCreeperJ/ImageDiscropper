@@ -53,6 +53,9 @@ bool parseColor(const std::string& s, core::Color& out, std::string& err);
 // 解析导出格式 "png" / "jpeg"("jpg") / "webp" / "bmp"；成功写 out。
 bool parseFormat(const std::string& s, engine::ExportFormat& out, std::string& err);
 
+// 解析有损格式质量参数 "0"~"100"（仅 JPEG/WebP 生效，PNG/BMP 忽略）；成功写 out，越界或非整数失败。
+bool parseQuality(const std::string& s, int& out, std::string& err);
+
 // 解析排序策略 "row-major" / "column-major" / "custom"；成功写 out。
 bool parseSort(const std::string& s, engine::SortStrategy& out, std::string& err);
 

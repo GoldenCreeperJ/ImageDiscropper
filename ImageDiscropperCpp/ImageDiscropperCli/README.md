@@ -12,6 +12,12 @@
 | `erase`   | L2 反向剔除 | 恒 remove      | 分离到文件夹 / 坍缩（重排为 L3 专属，`erase` 拒绝 `--merge rearrange`） |
 | `grid`    | L3 网格分割 | keep 或 remove | 分离 / 重排合并（`--merge-sort`/`--merge-decorate` 控制填充顺序）   |
 | `config`  | 配置驱动    | 由 JSON 决定     | 由 JSON 的 emit 决定                                      |
+| `new`     | 新建画布    | 不涉及（不切割）      | 程序生成一张画布（尺寸 / 底色 alpha / 图案）并写盘                       |
+
+> **输入来源**：`extract` / `erase` / `grid` / `config` 的输入图像既可 `--input <file>` 读文件，
+> 也可用 `--size WxH`（可配 `--pattern` 等）**程序生成一张画布**作为输入（`new` 的同一套生成选项）；
+> 二者**互斥、择一**。`config` 还支持 `layers` 段（§7 多层画布）作为**叠加图层**来源：`layers` 仅承载叠加层、不含底图，底图 base 由 `--input` / `--size` / `generate` 段（三者可组合）提供；`layers` 存在时由 CLI 逐层解码 `file` 层源图（相对配置目录 / `<配置名>.assets/`）注入像素、`canvas::composeCanvas(layers, w, h, base)` 先铺全透明底、依底图 base→叠加层（按 zOrder）展平为 `config.source` 尺寸的画布（画布无级背景；引擎仍只收一张展平画布图，runEngine 零改动）；无底图时叠加层直接铺于全透明底之上（不视为错误）。
+> `new` 则是「创建而非切割」，只接收生成选项（非 dry-run 时需 `--output`），拒绝 `--input`。
 
 ## 目录结构
 
@@ -31,6 +37,10 @@ CLI 由**仓库根** `CMakeLists.txt` 统一编排（Core 先于 CLI 引入，CL
 构建命令与测试运行见 [`../README.md`](../README.md)「构建与运行」。
 第三方库（stb / libwebp / nlohmann_json）由 Core 以 PRIVATE 封装，CLI 无需感知。
 版本经编译期宏注入：`IDC_CLI_VERSION`（根工程版本）与 `IDC_CORE_VERSION`（Core 经 PARENT_SCOPE 回传）。
+
+> **Windows 路径 / 参数编码**：入口 `main` 在 Windows 下改用宽字符 `__wargv` 并经 `WideCharToMultiByte(CP_UTF8, …)`
+> 转为 **UTF-8** 传下去（非 Windows 保留窄 `argv`）；Core 的文件打开（`readImageFile`/`writeImageFile`、配置读写、导出）
+> 统一用 `std::filesystem::u8path` 按 UTF-8 解释路径——全链路 UTF-8 契约一致，中文 / 非 ASCII 的输入输出路径均可正常读写。
 
 ## 用法速览
 
@@ -52,6 +62,11 @@ idc grid   --input photo.jpg --grid 100,100,200,150 --keep 0,0 --keep 0,1 --keep
 # 配置驱动（若 JSON 含可选 annotations 段，执行前会把标注烧录进预处理后的工作图）
 idc config --load my-config.json --input photo.jpg --output result.png
 
+# 新建：程序生成一张 1024x768 棋盘格（白底 / 半透明蓝纹）并写盘
+idc new --size 1024x768 --pattern checkerboard --bg "#FFFFFFFF" --fg "#800000FF" --period 64 --output board.png
+# 生成源切割：用程序生成的径向渐变画布作为输入（--size 替代 --input），保留中心矩形
+idc extract --size 200x200 --pattern radial-gradient --bg "#FF000000" --fg "#FFFFFFFF" --rect 50,50,150,150 --output grad.png
+
 # 命令行标注：三层命令 + config 均可附加标注（SPEC §7 annotations 元素语法，坐标基准＝预处理产出）
 #   --annotation '<内联 JSON 对象>'：单条标注，可重复；--annotations <file.json>：文件根为标注数组，可重复
 idc extract --input photo.jpg --rect 100,100,300,250 \
@@ -64,13 +79,61 @@ idc extract --input photo.jpg --rect 100,100,300,250 --annotations annos.json \
 
 完整选项见 `idc <command> --help`。
 
+## 新建与图像生成（`new` / 生成源）
+
+与 GUI「新建」对话框一一对应，图案生成本体委托 Core 的 `generate::makePattern`（CLI 不实现任何像素 / 图案逻辑）。
+
+| 选项                  | 取值                                                                                                                                                                                                                                                | 默认                |
+|---------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------|
+| `--size WxH`        | 像素尺寸（正整数；单边 ≤ 65535 且 宽×高 ≤ 64,000,000≈256MB）                                                                                                                                                                                                     | new 必填；作生成源时必填    |
+| `--pattern <kind>`  | `solid` / `linear-gradient` / `radial-gradient` / `checkerboard` / `stripes` / `grid-lines` / `dot-grid` / `concentric` / `radial-rays` / `hue-gradient` / `noise`（斜纹已并入 `stripes`、同心方框已并入 `concentric`，均由 `--orientation` 选形状；旧 `image` 图案已彻底移除） | `solid`（纯色）       |
+| `--orientation <d>` | `horizontal` / `vertical` / `diagonal-down`(↘) / `diagonal-up`(↗)（线性渐变轴 / 条纹 4 向含斜纹 / 同心 `vertical`＝方环否则圆环 / 色相渐变扫描轴；接受缩写 h/v）                                                                                                                    | `horizontal`      |
+| `--bg <hex>`        | 底色 `#RRGGBB` / `#AARRGGBB`（**alpha 生效**，`00` 全透~`FF` 全不透）                                                                                                                                                                                         | `#FFFFFFFF`（不透明白） |
+| `--fg <hex>`        | 前景 / 图案色（渐变终点色）                                                                                                                                                                                                                                   | `#FF000000`（黑）    |
+| `--period <n>`      | 周期 / 格子边长 / 环间距 / 条纹（含斜纹）带间距 / 色相波长（px）                                                                                                                                                                                                           | 32                |
+| `--line-width <n>`  | 网格线 / 同心环（圆环·方环）线宽（px）                                                                                                                                                                                                                            | 1                 |
+| `--dot-radius <n>`  | 点阵点半径（px）                                                                                                                                                                                                                                         | 2                 |
+| `--seed <n>`        | 噪声种子（非负整数；同种子 + 同尺寸恒同图，供确定性复现 / C++↔Rust 对拍）                                                                                                                                                                                                      | 0                 |
+| `--noise <mode>`    | 噪声配色：`full-color`（全彩）/ `grayscale`（灰度）/ `two-color`（双色 bg↔fg）                                                                                                                                                                                     | `full-color`      |
+
+> 上表选项仅对应图案生效（如 `solid` 只看 `--bg`、`--orientation` 只对 `linear-gradient`/`stripes`(含斜纹 4 向)/`concentric`(vertical＝方环)/`hue-gradient` 有效、`--line-width` 只对 `grid-lines`/`concentric` 有效、`--dot-radius` 只对 `dot-grid` 有效、`--seed`/`--noise` 只对 `noise` 有效）；完整「图案×参数适用矩阵」见 `idc new --help`。图片已从图案中拆出：CLI 侧仅保留**底图直挂**路径（`--input` 读文件 / `--size` 生成纯色等图案），带图的叠加层只能经配置 `layers` 段（§7）传入，不新增命令行挂图参数（旧 `--pattern-image`/`--image-anchor`/`--image-scale` 已移除）。
+> `new` 另支持 `--output`（非 dry-run 时必填）/ `--format`（缺省由扩展名推断）/ `--quality <0~100>`（有损质量，默认 90，仅 JPEG/WebP 生效）/ `--pad-color <hex>`（有损格式压平透明像素所用背景色，透写 `emit.padColor`，默认透明→黑底）；生成图作为切割命令的输入时，走同一 `--input` 读图之后的标准流程。
+> `new --save-config <file>` 为 dry-run：不落像素，而把本次生成配方（`source` 尺寸 + SPEC §7 `generate` 段 + `emit`）序列化进配置，供 `config --load` 据其复现画布（此路径不要求 `--output`）。
+> `--quality` 为通用导出选项：`extract` / `erase` / `grid` / `new` 均可传入（经 `applyExportOptions` 透写 `emit.quality`，`config` 则由 JSON 的 `emit.quality` 决定）。
+> 尺寸非法（<=0 / 单边超 65535 / 宽×高超 64,000,000）、图案名 / 颜色 / 方向 / 周期 / 种子 / 噪声模式非法均退出码 1（早于生成，分配前短路不至 OOM）；`--input` 与 `--size` 同时出现→退出码 1；`--quality` 非 0~100 整数→退出码 1；`--pattern image` 已不识别（旧图片图案已彻底移除），传入一律报「不支持的图案类型」退出码 1。
+
 > **标注入口**：四层命令（`extract` / `erase` / `grid` / `config`）均支持命令行标注输入——`--annotation '<内联 JSON 对象>'`
 > （一条 SPEC §7 `annotations` 元素，可重复）与 `--annotations <file.json>`（文件根为标注数组，可重复）；两者可混用、累积追加。
 > `config` 命令还会把命令行标注**追加**在其 `--load` 配置自带的 `annotations` 段之后。
 > 标注解析委托 Core 的 `parseAnnotationsFromJsonText`（内联与文件同一入口），CLI 不自行解析 JSON。
 >
-> **标注烧录**：`executeJob` 会先物化 `preprocess` 为工作图，再把标注烧录进该工作图（坐标基准＝预处理产出），
-> 故标注随像素一起被切割落位。`--save-config` dry-run 会把「配置自带 + 命令行」标注一并透写 `annotations` 段（往返不丢）。
+> **标注烧录**：`executeJob` 先物化 `preprocess` 为工作图，再把标注烧录进该工作图（坐标基准＝预处理产出），
+> 故标注随像素一起被切割落位（标注不受画布预处理影响）。
+> `--save-config` dry-run 会把「配置自带 + 命令行」标注一并透写 `annotations` 段（往返不丢）。
+
+## 多层画布与资源打包（`layers` 段 / `--bundle-assets`）
+
+`config --load` 的配置可携带 SPEC §7 `layers` 段（可选）描述叠于底图之上的**叠加图层**（`layers` 仅承载叠加层、不含底图——底图走 `--input`/`--size`/`generate` 段）：
+
+> **术语对齐 [SPEC §2.2](../../SPEC.md)**：此处「底图 base」即 §2.2 的**底图**（同构 `ImageLayer`、钉最底、不入 `layers`），`--input` 读入的原图 / `generate` 段图案（+附图片落位）承载的即**底图图片**；`layers` 数组的成员即**图层**，其 `file` 层引用的源图为**图层图片**（位图靠 `<配置名>.assets/` 引用、不入配置），`recipe` 层为程序图案（非图片）。
+
+- **叠加层构成**：`layers` = 叠加 `ImageLayer` **数组**（不含底图）；画布**无级背景**（`composeCanvas` 恒铺全透明底）；每层携
+  `source`（`recipe` 配方，与 `generate` 同源不留文件名 | `file` 相对文件名 | 无源→空占位）、
+  `transform`（画布锚点 + 图片枢轴 + 自由 `x,y` + 目标宽高 + **不透明度 `opacity`**——合成期 alpha 乘子 `a'=(a·opacity+127)/255`，缺省 255＝不透明、灰度层亦生效）、`zOrder`（叠放序）、逐层 `preprocess`（**不含 `opacity`**——不透明度已上移为 `transform.opacity`，旧图层 preprocess 内的 `opacity` 步载入时自动迁移到该字段）。
+- **执行链**（`buildLayerCanvas`）：逐层解码 `file` 源图（先「配置目录 / 相对名」后「`<配置名>.assets / 相对名」）注入像素
+  → `canvas::composeCanvas(layers, w, h, base)` 依底图 base→叠加层展平（画布无级背景、恒铺全透明底；base 由 `--input`/`--size`/`generate` 得来、非空则先铺 (0,0)），叠加层按 z 序逐层物化→缩放→按 `transform.opacity` 逐像素乘 alpha→source-over 落位、越界自然裁剪 → 得展平画布图 → 交 `runEngine`（引擎零改动）；
+  **缺文件降级为空占位**（合成时跳过），不报错。
+- **`--bundle-assets`**（全局选项，需与 `--save-config` 同用）：把各 `file` 层源图按**相对名**（不哈希、非默认）
+  复制进 `<配置名>.assets/`，使配置可携资源整体分发。相对名含 `..` / 绝对路径 / 盘符 / root_name 一律**越界拒绝**
+  （执行时退出码 3；`--bundle-assets` 时退出码 1）。
+- **可复现性**：C++/Rust 逐像素对拍仅覆盖 `recipe` 层（据配方现算）；`file` 层只对拍**结构**（落位 / z 序 / 管线声明）。
+
+```bash
+# 读取含 layers 段的配置（file 层从配置同目录或 <配置名>.assets/ 取图）
+idc config --load canvas-config.json --output out.png
+# 保存配置时把 file 层源图一并打包进 <配置名>.assets/
+idc config --load canvas-config.json --save-config bundle.json --bundle-assets
+```
 
 ## 标注使用方法
 
@@ -135,16 +198,19 @@ idc config --load base.json --annotation '{"type":"text","x":10,"y":10,"text":"h
 - 引擎编排：`engine::runEngine` / `EngineConfig` / `EngineResult`
 - 网格几何：`engine::Grid::build` / `cellAt` / `cellCount`（把 `r,c` 映射为线性 `index`）
 - 区域：`engine::RectRegion` / `horizontalBand` / `verticalBand`
-- 配置存取：`engine::loadEngineConfig` / `saveEngineConfig`（可选 `AnnotationSet*` 参：加载还原 / 保存附带 SPEC §7 `annotations` 段）
+- 配置存取：`engine::loadEngineConfig` / `saveEngineConfig`（可选 `AnnotationSet*` 参：加载还原 / 保存附带 SPEC §7 `annotations` 段；`EngineConfig` 含可选 `generate` 段（`new --save-config` 写入、`config --load` 据其生成源画布）与可选 `layers` 段）
+- 多层画布合成：`canvas::composeCanvas(layers, w, h, base)`（`config --load` 带 `layers` 时由 `job::buildLayerCanvas` 以已解析底图 base 为基、逐层解码叠加 `file` 源图注入后展平为工作图）；资源打包由 `job::bundleLayerAssets` 完成（`--bundle-assets`）
 - 标注文本解析：`engine::parseAnnotationsFromJsonText`（内联对象 / 根数组 → `vector<Annotation>`，供 `--annotation` / `--annotations` 复用；CLI 不引 nlohmann/json）
 - 标注烧录：`annotation::AnnotationSet::burnIn(base)` / `restore` / `annotations()`（把命令行 / 配置标注烧进工作图）
-- 图像 I/O：`engine::readImageFile`（解码）/ `writeImageFile`（示例 / 测试造图）
+- 图像 I/O：`engine::readImageFile`（解码）/ `writeImageFile`（示例 / 测试造图）——路径按 **UTF-8** 解析（`u8path`），支持中文 / 非 ASCII 路径
+- 导出落盘：`engine::exportImage`（`new` 经 `job::writeGeneratedImage` 构造全画布单片段 Composition 复用同一落盘通道：扩展名推断格式 / 自动建父目录 / JPEG 压平）
+- 图案生成：`generate::makePattern(w, h, PatternParams)`（`new` 与生成源均委托；尺寸 / 图案名 / 颜色等参数装配见 `src/generate_args.cpp`，CLI 不实现像素逻辑）
 - 基础类型：`core::Image` / `core::Color` / `kTransparent`
 
 ## 已知限制
 
 1. **合并导出的 JPEG/BMP 透明压平**：不支持透明的格式会把 alpha 压平到 `padColor`；
-   若未指定 `--pad-color` 则为透明黑，转 JPEG 后表现为黑色背景（属格式固有特性，非缺陷）。
+   `new` 可用 `--pad-color <hex>` 显式指定压平底色；未指定时 `emit.padColor` 缺省为透明黑，转 JPEG 后表现为黑色背景（属格式固有特性，非缺陷；透明画布导出 JPEG 时建议给 `--pad-color`）。
 
 > 此前记录的 4 项 Core 限制（`--pad-color` 不生效 / `{row}`·`{col}` 不支持 / 分离忽略 `--sort` /
 > 合并不建父目录）**均已在 Core 层修复**，见 `ImageDiscropperCore` 的 `composition.*` 与 `export.cpp`。

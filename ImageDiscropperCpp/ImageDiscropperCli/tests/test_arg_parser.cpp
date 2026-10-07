@@ -111,8 +111,8 @@ void testArgParser() {
     {
         const GlobalOptions a = parseGlobalOptions({"extract", "--input", "a.png", "--verbose"});
         CHECK(a.verbose && a.config.empty());
-        const auto [help, version, verbose, quiet, config, saveConfig] = parseGlobalOptions({});
-        CHECK(!help && !version && !verbose && !quiet);
+        const auto [help, version, verbose, quiet, config, saveConfig, bundleAssets] = parseGlobalOptions({});
+        CHECK(!help && !version && !verbose && !quiet && !bundleAssets);
         CHECK(config.empty() && saveConfig.empty());
     }
 

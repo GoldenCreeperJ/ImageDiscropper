@@ -47,11 +47,42 @@ struct JobOptions {
 // 失败（不存在 / 不可读 / 非图像）返回 InputError(3) 并已按错误格式打印错误。
 ExitCode loadInputImage(const std::string& path, core::Image& out, const JobOptions& opt);
 
+// 把一张「已生成的图像」作为合并单图落盘（new 命令专用）：内部构造覆盖全画布的单片段
+// Composition 复用 Core exportImage，从而共享「扩展名推断格式 / 自动建父目录 / JPEG 压平」等行为
+// （emit.format 仅作扩展名不明时的回退）。失败返回 OutputError(4) 并已打印错误。
+ExitCode writeGeneratedImage(const core::Image& image, const std::string& outPath,
+                             const engine::CompositionParams& emit, const JobOptions& opt);
+
 // 执行作业：按需物化工作图 work（preprocess / 标注；两者皆无时直指入参图、不深拷贝）
 // → 以 work 尺寸校正 config.source → runEngine(work) → 坍缩校验 → exportImage(work)。
 // 几何与落盘共用同一张 work，确保含 rotate/resize 的配置坐标一致。返回退出码；
 // 失败时已按错误格式打印错误。config 以引用传入（内部会写入 source 尺寸并清空 preprocess）。
 ExitCode executeJob(engine::EngineConfig& config, const core::Image& image, const JobOutput& out, const JobOptions& opt, const annotation::AnnotationSet* annotations = nullptr);
+
+// 多层画布合成（SPEC §7 layers 段）：config 带 layers 时，按 configPath 所在目录（及同名
+//  <配置名>.assets/ 伴随目录）逐层解码 File 叠加层源图像注入 decodedPixels，再交 Core canvas::composeCanvas
+//  以传入的 **base（画布底图，可为空＝仅背景）**为基座、按 zOrder 叠上层展平为 config.source 尺寸的画布写入 out
+//  （引擎仍只收一张展平画布，签名不变）。缺文件降级为占位；越界（绝对路径 / `..`）文件层名 → InputError(3)。
+//  composeCanvas 产空图（尺寸非法）→ RuntimeError(2)。仅在 config.layers 有值时由命令层调用。
+ExitCode buildLayerCanvas(const engine::EngineConfig& config, const std::string& configPath,
+                          const core::Image& base, core::Image& out, const JobOptions& opt);
+
+// 底图展平（SPEC §7 generate 段，同构 canvas::ImageLayer）：config.base 非空时交 Core canvas::composeBase 展平
+//  为 config.source 尺寸写入 out（纯图案底＝按 source 尺寸现算、与旧 generate 段等价）。
+//  底图不外传文件：若配置带内层落位（hasImagePlacement）却未提供外部源图（无 --input），无法展平落位 → InputError(3)。
+//  composeBase 产空图（尺寸非法）→ RuntimeError(2)。仅在 config.base 有值且未给 --input/--size 时由命令层调用。
+ExitCode buildBaseCanvas(const engine::EngineConfig& config, core::Image& out, const JobOptions& opt);
+
+// 把已解析的外部底图源（--input/--size 产物 io）按 config.base 的内层落位声明摆入 config.source 尺寸画布：
+//  运行时以 File 源注入 decodedPixels 后交 composeBase 展平，原地写回 io（**配置不含图片路径，图凭运行时供给**）。
+//  无落位声明 → 原样返回（恒等底图）。composeBase 产空图 → RuntimeError(2)。仅在 config.base 带落位时由命令层调用。
+ExitCode placeInputIntoBase(const engine::EngineConfig& config, core::Image& io, const JobOptions& opt);
+
+// 资源打包（--bundle-assets）：把 config 内各 File 层源图按相对名复制到
+//  <saveConfigPath 同名>.assets/ 下（保留子目录相对路径）。源图缺失 → InputError(3)；
+//  越界文件层名 → ArgError(1)；复制 / 建目录失败 → OutputError(4)。仅在 --save-config 且 --bundle-assets 时调用。
+ExitCode bundleLayerAssets(const engine::EngineConfig& config, const std::string& configPath,
+                           const std::string& saveConfigPath, const JobOptions& opt);
 
 // 把一份 EngineConfig 序列化到 JSON 文件（Core saveEngineConfig），用于 --save-config dry-run。
 // annotations 非空时附带标注段（往返不丢）。成功返回 Ok 并（非 quiet 时）提示；失败（路径空 / 写盘失败）返回 OutputError(4)。

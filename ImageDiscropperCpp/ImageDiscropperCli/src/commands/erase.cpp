@@ -25,6 +25,7 @@
 #include "annotation_args.h"
 #include "arg_parser.h"
 #include "command_support.h"
+#include "generate_args.h"
 #include "job.h"
 #include "value_parser.h"
 
@@ -35,9 +36,11 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     ArgParser args;
     args.parse(tokens);
 
-    // --- 第 3 步：必填。---
-    if (!args.has("--input"))
-        return argError("缺少 --input", "请用 --input <file> 指定输入图像");
+    // --- 第 3 步：必填。（输入来源二选一：--input 读文件 或 --size 生成画布。）---
+    if (!args.has("--input") && !hasGenerateOptions(args))
+        return argError("缺少输入图像", "请用 --input <file> 指定输入图像，或用 --size WxH（可配 --pattern）生成画布作为输入");
+    if (args.has("--input") && hasGenerateOptions(args))
+        return argError("--input 与 --size 不可同时使用", "读取文件用 --input；程序生成画布用 --size（二者择一）");
 
     // --- 第 4 步：互斥——几何三选一（--rect 可重复，整体算作一类）。---
     const bool hasRect = args.has("--rect");
@@ -115,13 +118,13 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
             return argError("垂直带退化：需满足 x1<x2", "请检查 --vband 的坐标顺序");
         config.cut.generator = engine::CutGenerator::VERTICAL_LINE;
     }
-    // 公共导出选项：--format（分离时决定扩展名 / 合并时作扩展名回退）/ --naming（分离命名模板）。
-    if (!applyFormatNaming(args, config.emitParams, err)) return argError(err);
+    // 公共导出选项：--format（分离时决定扩展名 / 合并时作扩展名回退）/ --quality（JPEG/WebP）/ --naming（分离命名模板）。
+    if (!applyExportOptions(args, config.emitParams, err)) return argError(err);
 
-    // --- 第 6 步：读图（失败退出码 3）。---
+    // --- 第 6 步：获取输入图像（--input 读文件失败 3；--size 生成参数非法 1）。---
     const JobOptions opt = makeJobOptions(go, explicitCollapse);
     core::Image image;
-    if (const ExitCode ec = loadInputImage(args.get("--input"), image, opt); ec != ExitCode::Ok)
+    if (const ExitCode ec = resolveInputImage(args, image, opt); ec != ExitCode::Ok)
         return toInt(ec);
 
     // --- 装配切割几何：带需图像尺寸构造贯穿全图矩形；写入 source（供 --save-config 完整）。---

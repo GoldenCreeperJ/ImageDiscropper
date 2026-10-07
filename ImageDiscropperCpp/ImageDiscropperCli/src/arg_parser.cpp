@@ -102,6 +102,7 @@ GlobalOptions parseGlobalOptions(const std::vector<std::string>& args) {
         if (name == "--version" || name == "-v") { go.version = true; continue; }
         if (name == "--verbose") { go.verbose = true; continue; }
         if (name == "--quiet") { go.quiet = true; continue; }
+        if (name == "--bundle-assets") { go.bundleAssets = true; continue; }
 
         if (name == "--config") {
             if (hasInline) go.config = inlineVal;

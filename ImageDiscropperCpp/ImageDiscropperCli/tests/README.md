@@ -12,9 +12,9 @@
 | `test_main.cpp`         | 入口 `main`：依次调度 `testArgParser → testValueParser → testIntegration` |
 | `test_arg_parser.cpp`   | 单元：`ArgParser` 语法归类（含负数值消费）+ `parseGlobalOptions` 全局选项             |
 | `test_value_parser.cpp` | 单元：`value_parser` 全部「字符串 → 类型」解析与格式校验（成功 + 失败两路）                   |
-| `test_integration.cpp`  | 集成：IT-1~IT-25，进程内调用 `cliMain`，校验退出码 / 输出尺寸 / 像素落位 / 错误文本           |
+| `test_integration.cpp`  | 集成：IT-1~IT-48，进程内调用 `cliMain`，校验退出码 / 输出尺寸 / 像素落位 / 错误文本           |
 
-## 集成测试做法（IT-1~IT-25）
+## 集成测试做法（IT-1~IT-48）
 
 - **进程内调用**：`cli_tests` 链接 `idc_cli_lib`，直接调 `cliMain`（不启动子进程）；用 `rdbuf` 重定向
   `std::cout`/`std::cerr` 到 `ostringstream` 捕获输出，调用后恢复。
@@ -27,19 +27,43 @@
 
 ## 覆盖矩阵
 
-| 编号       | 场景                                                                          | 验证点                                            |
-|----------|-----------------------------------------------------------------------------|------------------------------------------------|
-| IT-1~3   | `extract --rect/--hband/--vband`                                            | 输出尺寸正确（100×80 / 200×80 / 100×150）              |
-| IT-4     | `erase --rect --output-dir`                                                 | 分离 4 个文件，尺寸两两为 50×40 / 50×30                   |
-| IT-5~7   | `erase --rect/--hband/--vband --merge collapse`                             | 坍缩尺寸 (W−Δx)×(H−Δy) = 100×70 / 200×70 / 100×150 |
-| IT-8     | `erase` 多矩形并集 collapse                                                      | 130×80（删整列 70 + 整行 70）                         |
-| IT-9~11  | `grid --keep/--sort column-major/--sort custom` + `--compose`               | 画布尺寸与像素落位符合排序序列                                |
-| IT-12    | `config --load` 执行                                                          | 配置参数全部生效（等价 IT-5，100×70）                       |
-| IT-13~14 | `--version` / `--help`                                                      | 版本格式 / 含全部子命令                                  |
-| IT-15~18 | 缺必填 / 输入不存在 / 输出目录不存在 / 坍缩不可行                                               | 退出码 1 / 3 / 4 / 2 + stderr 提示                  |
-| IT-19~20 | `grid --merge-sort column-major` / `--merge-decorate reverse` + `--compose` | 填充路径列优先 / 整体逆序（与选择排序正交）                        |
-| IT-21    | `erase --merge rearrange`                                                   | 退出码 1 + 提示（重排为 L3 专属，L2 直接拒绝）                  |
-| IT-22    | `extract --annotation` 内联矩形标注                                               | 退出码 0；标注烧进工作图（内部点变色、未覆盖点保持原色）                  |
-| IT-23    | `extract --annotations <file>`（根为数组）                                        | 退出码 0；多条标注一并烧录（绿区 + 蓝区各自变色）                    |
-| IT-24    | `extract --annotation '{bad json'`                                          | 退出码 1 + stderr 含“标注”（Core 段解析失败）               |
-| IT-25    | `extract --annotation + --save-config`                                      | 退出码 0；写出的配置 JSON 含 `annotations` 段（透写不丢）       |
+| 编号       | 场景                                                                             | 验证点                                                                                                                                         |
+|----------|--------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
+| IT-1~3   | `extract --rect/--hband/--vband`                                               | 输出尺寸正确（100×80 / 200×80 / 100×150）                                                                                                           |
+| IT-4     | `erase --rect --output-dir`                                                    | 分离 4 个文件，尺寸两两为 50×40 / 50×30                                                                                                                |
+| IT-5~7   | `erase --rect/--hband/--vband --merge collapse`                                | 坍缩尺寸 (W−Δx)×(H−Δy) = 100×70 / 200×70 / 100×150                                                                                              |
+| IT-8     | `erase` 多矩形并集 collapse                                                         | 130×80（删整列 70 + 整行 70）                                                                                                                      |
+| IT-9~11  | `grid --keep/--sort column-major/--sort custom` + `--compose`                  | 画布尺寸与像素落位符合排序序列                                                                                                                             |
+| IT-12    | `config --load` 执行                                                             | 配置参数全部生效（等价 IT-5，100×70）                                                                                                                    |
+| IT-13~14 | `--version` / `--help`                                                         | 版本格式 / 含全部子命令                                                                                                                               |
+| IT-15~18 | 缺必填 / 输入不存在 / 输出目录不存在 / 坍缩不可行                                                  | 退出码 1 / 3 / 4 / 2 + stderr 提示                                                                                                               |
+| IT-19~20 | `grid --merge-sort column-major` / `--merge-decorate reverse` + `--compose`    | 填充路径列优先 / 整体逆序（与选择排序正交）                                                                                                                     |
+| IT-21    | `erase --merge rearrange`                                                      | 退出码 1 + 提示（重排为 L3 专属，L2 直接拒绝）                                                                                                               |
+| IT-22    | `extract --annotation` 内联矩形标注                                                  | 退出码 0；标注烧进工作图（内部点变色、未覆盖点保持原色）                                                                                                               |
+| IT-23    | `extract --annotations <file>`（根为数组）                                           | 退出码 0；多条标注一并烧录（绿区 + 蓝区各自变色）                                                                                                                 |
+| IT-24    | `extract --annotation '{bad json'`                                             | 退出码 1 + stderr 含“标注”（Core 段解析失败）                                                                                                            |
+| IT-25    | `extract --annotation + --save-config`                                         | 退出码 0；写出的配置 JSON 含 `annotations` 段（透写不丢）                                                                                                    |
+| IT-26    | `new --size 64x48 --pattern solid --bg "#FFFF0000"`                            | 退出码 0；生成 64×48 全红图（回读尺寸 + 像素色）                                                                                                              |
+| IT-27    | `new --bg "#00FFFFFF"`（底色 alpha=00）                                            | 退出码 0；回读全透明画布（alpha==0）                                                                                                                     |
+| IT-28    | 生成源切割：`extract --size 200x150 --rect 50,40,150,120`                            | 退出码 0；100×80 全红（--size 替代 --input 后走 L1）                                                                                                    |
+| IT-29    | `extract --input` 与 `--size` 同时给出                                              | 退出码 1 + stderr 含“--size”（互斥）                                                                                                                |
+| IT-30    | `new --pattern bogus`                                                          | 退出码 1 + stderr 含“图案”（非法枚举名）                                                                                                                 |
+| IT-31    | `new` 缺 --output / 带 --input                                                   | 退出码 1（必填缺失 / new 不接受 --input）                                                                                                               |
+| IT-32    | `new --quality 80`（合法）/ `150` / `abc`                                          | code 0 / code 1（错含“质量”）/ code 1（非整数）                                                                                                        |
+| IT-33    | `extract --quality 200`                                                        | 退出码 1 + stderr 含“质量”（导出选项统一校验）                                                                                                              |
+| IT-34    | `new --bg "#00FFFFFF" --format jpeg --pad-color "#FF0000FF`                    | 退出码 0；透明画布按 pad-color 压平（回读像素为蓝）                                                                                                            |
+| IT-35    | `new --size 32x24 --pattern checkerboard --period 8 --save-config`（无 --output） | 退出码 0；写出的配置含 `generate` 段（kind/period）                                                                                                      |
+| IT-36    | `config --load it35.json --save-config`（dry-run 往返）                            | 退出码 0；`generate` 段（checkerboard）读入再写出保持                                                                                                     |
+| IT-37    | `config --load`（含 generate 段，无 --input/--size）                                 | 退出码 0；据 source+generate 合成红底→L1 keep rect 得 100×80 全红                                                                                       |
+| IT-38    | `new --size 65535x65535`（单边合法但总像素超限）                                           | 退出码 1 + stderr 含“总像素”（分配前短路）                                                                                                                |
+| IT-39    | `new` 四种图案（stripes/concentric/hue-gradient/noise） 64×48 冒烟                     | 退出码 0；均生成非空图（斜纹/同心方框已并入前两者）                                                                                                                 |
+| IT-40    | `new --pattern noise --seed 1234` 两次落盘 / `--seed 9999` 一次                      | 同种子字节逐字相等（确定性）；异种子字节不同                                                                                                                      |
+| IT-41    | `new --seed -1` / `new --noise bogus`                                          | 退出码 1（种子非法 / 噪声模式非法）                                                                                                                        |
+| IT-42    | `new --pattern image` 回归护栏（图片图案已彻底移除）                                          | 退出码 1 + stderr 含“不支持的图案类型”（`parsePatternKind` 不再识别 `image`）；图片层仅能经配置 `layers` 段表达                                                           |
+| IT-43    | 旧 token 拒绝 + 斜向/方环写入                                                           | `--pattern diagonal-stripes`/`rect-rings`→退出码 1；`stripes --orientation diagonal-down/diagonal-up`、`concentric --orientation vertical`→退出码 0 |
+| IT-44    | 多层画布 `layers` 段端到端（配方层）：`config --load` 合成后切割                                  | 退出码 0；透明底 + 整幅红色配方层 → composeCanvas 展平后据配置切割得预期像素                                                                                           |
+| IT-45    | `file` 层解码 + `--bundle-assets` 复制                                              | 源图写临时目录、相对名解析→config 合成（File 层 20×20 居中落位、不撑大）；`--bundle-assets` 把源图复制进 `<配置名>.assets/`                                                     |
+| IT-46    | `file` 层越界路径（含 `..`）                                                           | `config` 执行时退出码 3（InputError）+ stderr 含“越界”                                                                                                 |
+| IT-47    | 图层大于画布→不撑大、合成自然裁剪                                                              | 输出尺寸恒等于 `source`（不撑大）                                                                                                                       |
+| IT-48    | 预处理 `opacity`（set）· PNG 保留 alpha                                               | 退出码 0；回读像素 alpha 等于设定值（PNG 保 alpha）                                                                                                         |
+| IT-49    | 底图同构 `base`（`generate` 段携 `file`+内层落位+`backdrop`）端到端                           | 退出码 0；`config --load` 据 source 尺寸 `composeBase` 复现蓝源左上 20×20、绿底铺其余；`--save-config` 回写 `generate` 段带 `file`/`imageAnchor`/`backdrop` 键       |

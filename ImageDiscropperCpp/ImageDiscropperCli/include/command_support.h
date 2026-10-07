@@ -49,14 +49,16 @@ inline JobOptions makeJobOptions(const GlobalOptions& go, const bool explicitCol
     return opt;
 }
 
-// 解析公共导出选项 --format / --naming 写入 emit：
+// 解析公共导出选项 --format / --naming / --quality 写入 emit：
 //   --format 存在则解析为 ExportFormat（失败 → false + err）；合并导出时 Core 仍以 --output
 //            扩展名优先，此处的 format 作为无有效扩展名时的回退（见 export.cpp: exportMerged）。
 //   --naming 存在则经 checkNaming 校验（非空、不含路径分隔符）后写入，用于分离导出命名。
-// 二者均可省略（省略时沿用 emit 既有默认值）。成功返回 true。
-inline bool applyFormatNaming(const ArgParser& args, engine::CompositionParams& emit,
+//   --quality 存在则经 parseQuality 校验（0~100 整数，仅 JPEG/WebP 生效）后写入 emit.quality。
+// 均可省略（省略时沿用 emit 既有默认值）。成功返回 true。
+inline bool applyExportOptions(const ArgParser& args, engine::CompositionParams& emit,
                               std::string& err) {
     if (args.has("--format") && !parseFormat(args.get("--format"), emit.format, err)) return false;
+    if (args.has("--quality") && !parseQuality(args.get("--quality"), emit.quality, err)) return false;
     if (args.has("--naming")) {
         const std::string tpl = args.get("--naming");
         if (!checkNaming(tpl, err)) return false;

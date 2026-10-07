@@ -173,6 +173,14 @@ bool parseFormat(const std::string& s, engine::ExportFormat& out, std::string& e
     return false;
 }
 
+bool parseQuality(const std::string& s, int& out, std::string& err) {
+    int v = 0;
+    if (!toInt(s, v)) { err = "质量参数须为 0~100 的整数：'" + s + "'"; return false; }
+    if (v < 0 || v > 100) { err = "质量参数超出范围（0~100）：'" + s + "'"; return false; }
+    out = v;
+    return true;
+}
+
 bool parseSort(const std::string& s, engine::SortStrategy& out, std::string& err) {
     const std::string v = toLower(s);
     if (v == "row-major") { out = engine::SortStrategy::ROW_MAJOR; return true; }

@@ -30,6 +30,9 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go);
 // 配置文件：config --load <file> 执行；配合 --save-config 可加载后再序列化（转换/校验）。
 int cmdConfig(const std::vector<std::string>& tokens, const GlobalOptions& go);
 
+// 新建图像：--size + [--pattern/--bg/--fg/…] + --output（程序生成一张画布并落盘）。
+int cmdNew(const std::vector<std::string>& tokens, const GlobalOptions& go);
+
 // CLI 顶层入口：解析全局选项 → 处理 help/version → 定位子命令 → 分派 → 未捕获异常兜底(5)。
 // args 为不含程序名的 argv。返回退出码整数。
 int cliMain(const std::vector<std::string>& args);

@@ -36,6 +36,7 @@
 #include "annotation_args.h"
 #include "arg_parser.h"
 #include "command_support.h"
+#include "generate_args.h"
 #include "job.h"
 #include "value_parser.h"
 
@@ -46,9 +47,11 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     ArgParser args;
     args.parse(tokens);
 
-    // --- 第 3 步：必填。---
-    if (!args.has("--input"))
-        return argError("缺少 --input", "请用 --input <file> 指定输入图像");
+    // --- 第 3 步：必填。（输入来源二选一：--input 读文件 或 --size 生成画布。）---
+    if (!args.has("--input") && !hasGenerateOptions(args))
+        return argError("缺少输入图像", "请用 --input <file> 指定输入图像，或用 --size WxH（可配 --pattern）生成画布作为输入");
+    if (args.has("--input") && hasGenerateOptions(args))
+        return argError("--input 与 --size 不可同时使用", "读取文件用 --input；程序生成画布用 --size（二者择一）");
     if (!args.has("--grid"))
         return argError("缺少 --grid", "请用 --grid x0,y0,cw,ch 指定基准点与单元尺寸");
 
@@ -150,13 +153,13 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
         config.emitParams.mode = engine::EmitMode::SEPARATE;
     }
 
-    // --- 第 5 步：填充色与公共导出选项 --format / --naming。---
+    // --- 第 5 步：填充色与公共导出选项 --format / --quality / --naming。---
     if (args.has("--pad-color")) {
         core::Color pad;
         if (!parseColor(args.get("--pad-color"), pad, err)) return argError(err);
         config.emitParams.padColor = pad; // Core 已透传至合并画布填充色（见文件头说明）。
     }
-    if (!applyFormatNaming(args, config.emitParams, err)) return argError(err);
+    if (!applyExportOptions(args, config.emitParams, err)) return argError(err);
 
     // --- 第 5 步：选择单元 (r,c) 的格式解析（映射为序号需网格，故读图后再映射）。---
     std::vector<std::pair<int, int>> chosen; // 保持出现顺序（custom 下即输出序）。
@@ -177,10 +180,10 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
         }
     }
 
-    // --- 第 6 步：读图（失败退出码 3）。---
+    // --- 第 6 步：获取输入图像（--input 读文件失败 3；--size 生成参数非法 1）。---
     const JobOptions opt = makeJobOptions(go, /*explicitCollapse=*/false);
     core::Image image;
-    if (const ExitCode ec = loadInputImage(args.get("--input"), image, opt); ec != ExitCode::Ok)
+    if (const ExitCode ec = resolveInputImage(args, image, opt); ec != ExitCode::Ok)
         return toInt(ec);
 
     // --- 用 Core Grid 铺网格（复用引擎几何，CONTRIBUTING.md「分层纪律」），据此把 (r,c) 映射为单元序号。---

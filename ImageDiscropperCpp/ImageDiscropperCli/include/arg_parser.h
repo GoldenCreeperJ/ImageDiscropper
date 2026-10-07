@@ -29,6 +29,7 @@ struct GlobalOptions {
     bool quiet{false};       // --quiet：静默，仅输出错误。
     std::string config;      // --config <file>：从 JSON 配置读取全部参数（SPEC §7）。
     std::string saveConfig;  // --save-config <file>：把当前参数序列化为 JSON（dry-run）。
+    bool bundleAssets{false}; // --bundle-assets：与 --save-config 同用时，把 File 图层源图按相对名复制进 <配置名>.assets/
 };
 
 // ---------------------------------------------------------------------------
@@ -67,7 +68,7 @@ private:
 };
 
 // 从完整 argv（不含程序名）扫描出全局选项。识别 --help/-h、--version/-v、
-// --verbose、--quiet、--config <file>、--save-config <file>。
+// --verbose、--quiet、--config <file>、--save-config <file>、--bundle-assets。
 GlobalOptions parseGlobalOptions(const std::vector<std::string>& args);
 
 } // namespace idc::cli
