@@ -29,6 +29,9 @@
 #include <QStandardItemModel>
 
 #include "model/document.h"
+#include "util/gui_nums.h"
+#include "i18n/gui_texts.h"
+#include "i18n/gui_i18n.h"
 
 namespace idc::gui {
 
@@ -54,155 +57,25 @@ void applyMaskTo(const std::string& mask, QCheckBox* r, QCheckBox* g, QCheckBox*
 // 构造：上「画布尺寸（Resize）」+ 中「几何操作」区/列表 + 「色彩操作」区/列表 + 下「重置」。
 ImagePanel::ImagePanel(QWidget* parent) : QWidget(parent) {
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(8, 8, 8, 8);   // 面板内边距 8px。
-    root->setSpacing(12);                    // 分组间距 12px。
+    root->setContentsMargins(nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx,
+                             nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx);   // 面板内边距。
+    root->setSpacing(nums::panels::kPanelGroupSpacingPx);                                    // 分组间距。
 
     // ---- 顶部当前预处理目标标注（未选图层＝画布；选中图片图层＝该层）----
-    targetLabel_ = new QLabel(QStringLiteral("当前目标：画布"), this);
-    targetLabel_->setToolTip(QStringLiteral("预处理编辑作用于当前目标（三元）：选中图片图层时作用于该层，拾取到底图时作用于底图（仅色彩），否则作用于画布。"));
+    targetLabel_ = new QLabel(this);
+    i18n::bindText(retranslator_, targetLabel_, IDC_GT(status, kTargetLabelInit));   // 初值绑定；有图时 syncFromDocument 回灌三元目标
+    i18n::bindToolTip(retranslator_, targetLabel_, IDC_GT(tooltip, kPreprocessTarget));
     root->addWidget(targetLabel_);
 
-    // ---- 画布尺寸（Resize）独立区：常驻、恒最先重放、不入队列 ----
-    auto* sizeBox = sizeBox_ = new QGroupBox(QStringLiteral("画布尺寸"), this);
-    auto* sizeGrid = new QGridLayout(sizeBox);
-    sizeGrid->setSpacing(6);
-
-    resizeW_ = new QSpinBox(sizeBox);
-    resizeH_ = new QSpinBox(sizeBox);
-    for (QSpinBox* s : {resizeW_, resizeH_}) {
-        s->setRange(1, 20000);               // 上限覆盖 8000×8000 大图并留余量。
-        s->setToolTip(QStringLiteral("目标边长（像素）。勾选「保持宽高比」时改宽联动算高。"));
-    }
-    resizeKeepRatio_ = new QCheckBox(QStringLiteral("保持宽高比"), sizeBox);
-    resizeKeepRatio_->setChecked(true);
-    sizeGrid->addWidget(new QLabel(QStringLiteral("宽 / 高"), sizeBox), 0, 0);
-    sizeGrid->addWidget(resizeW_, 0, 1);
-    sizeGrid->addWidget(resizeH_, 0, 2);
-    sizeGrid->addWidget(resizeKeepRatio_, 0, 3);
-
-    resizeScalePct_ = new QSpinBox(sizeBox);
-    resizeScalePct_->setRange(1, 1000);      // 1%..1000%。
-    resizeScalePct_->setValue(100);
-    resizeScalePct_->setSuffix(QStringLiteral("%"));
-    resizeScalePct_->setToolTip(QStringLiteral("按当前画布尺寸目标（无则原图尺寸）的百分比缩放。"));
-    currentSizeLabel_ = new QLabel(QStringLiteral("当前输出尺寸: —×—"), sizeBox);
-    sizeGrid->addWidget(new QLabel(QStringLiteral("比例"), sizeBox), 1, 0);
-    sizeGrid->addWidget(resizeScalePct_, 1, 1);
-    sizeGrid->addWidget(currentSizeLabel_, 1, 2, 1, 2);
-
-    applySizeBtn_ = new QPushButton(QStringLiteral("应用尺寸"), sizeBox);
-    applySizeBtn_->setToolTip(QStringLiteral("把工作图设为上面输入的绝对尺寸（恒从原图重采样）。"));
-    scaleSizeBtn_ = new QPushButton(QStringLiteral("按比例缩放"), sizeBox);
-    scaleSizeBtn_->setToolTip(QStringLiteral("按上面百分比缩放画布尺寸。"));
-    clearSizeBtn_ = new QPushButton(QStringLiteral("清除尺寸"), sizeBox);
-    clearSizeBtn_->setToolTip(QStringLiteral("取消画布尺寸，回到原图尺寸（轻操作队列保留）。"));
-    auto* sizeBtnRow = new QHBoxLayout();
-    sizeBtnRow->addWidget(applySizeBtn_);
-    sizeBtnRow->addWidget(scaleSizeBtn_);
-    sizeBtnRow->addWidget(clearSizeBtn_);
-    sizeGrid->addLayout(sizeBtnRow, 2, 0, 1, 4);
-    root->addWidget(sizeBox);
-
-    // ================= 几何操作区（旋转 / 翻转）=================
-    auto* geoBox = geoBox_ = new QGroupBox(QStringLiteral("几何操作"), this);
-    auto* geoGrid = new QGridLayout(geoBox);
-    geoGrid->setSpacing(6);
-
-    geoTypeCombo_ = new QComboBox(geoBox);
-    geoTypeCombo_->addItems({QStringLiteral("旋转"), QStringLiteral("翻转")});
-    geoGrid->addWidget(new QLabel(QStringLiteral("操作类型"), geoBox), 0, 0);
-    geoGrid->addWidget(geoTypeCombo_, 0, 1, 1, 3);
-
-    rotAngle_ = new QComboBox(geoBox);
-    rotAngle_->addItem(QStringLiteral("左转 90°"), -90);
-    rotAngle_->addItem(QStringLiteral("右转 90°"), 90);
-    rotAngle_->addItem(QStringLiteral("旋转 180°"), 180);
-    geoGrid->addWidget(new QLabel(QStringLiteral("角度"), geoBox), 1, 0);
-    geoGrid->addWidget(rotAngle_, 1, 1, 1, 3);
-
-    flipDir_ = new QComboBox(geoBox);
-    flipDir_->addItem(QStringLiteral("水平（左右）"), 1);
-    flipDir_->addItem(QStringLiteral("垂直（上下）"), 0);
-    geoGrid->addWidget(new QLabel(QStringLiteral("方向"), geoBox), 2, 0);
-    geoGrid->addWidget(flipDir_, 2, 1, 1, 3);
-
-    auto* geoBtnRow = new QHBoxLayout();
-    geoAddBtn_ = new QPushButton(QStringLiteral("添加几何步骤"), geoBox);
-    geoAddBtn_->setToolTip(QStringLiteral("把上面配置好的几何操作追加到几何列表末尾（恒在色彩块之前）。"));
-    geoReplaceBtn_ = new QPushButton(QStringLiteral("更新所选"), geoBox);
-    geoReplaceBtn_->setToolTip(QStringLiteral("用当前配置就地替换几何列表中选中的步骤。"));
-    geoBtnRow->addWidget(geoAddBtn_);
-    geoBtnRow->addWidget(geoReplaceBtn_);
-    geoGrid->addLayout(geoBtnRow, 3, 0, 1, 4);
-
-    geoList_ = new QListWidget(geoBox);
-    geoList_->setToolTip(QStringLiteral("几何操作队列（旋转 / 翻转，在缩放结果之后、色彩操作之前应用）。选中后可删除 / 上下移动 / 更新。"));
-    geoGrid->addWidget(geoList_, 4, 0, 1, 4);
-
-    auto* geoEditRow = new QHBoxLayout();
-    geoDelBtn_ = new QPushButton(QStringLiteral("删除"), geoBox);
-    geoUpBtn_ = new QPushButton(QStringLiteral("上移"), geoBox);
-    geoDownBtn_ = new QPushButton(QStringLiteral("下移"), geoBox);
-    geoEditRow->addWidget(geoDelBtn_);
-    geoEditRow->addWidget(geoUpBtn_);
-    geoEditRow->addWidget(geoDownBtn_);
-    geoGrid->addLayout(geoEditRow, 5, 0, 1, 4);
-    root->addWidget(geoBox);
-
-    // ================= 色彩操作区（黑白 / 反色 / 分离）=================
-    auto* colorBox = new QGroupBox(QStringLiteral("色彩操作"), this);
-    auto* colorGrid = new QGridLayout(colorBox);
-    colorGrid->setSpacing(6);
-
-    colorTypeCombo_ = new QComboBox(colorBox);
-    colorTypeCombo_->addItems({QStringLiteral("黑白（灰度）"), QStringLiteral("色道反色"),
-                               QStringLiteral("色道分离")});
-    colorGrid->addWidget(new QLabel(QStringLiteral("操作类型"), colorBox), 0, 0);
-    colorGrid->addWidget(colorTypeCombo_, 0, 1, 1, 3);
-
-    // 「作用通道」整行容器（仅反色 / 分离显隐）。
-    colorChanRow_ = new QWidget(colorBox);
-    {
-        auto* h = new QHBoxLayout(colorChanRow_);
-        h->setContentsMargins(0, 0, 0, 0);
-        h->addWidget(new QLabel(QStringLiteral("作用通道"), colorChanRow_));
-        chR_ = new QCheckBox(QStringLiteral("R"), colorChanRow_);
-        chG_ = new QCheckBox(QStringLiteral("G"), colorChanRow_);
-        chB_ = new QCheckBox(QStringLiteral("B"), colorChanRow_);
-        for (QCheckBox* c : {chR_, chG_, chB_}) c->setChecked(true);
-        h->addWidget(chR_);
-        h->addWidget(chG_);
-        h->addWidget(chB_);
-        h->addStretch(1);
-    }
-    colorGrid->addWidget(colorChanRow_, 1, 0, 1, 4);
-
-    auto* colorBtnRow = new QHBoxLayout();
-    colorAddBtn_ = new QPushButton(QStringLiteral("添加色彩步骤"), colorBox);
-    colorAddBtn_->setToolTip(QStringLiteral("把上面配置好的色彩操作追加到色彩列表末尾（恒在几何块之后）。"));
-    colorReplaceBtn_ = new QPushButton(QStringLiteral("更新所选"), colorBox);
-    colorReplaceBtn_->setToolTip(QStringLiteral("用当前配置就地替换色彩列表中选中的步骤。"));
-    colorBtnRow->addWidget(colorAddBtn_);
-    colorBtnRow->addWidget(colorReplaceBtn_);
-    colorGrid->addLayout(colorBtnRow, 3, 0, 1, 4);
-
-    colorList_ = new QListWidget(colorBox);
-    colorList_->setToolTip(QStringLiteral("色彩操作队列（黑白 / 反色 / 分离，在几何产物上应用）。选中后可删除 / 上下移动 / 更新。"));
-    colorGrid->addWidget(colorList_, 4, 0, 1, 4);
-
-    auto* colorEditRow = new QHBoxLayout();
-    colorDelBtn_ = new QPushButton(QStringLiteral("删除"), colorBox);
-    colorUpBtn_ = new QPushButton(QStringLiteral("上移"), colorBox);
-    colorDownBtn_ = new QPushButton(QStringLiteral("下移"), colorBox);
-    colorEditRow->addWidget(colorDelBtn_);
-    colorEditRow->addWidget(colorUpBtn_);
-    colorEditRow->addWidget(colorDownBtn_);
-    colorGrid->addLayout(colorEditRow, 5, 0, 1, 4);
-    root->addWidget(colorBox);
+    // 分区构建（画布尺寸 / 几何操作 / 色彩操作；实现见 image_panel_sections.cpp）。
+    buildResizeSection(root);
+    buildGeoSection(root);
+    buildColorSection(root);
 
     // ---- 重置 ----
-    resetBtn_ = new QPushButton(QStringLiteral("重置预处理（清空尺寸与队列，恢复原图）"), this);
-    resetBtn_->setToolTip(QStringLiteral("丢弃画布尺寸与全部轻操作步骤，把工作图恢复为最初打开的原图。"));
+    resetBtn_ = new QPushButton(this);
+    i18n::bindButton(retranslator_, resetBtn_, IDC_GT(label, kResetPreprocessButton));
+    i18n::bindToolTip(retranslator_, resetBtn_, IDC_GT(tooltip, kResetPreprocessBtn));
     root->addWidget(resetBtn_);
 
     // ---- 串联信号 ----
@@ -252,8 +125,8 @@ void ImagePanel::onColorTypeChanged(const int index) const {
     // 队列已产出灰度时，「黑白」(冗余) 与「色道分离」(对灰度无操作) 不可再入队 / 替换。
     const bool blocked = has && doc_->activeSession().producesGray() && (index == kGray || index == kSplit);
     colorAddBtn_->setEnabled(has && !blocked);
-    colorAddBtn_->setToolTip(blocked ? QStringLiteral("队列已产出灰度：重复「黑白」属冗余、「色道分离」对灰度图为无操作，故不可添加。")
-                                     : QStringLiteral("把上面配置好的色彩操作追加到色彩列表末尾（恒在几何块之后）。"));
+    colorAddBtn_->setToolTip(blocked ? IDC_GTR(tooltip, kColorAddBlocked)
+                                     : IDC_GTR(tooltip, kColorAddBtn));
     colorReplaceBtn_->setEnabled(has && colorList_->currentRow() >= 0 && !blocked);
 }
 
@@ -439,17 +312,17 @@ QString ImagePanel::describeStep(const preprocess::PreprocessConfig& cfg) {
     return std::visit([](const auto& op) -> QString {
         using T = std::decay_t<decltype(op)>;
         if constexpr (std::is_same_v<T, preprocess::GrayOp>) {
-            return QStringLiteral("黑白（灰度）");
+            return IDC_GTR(label, kColorTypeGray);
         } else if constexpr (std::is_same_v<T, preprocess::InvertOp>) {
-            return QStringLiteral("色道反色 [%1]").arg(QString::fromStdString(op.mask));
+            return IDC_GTR(status, kStepInvertDesc).arg(QString::fromStdString(op.mask));
         } else if constexpr (std::is_same_v<T, preprocess::SplitOp>) {
-            return QStringLiteral("色道分离 [%1]").arg(QString::fromStdString(op.mask));
+            return IDC_GTR(status, kStepSplitDesc).arg(QString::fromStdString(op.mask));
         } else if constexpr (std::is_same_v<T, preprocess::RotateOp>) {
-            return QStringLiteral("旋转 %1°").arg(op.angle);
+            return IDC_GTR(status, kStepRotateDesc).arg(op.angle);
         } else if constexpr (std::is_same_v<T, preprocess::FlipOp>) {
-            return op.horizontal ? QStringLiteral("水平翻转") : QStringLiteral("垂直翻转");
+            return op.horizontal ? IDC_GTR(menu, kFlipHorizontal) : IDC_GTR(menu, kFlipVertical);
         } else {
-            return QStringLiteral("未知步骤");
+            return IDC_GTR(status, kStepUnknown);
         }
     }, cfg);
 }
@@ -470,11 +343,11 @@ void ImagePanel::syncFromDocument() {
     if (targetLabel_) {
         QString t;
         switch (doc_->preprocessTarget()) {
-            case PreprocessTarget::Layer:  t = QStringLiteral("图片图层"); break;
-            case PreprocessTarget::Base:   t = QStringLiteral("底图"); break;
-            case PreprocessTarget::Canvas: t = QStringLiteral("画布"); break;
+            case PreprocessTarget::Layer:  t = IDC_GTR(label, kImageLayerName); break;
+            case PreprocessTarget::Base:   t = IDC_GTR(menu, kShowBase); break;
+            case PreprocessTarget::Canvas: t = IDC_GTR(label, kTargetCanvasName); break;
         }
-        targetLabel_->setText(QStringLiteral("当前目标：%1").arg(t));
+        targetLabel_->setText(IDC_GTR(status, kTargetLabelFmt).arg(t));
     }
 
     // 底图（Base）目标：仅开放色彩预处理——禁用「几何操作」区与「画布尺寸（Resize）」区
@@ -485,7 +358,7 @@ void ImagePanel::syncFromDocument() {
 
     // ---- 尺寸区：只读回显当前输出尺寸；尺寸框默认取当前输出宽高（阻断联动回调避免抖动）----
     if (currentSizeLabel_)
-        currentSizeLabel_->setText(QStringLiteral("当前输出尺寸: %1×%2").arg(doc_->width()).arg(doc_->height()));
+        currentSizeLabel_->setText(IDC_GTR(status, kCurrentSizeFmt).arg(doc_->width()).arg(doc_->height()));
     for (QSpinBox* s : {resizeW_, resizeH_}) s->blockSignals(true);
     resizeW_->setValue(doc_->width());
     resizeH_->setValue(doc_->height());
@@ -527,7 +400,7 @@ void ImagePanel::syncFromDocument() {
         for (const int idx : {kGray, kSplit}) {
             if (QStandardItem* it = model->item(idx)) {
                 it->setEnabled(!grayOut);
-                it->setToolTip(grayOut ? QStringLiteral("队列已产出灰度：此操作冗余或对灰度无操作") : QString());
+                it->setToolTip(grayOut ? IDC_GTR(tooltip, kGrayOutItem) : QString());
             }
         }
         if (grayOut && colorList_->currentRow() < 0 &&

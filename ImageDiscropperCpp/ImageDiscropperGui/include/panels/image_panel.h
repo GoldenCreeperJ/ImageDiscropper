@@ -18,6 +18,7 @@
 #include <QWidget>
 
 #include "preprocess/preprocess_config.h"
+#include "i18n/retranslate.h"
 
 class QComboBox;
 class QGroupBox;
@@ -26,6 +27,7 @@ class QSpinBox;
 class QCheckBox;
 class QLabel;
 class QListWidget;
+class QVBoxLayout;
 
 namespace idc::gui {
 
@@ -43,6 +45,10 @@ public:
     void setDocument(Document* doc);
     // 从 Document 反向同步：刷新尺寸区控件 / 按类型重建几何与色彩两列表 / 依 hasImage/选中态启停控件。
     void syncFromDocument();
+
+    // 语言热切换重放：重跑本面板登记的静态文案闭包（分区标题/行标签/下拉项/按钮）。
+    // 动态回显（目标标注/当前尺寸/列表行）由调用方随后的 syncPanels→syncFromDocument 重派生。
+    void retranslate() { retranslator_.run(); }
 
 signals:
     // ---- 轻操作队列增删移改（扁平队列下标：色彩项 = 几何项数 + 色彩行）----
@@ -89,6 +95,10 @@ private slots:
     void onResizeWidthEdited(int value) const;   // 保持宽高比时，改宽联动算高（尺寸区内）。
 
 private:
+    // 分区构建（定义在 image_panel_sections.cpp，TU 拆分）：画布尺寸区 / 几何操作区 / 色彩操作区。
+    void buildResizeSection(QVBoxLayout* root);
+    void buildGeoSection(QVBoxLayout* root);
+    void buildColorSection(QVBoxLayout* root);
     // 依几何区类型 + 参数控件值构造一个几何轻操作 PreprocessConfig（RotateOp / FlipOp）。
     preprocess::PreprocessConfig buildGeoConfig() const;
     // 依色彩区类型 + 参数控件值构造一个色彩轻操作 PreprocessConfig（GrayOp / InvertOp / SplitOp）。
@@ -150,6 +160,8 @@ private:
 
     // 重置。
     QPushButton* resetBtn_{nullptr};      // 重置预处理（清空 resize 与两列表队列）。
+
+    i18n::Retranslator retranslator_;     // 本面板文案重放登记表
 };
 
 } // namespace idc::gui

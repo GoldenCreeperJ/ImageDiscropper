@@ -36,6 +36,9 @@ public:
     /// 展开 content 所在节（已展开则无副作用；状态变化会发 sectionToggled）。
     void expandSection(const QWidget* content);
 
+    /// 改 content 所在节的标题文字（语言热切换重放）：更新存的 title 并按当前展开态重绘头部。
+    void retitle(const QWidget* content, const QString& title);
+
 signals:
     /// 某节展开/收起时发出（内容显隐已在本类处理，外部只做联动编排）。
     void sectionToggled(QWidget* content, bool expanded);

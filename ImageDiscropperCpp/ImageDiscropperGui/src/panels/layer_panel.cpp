@@ -12,67 +12,58 @@
 #include <QVBoxLayout>
 
 #include "model/document.h"
+#include "util/gui_nums.h"
+#include "i18n/gui_texts.h"
+#include "i18n/gui_i18n.h"
 
 namespace idc::gui {
 
 // 构建面板：底图 / 图片（单开关）/ 标注 / 遮罩 / 网格线 / 切割线 / 选取边框 / 单元编号各行显示开关。
 LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(8, 8, 8, 8);
-    root->setSpacing(6);
+    root->setContentsMargins(nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx,
+                             nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx);
+    root->setSpacing(nums::panels::kPanelSpacingPx);
 
-    auto* box = new QGroupBox(QStringLiteral("图层"), this);
+    auto* box = new QGroupBox(this);
+    i18n::bindTitle(retranslator_, box, IDC_GT(label, kLayerPanelBox));
     auto* lay = new QVBoxLayout(box);
-    lay->setSpacing(4);
+    lay->setSpacing(nums::panels::kPanelTightSpacingPx);
+
+    // 一行一开关：建复选框（绑定文字+tooltip 入重放表、默认勾选）并归入本分组。
+    const auto addToggle = [this, box, lay](const i18n::TextRef& text, const i18n::TextRef& tip) {
+        auto* cb = new QCheckBox(box);
+        i18n::bindButton(retranslator_, cb, text);
+        cb->setChecked(true);
+        i18n::bindToolTip(retranslator_, cb, tip);
+        lay->addWidget(cb);
+        return cb;
+    };
 
     // 底图层：仅显示/隐藏（只切换画布 base 图元可见性）。
-    baseVisible_ = new QCheckBox(QStringLiteral("底图  显示"), box);
-    baseVisible_->setChecked(true);
-    baseVisible_->setToolTip(QStringLiteral("显示 / 隐藏底图（仅影响画布预览，不影响导出）"));
-    lay->addWidget(baseVisible_);
+    baseVisible_ = addToggle(IDC_GT(label, kShowBaseCheck), IDC_GT(tooltip, kLayerShowBase));
 
     // 图片图层：所有图片合成的单一层，一个「显示」开关整体控制其显隐；行位于底图与标注之间（z 序：底图 < 图片图层 < 标注）。
     // 常驻显示：无论有无图层该行总在面板中且始终可用（不再依 hasLayers 置灰；无图层时切换无副作用）。
-    imageVisible_ = new QCheckBox(QStringLiteral("图片  显示"), box);
-    imageVisible_->setChecked(true);
-    imageVisible_->setToolTip(QStringLiteral("显示 / 隐藏图片图层（所有图片；隐藏→不参与展平合成与导出，落位框一并隐藏）"));
-    lay->addWidget(imageVisible_);
+    imageVisible_ = addToggle(IDC_GT(label, kShowImageCheck), IDC_GT(tooltip, kLayerShowImage));
 
     // 标注层：显示/隐藏（隐藏后标注不可拖动/选中，与选取边框一致）。
-    annoVisible_ = new QCheckBox(QStringLiteral("标注  显示"), box);
-    annoVisible_->setChecked(true);
-    annoVisible_->setToolTip(QStringLiteral("显示 / 隐藏标注图层（矢量叠加，不改底图像素；隐藏后标注不可交互）"));
-    lay->addWidget(annoVisible_);
+    annoVisible_ = addToggle(IDC_GT(label, kShowAnnoCheck), IDC_GT(tooltip, kLayerShowAnno));
 
     // 遮罩层：保留(绿)/删除(红)预览遮罩（从工具栏/视图菜单迁入，成为正式图层项）。
-    maskVisible_ = new QCheckBox(QStringLiteral("遮罩  显示"), box);
-    maskVisible_->setChecked(true);
-    maskVisible_->setToolTip(QStringLiteral("显示 / 隐藏保留（绿）/删除（红）预览遮罩（仅影响预览，不影响导出）"));
-    lay->addWidget(maskVisible_);
+    maskVisible_ = addToggle(IDC_GT(label, kShowMaskCheck), IDC_GT(tooltip, kLayerShowMask));
 
     // 网格线层：L3 / L2 多矩形的 Core 诱导网格灰色虚线。
-    gridVisible_ = new QCheckBox(QStringLiteral("网格线  显示"), box);
-    gridVisible_->setChecked(true);
-    gridVisible_->setToolTip(QStringLiteral("显示 / 隐藏网格线（L3 网格分割与 L2 多矩形并集时出现）"));
-    lay->addWidget(gridVisible_);
+    gridVisible_ = addToggle(IDC_GT(label, kShowGridCheck), IDC_GT(tooltip, kLayerShowGrid));
 
     // 切割线层：选区标记边向全图贯穿延伸的橙色切割线。
-    cutLineVisible_ = new QCheckBox(QStringLiteral("切割线  显示"), box);
-    cutLineVisible_->setChecked(true);
-    cutLineVisible_->setToolTip(QStringLiteral("显示 / 隐藏贯穿全图的橙色切割线（即选区边的延伸）"));
-    lay->addWidget(cutLineVisible_);
+    cutLineVisible_ = addToggle(IDC_GT(label, kShowCutLineCheck), IDC_GT(tooltip, kLayerShowCutLine));
 
     // 选取边框层：橙色选区矩形描边/填充/手柄（含 L2 多矩形轮廓）与 L3 单元选择高亮。
-    selectionVisible_ = new QCheckBox(QStringLiteral("选取边框  显示"), box);
-    selectionVisible_->setChecked(true);
-    selectionVisible_->setToolTip(QStringLiteral("显示 / 隐藏橙色选区边框与四角手柄（含 L3 单元选择高亮）；隐藏后选区不可编辑，需重新勾选才能再拖动"));
-    lay->addWidget(selectionVisible_);
+    selectionVisible_ = addToggle(IDC_GT(label, kShowSelectionCheck), IDC_GT(tooltip, kLayerShowSelection));
 
     // 单元编号层：L3 CUSTOM 序下每个已选单元左上角的序号角标（CellPickerItem 的角标子图层）。
-    numberVisible_ = new QCheckBox(QStringLiteral("单元编号  显示"), box);
-    numberVisible_->setChecked(true);
-    numberVisible_->setToolTip(QStringLiteral("显示 / 隐藏单元编号角标（仅 L3 自定义排序时出现）"));
-    lay->addWidget(numberVisible_);
+    numberVisible_ = addToggle(IDC_GT(label, kShowNumberCheck), IDC_GT(tooltip, kLayerShowNumber));
 
     root->addWidget(box);
 
@@ -122,6 +113,56 @@ void LayerPanel::setMaskVisible(const bool visible) const {
     maskVisible_->blockSignals(true);
     maskVisible_->setChecked(visible);
     maskVisible_->blockSignals(false);
+}
+
+// 视图菜单显隐项的外部反向同步（同 setMaskVisible：复选框为唯一真相源，仅翻转勾选态）。
+void LayerPanel::setBaseVisible(const bool visible) const {
+    if (!baseVisible_) return;
+    baseVisible_->blockSignals(true);
+    baseVisible_->setChecked(visible);
+    baseVisible_->blockSignals(false);
+}
+
+void LayerPanel::setImageVisible(const bool visible) const {
+    if (!imageVisible_) return;
+    imageVisible_->blockSignals(true);
+    imageVisible_->setChecked(visible);
+    imageVisible_->blockSignals(false);
+}
+
+void LayerPanel::setGridVisible(const bool visible) const {
+    if (!gridVisible_) return;
+    gridVisible_->blockSignals(true);
+    gridVisible_->setChecked(visible);
+    gridVisible_->blockSignals(false);
+}
+
+void LayerPanel::setCutLineVisible(const bool visible) const {
+    if (!cutLineVisible_) return;
+    cutLineVisible_->blockSignals(true);
+    cutLineVisible_->setChecked(visible);
+    cutLineVisible_->blockSignals(false);
+}
+
+void LayerPanel::setSelectionVisible(const bool visible) const {
+    if (!selectionVisible_) return;
+    selectionVisible_->blockSignals(true);
+    selectionVisible_->setChecked(visible);
+    selectionVisible_->blockSignals(false);
+}
+
+void LayerPanel::setNumberVisible(const bool visible) const {
+    if (!numberVisible_) return;
+    numberVisible_->blockSignals(true);
+    numberVisible_->setChecked(visible);
+    numberVisible_->blockSignals(false);
+}
+
+void LayerPanel::setAnnotationVisible(const bool visible) const {
+    if (!annoVisible_) return;
+    annoVisible_->blockSignals(true);
+    annoVisible_->setChecked(visible);
+    annoVisible_->blockSignals(false);
 }
 
 } // namespace idc::gui

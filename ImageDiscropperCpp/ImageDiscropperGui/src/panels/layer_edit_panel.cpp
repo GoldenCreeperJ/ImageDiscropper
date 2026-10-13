@@ -19,51 +19,59 @@
 #include <QVBoxLayout>
 
 #include "model/document.h"
+#include "generate/pattern.h"   // generate::kMaxDimension：画布尺寸上限的真相源在 Core
+#include "util/gui_nums.h"
+#include "i18n/gui_texts.h"
+#include "i18n/gui_i18n.h"
 
 namespace idc::gui {
 
 namespace {
 // 锚点 / 枢轴 9 向下拉条目（顺序严格对齐 generate::ImageAnchor 枚举声明序，索引即枚举值）。
-void fillAnchorCombo(QComboBox* combo) {
-    combo->addItem(QStringLiteral("左上"));
-    combo->addItem(QStringLiteral("上中"));
-    combo->addItem(QStringLiteral("右上"));
-    combo->addItem(QStringLiteral("左中"));
-    combo->addItem(QStringLiteral("居中"));
-    combo->addItem(QStringLiteral("右中"));
-    combo->addItem(QStringLiteral("左下"));
-    combo->addItem(QStringLiteral("下中"));
-    combo->addItem(QStringLiteral("右下"));
+// 九向名称与菜单「图片→锚点/枢轴」子菜单同源（texts::label::kDir*）。
+void fillAnchorCombo(i18n::Retranslator& r, QComboBox* combo) {
+    i18n::addItemsI18n(r, combo, {IDC_GT(label, kDirTopLeft), IDC_GT(label, kDirTopCenter), IDC_GT(label, kDirTopRight),
+                             IDC_GT(label, kDirMiddleLeft), IDC_GT(label, kDirCenter), IDC_GT(label, kDirMiddleRight),
+                             IDC_GT(label, kDirBottomLeft), IDC_GT(label, kDirBottomCenter), IDC_GT(label, kDirBottomRight)});
 }
 } // namespace
 
 LayerEditPanel::LayerEditPanel(QWidget* parent) : QWidget(parent) {
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(8, 8, 8, 8);
-    root->setSpacing(6);
+    root->setContentsMargins(nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx,
+                             nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx);
+    root->setSpacing(nums::panels::kPanelSpacingPx);
 
     // ---- ① 图层增删序区（作用于画布当前拾取层；无图层列表，选中由画布承担）----
-    auto* listBox = new QGroupBox(QStringLiteral("图片图层"), this);
+    auto* listBox = new QGroupBox(this);
+    i18n::bindTitle(retranslator_, listBox, IDC_GT(label, kImageLayerName));
     auto* listLay = new QVBoxLayout(listBox);
-    listLay->setSpacing(4);
+    listLay->setSpacing(nums::panels::kPanelTightSpacingPx);
 
     // 1-2-2-2 网格：「添加图片」独占首行（跨两列），上移/下移、移至顶层/底层、删除/清空图层各占一行。
     auto* gridBtns = new QGridLayout();
-    gridBtns->setSpacing(4);
-    addImageBtn_ = new QPushButton(QStringLiteral("添加图片…"), listBox);
-    addImageBtn_->setToolTip(QStringLiteral("添加图片图层：复用「新建画布」采参对话框——程序生成的图案作为可复现的图案图层，导入的图片作为位图层；往现有画布追加，超出部分合成时裁剪、不撑大。"));
-    moveUpBtn_ = new QPushButton(QStringLiteral("上移"), listBox);
-    moveUpBtn_->setToolTip(QStringLiteral("把选中图层向顶层移动一层（更靠近前面）。"));
-    moveDownBtn_ = new QPushButton(QStringLiteral("下移"), listBox);
-    moveDownBtn_->setToolTip(QStringLiteral("把选中图层向底层移动一层（更靠近后面）。"));
-    moveTopBtn_ = new QPushButton(QStringLiteral("移至顶层"), listBox);
-    moveTopBtn_->setToolTip(QStringLiteral("把选中图层移到最顶层（盖住其余所有图片图层）。"));
-    moveBottomBtn_ = new QPushButton(QStringLiteral("移至底层"), listBox);
-    moveBottomBtn_->setToolTip(QStringLiteral("把选中图层移到最底层（在所有图片图层之下、底图之上）。"));
-    removeBtn_ = new QPushButton(QStringLiteral("删除"), listBox);
-    removeBtn_->setToolTip(QStringLiteral("删除选中图层。"));
-    clearLayersBtn_ = new QPushButton(QStringLiteral("清空图层"), listBox);
-    clearLayersBtn_->setToolTip(QStringLiteral("清空全部图片图层，回退为单图底图态（保留底图、标注与预处理）。"));
+    gridBtns->setSpacing(nums::panels::kPanelTightSpacingPx);
+    addImageBtn_ = new QPushButton(listBox);
+    i18n::bindButton(retranslator_, addImageBtn_, IDC_GT(label, kAddImageButton));
+    i18n::bindToolTip(retranslator_, addImageBtn_, IDC_GT(tooltip, kLayerAddImage));
+    moveUpBtn_ = new QPushButton(listBox);
+    i18n::bindButton(retranslator_, moveUpBtn_, IDC_GT(label, kMoveUpButton));
+    i18n::bindToolTip(retranslator_, moveUpBtn_, IDC_GT(tooltip, kLayerMoveUp));
+    moveDownBtn_ = new QPushButton(listBox);
+    i18n::bindButton(retranslator_, moveDownBtn_, IDC_GT(label, kMoveDownButton));
+    i18n::bindToolTip(retranslator_, moveDownBtn_, IDC_GT(tooltip, kLayerMoveDown));
+    moveTopBtn_ = new QPushButton(listBox);
+    i18n::bindButton(retranslator_, moveTopBtn_, IDC_GT(label, kMoveTopButton));
+    i18n::bindToolTip(retranslator_, moveTopBtn_, IDC_GT(tooltip, kLayerMoveTop));
+    moveBottomBtn_ = new QPushButton(listBox);
+    i18n::bindButton(retranslator_, moveBottomBtn_, IDC_GT(label, kMoveBottomButton));
+    i18n::bindToolTip(retranslator_, moveBottomBtn_, IDC_GT(tooltip, kLayerMoveBottom));
+    removeBtn_ = new QPushButton(listBox);
+    i18n::bindButton(retranslator_, removeBtn_, IDC_GT(label, kRemoveButton));
+    i18n::bindToolTip(retranslator_, removeBtn_, IDC_GT(tooltip, kLayerEditRemove));
+    clearLayersBtn_ = new QPushButton(listBox);
+    i18n::bindButton(retranslator_, clearLayersBtn_, IDC_GT(label, kClearLayersButton));
+    i18n::bindToolTip(retranslator_, clearLayersBtn_, IDC_GT(tooltip, kClearAllImageLayers));
     gridBtns->addWidget(addImageBtn_, 0, 0, 1, 2);   // 首行跨两列
     gridBtns->addWidget(moveUpBtn_, 1, 0);
     gridBtns->addWidget(moveDownBtn_, 1, 1);
@@ -73,72 +81,75 @@ LayerEditPanel::LayerEditPanel(QWidget* parent) : QWidget(parent) {
     gridBtns->addWidget(clearLayersBtn_, 3, 1);
     listLay->addLayout(gridBtns);
     root->addWidget(listBox);
-    auto* tfBox = new QGroupBox(QStringLiteral("图层落位"), this);
+    auto* tfBox = new QGroupBox(this);
+    i18n::bindTitle(retranslator_, tfBox, IDC_GT(label, kLayerPlaceBox));
     auto* tfForm = new QFormLayout(tfBox);
-    tfForm->setSpacing(4);
+    tfForm->setSpacing(nums::panels::kPanelTightSpacingPx);
     anchorCombo_ = new QComboBox(tfBox);
-    fillAnchorCombo(anchorCombo_);
-    anchorCombo_->setToolTip(QStringLiteral("画布锚点：图层对齐到画布的哪个位置。"));
+    fillAnchorCombo(retranslator_, anchorCombo_);
+    i18n::bindToolTip(retranslator_, anchorCombo_, IDC_GT(tooltip, kLayerAnchorCombo));
     pivotCombo_ = new QComboBox(tfBox);
-    fillAnchorCombo(pivotCombo_);
-    pivotCombo_->setToolTip(QStringLiteral("图片枢轴：图层自身以哪个部位对齐到锚点。"));
+    fillAnchorCombo(retranslator_, pivotCombo_);
+    i18n::bindToolTip(retranslator_, pivotCombo_, IDC_GT(tooltip, kLayerPivotCombo));
     posXSpin_ = new QSpinBox(tfBox);
-    posXSpin_->setRange(-1000000, 1000000);
+    posXSpin_->setRange(-nums::model::kTransformCoordLimitPx, nums::model::kTransformCoordLimitPx);
     posXSpin_->setSuffix(QStringLiteral(" px"));
-    posXSpin_->setToolTip(QStringLiteral("自由偏移 X（叠加在锚点/枢轴结果之上）。"));
+    i18n::bindToolTip(retranslator_, posXSpin_, IDC_GT(tooltip, kLayerOffsetXSpin));
     posYSpin_ = new QSpinBox(tfBox);
-    posYSpin_->setRange(-1000000, 1000000);
+    posYSpin_->setRange(-nums::model::kTransformCoordLimitPx, nums::model::kTransformCoordLimitPx);
     posYSpin_->setSuffix(QStringLiteral(" px"));
-    posYSpin_->setToolTip(QStringLiteral("自由偏移 Y。"));
+    i18n::bindToolTip(retranslator_, posYSpin_, IDC_GT(tooltip, kLayerOffsetYSpin));
     widthSpin_ = new QSpinBox(tfBox);
-    widthSpin_->setRange(0, 1000000);
-    widthSpin_->setSpecialValueText(QStringLiteral("原生"));
+    widthSpin_->setRange(0, nums::model::kTransformCoordLimitPx);
     widthSpin_->setSuffix(QStringLiteral(" px"));
-    widthSpin_->setToolTip(QStringLiteral("目标宽（0＝用原生尺寸不缩放）。"));
+    i18n::bindSpecialValue(retranslator_, widthSpin_, IDC_GT(label, kNativeSpecialValue));
+    i18n::bindToolTip(retranslator_, widthSpin_, IDC_GT(tooltip, kLayerWidthSpin));
     heightSpin_ = new QSpinBox(tfBox);
-    heightSpin_->setRange(0, 1000000);
-    heightSpin_->setSpecialValueText(QStringLiteral("原生"));
+    heightSpin_->setRange(0, nums::model::kTransformCoordLimitPx);
     heightSpin_->setSuffix(QStringLiteral(" px"));
-    heightSpin_->setToolTip(QStringLiteral("目标高（0＝用原生尺寸不缩放）。"));
+    i18n::bindSpecialValue(retranslator_, heightSpin_, IDC_GT(label, kNativeSpecialValue));
+    i18n::bindToolTip(retranslator_, heightSpin_, IDC_GT(tooltip, kLayerHeightSpin));
     opacitySpin_ = new QSpinBox(tfBox);
     opacitySpin_->setRange(0, 255);
     opacitySpin_->setValue(255);
-    opacitySpin_->setToolTip(QStringLiteral("不透明度（0–255，255＝完全不透明）：选中图片图层时整体降低该图层透明度；"
-                                              "未选图层（目标＝画布/底图）时整体淡出画布底图（影响预览与导出，随配置往返）。"));
-    tfForm->addRow(QStringLiteral("画布锚点"), anchorCombo_);
-    tfForm->addRow(QStringLiteral("图片枢轴"), pivotCombo_);
-    tfForm->addRow(QStringLiteral("偏移 X / Y"), [&] {
+    i18n::bindToolTip(retranslator_, opacitySpin_, IDC_GT(tooltip, kLayerOpacitySpin));
+    i18n::bindFormRow(retranslator_, tfForm, anchorCombo_, IDC_GT(label, kAnchorFieldLabel));
+    i18n::bindFormRow(retranslator_, tfForm, pivotCombo_, IDC_GT(label, kPivotFieldLabel));
+    i18n::bindFormRow(retranslator_, tfForm, [&] {
         auto* w = new QWidget(tfBox);
         auto* h = new QHBoxLayout(w);
         h->setContentsMargins(0, 0, 0, 0);
         h->addWidget(posXSpin_);
         h->addWidget(posYSpin_);
         return w;
-    }());
-    tfForm->addRow(QStringLiteral("目标宽 / 高"), [&] {
+    }(), IDC_GT(label, kOffsetFieldLabel));
+    i18n::bindFormRow(retranslator_, tfForm, [&] {
         auto* w = new QWidget(tfBox);
         auto* h = new QHBoxLayout(w);
         h->setContentsMargins(0, 0, 0, 0);
         h->addWidget(widthSpin_);
         h->addWidget(heightSpin_);
         return w;
-    }());
-    tfForm->addRow(QStringLiteral("不透明度"), opacitySpin_);
-    applyTransformBtn_ = new QPushButton(QStringLiteral("应用落位"), tfBox);
+    }(), IDC_GT(label, kTargetSizeFieldLabel));
+    i18n::bindFormRow(retranslator_, tfForm, opacitySpin_, IDC_GT(label, kOpacityFieldLabel));
+    applyTransformBtn_ = new QPushButton(tfBox);
+    i18n::bindButton(retranslator_, applyTransformBtn_, IDC_GT(label, kApplyPlaceButton));
     tfForm->addRow(applyTransformBtn_);
     root->addWidget(tfBox);
 
     // ---- ③ 画布尺寸区 ----
-    auto* sizeBox = new QGroupBox(QStringLiteral("画布尺寸"), this);
+    auto* sizeBox = new QGroupBox(this);
+    i18n::bindTitle(retranslator_, sizeBox, IDC_GT(label, kCanvasSizeBox));
     auto* sizeLay = new QHBoxLayout(sizeBox);
     canvasWSpin_ = new QSpinBox(sizeBox);
-    canvasWSpin_->setRange(1, 65535);
+    canvasWSpin_->setRange(1, generate::kMaxDimension);
     canvasWSpin_->setSuffix(QStringLiteral(" ×"));
     canvasHSpin_ = new QSpinBox(sizeBox);
-    canvasHSpin_->setRange(1, 65535);
+    canvasHSpin_->setRange(1, generate::kMaxDimension);
     canvasHSpin_->setSuffix(QStringLiteral(" px"));
-    applyCanvasBtn_ = new QPushButton(QStringLiteral("应用"), sizeBox);
-    applyCanvasBtn_->setToolTip(QStringLiteral("改画布尺寸：仅清空框选/网格选区，保留图层与标注。"));
+    applyCanvasBtn_ = new QPushButton(sizeBox);
+    i18n::bindButton(retranslator_, applyCanvasBtn_, IDC_GT(label, kApplyButton));
+    i18n::bindToolTip(retranslator_, applyCanvasBtn_, IDC_GT(tooltip, kLayerCanvasSizeApply));
     sizeLay->addWidget(canvasWSpin_);
     sizeLay->addWidget(canvasHSpin_);
     sizeLay->addWidget(applyCanvasBtn_);

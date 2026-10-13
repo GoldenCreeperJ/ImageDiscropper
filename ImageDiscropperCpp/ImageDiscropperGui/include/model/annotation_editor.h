@@ -24,6 +24,8 @@
 #include "core/point.h"
 #include "geometry/shape_type.h"
 #include "geometry/shapes.h"
+#include "util/gui_nums.h"   // 出厂默认属性与输入边界（本头零 Qt，gui_nums.h 亦零 Qt）
+#include "i18n/gui_texts.h"  // 默认标注文字初值（与标注属性页文字框同字）
 
 namespace idc::gui {
 
@@ -82,7 +84,7 @@ public:
     // 命中检测：委托集合（顶层优先，填充判内部、其余判轮廓邻近），未命中 nullopt。
     std::optional<std::size_t> hitTest(const core::Point2D& p) const { return set_.hitTest(p); }
 
-    void selectAnnotation(std::optional<std::size_t> idx) { selectedIndex_ = idx; }
+    void selectAnnotation(const std::optional<std::size_t> idx) { selectedIndex_ = idx; }
     std::optional<std::size_t> selectedAnnotationIndex() const { return selectedIndex_; }
     annotation::Annotation* selectedAnnotation();
     const annotation::Annotation* selectedAnnotation() const;
@@ -116,11 +118,14 @@ private:
     core::Color currentColor_{core::kBlack};
     core::Color currentFillColor_{core::kBlack};
     bool fillColorLinked_{true};   // 填充色是否跟随边框色（未显式改过填充色时为真）
-    int currentStrokeWidth_{2};
-    bool currentFill_{false};
-    std::string currentText_{"A"};
-    double currentFontSize_{200.0};
-    double currentCornerRadius_{0.0};
+    int currentStrokeWidth_{nums::model::kDefaultStrokeWidthPx};
+    bool currentFill_{nums::model::kDefaultFillOn};
+    std::string currentText_{texts::label::kDefaultAnnotationText};   // 与 panels/annotation_prop_panel.cpp 文字框初值同源。
+    // 注：本类零 Qt（unit_tests 直编），不能引 IDC_GTR，故这里的默认文字恒为源语言。
+    //     英文界面下面板里的初值已译文，但“未动文字框就直接拖一个新标注”时落的是中文默认值——
+    //     一期已知边界（属数据而非界面装饰，二期若要统一，应在 GUI 侧赋值而非模型默认值）。
+    double currentFontSize_{nums::model::kDefaultFontSizePx};
+    double currentCornerRadius_{nums::model::kDefaultCornerRadiusPx};
 
     std::optional<std::size_t> selectedIndex_;
 };

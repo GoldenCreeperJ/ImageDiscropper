@@ -26,8 +26,12 @@
 #include "model/layer_session_store.h"
 #include "model/preprocess_session.h"
 #include "preprocess/preprocess_pipeline.h"
+#include "util/gui_nums.h"
+#include "i18n/gui_texts.h"
 
 namespace idc::gui {
+
+class ConfigCodec;   // 配置映射拆至 model/config_codec（friend 直读私有状态，见下方转发）。
 
 // L1 标准提取的形状选择（映射到 Core 的 CutGenerator）。
 enum class L1Shape {
@@ -63,6 +67,7 @@ enum class PreprocessTarget {
 // ---------------------------------------------------------------------------
 class Document : public QObject {
     Q_OBJECT
+    friend class ConfigCodec;   // 配置组装/还原直读私有状态（model/config_codec.h）。
 public:
     explicit Document(QObject* parent = nullptr);
 
@@ -157,9 +162,12 @@ public:
     //   随 §7 generate 段往返（保存回填 config.base->transform.opacity、载入归一内存声明为 255）。
     std::uint8_t baseOpacity() const { return baseOpacity_; }
     void setBaseOpacity(int opacity);   // 相等早退；否则置值后发 layersChanged（图层态重组）+ changed()（刷新面板）。
-    // 按 baseOpacity_ 淡出的画布底图副本（供 PreprocessController 图层态 recompose / 导出重算作 composeCanvas 的 base 入参）。
+    // 按 baseOpacity_ 淡出的画布底图（供 PreprocessController 图层态 recompose / 导出重算作 composeCanvas 的 base 入参）。
     //   canvasBase() 保持原样（几何等其它用途）；淡出只此一处施加，避免与 composeBase 双淡。
-    core::Image fadedCanvasBase() const;
+    //   拖动提交每次重组都会调用本方法，但图层拖动本身从不改变底图/其色彩预处理/底图不透明度三者中的任一项——
+    //   故按「内容签名」（底图尺寸/格式/首尾字节指纹 + baseOpacity + baseSession_ 色彩步声明）缓存淡出结果：
+    //   签名未变则零重算直接复用（仅新增一份底图尺寸量级的常驻缓存，随签名变化自动覆盖、无内存泄漏风险）。
+    const core::Image& fadedCanvasBase() const;
 
     // ---- 画布级整体不透明度（0..255，255＝不透明）----
     //   三元目标之一（Canvas）的透明度：作用于合成 + 画布预处理后的整幅工作图，与图层 transform.opacity、
@@ -326,18 +334,10 @@ public:
     // ---- 组装 Core 配置（纯字段搬运 + 枚举映射，无引擎逻辑）----
     // 依当前模式/子选项构建切割配置。
     engine::CutConfig buildCutConfig() const;
-    // 构建一次完整作业的配置（供 runEngine / exportImage 使用）。
-    // 约定不变：引擎永远收到「已预处理的工作图 + 空 preprocess」——预处理已物化进 working_，
-    // 故此处 preprocess 恒空，runEngine 不会二次应用（结构性根除双应用）。
+    // 运行/可序列化配置组装与反向还原已拆至 ConfigCodec（model/config_codec，本类 friend）；
+    // 以下为保持公有 API 形状的一行转发（定义在 document.cpp，避免头文件依赖 ConfigCodec 完整类型）。
     engine::EngineConfig buildEngineConfig() const;
-    // 构建可序列化配置（保存 / 载入用，SPEC §7）：与 buildEngineConfig 同字段，但
-    // preprocess 填入完整声明队列 steps_、source 取原图尺寸——还原端从 original 重放整链即可复现 working_。
-    // 与 buildEngineConfig 的关键差异只在 preprocess 段：运行配置恒空、序列化配置携带完整管线。
     engine::EngineConfig buildSerializableConfig() const;
-    // 反向映射（配置加载与撤销重做共用）：把一份 EngineConfig 的字段搬回 Document 状态，
-    // 与 buildEngineConfig 互逆——生成器+tier 还原 L1 形状/L2 子功能，搬运几何/选择集/排序/导出参数。
-    // 不还原 source 尺寸（图像不随配置/快照改变）；直接改字段后只发一次 changed()（避免逐 setter 多次刷新）。
-    // 维持模型不变式：非 L3 不得为重排（复位为坍缩）、网格单元尺寸非正时回退默认，杜绝非法组合。
     void applyEngineConfig(const engine::EngineConfig& cfg);
 
 signals:
@@ -345,6 +345,9 @@ signals:
     void imageChanged();
     // 任意参数变更：仅需刷新预览与状态栏（不重建底图）。
     void changed();
+    // 模式 / 极性切换（仅公开 setMode / setPolarity 触发；配置加载直写字段不走此信号）：
+    // 供上层在用户切模式/极性后把画布交互态收口回「框选」。
+    void modeOrPolarityChanged();
     // 图层栈/画布尺寸声明态变更（addImageLayer/removeLayer/move/update/setCanvasSize/beginLayerCanvas）：
     // 需 PreprocessController 接此信号走 composeCanvas 重算 original_（再叠画布预处理→working_）。
     void layersChanged();
@@ -363,6 +366,27 @@ private:
     std::uint8_t baseOpacity_{255};                          // 底图整体不透明度（0..255，255＝不透明）：合成边界淡出用，内存 baseLayer_ 声明恒存 255
     bool baseSelected_{false};                               // 底图是否被选中（图片拾取态点画布内非图层处）；与 selectedLayerId_ 互斥
     PreprocessSession baseSession_;                          // 底图色彩预处理声明态（steps_ 仅色彩、resize_ 恒 nullopt）；fadedCanvasBase 边界施加、不烘焙进 baseImage_
+    // fadedCanvasBase 的「内容签名 + 淡出结果」缓存：签名（见 matches()）不变即直接复用 value_、免重跑 clone/applyExec/applyAlpha。
+    //   不采用「显式失效挂钩」——因 baseImage_/baseOpacity_/baseSession_ 均可被 ConfigCodec（friend）直接改字段绕过 setter，
+    //   挂钩遗漏会造成静默脏缓存；改用内容指纹自行判等，签名变了自然重算，无需任何调用点配合。
+    struct FadedBaseCache {
+        bool valid = false;
+        int baseWidth = 0;
+        int baseHeight = 0;
+        core::ImageFormat baseFormat = core::ImageFormat::RGBA;
+        std::uint64_t baseFingerprint = 0;   // 首尾各采样至多 4 字节的轻量内容指纹（O(1)，不遍历全图）
+        std::uint8_t opacity = 255;
+        preprocess::PreprocessPipeline steps;
+
+        bool matches(const FadedBaseCache& o) const {
+            return valid && o.valid && baseWidth == o.baseWidth && baseHeight == o.baseHeight &&
+                   baseFormat == o.baseFormat && baseFingerprint == o.baseFingerprint &&
+                   opacity == o.opacity && steps == o.steps;
+        }
+
+        core::Image value;   // 淡出后的完整底图位图（命中时直接按引用回给调用方，零拷贝）
+    };
+    mutable FadedBaseCache fadedBaseCache_;
     std::uint8_t canvasOpacity_{255};                        // 画布级整体不透明度（0..255）：产出边界 applyAlpha 施加一次、影响预览与导出，随 §7 顶层 opacity 往返
     std::vector<canvas::ImageLayer> layers_;                   // 叠加图片图层数组（声明态；**不含底图**；直接以数组承载）
     bool imageLayersVisible_{true};                            // 图片图层整体显隐（纯 GUI 运行态，不入配置；对标 layersBurnIn_）
@@ -386,8 +410,8 @@ private:
     engine::EmitMode emitMode_{engine::EmitMode::MERGED};
     engine::MergeLayout layout_{engine::MergeLayout::COLLAPSE};
     engine::ExportFormat format_{engine::ExportFormat::PNG};
-    int quality_{90};
-    QString naming_{QStringLiteral("{name}_{index:03d}")};
+    int quality_{nums::model::kDefaultExportQualityPercent};   // 出厂默认转引 Core（与导出面板 range 同源）。
+    QString naming_{QString::fromUtf8(texts::ident::kNamingDefaultTemplate)};   // 命名模板初值与面板输入框初值同字。
     QString outputDir_;
     QString outputFile_;
 

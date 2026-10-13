@@ -18,6 +18,7 @@
 #include <optional>
 
 #include "canvas/layer.h"
+#include "i18n/retranslate.h"
 
 class QComboBox;
 class QLabel;
@@ -40,6 +41,10 @@ public:
     void setDocument(Document* doc);
     // 从 Document 反向同步：回填选中层变换控件 / 回填画布尺寸 / 依状态启停控件。
     void syncFromDocument();
+
+    // 语言热切换重放：重跑本面板登记的静态文案（分区标题/行标签/下拉项/按钮/tooltip）。
+    // 动态回显（选中层变换/画布尺寸）由调用方随后的 syncPanels→syncFromDocument 重派生。
+    void retranslate() { retranslator_.run(); }
 
 signals:
     void layerMoveRequested(int id, bool up);                   // 上移（向顶，zOrder 更大）/ 下移（作用画布当前拾取层）
@@ -92,6 +97,8 @@ private:
     QSpinBox*  canvasWSpin_{nullptr};
     QSpinBox*  canvasHSpin_{nullptr};
     QPushButton* applyCanvasBtn_{nullptr};
+
+    i18n::Retranslator retranslator_;   // 本面板文案重放登记表
 };
 
 } // namespace idc::gui

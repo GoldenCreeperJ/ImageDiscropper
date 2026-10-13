@@ -7,9 +7,10 @@
 
 namespace idc::gui {
 
-// 依图层现声明算其物化签名：只覆盖 materializeLayer 读取的来源态（kind / 逐层 preprocess / 文件名 /
-// 解码像素布局 / 配方参数 + 目标尺寸），恒不含 transform.x/y/anchor/opacity/zOrder——改落位或
-// 不透明度只重组、不重跑预处理（缺口 1）。
+// 依图层现声明算其物化签名：覆盖 materializeLayer（整层位图：组装含底色框→缩放→预处理）读取的
+// 全部输入——来源态（kind / 逐层 preprocess / 文件名 / 解码像素布局 / 配方参数）+ 目标尺寸（所有 kind）+
+// 内层落位与图层框（hasImagePlacement / box / fit / 锚点枢轴偏移 / boxBackdrop）；恒不含 transform.x/y/
+// anchor/layerPivot/opacity/zOrder——改落位或不透明度只重组、不重跑（缺口 1）。
 LayerSig LayerSessionStore::makeSig(const canvas::ImageLayer& layer) {
     LayerSig s;
     s.kind = static_cast<int>(layer.sourceKind);
@@ -22,6 +23,16 @@ LayerSig LayerSessionStore::makeSig(const canvas::ImageLayer& layer) {
     s.th = layer.transform.height;
     s.hasRecipe = layer.recipe.has_value();
     s.recipe = layer.recipe;
+    s.hasPlacement = layer.hasImagePlacement;
+    s.boxW = layer.boxWidth;
+    s.boxH = layer.boxHeight;
+    s.imageFit = static_cast<int>(layer.imageFit);
+    s.imageAnchor = static_cast<int>(layer.imageAnchor);
+    s.imagePivot = static_cast<int>(layer.imagePivot);
+    s.imageX = layer.imageX;
+    s.imageY = layer.imageY;
+    s.hasBackdrop = layer.boxBackdrop.has_value();
+    s.backdrop = layer.boxBackdrop;
     return s;
 }
 

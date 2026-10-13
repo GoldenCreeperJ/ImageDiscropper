@@ -10,6 +10,8 @@
 
 #include <QWidget>
 
+#include "i18n/retranslate.h"
+
 class QButtonGroup;
 
 namespace idc::gui {
@@ -29,6 +31,9 @@ public:
     // 从 Document 反向同步按钮选中态（用 blockSignals 防回环）。
     void syncFromDocument() const;
 
+    // 语言热切换重放：重跑本面板登记的文案闭包，并按新文本重测本面板最小宽。
+    void retranslate();
+
 private slots:
     // 模式按钮切换（id：1=L1, 2=L2, 3=L3）。
     void onModeToggled(int id, bool checked) const;
@@ -39,6 +44,8 @@ private:
     Document* doc_{nullptr};
     QButtonGroup* modeGroup_{nullptr};
     QButtonGroup* polarityGroup_{nullptr};
+
+    i18n::Retranslator retranslator_;   // 本面板文案重放登记表
 };
 
 } // namespace idc::gui

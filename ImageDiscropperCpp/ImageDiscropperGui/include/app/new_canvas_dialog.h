@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：app/new_canvas_dialog.h
-// 作用：「文件 → 新建」模态对话框——采集新画布的尺寸、底色（RGB + alpha，经取色对话框设定，可透明）、
-//       前景色（RGB + alpha，同经取色对话框）与程序化图案参数（渐变/棋盘/条纹(含斜纹)/网格/点阵/同心(圆环·方环)/放射/色相渐变/噪声），
+// 作用：「文件 → 新建」模态对话框——采集新画布的尺寸与程序化图案参数（图案采参表单已拆至
+//       panels/PatternFormWidget：底色/前景色/11 种图案/方向/周期/线宽/点半径/噪声），
 //       实时预览，接受后经 EngineBridge::generatePattern（委托 Core generate::makePattern）产出初始画布。
 //       图片不再是图案类型（旧「贴图图案」已彻底移除），而是独立的**可选附加层**入口：
 //       勾选后可选源图 + 三适应（裁剪/拉伸/原生）+ **两级落位**（各自独立成组、勿混淆）：
@@ -10,14 +10,14 @@
 //       **顶部宽/高即图层尺寸**（图层框 W×H），不另设图层框；三适应均是「图片适应到这个尺寸」。
 //       合成走 Core **两级**（已升为 ImageLayer 持久字段）：内层 源图→图层框（ImageFit 适应 + imageAnchor/Pivot/偏移 + boxBackdrop 底色），
 //       外层 图层框→画布（transform）；composeCanvas 一次产图，预览 / 定稿 / config 重载同一条路径。「原生」把顶部宽/高回填为源图尺寸并锁定。
-// 分块依据：对话框只做「控件 + 采参 + 预览编排」，像素生成一律走桥接调 Core（CONTRIBUTING.md「分层纪律」）；
+// 分块依据：对话框只做「尺寸/附加图片/两级落位采参 + 预览/定稿编排」，像素生成一律走桥接调 Core
+//           （CONTRIBUTING.md「分层纪律」）；图案参数表单独立成件（app/forms/pattern_form）。
 //           预览用小尺寸代理（按比例缩放周期/线宽/点半径/偏移）避免大图逐像素重算卡顿，接受时才产全尺寸图。
 // 说明：属 app 编排层（与四控制器并列），可直接调用 model 桥；产出的 core::Image 由 MainWindow 注入 Document。
 //       适应模式与两级落位已升为 Core ImageLayer **持久字段**（hasImagePlacement/imageFit/boxWidth/boxHeight/imageAnchor/imagePivot/imageX/imageY/boxBackdrop + transform）；config 仅凭 fileName + 这些字段即可完整复现，reload 一致。
 // ============================================================================
 #pragma once
 
-#include <QColor>
 #include <QDialog>
 
 #include "core/image.h"
@@ -32,6 +32,9 @@ class QSpinBox;
 
 namespace idc::gui {
 
+class PatternFormWidget;
+class PlacementRow;
+
 // ---------------------------------------------------------------------------
 // ImageFit：附加图片对「图层尺寸（顶部宽/高，即本对话框产出图的 W×H）」的适应方式（与 Core canvas::ImageFit 同序，经 int 中转移写入层内持久字段）。
 //   Crop    —— 图层尺寸不动，源图按原生尺寸贴入、按锚点/枢轴/偏移落位，超出图层部分自然裁剪。
@@ -41,7 +44,7 @@ namespace idc::gui {
 enum class ImageFit { Crop, Stretch, Native };
 
 // ---------------------------------------------------------------------------
-// NewCanvasDialog：新建画布的参数采集 + 实时预览对话框。
+// NewCanvasDialog：新建画布的参数采集 + 实时预览对话框（图案采参表单内嵌 PatternFormWidget）。
 // ---------------------------------------------------------------------------
 class NewCanvasDialog : public QDialog {
     Q_OBJECT
@@ -83,21 +86,16 @@ public:
     // 附加图片开关默认开（添加图层语境必带图），使 accept() 产出图层内容（producesLayerCanvas）；新建画布语境下恒不产出图层。
     // 顶部宽/高 spin 预填真实画布 W×H 并**保持可编辑**：此即图层尺寸（适应目标），改小即裁剪、改大即留白。
     // 合成语义与新建画布完全一致（底图图案 + 两级落位两段合成 + 越界裁剪），不叠底图、不撑大。
-    void setAddLayerMode(const int canvasW, const int canvasH);
+    void setAddLayerMode(int canvasW, int canvasH);
 
 private slots:
-    void onPickBackground();     // 弹出 QColorDialog（ShowAlphaChannel）选底色 RGBA。
-    void onPickForeground();     // 弹出 QColorDialog（ShowAlphaChannel）选前景色 RGBA。
     void onPickImage();          // 弹出文件对话框选源图，经 EngineBridge::loadImage 解码到 imageSource_。
-    void onParamsChanged();      // 任一控件变更 → 刷新可用性 + 重生成预览。
+    void onParamsChanged() const;      // 任一控件变更 → 图案表单可用性 + 图层/图片落位显隐 + 重生成预览。
     void accept() override;      // 全尺寸生成结果并交存后接受。
 
 private:
-    void updateSwatches();                                  // 重绘两个色块按钮底色。
-    void updateControlAvailability();                       // 依图案类型 + 附加图片开关显隐/启停相关参数控件（含图案切换时的方向重建）。
-    void rebuildOrientationCombo(generate::PatternKind kind); // 依图案类型重建方向条目（存 Orientation 枚举于 itemData）。
-    void syncCanvasSizeToSource();                           // Native 适应下把顶部宽/高（图层尺寸）回填为源图原生尺寸。
-    generate::PatternParams buildParams() const;            // 从控件汇编 PatternParams（全尺寸语义，已无图片字段）。
+    void updateControlAvailability() const;                       // 依附加图片开关/语境/适应方式显隐落位组并锁定尺寸（图案相关显隐在 PatternFormWidget 内）。
+    void syncCanvasSizeToSource() const;                           // Native 适应下把顶部宽/高（图层尺寸）回填为源图原生尺寸。
     // 内层构造：按当前落位/适应/图层框底色组装一个 File 图层（decodedPixels 预缩 factor 为预览代理，
     //   boxWidth/Height = 传入尺寸，transform = 图层落位）；预览与定稿共用，保证与 Core 合成单一真相源。
     canvas::ImageLayer buildAttachedLayer(double factor, const canvas::ImageTransform& layerPlace,
@@ -107,62 +105,26 @@ private:
     core::Image composeResult(const generate::PatternParams& p, int outW, int outH, double factor,
                               const canvas::ImageTransform& layerPlace, const canvas::ImageTransform& imgPlace,
                               ImageFit fit) const;
-    void refreshPreview();                                  // 小尺寸代理生成并缩放到预览标签。
+    void refreshPreview() const;                                  // 小尺寸代理生成并缩放到预览标签。
 
     // 尺寸（＝图层尺寸：本对话框产出图/层的 W×H）。
     QSpinBox* widthSpin_{nullptr};
     QSpinBox* heightSpin_{nullptr};
-    // 图案类型 + 方向。
-    QComboBox* kindCombo_{nullptr};
-    QComboBox* orientationCombo_{nullptr};
-    // 颜色（底色 / 前景色均为 RGBA，alpha 经取色对话框设定，不另设独立控件）。
-    QPushButton* bgSwatch_{nullptr};
-    QPushButton* fgSwatch_{nullptr};
-    QLabel* fgLabel_{nullptr};   // 「前景色：」标题（纯色时随行隐藏）。
-    QColor bgColor_{QColor(255, 255, 255, 255)};   // 底色 RGBA。
-    QColor fgColor_{QColor(0, 0, 0, 255)};         // 前景色 RGBA。
-    // 图案参数。
-    QSpinBox* periodSpin_{nullptr};
-    QSpinBox* lineWidthSpin_{nullptr};
-    QSpinBox* dotRadiusSpin_{nullptr};
-    QLabel* periodLabel_{nullptr};
-    QLabel* lineWidthLabel_{nullptr};
-    QLabel* dotRadiusLabel_{nullptr};
-    QLabel* orientationLabel_{nullptr};
-    // 噪声参数（仅 Noise 图案显隐）。
-    QLabel* seedLabel_{nullptr};
-    QSpinBox* seedSpin_{nullptr};
-    QLabel* noiseModeLabel_{nullptr};
-    QComboBox* noiseModeCombo_{nullptr};
+    // 图案参数表单（底色/前景色/类型/方向/周期/线宽/点半径/噪声；app/forms/pattern_form）。
+    PatternFormWidget* patternForm_{nullptr};
     // 附加图片（可选）区块：开关驱动显隐，不再依赖图案类型（旧「贴图图案」已移除）。
     QCheckBox* attachImageCheck_{nullptr};       // 「附加图片（可选）」开关：未勾选即可直接导出纯图案底图。
     QPushButton* imagePickButton_{nullptr};
     QLabel* imagePathLabel_{nullptr};
     QLabel*    imageFitLabel_{nullptr};          // 「适应方式：」标题。
     QComboBox* imageFitCombo_{nullptr};          // 三适应模式（存 ImageFit 于 itemData）：裁剪/拉伸/原生。
-    // 图片落位（图片 相对 图层）：附加图片开启时随开关显示。
-    QLabel*    imageGroupLabel_{nullptr};         // 「图片落位（图片 相对 图层）」分组标题。
-    QLabel*    imageAnchorLabel_{nullptr};       // 「图片锚点：」标题。
-    QComboBox* imageAnchorCombo_{nullptr};        // 图片锚点（对齐到图层的哪个位置，9 向）。
-    QLabel*    imagePivotLabel_{nullptr};        // 「图片枢轴：」标题。
-    QComboBox* imagePivotCombo_{nullptr};         // 图片枢轴（源图对齐到锚点的部位，9 向）。
-    QLabel*    imagePosLabel_{nullptr};           // 「图片位置：」标题。
-    QSpinBox*  imagePosXSpin_{nullptr};           // 自由偏移 X（px）。
-    QSpinBox*  imagePosYSpin_{nullptr};           // 自由偏移 Y（px）。
-    // 图层落位（图层 相对 底图）：**仅「添加图片图层」语境显示**（新建画布隐藏）、不受附加图片开关隐藏，产出段2 的图层 transform。
-    QLabel*    layerGroupLabel_{nullptr};         // 「图层落位（图层 相对 底图）」分组标题。
-    QLabel*    layerAnchorLabel_{nullptr};        // 「图层锚点：」标题。
-    QComboBox* layerAnchorCombo_{nullptr};         // 图层锚点（对齐到底图的哪个位置，9 向）。
-    QLabel*    layerPivotLabel_{nullptr};         // 「图层枢轴：」标题。
-    QComboBox* layerPivotCombo_{nullptr};          // 图层枢轴（图层框对齐到锚点的部位，9 向）。
-    QLabel*    layerPosLabel_{nullptr};           // 「图层位置：」标题。
-    QSpinBox*  layerPosXSpin_{nullptr};           // 自由偏移 X（px）。
-    QSpinBox*  layerPosYSpin_{nullptr};           // 自由偏移 Y（px）。
+    // 两级落位（app/forms/placement_row）：图层落位（图层 相对 底图）与图片落位（图片 相对 图层）——
+    // 锚点/枢轴/偏移三行一组，语义与 canvas::ImageTransform 字段一一对应。
+    PlacementRow* layerPlaceRow_{nullptr};       // 图层落位：仅「添加图片图层」语境显示（新建画布隐藏）、不受附加图片开关隐藏。
+    PlacementRow* imagePlaceRow_{nullptr};       // 图片落位：附加图片开启时随开关显示。
     core::Image imageSource_{};   // 已解码的源图（EngineBridge::loadImage 产出；段1 图片→图层框的输入）。
     // 预览。
     QLabel* previewLabel_{nullptr};
-
-    generate::PatternKind shownKind_{static_cast<generate::PatternKind>(-1)};   // 上次生效的图案类型，用于检测切换（重建方向条目、色相波长初值 128）。
 
     core::Image result_;   // accept() 产出的全尺寸画布（新建画布扁平整幅）。
     canvas::ImageLayer resultLayer_{};   // 附加图片「添加图层」路：可序列化结果层（原始源 + 两级落位 + 图层框底色）。

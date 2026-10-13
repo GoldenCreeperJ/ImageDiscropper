@@ -14,22 +14,11 @@
 #include <QWheelEvent>
 
 #include "canvas/canvas_view.h"
+#include "util/gui_nums.h"
 
 namespace idc::gui {
-namespace {
 
-// 抓取带屏幕基准：12 逻辑 px（Android 上逻辑 px≈dp≈pt），SPEC §8.3 触控精度下限。
-constexpr qreal kTouchOverlayPx = 12.0;
-
-// 双击（= 适应窗口）判定阈值：两击间隔、落点容差、单击最长时长与移动容差。
-constexpr qint64 kDoubleTapGapMs = 300;   // 第二击按下距上一击释放的上限
-constexpr int    kDoubleTapPosPx = 64;    // 两击落点曼哈顿距离容差（手指抖动余量）
-constexpr qint64 kTapMaxMs       = 250;   // 轻点的最长按下时长
-constexpr int    kTapMovePx      = 8;     // 轻点允许的移动（超出即视为拖拽，不作双击候选）
-
-} // namespace
-
-qreal TouchInputAdapter::screenOverlayPx() const { return kTouchOverlayPx; }
+qreal TouchInputAdapter::screenOverlayPx() const { return nums::canvas::kTouchOverlayScreenPx; }
 
 // 触控装配：①注册捏合手势——双指缩放/平移由此进入 onGestureEvent（单指仍走 QPA 合成鼠标序列）；
 // ②防误触：关闭 hover 鼠标跟踪——触控无持续悬停，若不关则拖拽途中的
@@ -47,8 +36,8 @@ void TouchInputAdapter::onPress(CanvasView& view, QMouseEvent* event) {
         const QPoint vp = event->pos();
         // 双击第二击：距上一有效轻点足够近且足够快 → 适应窗口；吞掉本序列后续事件，
         // 不再进入框选/图元路由（桌面双击无绑定语义，移动端 SPEC 映射为适应窗口）。
-        if (tapClock_.isValid() && tapClock_.elapsed() <= kDoubleTapGapMs
-            && (vp - lastTapPos_).manhattanLength() <= kDoubleTapPosPx) {
+        if (tapClock_.isValid() && tapClock_.elapsed() <= nums::canvas::kDoubleTapGapMs
+            && (vp - lastTapPos_).manhattanLength() <= nums::canvas::kDoubleTapPosScreenPx) {
             swallowing_ = true;
             tapClock_.invalidate();          // 已消费，防止三连击连续触发
             view.fitToWindow();
@@ -67,7 +56,7 @@ void TouchInputAdapter::onPress(CanvasView& view, QMouseEvent* event) {
 void TouchInputAdapter::onMove(CanvasView& view, QMouseEvent* event) {
     if (swallowing_) { event->accept(); return; }
     if (tapCandidate_
-        && (event->pos() - pressPos_).manhattanLength() > kTapMovePx)
+        && (event->pos() - pressPos_).manhattanLength() > nums::canvas::kTapMoveScreenPx)
         tapCandidate_ = false;
     router_.onMove(view, event);
 }
@@ -81,7 +70,7 @@ void TouchInputAdapter::onRelease(CanvasView& view, QMouseEvent* event) {
     }
     if (event->button() == Qt::LeftButton) {
         const bool isTap = tapCandidate_ && !gestureSeen_
-            && pressClock_.isValid() && pressClock_.elapsed() <= kTapMaxMs;
+            && pressClock_.isValid() && pressClock_.elapsed() <= nums::canvas::kTapMaxMs;
         if (isTap) {
             lastTapPos_ = event->pos();
             tapClock_.restart();

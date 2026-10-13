@@ -12,6 +12,8 @@
 
 #include <QWidget>
 
+#include "i18n/retranslate.h"
+
 class QComboBox;
 class QLineEdit;
 class QSpinBox;
@@ -37,6 +39,8 @@ public:
     void syncFromDocument();
     // 依 Core isCollapsible 结果启用/禁用「合并坍缩」项（不可行时切到重排）。
     void setCollapsible(bool collapsible);
+    // 最近一次 Core 坍缩可行性（供菜单「导出设置·坍缩」镜像同一置灰规则）。
+    bool collapsible() const { return collapsible_; }
     // 更新导出前信息文字（画布尺寸、保留块数等；由 MainWindow 回灌）。
     void setPreviewInfo(const QString& text) const;
     // 显示输出图像预览缩略图（由 MainWindow 按 Core Composition 渲染后回灌）。
@@ -53,6 +57,14 @@ public:
     void setBurnInChecked(bool on) const;
     // 反向同步「导出时烧录图片图层」复选框（由 MainWindow 依 Document::layersBurnIn 回灌；blockSignals 防回环）。
     void setLayersBurnInChecked(bool on) const;
+    // 外部（文件菜单「导出设置」）选择输出方式/格式：经 combo 走与用户点击同一
+    // onModeChanged/onFormatChanged 路径（含重排 auto-grid 与警告刷新）；面板为唯一真相源。
+    void selectEmitMode(int index) const;
+    void selectFormat(int index) const;
+
+    // 语言热切换重放：重跑本面板登记的静态文案闭包（行标签/下拉项/按钮/提示）。
+    // 动态回显（导出前信息/预览占位/重排警告）由调用方随后的 syncPanels/refreshPreview 重派生。
+    void retranslate() { retranslator_.run(); }
 
 signals:
     // 请求导出（MainWindow 负责路径校验与调用 EngineBridge）。
@@ -61,6 +73,8 @@ signals:
     void burnInChanged(bool on);
     // 导出时是否烧录图片图层（写回 Document::setLayersBurnIn；仅影响导出、与图层面板「显示」仅预览正交）。
     void layersBurnInChanged(bool on);
+    // 坍缩可行性变化（预览刷新回灌）：供菜单「导出设置·坍缩」镜像置灰。
+    void collapsibleChanged(bool collapsible);
 
 private slots:
     void onModeChanged(int index);
@@ -136,6 +150,8 @@ private:
     int cellH_{0};
     bool mergeGridTouched_{false};         // 用户手动改过 cols/rows → 停止自动填充
     bool collapsible_{true};               // 最近一次 Core 坍缩可行性（供模式项启用/禁用）
+    
+    i18n::Retranslator retranslator_;      // 本面板文案重放登记表
 };
 
 } // namespace idc::gui

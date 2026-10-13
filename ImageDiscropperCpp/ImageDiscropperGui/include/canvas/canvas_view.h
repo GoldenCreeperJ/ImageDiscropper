@@ -10,7 +10,8 @@
 //   - 键盘（Esc / 空格 / 方向键）是桌面专属通道，仍留在本视图；移动端由补偿 UI 调同一 gesture* 入口；
 //   - 通过信号（rubberSelect / nudgeSelection / cursorScenePos / *Requested）与外界解耦，
 //     视图不认识 Document，只发意图，符合「采集交互 → 翻译 → 交上层」的 GUI 定位。
-// 说明：手柄尺寸随缩放动态换算（updateHandleSize），保证选区手柄恒约 8 屏幕像素（NFR-7）。
+// 说明：手柄尺寸随缩放动态换算（updateHandleSize），保证选区手柄恒约 8 屏幕像素（NFR-7）；
+//       内容外的滚动余量按**视口各边百分比**同时随缩放与视口尺寸换算（updateScrollMargins），故 resize 需重推。
 // ============================================================================
 #pragma once
 
@@ -24,6 +25,7 @@
 class QRubberBand;
 class QContextMenuEvent;
 class QMouseEvent;
+class QResizeEvent;
 
 namespace idc::gui {
 
@@ -87,10 +89,17 @@ public:
     void gestureMarqueeBegin(const QPoint& viewportPos);
     void gestureMarqueeUpdate(const QPoint& viewportPos) const;
     void gestureMarqueeEnd(const QPoint& viewportPos);
+    // 标注选取态空白按下（无图元接管）：发 annoBlankPressed 供上层取消标注选中
+    //（本态禁框选、无 marqueeStarted 通道，反选需专用入口）。
+    void gestureAnnoBlankPress();
     // 悬停移动：回报光标场景坐标（状态栏）。
     void gestureCursorMoved(const QPoint& viewportPos);
     // 步进缩放（桌面滚轮一格 ×1.15；工具栏 ± 走 zoomIn/Out，另成一路）。
     void gestureStepZoom(qreal factor);
+    // 步进缩放并锚定给定视口点（桌面滚轮专用）：显式以光标处为原点，不依赖 QGraphicsView 的
+    // AnchorUnderMouse——其内部记录的鼠标位仅在基类 mouseMove/Press 里刷新，而本视图的绘制悬停 /
+    // 平移路径不经基类，读数会陈旧，导致缩放跳位（有时不以鼠标为原点）。
+    void gestureStepZoomAt(const QPoint& anchorViewport, qreal factor);
     // 右键菜单项意图代理（菜单 UI 在桌面适配器；此处补发既有意图信号）。
     void requestClearCut();
     void requestResetView();
@@ -109,6 +118,8 @@ signals:
     void rubberSelect(const QRectF& sceneRect);
     // 框选起带（空白处按下即发）：供上层清除进行中的标注选中，使标注 OBB 手柄随框选消失。
     void marqueeStarted();
+    // 标注选取态下按下落在空白（未命中任何标注/选区框图元）：供上层取消标注选中（桌面/触控同构）。
+    void annoBlankPressed();
     // 方向键微调选区（dx,dy 为原图像素增量，Shift 时为大步）。
     void nudgeSelection(int dx, int dy);
     // 右键菜单意图。
@@ -139,14 +150,19 @@ protected:
     void contextMenuEvent(QContextMenuEvent* event) override;
     // 手势事件（QEvent::Gesture，触控 pinch 缩放）：交适配器消费，未消费则照常下发。
     bool event(QEvent* event) override;
+    // 视口尺寸变化：滚动余量按视口各边百分比生效（与缩放无关的那一层口径），故尺寸变了就得重推场景矩形。
+    void resizeEvent(QResizeEvent* event) override;
 
 private:
     // 依当前视图缩放换算选区手柄的场景尺寸（屏幕基准由适配器提供：桌面约 8 屏幕px，
     // 触控 ≥12pt，SPEC §8.3），并下发给选区框。
     void updateHandleSize();
-    // 按倍数缩放并钳制到允许区间 [kMinZoom, kMaxZoom]，随后刷新手柄尺寸与倍率回报。
+    // 按当前视口尺寸与缩放把滚动余量注入场景（横 = 视口宽×百分比、纵 = 视口高×百分比，再除以 m11 折算为场景单位）；
+    // 缩放基准变化（updateHandleSize）与视口尺寸变化（resizeEvent）两个入口共用。
+    void updateScrollMargins() const;
+    // 按倍数缩放并钳制到 CanvasPrefs 允许区间 [zoomMin,zoomMax]，随后刷新手柄尺寸与倍率回报。
     void zoomBy(qreal factor);
-    // 把当前变换的缩放钳制回允许区间（供 fitToWindow 等绝对变换后收敛回区间）。
+    // 把当前变换的缩放钳制回 CanvasPrefs 允许区间（供 fitToWindow 等绝对变换后收敛回区间）。
     void clampZoom();
 
     CanvasScene* scene_{nullptr};

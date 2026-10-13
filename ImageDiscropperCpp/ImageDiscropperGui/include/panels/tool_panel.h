@@ -14,6 +14,7 @@
 
 #include "canvas/canvas_mode.h"
 #include "model/annotation_bridge.h"
+#include "i18n/retranslate.h"
 
 class QButtonGroup;
 class QWidget;
@@ -37,6 +38,9 @@ public:
     // 编程式切换当前模式（勾选对应按钮）：经正常 idToggled 路径发 modeChanged（与用户点击同构）。
     void setMode(CanvasMode mode) const;
 
+    // 语言热切换重放：重跑本面板登记的文案闭包（分组标题/模式与工具按钮及其 tooltip）。
+    void retranslate() { retranslator_.run(); }
+
 signals:
     // 用户切换了画布交互模式（四态互斥）。
     void modeChanged(CanvasMode mode);
@@ -52,6 +56,8 @@ private:
     QButtonGroup* modeGroup_{nullptr};
     QButtonGroup* toolGroup_{nullptr};
     QWidget* shapeArea_{nullptr};   // 形状子行容器（仅 AnnoCreate 模式可见）
+
+    i18n::Retranslator retranslator_;   // 本面板文案重放登记表
 };
 
 } // namespace idc::gui

@@ -13,49 +13,60 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
+#include "util/gui_nums.h"
+#include "i18n/gui_texts.h"
+#include "i18n/gui_i18n.h"
+
 namespace idc::gui {
 namespace {
 
-// 按钮样式：中性底 + 选中态蓝色高亮（与 LeftPanel 模式按钮观感一致）。
-// 【深色模式】未选态背景为硬编码浅色（#f2f2f2），需显式指定深色文字，否则系统深色主题下白字浅底不可读。
+// 按钮样式：未选态底/字/边框走 palette(...) 令牌（随深/浅主题自动给正确字色，旧「硬编码浅底配深字」hack 已删），
+// 选中态蓝色高亮（#3b7ddd 配白字）与 LeftPanel 模式按钮观感一致、两主题皆可读。
+// 注：QSS palette() 角色名不带连字符（buttontext）。
 auto kToolStyle =
-    "QPushButton{padding:5px;border:1px solid #bbb;border-radius:4px;background:#f2f2f2;color:#1b1b1b;}"
+    "QPushButton{padding:5px;border:1px solid palette(mid);border-radius:4px;background:palette(button);color:palette(buttontext);}"
     "QPushButton:checked{background:#3b7ddd;color:#fff;border-color:#3b7ddd;}";
 
-// 交互模式清单：{模式枚举, 中文标签, 悬停提示}。顺序即面板排布顺序（网格 2 列）。
+// 交互模式清单：{模式枚举, 标签, 悬停提示}。顺序即面板排布顺序（网格 2 列）。
+// 模式名与菜单「画布模式」子菜单同源（menu::kCanvas*）；悬停说明为本面板专属措辞。
+// 表位存 IDC_GT（键 + 中文源值成对），按钮文案在构造循环里 i18n::qs() 现取——
+// 构造期取值 = 一期「改语言重启生效」的语义，与就地 IDC_GTR 等价。
 struct ModeEntry {
     CanvasMode mode;
-    const char* label;
-    const char* tip;
+    i18n::TextRef label;
+    i18n::TextRef tip;
 };
 
 constexpr ModeEntry kModes[] = {
-    {CanvasMode::Marquee,    "框选",     "橡皮筋框选生成选区 / 拖动选区框；标注与图片落位框不可拾取"},
-    {CanvasMode::ImagePick,  "图片拾取", "在画布上点选 / 拖拽图片图层落位框调位（释放写回落位偏移）"},
-    {CanvasMode::AnnoSelect, "标注选取", "点选 / 拖动 / 手柄变换既有标注；禁框选（切换即回到画布预处理目标）"},
-    {CanvasMode::AnnoCreate, "标注绘制", "在下方选择形状后于画布绘制新标注"},
+    {CanvasMode::Marquee,    IDC_GT(menu, kCanvasMarquee),    IDC_GT(tooltip, kModeMarqueeBtn)},
+    {CanvasMode::ImagePick,  IDC_GT(menu, kCanvasImagePick),  IDC_GT(tooltip, kModeImagePickBtn)},
+    {CanvasMode::AnnoSelect, IDC_GT(menu, kCanvasAnnoSelect), IDC_GT(tooltip, kModeAnnoSelectBtn)},
+    {CanvasMode::AnnoCreate, IDC_GT(menu, kCanvasAnnoCreate), IDC_GT(tooltip, kModeAnnoCreateBtn)},
 };
 
-// 形状工具清单（「标注绘制」态子行）：{工具枚举, 中文标签, 悬停提示}。不含 SELECT（已上移为「标注选取」模式）。
+// 形状工具清单（「标注绘制」态子行）：{工具枚举, 标签, 悬停提示}。不含 SELECT（已上移为「标注选取」模式）。
+// 形状名与菜单「标注→工具」同源（label::kTool*，面板为真相源）。
+// 表序即网格入位序（3 列）：四个三角形（ISOS/EQU/RECT_TRI/EQU_RECT_TRI）刻意用 LINE/POLYLINE 等
+// 非三角项分隔，使任一行不超过 2 个三角形（旧序 EQU_TRI/RECT_TRI/EQU_RECT_TRI 挤成同一行）。仅改表序，不动枚举值。
 struct ToolEntry {
     AnnoTool tool;
-    const char* label;
-    const char* tip;
+    i18n::TextRef label;
+    i18n::TextRef tip;
 };
 const ToolEntry kTools[] = {
-    {AnnoTool::RECT,           "矩形",        "两点拖拽绘制矩形；面板“圆角”>0 即得圆角矩形"},
-    {AnnoTool::SQUARE,         "正方形",      "落点为一个顶点，拖拽定边长（取 max(宽,高)）画轴对齐正方形；面板“圆角”>0 即得圆角正方形"},
-    {AnnoTool::RHOMBUS,        "菱形",        "起点为中心，拖拽绘制菱形"},
-    {AnnoTool::CIRCLE,         "圆形",        "起点为圆心，拖拽绘制圆形"},
-    {AnnoTool::ELLIPSE,        "椭圆",        "落点为中心，拖拽定两半轴（dx/dy）绘制椭圆"},
-    {AnnoTool::ISOS_TRI,       "等腰三角形",  "起点为底边中点，拖拽绘制等腰三角形"},
-    {AnnoTool::EQU_TRI,        "等边三角形",  "落点为底边中点，拖拽绘制底边水平、顶角朝光标生长的等边三角形"},
-    {AnnoTool::RECT_TRI,       "直角三角形",  "落点为直角顶点，拖拽沿两轴定两直角边长（dx、dy）"},
-    {AnnoTool::EQU_RECT_TRI,   "等腰直角三角形", "落点为直角顶点，拖拽定直角边长（取 max(宽,高)）画轴对齐等腰直角三角形"},
-    {AnnoTool::LINE,           "直线",        "两点拖拽绘制直线段"},
-    {AnnoTool::POLYLINE,       "多线段",      "连续单击追加顶点，Esc 或切换工具收笔"},
-    {AnnoTool::TEXT,           "文字",        "单击落点，输入文字内容后添加"},
-    {AnnoTool::BRUSH,          "画笔",        "按住拖动绘制自由路径，Esc 或切换工具收笔"},
+    {AnnoTool::RECT,           IDC_GT(label, kToolRect),          IDC_GT(tooltip, kToolRectBtn)},
+    {AnnoTool::SQUARE,         IDC_GT(label, kToolSquare),        IDC_GT(tooltip, kToolSquareBtn)},
+    {AnnoTool::RHOMBUS,        IDC_GT(label, kToolRhombus),       IDC_GT(tooltip, kToolRhombusBtn)},
+    {AnnoTool::CIRCLE,         IDC_GT(label, kToolCircle),        IDC_GT(tooltip, kToolCircleBtn)},
+    {AnnoTool::ELLIPSE,        IDC_GT(label, kToolEllipse),       IDC_GT(tooltip, kToolEllipseBtn)},
+    {AnnoTool::ISOS_TRI,       IDC_GT(label, kToolIsoTriangle),   IDC_GT(tooltip, kToolIsoTriBtn)},
+    {AnnoTool::EQU_TRI,        IDC_GT(label, kToolEquTriangle),   IDC_GT(tooltip, kToolEquTriBtn)},
+    {AnnoTool::LINE,           IDC_GT(label, kToolLine),          IDC_GT(tooltip, kToolLineBtn)},
+    {AnnoTool::RECT_TRI,       IDC_GT(label, kToolRightTriangle), IDC_GT(tooltip, kToolRightTriBtn)},
+    {AnnoTool::POLYLINE,       IDC_GT(label, kToolPolyline),      IDC_GT(tooltip, kToolPolylineBtn)},
+    {AnnoTool::EQU_RECT_TRI,   IDC_GT(label, kToolIsoRightTri),   IDC_GT(tooltip, kToolIsoRightTriBtn)},
+    {AnnoTool::TEXT,           IDC_GT(label, kToolText),          IDC_GT(tooltip, kToolTextBtn)},
+    {AnnoTool::BRUSH,          IDC_GT(label, kToolBrush),         IDC_GT(tooltip, kToolBrushBtn)},
 };
 
 } // namespace
@@ -63,25 +74,28 @@ const ToolEntry kTools[] = {
 // 构建面板：一个「交互模式」分组——顶部四态模式互斥单选（2 列网格），下方形状子行（3 列网格，仅绘制态可见）。
 ToolPanel::ToolPanel(QWidget* parent) : QWidget(parent) {
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(8, 8, 8, 8);
-    root->setSpacing(6);
+    root->setContentsMargins(nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx,
+                             nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx);
+    root->setSpacing(nums::panels::kPanelSpacingPx);
 
-    auto* box = new QGroupBox(QStringLiteral("交互模式"), this);
+    auto* box = new QGroupBox(this);
+    i18n::bindTitle(retranslator_, box, IDC_GT(label, kInteractionModeBox));
     auto* boxLay = new QVBoxLayout(box);
-    boxLay->setSpacing(6);
+    boxLay->setSpacing(nums::panels::kPanelSpacingPx);
 
     // ---- 顶部：四态互斥模式按钮（2 列网格）----
     auto* modeGrid = new QGridLayout();
-    modeGrid->setSpacing(4);
+    modeGrid->setSpacing(nums::panels::kPanelTightSpacingPx);
     modeGroup_ = new QButtonGroup(this);
     modeGroup_->setExclusive(true);
     int mi = 0;
     for (const auto&[mode, label, tip] : kModes) {
         constexpr int cols = 2;
-        auto* btn = new QPushButton(QString::fromUtf8(label), box);
+        auto* btn = new QPushButton(box);
+        i18n::bindButton(retranslator_, btn, label);
         btn->setCheckable(true);
         btn->setStyleSheet(kToolStyle);
-        btn->setToolTip(QString::fromUtf8(tip));
+        i18n::bindToolTip(retranslator_, btn, tip);
         modeGroup_->addButton(btn, static_cast<int>(mode));
         modeGrid->addWidget(btn, mi / cols, mi % cols);
         ++mi;
@@ -92,16 +106,17 @@ ToolPanel::ToolPanel(QWidget* parent) : QWidget(parent) {
     // ---- 下方：形状子行（3 列网格；仅「标注绘制」态可见）----
     shapeArea_ = new QWidget(box);
     auto* shapeGrid = new QGridLayout(shapeArea_);
-    shapeGrid->setSpacing(4);
+    shapeGrid->setSpacing(nums::panels::kPanelTightSpacingPx);
     toolGroup_ = new QButtonGroup(this);
     toolGroup_->setExclusive(true);
     int i = 0;
     for (const auto&[tool, label, tip] : kTools) {
         constexpr int cols = 3;
-        auto* btn = new QPushButton(QString::fromUtf8(label), shapeArea_);
+        auto* btn = new QPushButton(shapeArea_);
+        i18n::bindButton(retranslator_, btn, label);
         btn->setCheckable(true);
         btn->setStyleSheet(kToolStyle);
-        btn->setToolTip(QString::fromUtf8(tip));
+        i18n::bindToolTip(retranslator_, btn, tip);
         toolGroup_->addButton(btn, static_cast<int>(tool));
         shapeGrid->addWidget(btn, i / cols, i % cols);
         ++i;

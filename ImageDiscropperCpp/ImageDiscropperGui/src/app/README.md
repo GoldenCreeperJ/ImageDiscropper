@@ -1,57 +1,78 @@
-# app/ — 主窗口装配壳、四个控制器与程序入口
+# app/ — 主窗口装配壳、八个控制器与程序入口
 
 顶层装配与编排。MainWindow 只做「装配 + 编排 + 转发」，不含切割/几何/导出实现——
 Core 调用集中在 `EngineBridge`，状态集中在 `Document`。为避免 `main_window.cpp` 成为上帝文件，
-编排按域拆到四个控制器，纯 UI 装配拆到 `MainWindowUi`，状态栏拆为 `StatusBar` 组件。
+编排按域拆到八个控制器，纯 UI 装配与 UI 状态回同步拆到 `MainWindowUi`，单键快捷键分派拆到
+`KeyRouter`，状态栏拆为 `StatusBar` 组件。八个控制器 + 键表分派 `KeyRouter` 已下沉 `controllers/` 子目录（清单见 [controllers/README.md](controllers/README.md)），新建画布对话框的采参组件 `pattern_form`/`placement_row` 在 `forms/` 子目录（见 [forms/README.md](forms/README.md)），与 CLI `src/commands/` 同构：装配壳同层只留 main_window/main_window_ui/main_window_menus/new_canvas_dialog/status_bar/palette/canvas_prefs/app_prefs/appearance_dialog/main。
 
-| 文件                               | 职责                                                                                                                                                                                                                                                                                                                                                                                                                                |
-|----------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `main_window.{h,cpp}`            | 装配壳：装配 + 实例化/注入控制器 + 剩余信号槽串联（Document 信号 / 画布交互写回 / 历史启用态回灌）+ 文件/编辑动作 + 单键快捷键；构造拆为「骨架装配 → `initCore()` 接线」两段，`initCore` 为桌面/移动（mobile/MobileShell）逐行共用的唯一接线序列。**图片图层接线**：「添加图片」经 `onAddImageLayer` 复用 `NewCanvasDialog` 产 `recipe`/`file` 层；图层面板 `imageLayerVisibilityChanged` → `Document::setImageLayersVisible`（`Document::imageLayersVisible_` 运行态整体显隐单开关）→ `layersChanged` → `PreprocessController::recomposeLayerCanvas` 重组 |
-| `main_window_ui.{h,cpp}`         | `MainWindowUi` 静态建造者（MainWindow 的 friend）：buildCentral/buildMenus/buildToolbar/buildStatus 纯 UI 装配，回填部件指针                                                                                                                                                                                                                                                                                                                         |
-| `status_bar.{h,cpp}`             | `StatusBar`：六标签（坐标/RGB/模式/保留块/缩放/提示）+ 非模态 `notify`；`setCompactMode` 供移动端只留模式/块数/缩放（SPEC §8.3）                                                                                                                                                                                                                                                                                                                                     |
-| `doc_history.{h,cpp}`            | `DocHistory`：文档参数态撤销/重做（防抖采集/抑制守卫/载入配置冲刷压栈/上下文判定/启用态信号）                                                                                                                                                                                                                                                                                                                                                                           |
-| `preview_controller.{h,cpp}`     | `PreviewController`：refreshPreview 五分支状态机 + 导出输出预览缓存与按需渲染（A/B 规则）                                                                                                                                                                                                                                                                                                                                                                 |
-| `preprocess_controller.{h,cpp}`  | `PreprocessController`：预处理编排薄壳（声明策略已下沉 `model::PreprocessSession`）——轻操作走 stepAppend/Replace/Remove/Move/reset 五信号 + 菜单「追加一步」入口，画布尺寸走 onSetResizeTarget/onScaleResize/onClearResize；两路径均汇入 `commitPipeline`（先调 session 静态策略算候选态）几何签名尺寸门 + `base_` 缓存复用重放；忙碌框仅在有 resize 需重采样时弹；`setBusyOverlayMode` 供移动端改全屏遮罩（SPEC §8.2）                                                                                                            |
-| `annotation_coordinator.{h,cpp}` | `AnnotationCoordinator`：标注 33 槽 + 手势分派状态机 + 图层显隐/烧录联动                                                                                                                                                                                                                                                                                                                                                                             |
-| `main.cpp`                       | 程序入口（双产物各编一份：`idc_gui` 纯桌面 / `idc_gui_mobile` 经宏恒选移动壳；Android 单目标），含 `QApplication` + 事件循环                                                                                                                                                                                                                                                                                                                                        |
+| 文件                                             | 职责                                                                                                                                                                                                                                                                                                                                              |
+|------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `main_window.{h,cpp}`                          | 装配壳：装配 + 实例化/注入八个控制器 + 剩余跨件串联（Document 信号 / 状态栏回报 / 历史启用态回灌 / 菜单勾选态回同步）+ 模式/极性动作 + 撤销重做路由 + 快捷键事件入口转发；构造拆为「骨架装配 → `initCore()` 接线」两段，`initCore` 为桌面/移动（mobile/MobileShell）逐行共用的唯一接线序列；`openImageFromPath` 保留一行转发（main.cpp 公共面）                                                                                                                  |
+| `main_window_ui.{h,cpp}`                       | `MainWindowUi` 静态建造者与 UI 状态同步（MainWindow 的 friend）：buildCentral/buildToolbar/buildStatus 装配 + `syncUi`/`syncCanvasModeActions`/`syncToolActions`/`syncAnnoSelActions` 全量与定向回同步（原 `MainWindow::syncPanels` 全体迁入）；buildMenus 独立 TU `main_window_menus.cpp`，按菜单域拆私有静态 helper（声明为类成员以继承 friend 权限）                                                  |
+| `controllers/canvas_coordinator.{h,cpp}`       | `CanvasCoordinator`：画布交互域——四态互斥模式落地 `applyCanvasMode` + 选区/单元交互写回（框选/拖改/点选/框选/调序/微调/清选区/全选反选清空）+ 状态栏交互提示；画布/场景/参数面板/工具面板相关信号接线住本控制器 `connectSignals`                                                                                                                                                                                            |
+| `controllers/session_controller.{h,cpp}`       | `SessionController`：文档会话生命周期——打开/新建画布/添加图片图层/清空图层/重置全部 + 图层编辑面板声明态 CRUD 接线（含图层面板图片图层整体显隐开关）                                                                                                                                                                                                                                                     |
+| `controllers/export_controller.{h,cpp}`        | `ExportController`：导出编排——烧录源组装（图片图层/标注）→ 路径解析（桌面对话框 / Android 相册发布）→ EngineBridge 导出 → 结果提示；Android 发布子编排在 `mobile/android_export_publish`                                                                                                                                                                                                      |
+| `controllers/config_controller.{h,cpp}`        | `ConfigController`：配置存取编排——保存（§7 schema JSON，含标注与图层段）/ 加载（底图像素重生 + 资产解码 + 历史压栈可撤销 + 预处理队列重放 + 标注还原）                                                                                                                                                                                                                                             |
+| `controllers/key_router.{h,cpp}`               | `KeyRouter`（全静态，MainWindow 的 friend）：单键快捷键分派（1/2/3 模式、K/R 极性、Esc 清选区、Delete/Backspace 删标注）+ 数值/文本输入焦点守卫；`MainWindow::keyPressEvent` 只留转发                                                                                                                                                                                                        |
+| `status_bar.{h,cpp}`                           | `StatusBar`：六标签（坐标/RGB/模式/保留块/缩放/提示）+ 非模态 `notify`；`setCompactMode` 供移动端只留模式/块数/缩放（SPEC §8.3）                                                                                                                                                                                                                                                   |
+| `palette.{h,cpp}`                              | `Palette`（QObject 单例）：画布六项核心语义色（保留/删除遮罩、选区、标注、网格、背景）+ 三项填充 alpha 的读写与 QSettings **应用级**持久化；改色发 `changed()` 联动画布重绘。渲染图元（canvas/items/*）绘制期取色。纯呈现偏好，不进 §7 配置、不进撤销栈                                                                                                                                                                                |
+| `canvas_prefs.{h,cpp}`                         | `CanvasPrefs`（QObject 单例）：画布**交互/视图偏好**（与 Palette 分家、各存 `canvas/` 组）——选区吸附开关（**运行时可切换**）、手柄/命中屏幕基准（0=跟随平台默认、>0 覆盖）、内容外滚动余量（视口各边百分比，0=不留）、缩放步进与上下限区间、新建默认尺寸的读写与 QSettings **应用级**持久化；需即时联动的 setter 经 `touched()`＝`save()`+发 `changed()`（`CanvasView` 借此重算手柄与滚动余量/钳制缩放/回设吸附），`rememberNewCanvasSize` 只落盘不发。取值器全内联头文件，本件只变更路径；纯呈现/交互偏好，不进 §7、不进撤销栈 |
+| `app_prefs.{h,cpp}`                            | `UiPrefs`（**非 QObject** 单例，存 `ui/` 组）：GUI **应用级会话记忆/杂项交互偏好**——最近打开文件 MRU（有序、上限 8、`content://` 不入）、上次打开目录 / 上次导出目录（文件对话框起始种子）、导出「重排前二次确认」开关（默认开）的读写与 QSettings 持久化；无即时联动消费者，故不发 `changed()`（菜单经 `aboutToShow` 懒重建读取、onExport 调用点即时读取），变更即落盘。纯呈现/交互偏好，不进 §7、不进撤销栈                                                                                 |
+| `appearance_dialog.{h,cpp}`                    | `AppearanceDialog`（QDialog）：「视图→外观/交互…」对话框（移动「更多」同源），**上区画布配色**（六色取色 + 三 alpha，写 Palette）、**中区画布交互**（手柄/边缘余量/缩放步进/区间/新建默认七数值框，写 CanvasPrefs）、**下区应用语言**（三选下拉 + 重启生效提示，写 UiPrefs，无移动端门控），内容包 QScrollArea + 恢复默认（**只回退配色与交互两单例，不重置语言**）；自身不持偏好态（单一真相源在三单例），颜色/交互改动即时写对应单例（生效+落盘+联动）、语言只落盘待下次启动决议；选区吸附不在此（挂菜单运行时开关）                                |
+| `controllers/doc_history.{h,cpp}`              | `DocHistory`：文档参数态撤销/重做（防抖采集/抑制守卫/载入配置冲刷压栈/上下文判定/启用态信号）                                                                                                                                                                                                                                                                                         |
+| `controllers/preview_controller.{h,cpp}`       | `PreviewController`：refreshPreview 五分支状态机 + 导出输出预览缓存与按需渲染（A/B 规则）+ 画布右键遮罩切换 `onToggleMasks`（同步图层面板复选框）                                                                                                                                                                                                                                          |
+| `controllers/preprocess_controller_commit.cpp` | `PreprocessController` 的「提交链」域实现（TU 拆分）：commitPipeline（geomSig 尺寸门 + base_ 缓存重放 + 回灌）/commitActive（按目标提交）/忙碌框（runInBusyDialog + runWithBusyDialog）                                                                                                                                                                                              |
+| `controllers/preprocess_controller_canvas.cpp` | `PreprocessController` 的「多层画布」域实现（TU 拆分）：syncLayerMaterialCache/recomposeLayerCanvas/composeLayerCanvasForExport                                                                                                                                                                                                                                |
+| `controllers/preprocess_controller.{h,cpp}`    | `PreprocessController`：预处理编排薄壳（声明策略已下沉 `model::PreprocessSession`）——轻操作走 stepAppend/Replace/Remove/Move/reset 五信号 + 菜单「追加一步」入口，画布尺寸走 onSetResizeTarget/onScaleResize/onClearResize；两路径均汇入 `commitPipeline`（先调 session 静态策略算候选态）几何签名尺寸门 + `base_` 缓存复用重放；忙碌框仅在有 resize 需重采样时弹；`setBusyOverlayMode` 供移动端改全屏遮罩（SPEC §8.2）                          |
+| `controllers/annotation_coordinator.{h,cpp}`   | `AnnotationCoordinator`：标注 33 槽 + 手势分派状态机 + 图层显隐/烧录联动                                                                                                                                                                                                                                                                                           |
+| `new_canvas_dialog.cpp`                        | 「文件→新建画布」与「添加图片图层」共用的模态对话框实现：尺寸 + 附加图片开关 + 小尺寸代理预览 + `accept()` 经 `EngineBridge::generatePattern` 产全尺寸画布（采参子件在 `forms/`）                                                                                                                                                                                                                        |
+| `forms/pattern_form.cpp`                       | 图案采参表单实现（自 `new_canvas_dialog.cpp` 拆出，两语境共用），见 [forms/README.md](forms/README.md)                                                                                                                                                                                                                                                               |
+| `forms/placement_row.cpp`                      | 「锚点 / 枢轴 / 自由偏移」落位行实现（两组重复装配合一），同上 [forms/README.md](forms/README.md)                                                                                                                                                                                                                                                                           |
+| `main.cpp`                                     | 程序入口（双产物各编一份：`idc_gui` 纯桌面 / `idc_gui_mobile` 经宏恒选移动壳；Android 单目标），含 `QApplication` + 事件循环                                                                                                                                                                                                                                                      |
 
 ## 布局
 
-`QSplitter` 水平三分：**左侧可滚动容器（QScrollArea 竖排 LeftPanel + ToolPanel + LayerPanel）** | **中央画布（CanvasView）** | **右侧 QScrollArea 包裹的 AccordionPanel（参数页 / 导出页 / 图像页 / 标注页，多节可同开）**。装配细节在 `MainWindowUi::buildCentral`（创建顺序、`setDocument`/`setModel` 注入、初始分割 {340,860,300}）。
+`QSplitter` 水平三分：**左侧可滚动容器（QScrollArea 竖排 LeftPanel + ToolPanel + LayerPanel）** | **中央画布（CanvasView）** | **右侧 QScrollArea 包裹的 AccordionPanel（图片页 / 预处理页 / 标注页 / 参数页 / 导出页，多节可同开）**。装配细节在 `MainWindowUi::buildCentral`（创建顺序、`setDocument`/`setModel` 注入、初始分割 {330,860,375}）。
 
 ## 编排（连接住在属主旁）
 
 构造顺序（承重，不可重排）：骨架装配（桌面 `MainWindowUi` 四步；移动 `MobileShellUi` 同模式）→ `MainWindow::initCore()`：
-依次实例化并注入四个控制器（各自 `connectSignals()`）→
+依次实例化并注入八个控制器（各自 `connectSignals()`）→
 `DocHistory::start()` → `MainWindow::connectAll()` → `syncPanels` → `refreshPreview` → `history_->reset()`（发
-`availabilityChanged` → 撤销/重做动作置灰，故 **connectAll 必须先于 reset**）→ 欢迎提示。
+`availabilityChanged` → 撤销/重做动作置灰，故 **各控制器 connectSignals 与 connectAll 必须先于 reset**）→ 初始态提示。
 **本序列桌面/移动逐行共用**（SPEC §8.3 行为同构的结构性保证；差异只在骨架装配）。
 
-**MainWindow::connectAll（剩余跨件串联）**：
+**MainWindow::connectAll（剩余跨件串联；各域接线住在属主控制器）**：
 
 ```
 Document.imageChanged → onImageChanged → preview_->rebuildPreviewPixmap + syncPanels + preview_->refreshPreview
 Document.changed      → onDocChanged   → preview_->refreshPreview + syncPanels（拖拽期跳过）
-CanvasView.rubberSelect / CanvasScene.selectionEdited → onRubberSelect：L1/L2 写回 Document.setRect（MULTI_RECT 则 addRect）；
-    L3 时把框选矩形经 scene_->cellsIntersecting 换成命中单元并 addCells（含从图像外起拖、未被 CellPickerItem grab 而落到视图橡皮筋的情形）
-CanvasScene.multiRectEdited(index, rect) → onMultiRectEdited：L2 MULTI_RECT 下拖动/缩放第 index 个选区框 → Document.updateRect(index)（与单选区同为可拖拽 SelectionRectItem）；
-    拖拽期 syncPanels 被跳过，故另调 param_->selectRectRow(index)（列表跟随选中+高亮）与 param_->updateRectListItem(index)（实时回显新尺寸）
-ParamPanel.rectSelected(index) → onRectSelected → scene_->setActiveMultiRect(index)：高亮画布上对应选区框（颜色略微加强，-1 清除）
-CanvasView.nudgeSelection → onNudge（方向键平移选区，钳制到图像内）
+Document.layersChanged → preprocess_->recomposeLayerCanvas（多层画布重组）
 CanvasView.cursorScenePos → onCursor（状态栏坐标 + 像素 RGB，经 StatusBar setter）
 CanvasView.zoomChanged → onZoomChanged（状态栏缩放倍数；所有缩放入口汇聚于 updateHandleSize 发出）
-CanvasView.clearCutRequested / toggleMasksRequested / resetViewRequested → 对应动作
-ExportPanel.exportRequested → onExport
+CanvasView.resetViewRequested → view_->fitToWindow
+ExportPanel.layersBurnInChanged / burnInChanged / collapsibleChanged → 菜单「导出设置」勾选态/置灰回同步
+    （落地连接在 ExportController / AnnotationCoordinator；初始同步 setLayersBurnInChecked）
 DocHistory.availabilityChanged → onHistoryAvailabilityChanged → aUndo_/aRedo_ setEnabled
-AnnotationBridge.changed/selectionChanged/toolChanged → history_->updateEnabled（标注上下文变化 → 重算启用态；
-    替代原标注槽内三处 updateUndoRedoEnabled() 调用，同源触发）
+ToolPanel.modeChanged → MainWindowUi::syncCanvasModeActions（画布模式菜单勾选态；CanvasCoordinator 的模式落地
+    连接先于本条——先 applyCanvasMode 落地、再读视图态回同步）
+AnnotationBridge.changed/selectionChanged/toolChanged → history_->updateEnabled（标注上下文变化 → 重算启用态）
+    + MainWindowUi::syncToolActions / syncAnnoSelActions（标注工具/叠放/填充菜单勾选态回同步）
 ```
 
 **各控制器自持的连接**：
 
 - `DocHistory::start()`：`Document.changed → scheduleCapture`（500ms 防抖采集）。
-- `PreviewController::connectSignals()`：`rightTabs currentChanged → onRightTabChanged`（导出页切回补渲染）。
+- `PreviewController::connectSignals()`：`rightTabs currentChanged → onRightTabChanged`（导出页切回补渲染）+
+  `view_.toggleMasksRequested → onToggleMasks`（画布右键遮罩切换，同步图层面板复选框）。
 - `PreprocessController::connectSignals()`：`ImagePanel` 轻队列意图信号（`stepAppendRequested`/`stepReplaceRequested`/`stepRemoveRequested`/`stepMoveRequested`/`resetRequested`）+ 独立尺寸区意图信号（`resizeAppliedRequested`/`resizeScaleRequested`/`resizeClearedRequested`）→ 对应槽。
+- `CanvasCoordinator::connectSignals()`：画布/场景/参数面板/工具面板意图信号——`rubberSelect`/`nudgeSelection`/
+  `clearCutRequested`/`selectionEdited`/`multiRectEdited`/`cellToggled`/`cellsMarqueeSelected`/`cellReordered`/
+  `rectSelected`/`modeChanged`/`imageLayerPressed`/`basePickRequested`/`pickDeselectRequested`/`imageLayerMoved` → 对应槽。
+- `SessionController::connectSignals()`：`LayerEditPanel` 9 意图信号（层序/落位/画布尺寸/添加/清空/不透明度）+
+  `LayerPanel.imageLayerVisibilityChanged` → Document 声明态 CRUD。
+- `ExportController::connectSignals()`：`ExportPanel.exportRequested → onExport`。
+- `ConfigController`：无面板信号（菜单/移动「更多」动作直连槽）。
 - `AnnotationCoordinator::connectSignals()`：标注域全部（`AnnotationBridge` 4 信号、`CanvasView` 6 手势、`CanvasScene` 4 标注、
   `ToolPanel`/`LayerPanel`（7，含单元编号 lambda）/`ExportPanel.burnInChanged`/`AnnotationPropPanel` 6），并做
   `exportPanel_->setBurnInChecked(anno->burnInEnabled())` 初始同步。
@@ -69,6 +90,7 @@ L2 MULTI_RECT 分支：`scene_->updateMultiRects(doc_.rects())` 增量刷新可�
 
 `onExport()` 在 `buildEngineConfig` 后、解析路径前调 `exportPanel_->rearrangeWarning()`：若重排参数存在风险
 （cols×rows < 保留块数、或单元宽/高 < 网格单元宽/高）则弹 `QMessageBox::warning` 二次确认，选 No 则中止导出。
+该模态确认受 `UiPrefs::confirmRearrangeRisk()`（`导出设置→重排前二次确认`，默认开）门控，关掉则跳过直接导出。导出文件/目录对话框以 `UiPrefs::lastExportDir()` 为起始目录并在选定后回写。
 **导出烧录**：解析路径后、调引擎前，若 `annoBridge_.burnInEnabled() && count()>0` 则 `exportSrc = annoBridge_.burnIn(doc_.working())`
 （以当前工作图为底逐个调 Core `rasterize` 合成标注）再送 `EngineBridge::exportResult(exportSrc, ...)`；否则直接送 `doc_.working()`。切割预览几何不受标注影响（标注随像素被切开）。
 
@@ -79,7 +101,7 @@ L2 MULTI_RECT 分支：`scene_->updateMultiRects(doc_.rects())` 增量刷新可�
 `stepMoveRequested(index,down)`/`resetRequested()`）→ `PreprocessController` 对应槽；菜单/快捷键入口（`onRotate`/`onFlip`/`onGray`/`onInvert`/`onSplit`）均委托「追加一步」（`onStepAppend`）。
 独立尺寸区发 `resizeAppliedRequested(w,h)`/`resizeScaleRequested(factor)`/`resizeClearedRequested()` → `onSetResizeTarget`/`onScaleResize`/`onClearResize`（“按比例”经当前输出尺寸换算为绝对目标）。
 两条路径均汇入公共收尾 `commitPipeline(nextSteps, nextResize, okMsg, busyText)`：候选有效管线/前缀经 `PreprocessSession::makeEffective` 组装（`[resize?]+steps_`），
-**先比较几何签名 `geomSig` 前后变化**（尺寸或净旋转象限变 → 先清失效选区与标注），再复用 `base_`＝`resize(original)` 缓存、仅重放轻后缀经 `EngineBridge::applyPipeline` 物化 `working_`（`setWorkingImage`）。
+**先比较几何签名 `geomSig` 前后变化**（尺寸或净旋转象限变 → 先清失效框选；标注/图层/色彩预处理恒保留），再复用 `base_`＝`resize(original)` 缓存、仅重放轻后缀经 `EngineBridge::applyPipeline` 物化 `working_`（`setWorkingImage`）。
 **原图始终保留**，resize 恒从原图重采样（不累积误差）；轻编辑不改 `base_`，仅重放轻后缀。`applyLoadedQueue(pipeline)` 委托 `PreprocessSession::normalizeLoaded` 将数组内 `ResizeOp` 归一化抽出为独立 resize、余下重排 geo 前 color 后再重放。
 反色 / 分离共用 R/G/B 复选框作通道选择器（`PreprocessConfig = variant<GrayOp,SplitOp,InvertOp,RotateOp,FlipOp,ResizeOp>`）。
 仅当确有 resize 需重采样（`baseDirty && 前缀非空`）时，经 `runWithBusyDialog` 弹**应用级模态、不可取消**的 `QProgressDialog`（父窗口为注入的 MainWindow；`busyResample_` 重入守卫）——无 resize 的轻编辑不再弹框。
@@ -107,7 +129,7 @@ AnnotationPropPanel.colorPicked/stroke/fill/text/fontSize → anno_->setColor/se
 ```
 
 - **绘制态门控**：SELECT 工具时 `setAnnotationDrawActive(false)`，画布维持既有橡皮筋选区/单元交互；任一绘制工具时置 true，左键拖拽路由到标注绘制。
-- **base 同步**：`openImageFromPath` 载新图后 `annoBridge_.setBaseImage(doc_.working())`（新图＝新标注会话）；`onImageChanged` 末尾 `scene_->updateAnnotations(annoBridge_)`（同维度预处理不清标注）；`PreprocessController::commitPipeline` 几何签名变化分支（尺寸/净旋转象限变）一并 `anno_->clearAll()`。
+- **base 同步**：`openImageFromPath` 载新图后 `annoBridge_.setBaseImage(doc_.working())`（新图＝新标注会话）；`onImageChanged` 末尾 `scene_->updateAnnotations(annoBridge_)`（预处理恒不清标注）；`PreprocessController::commitPipeline` 尺寸门仅清框选（不清标注/图层）。
 - **撤销/重做**：标注菜单驱动 `anno_->undo()/redo()`（→ Core 分层快照，**不再绑 Ctrl+Z/Y**）；Delete 键（经 `MainWindow::keyPressEvent` 转发）/菜单删除选中→`removeSelected()`；清除全部二次确认（父窗口为注入的 MainWindow）→`clearAll()`。
 - **对话框父窗口**：文字输入 `QInputDialog` 与清除确认 `QMessageBox` 均以注入的 `dialogParent_`（MainWindow）为父，保证模态落位。
 
@@ -121,17 +143,42 @@ AnnotationPropPanel.colorPicked/stroke/fill/text/fontSize → anno_->setColor/se
 回灌 `MainWindow::onHistoryAvailabilityChanged` 动态启停 `aUndo_/aRedo_`。**预处理不纳入全局撤销**（快照仅参数态），
 靠删改队列步骤 / 「重置预处理」回退。配置经 `EngineBridge::saveConfig/loadConfig` 委托 Core（保存走 `Document::buildSerializableConfig`、携带 `preprocess_.effectivePipeline()`（`[resize?]+steps_`）与 `annoBridge_.set()` 标注段），
 加载经 `DocHistory::recordConfigLoad`（冲刷防抖 → 抑制采集地 `applyEngineConfig`→ 参数还原后由 `MainWindow::onLoadConfig` 调 `PreprocessController::applyLoadedQueue` 回灌预处理队列）
-且**入同一撤销栈**（可一步撤销）；标注段先收进**临时层**，队列重放（含尺寸门清标注）**之后**才 `AnnotationBridge::replaceAnnotations` 覆盖真实层
+且**入同一撤销栈**（可一步撤销）；标注段先收进**临时层**，队列重放**之后**才 `AnnotationBridge::replaceAnnotations` 覆盖真实层
 （顺序纪律：先重放预处理、再还原标注；还原不入文档撤销栈，见 Gui README 决策 #11）。
 机制详见 Gui README「关键设计决策」#10/#11。
 
 ## 菜单 / 工具栏 / 快捷键（MainWindowUi 装配）
 
-- **菜单**：文件（打开/导出/**加载配置/保存配置**/退出）、编辑（**全局撤销/重做 Ctrl+Z/Y**、清除选区）、图像（预处理：左转/右转/180°、水平/垂直翻转、
-  黑白、反色（全通道）、重置预处理、打开图像处理面板）、**标注（撤销标注 / 重做标注（不再绑快捷键）/ 删除选中 / 清除全部 / 标注属性定位）**、视图（缩放/适应/重置/切换遮罩）、帮助（使用说明/关于）。
-- **工具栏**：打开/导出、**撤销/重做**、放大/缩小/适应、模式切换（`QActionGroup`，L2 强调、L3 禁用）。（遮罩切换已迁入左侧「图层」面板；视图菜单与画布右键仍保留快捷切换。）
-- **快捷键**（`MainWindow::keyPressEvent`）：`Ctrl+O`/`Ctrl+S`、`Ctrl +`/`Ctrl -`/`Ctrl+0`、`1`/`2`/`3` 切模式、`K`/`R` 切极性、`Esc` 清选区（绘制态下收笔/取消预览）、`Delete` 删除选中标注、`Ctrl+Z`/`Ctrl+Y` **全局撤销/重做（上下文路由：标注上下文→标注撤销，否则→文档参数撤销）**、方向键微调。
-  单键快捷键（1/2/3/K/R/Delete/方向键）在焦点位于数值/文本输入控件时被 `focusInTextInput()` 守卫忽略，避免打字误触。
+定位原则：**菜单栏＝应用几乎全部功能的入口，工具栏＝常用功能快速入口，主面板＝核心交互与复杂场景**。
+面板与菜单镜像一律「面板/模型为真相源，菜单经共享 QAction 或面板公共入口回写 + `syncPanels` 回同步勾选态」。
+
+- **菜单**：文件（新建画布/打开/导出/**导出设置（输出方式：分离/坍缩/重排；格式：PNG/JPG/WebP/BMP；烧录标注/烧录图片图层——
+  经 `ExportPanel::selectEmitMode/selectFormat/setBurnInChecked` 走与面板同一路径，含重排 auto-grid；置灰规则与面板
+  `refreshModeItemStates` 一致：坍缩依 Core 坍缩可行性（`collapsibleChanged` 回灌）、重排仅 L3）**/加载配置/保存配置/退出）、
+  编辑（**全局撤销/重做 Ctrl+Z/Y**、清除选区、**L3 全选/反选/清空单元**（仅 L3 启用）、重置全部）、
+  **模式（L1/L2/L3 + 极性保留/删除框内——与工具栏共用同一批 `QAction`；画布模式子菜单（框选/图片拾取/标注选取/标注绘制，
+  经 `ToolPanel::setMode` 走同一 modeChanged 路径）；切割参数子菜单：L1 形状（矩形/横带/竖带，仅 L1）、L2 方式（十字/横线/竖线/
+  多矩形并集剔除，仅 L2）、转为网格模式编辑（仅 L2 且有选区）、L3 排序（横优先/竖优先/自定义 + 整体逆序/蛇形，仅 L3）、
+  L3 余量（丢弃残缺/保留残缺/补白，仅 L3，勾选态随「参数」页余量下拉回同步）——子菜单按
+  当前切割模式启停）**、预处理（原「图像」菜单，仅预处理：左转/右转/180°、水平/垂直翻转、黑白、**反色（7 种按通道组合：全通道/红+绿/
+  红+蓝/绿+蓝/仅红/仅绿/仅蓝，任意组合去预处理面板）**、**色道分离（6 种常用保留组合）**、
+  重置预处理）、**图片（原「图层」菜单，多层画布独立成菜单，与预处理拆分：添加图片图层/清空全部图片图层 + 上移/下移/移至顶/底层/删除 +
+  **锚点/枢轴（各 9 向，作用画布当前拾取层落位 `transform`，无拾取层置灰，勾选态随拾取层回同步）**）**、标注（撤销标注/重做标注（不再绑快捷键）/删除选中/清除全部/**工具子菜单 13 种绘制形状（镜像工具
+  面板，非绘制态自动切「标注绘制」画布模式）**/**叠放次序（上移/下移/置顶/置底，无选中置灰）**/填充开关（勾选态随选中项或默认值
+  回同步））、视图（缩放/适应/重置/**图层显隐 8 项 checkable：底图/图片图层/标注/遮罩/网格线/
+  切割线/选区边框/单元编号——与图层面板复选框双向镜像，复选框为唯一真相源**）、帮助（使用说明/关于）。
+  **不再提供「定位到某面板」类菜单项**（右侧折叠面板多节可同开、无需定位）。
+  动态置灰：无图像时预处理菜单动作（含反色/分离子菜单项）统一置灰；当前预处理目标会话已产出灰度时「黑白」「色道分离」置灰（与预处理面板
+  `activeSession().producesGray()` 同源）。
+- **工具栏**：新建/打开/导出、**加载配置/保存配置**、**撤销/重做**、放大/缩小/适应、模式切换 L1/L2/L3（**复用模式菜单同一批 QAction**）、重置全部。
+  （极性保留/删除框内走左栏「模式」组或「模式」菜单；遮罩等图层显隐开关已迁入左侧「图层」面板，视图菜单与画布右键仍保留快捷切换。）
+- **快捷键**（`MainWindow::keyPressEvent`）：`Ctrl+O`/`Ctrl+S`/`Ctrl+N`、`Ctrl +`/`Ctrl -`/`Ctrl+0`、`1`/`2`/`3` 切模式、`K`/`R` 切极性、
+  `Esc` 清选区（绘制态下由画布先行收笔/取消预览）、`Delete`/`Backspace` 删除选中标注、`Ctrl+Z`/`Ctrl+Y` **全局撤销/重做（上下文路由：标注上下文→标注撤销，否则→文档参数撤销）**、方向键微调。
+  `Esc` 不注册为 `QAction` 快捷键（会与画布绘制态收笔在快捷键表互相抢占），由 `keyPressEvent` 统一分派。
+  单键快捷键（1/2/3/K/R/Esc/Delete/方向键）在焦点位于数值/文本输入控件时被 `focusInTextInput()` 守卫忽略，避免打字误触。
+- **自定义**：以上快捷键（组合键 + 单键共 15 条）收进 `app/keybindings.{h,cpp}` 的命令注册表（单一真相源），
+  桌面可在「视图 → 外观/交互…」对话框的「快捷键」Tab 逐条重绑（移动端无键盘，此 Tab 由构造参数关闭）；
+  改后即生效、跨会话持久化（QSettings `shortcuts/` 组），组合键类命令强制含 Ctrl/Alt，冲突时自动询问「改绑清除」，支持行内/全量恢复默认。
 - **非模态提示**：错误经 `notify()`（薄封装 → `StatusBar::notify`）写状态栏并限时显示，不打断用户。
 
 ## main.cpp

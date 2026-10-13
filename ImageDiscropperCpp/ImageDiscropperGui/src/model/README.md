@@ -2,13 +2,16 @@
 
 会话状态与 Core 调用的中枢。三者分离：`Document` 只管状态（内部**组合** `PreprocessSession` 承载预处理会话态），`PreprocessSession` 只管预处理声明态与纯策略，`EngineBridge` 只管调 Core。
 
-| 文件                           | 职责                                                                                                                                                                                                                    |
-|------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `document.{h,cpp}`           | 会话状态单一真相源，组装 `EngineConfig`，变更时发信号                                                                                                                                                                                    |
-| `preprocess_session.{h,cpp}` | 预处理会话（纯 C++、零 Qt）：声明式轻队列 `steps_` + 独立 `resize_` + `base_` 重放缓存 + geo→color 不变式/块内移动限幅/载入归一化/`effectivePipeline`/`baseDirtyFor`/`geomSig`/`producesGray` 等纯策略（由 `Document` 组合持有、`PreprocessController` 经 Document 驱动） |
-| `engine_bridge.{h,cpp}`      | GUI 中**唯一**触碰切割引擎 API 的类                                                                                                                                                                                              |
-| `annotation_editor.{h,cpp}`  | 标注会话编辑器（纯 C++、零 Qt 依赖）：组合 Core `annotation::AnnotationSet` + 撤销/重做双栈 + `EditType`/选中/`current*` 属性模板 + 底图持有                                                                                                           |
-| `annotation_bridge.{h,cpp}`  | 标注域桥：唯一持有并驱动 `AnnotationEditor`（其下组合 Core `annotation::AnnotationSet`）                                                                                                                                                |
+| 文件                              | 职责                                                                                                                                                                                                                    |
+|---------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `document.{h,cpp}`              | 会话状态单一真相源，组装 `EngineConfig`，变更时发信号；「画布/图层/预处理会话」域实现拆独立 TU `document_canvas.cpp`（类不拆、公有 API 不变）                                                                                                                        |
+| `document_canvas.cpp`           | `Document` 的「画布/图层/预处理会话」域成员实现（TU 拆分）：图像载入/换底图/工作图与预处理会话声明/预处理目标路由/图层栈 CRUD/画布尺寸/不透明度（自 document.cpp 原封迁出）                                                                                                            |
+| `config_codec.{h,cpp}`          | `ConfigCodec`（`Document` 的 friend）：`Document ↔ EngineConfig` 字段映射（`buildEngineConfig`/`buildSerializableConfig`/`applyEngineConfig`，自 Document 拆出的静态函数）；`Document` 保留一行转发                                             |
+| `preprocess_session.{h,cpp}`    | 预处理会话（纯 C++、零 Qt）：声明式轻队列 `steps_` + 独立 `resize_` + `base_` 重放缓存 + geo→color 不变式/块内移动限幅/载入归一化/`effectivePipeline`/`baseDirtyFor`/`geomSig`/`producesGray` 等纯策略（由 `Document` 组合持有、`PreprocessController` 经 Document 驱动） |
+| `engine_bridge.{h,cpp}`         | GUI 中**唯一**触碰切割引擎 API 的类                                                                                                                                                                                              |
+| `annotation_editor.{h,cpp}`     | 标注会话编辑器（纯 C++、零 Qt 依赖）：组合 Core `annotation::AnnotationSet` + 撤销/重做双栈 + `EditType`/选中/`current*` 属性模板 + 底图持有                                                                                                           |
+| `annotation_bridge_pending.cpp` | `AnnotationBridge` 的「绘制流程」域实现（TU 拆分）：pending 草稿重建/两点形状 begin·update·commit/折线·画笔路径/文字添加                                                                                                                               |
+| `annotation_bridge.{h,cpp}`     | 标注域桥：唯一持有并驱动 `AnnotationEditor`（其下组合 Core `annotation::AnnotationSet`）                                                                                                                                                |
 
 ## Document（QObject）
 
@@ -63,16 +66,16 @@ L3 网格参数 `GridParams`（默认单元 100×100，避免 `GridParams` 默�
 
 ## EngineBridge（无状态、可拷贝）
 
-| 方法                                   | 委托的 Core API                                                                                                                                                                                   |
-|--------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `loadImage(path, out, err)`          | `engine::readImageFile`（统一解码为 RGBA）                                                                                                                                                            |
-| `runPreviewGeometry(dims, cfg)`      | `engine::runEngineGeometry`（给定已预处理输出尺寸直接跑几何流水线、不应用 cfg.preprocess，供预览脱离全分辨率工作图）                                                                                                                |
-| `cutLines(cut, src)`                 | `engine::generateCutLines`（取贯穿切割线供渲染）                                                                                                                                                          |
-| `buildGrid(cut, src)`                | GRID→`Grid::build`、其余→`generateCutLines`+`induceGrid`（镜像 `runEngine` 网格产出，供 L3 网格线渲染）                                                                                                          |
-| `exportResult(work, cfg, out, err)`  | `engine::runEngine` + `engine::exportImage`（全分辨率落盘，无损）                                                                                                                                         |
-| `saveConfig(path, cfg, err[, anno])` | `engine::saveEngineConfig`（SPEC §7 schema JSON 落盘；可选 `AnnotationSet*` 非空时附带 `annotations` 段）                                                                                                   |
-| `loadConfig(path, out, err[, anno])` | `engine::loadEngineConfig`（从 JSON 还原配置；可选 `AnnotationSet*` 非空时一并还原 `annotations` 段到该集合、缺段＝清空；nlohmann 在 Core 侧 PRIVATE，GUI 不感知）                                                                |
-| `applyPipeline(src, pipeline)`       | `preprocess::PreprocessPipeline::applyExec`（声明式队列物化：执行层融合把整条流水线应用到 src——色彩折单次 `channelMap`、几何折单次 `D4 remap`、与逐步 `apply` 逐像素等价，供 `PreprocessController` 从 `original_` 重放 `steps_` 得 `working_`） |
+| 方法                                   | 委托的 Core API                                                                                                                                                                                                                                 |
+|--------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `loadImage(path, out, err)`          | `engine::readImageFile`（统一解码为 RGBA）                                                                                                                                                                                                          |
+| `runPreviewGeometry(dims, cfg)`      | `engine::runEngineGeometry`（给定已预处理输出尺寸直接跑几何流水线、不应用 cfg.preprocess，供预览脱离全分辨率工作图）                                                                                                                                                              |
+| `cutLines(cut, src)`                 | `engine::generateCutLines`（取贯穿切割线供渲染）                                                                                                                                                                                                        |
+| `buildGrid(cut, src)`                | GRID→`Grid::build`、其余→`generateCutLines`+`induceGrid`（镜像 `runEngine` 网格产出，供 L3 网格线渲染）                                                                                                                                                        |
+| `exportResult(work, cfg, out, err)`  | `engine::runEngine` + `engine::exportImage`（全分辨率落盘，无损）                                                                                                                                                                                       |
+| `saveConfig(path, cfg, err[, anno])` | `engine::saveEngineConfig`（SPEC §7 schema JSON 落盘；可选 `AnnotationSet*` 非空时附带 `annotations` 段）                                                                                                                                                 |
+| `loadConfig(path, out, err[, anno])` | `engine::loadEngineConfig`（从 JSON 还原配置；可选 `AnnotationSet*` 非空时一并还原 `annotations` 段到该集合、缺段＝清空；Core 的第 4 出参 `std::string* annoErr`（标注段逐条报因）本层恒传 `nullptr`——状态栏为单行会把多行报因压平（产品决定，见 Gui README「已核对的 Core API」）；nlohmann 在 Core 侧 PRIVATE，GUI 不感知） |
+| `applyPipeline(src, pipeline)`       | `preprocess::PreprocessPipeline::applyExec`（声明式队列物化：执行层融合把整条流水线应用到 src——色彩折单次 `channelMap`、几何折单次 `D4 remap`、与逐步 `apply` 逐像素等价，供 `PreprocessController` 从 `original_` 重放 `steps_` 得 `working_`）                                               |
 
 > 其余 GUI 代码只与 `EngineBridge` 交互，不直接 include 引擎实现细节，
 > 以此保证「GUI 不含切割/几何/导出逻辑」。
@@ -91,5 +94,5 @@ L3 网格参数 `GridParams`（默认单元 100×100，避免 `GridParams` 默�
 - **变换（缩放/旋转/翻转）**：`transformSelected(sx,sy,rotateDeg)` 委托 Core `Shape::applyObbTransform`（非破坏性仿射：绕局部盒中心沿自身轴缩放 + 绕世界中心刚性旋转，保留具体类型与字形不退化）；sx/sy 为**增量系数**（1.0=不变、负即翻转）、rotateDeg 为增量角。`displayObbScaleX/Y/RotationDeg()` 读出 Core 累积的**绝对带符号值**供属性面板忠实回显（变换语义与累积参数机制见 `include/geometry`）。属性面板与画布手柄**共用此入口**；无选中或增量恒等（1,1,0）则忽略。
 - **撤销/重做/清除**：`undo/redo/clearAll` → editor `revoke/redo/clear`（条目级撤销双栈：列表即主栈、撤销弹尾入重做栈、新操作清重做，GUI 不自建历史栈）。
 - **图层可见/导出烧录**：`setLayerVisible/setBurnIn` 为 GUI 侧标志；`burnIn(base)` 以传入的**当前工作图**为底逐个调 editor 的合成入口（委托 `AnnotationSet::burnIn(base)`，不复用会话 `AnnotationEditor` 所持可能陈旧的底图 `image_`，确保与预处理后最新底图一致）。
-- **配置还原**（SPEC §7 `annotations` 段）：`set()` 只读引用内部 Core `AnnotationSet`，供保存配置时交给 `EngineBridge::saveConfig` 序列化；`replaceAnnotations(items)` 委托 editor `restoreAnnotations` 整体替换当前列表（不推撤销快照、取消选中）后发 `changed()/selectionChanged()`；调用方（`MainWindow::onLoadConfig`）需保证在预处理队列重放（含尺寸门清标注）**之后**执行，否则还原会被误清；还原不纳入 DocHistory 文档撤销栈（已知限制）。
+- **配置还原**（SPEC §7 `annotations` 段）：`set()` 只读引用内部 Core `AnnotationSet`，供保存配置时交给 `EngineBridge::saveConfig` 序列化；`replaceAnnotations(items)` 委托 editor `restoreAnnotations` 整体替换当前列表（不推撤销快照、取消选中）后发 `changed()/selectionChanged()`；调用方（`MainWindow::onLoadConfig`）需保证在预处理队列重放**之后**执行（尺寸门现仅清框选、不清标注）；还原不纳入 DocHistory 文档撤销栈（已知限制）。
 - **信号**：`changed()`（标注列表/预览变化→画布重绘）、`selectionChanged()`（选中变化→高亮+属性面板）、`toolChanged()`（工具变化→面板同步）。

@@ -15,6 +15,8 @@
 
 #include <QtGlobal>  // qreal
 
+#include "util/gui_nums.h"
+
 class QContextMenuEvent;
 class QGestureEvent;
 class QMouseEvent;
@@ -46,7 +48,7 @@ public:
 
     // 覆盖层抓取带的屏幕等效尺寸（px）：手柄/抓边条带/点选阈值的屏幕基准
     // （桌面 8px，NFR-7；触控 ≥ 12pt≈dp，SPEC §8.3 触控精度）。
-    virtual qreal screenOverlayPx() const { return 8.0; }
+    virtual qreal screenOverlayPx() const { return nums::canvas::kDesktopOverlayScreenPx; }
 
     // 手势事件（捏合缩放/平移等）；返回 true 表示已消费，视图不再下发。
     virtual bool onGestureEvent(CanvasView& /*view*/, QGestureEvent* /*event*/) { return false; }

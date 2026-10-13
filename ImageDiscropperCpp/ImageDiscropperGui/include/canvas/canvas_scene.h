@@ -24,13 +24,15 @@
 class QGraphicsSceneMouseEvent;
 
 #include "canvas/layer.h"
-#include "canvas/mask_layer.h"
-#include "canvas/grid_layer.h"
-#include "canvas/cell_picker_item.h"
-#include "canvas/selection_rect_item.h"
-#include "canvas/annotation_item.h"
-#include "canvas/image_layer_item.h"
+#include "core/color.h"        // core::Color（annotationColorAt 返回值）
+#include "canvas/items/mask_layer.h"
+#include "canvas/items/grid_layer.h"
+#include "canvas/items/cell_picker_item.h"
+#include "canvas/items/selection_rect_item.h"
+#include "canvas/items/annotation_item.h"
+#include "canvas/items/image_layer_item.h"
 #include "engine/engine.h"
+#include "util/gui_nums.h"   // nums::canvas（手柄尺寸的场景口径兜底初值）
 
 namespace idc::gui {
 
@@ -45,7 +47,7 @@ public:
     explicit CanvasScene(QObject* parent = nullptr);
 
     // 设置底图：preview 为降采样 pixmap，scaleX/Y 为预览→原图放大系数，fullW/H 为原图尺寸。
-    // 会同步设定场景矩形与选区框的图像边界。
+    // 会同步按 applySceneExtent 重设场景矩形与选区框的图像边界。
     void setBaseImage(const QPixmap& preview, double scaleX, double scaleY, int fullW, int fullH);
 
     // 清空画布全部内容（换图前 / 关闭图像时）。
@@ -57,6 +59,14 @@ public:
     void setMasksVisible(bool visible);
     bool masksVisible() const { return masksVisible_; }
 
+    // Palette 改色后刷新需重建 pen 的图层（当前仅网格/诱导切割线：pen 在 rebuild 期烘焙、不随 update() 变色）。
+    // 遮罩/选区/标注均为 paint 期取色，由调用方随后的 QGraphicsScene::update() 统一重绘。
+    void refreshPaletteColors() const;
+
+    // 吸附运行时开关：回设单矩形选区与全部 L2 多矩形选区图元的 snapEnabled（无需重建）。
+    // 新建图元已在构造期从 CanvasPrefs 继承当前态，本方法只服务切换瞬间已存在的图元。
+    void applySnapEnabled(bool on) const;
+
     // 依 Core 切割线集合，判定选区哪几条边有内部贯穿切割线，下发给选区框绘制并允许直接拖动。
     // rect 为当前选区（原图像素）；切割线即选区边的贯穿延伸，与选区同为一个橙色图元（不双重表示）。
     void updateCutLines(const engine::CutLineSet& lines, const engine::RectRegion& rect) const;
@@ -65,8 +75,22 @@ public:
     // 依 Core 诱导网格刷新 L3 网格线（show=false 或非 L3 模式时清空）。
     // 网格线纯显示，与遮罩/选区解耦；单元区域均来自 Core Grid（CONTRIBUTING.md「分层纪律」）。
     // 同时把网格下发给单元点选图元（L3 交互）并按 show 切换其显隐。
+    // 另把各单元区域并入内容边界并回写场景矩形：仅补白(PAD)策略下 Core 保留越界单元值（残缺单元伸出图像
+    //   边界、虚拟起点可落在负坐标），那截越界需完整计入滚动范围才能被平移进视口；DISCARD / KEEP_PARTIAL
+    //   的单元恒在图内 → 并集就是原图（见 applySceneExtent）。
     void updateGrid(const engine::Grid& grid, bool show);
     void clearGrid();
+
+    // 视图滚动余量（场景单位，由 CanvasView 按 `视口各边百分比 / 当前缩放` 折算：横向取视口宽、纵向取视口高）：
+    // 场景矩形即视图滚动条范围，不给余量则「图大于窗」时平移到图像边缘就卡住（边缘的选区手柄 / 标注 / 补白
+    // 区块被视口边贴死）。余量按**视口口径**百分比生效，故**与图幅与缩放档无关**（随窗口大小同比变化，故视图尺寸
+    // 变化时需重推，见 CanvasView::resizeEvent）；场景矩形需先包住内容（原图 ∪ 补白单元，见 contentBounds），
+    // 余量只是包在内容外面的一层。场景不认识缩放与视口，只接这两个已折算好的数值。
+    void setScrollMargins(qreal marginXScene, qreal marginYScene);
+
+    // 内容边界 = 原图 ∪ 全部网格单元区域（无网格时即原图）。补白(PAD) 策略下残缺单元会伸出图像边界，故内容
+    // 可比原图大；供 fitToWindow 按**内容**（而非原图）铺满视口，使边界补白块在适应窗口时也完整可见。
+    QRectF contentBounds() const;
 
     // 仅刷新 L2 多矩形的诱导切割线（不动单元点选图元）：以橙色切割线样式画各矩形十字带
     // 并集的诱导线，受 cutLinesVisible_ 门控；不显示 picker（picker 会 grab 鼠标、阻断画布框选追加矩形）。
@@ -112,13 +136,20 @@ public:
     void clearAnnotations();
     // 标注控制点手柄尺寸（随视图缩放换算，使其屏幕观感恒定）。
     void setAnnotationHandleSize(qreal sceneUnits);
+    // 命中场景坐标处的标注显示色（供状态栏取色优先于底图像素）：标注层可见时自顶（下标大＝顶）向下
+    // 取首个可见且命中的标注图元，依其渲染规则返回描边/填充/文字色；无命中或标注层隐藏返回 nullopt。
+    std::optional<core::Color> annotationColorAt(const QPointF& scenePos) const;
     // 底图图层显隐（图层面板开关）：仅切换 base 图元可见性，不影响导出。
     void setBaseVisible(bool on) const;
 
     // ---- 图片图层落位框（多层画布，z 位于底图与标注之间）----
     // 依图层栈（zOrder 升序）与 Core layerPlacement 增量维护落位框图元（按 layerId 对齐）；
     // 无可呈现位图的层（layerPlacement 返回 nullopt）跳过。selectedId 高亮当前编辑层。
+    // canvasGeom 为画布级有效管线：底图经其几何步（rotate/flip/resize）作用后工作图坐标系与
+    //   画布坐标系分叉，故落位框需经 mapRectGeometry 正向映射到工作图坐标系（与逐像素几何同口径，
+    //   空管线/仅色彩步 → 恒等直通），使选框随画布几何同步变换、拾取/拖动命中对齐。
     void updateImageLayers(const std::vector<canvas::ImageLayer>& layers, int canvasW, int canvasH,
+                           const preprocess::PreprocessPipeline& canvasGeom,
                            std::optional<int> selectedId);
     void clearImageLayers();
     // 仅切换已有落位框的选中高亮框（不重算落位几何）：供选中层变化时廉价刷新。
@@ -162,6 +193,13 @@ private:
     // 按 id 取回对应的落位框图元（无则 nullptr）。
     ImageLayerItem* imageLayerItemById(int id) const;
 
+    // 重算场景矩形 = 内容边界 + 外圈余量（余量为视图注入的视口口径值，横/纵各自一个，故左右与上下可不等量）。
+    // 内容边界本身可以不对称（补白只在某一侧伸出），场景矩形随之不对称——这是正确行为：整幅场景小于视口时 Qt
+    // 按场景矩形居中，居中的是「内容」，而补白块本就是真实内容，本就该一起框进来（早先按四边等量外扩反而会把
+    // 空白一侧一并扩掉）。无越界时（非 L3 / 非补白）内容边界就是原图 → 各模式、各余量策略完全同口径。
+    // setBaseImage / updateGrid / clearGrid / setScrollMargins 共用。
+    void applySceneExtent();
+
 signals:
     // 选区框被用户移动/缩放/拖边（转发自 SelectionRectItem::rectChanged），参数为原图像素坐标矩形。
     // 拖动选区边＝移动对应切割线（二者同一图元），故只需这一个稳定信号。
@@ -203,14 +241,17 @@ private:
     QVector<AnnotationItem*> annoItems_;   // 标注矢量图元（下标与 AnnotationBridge::annotations() 一致）
     AnnotationItem* pendingAnnoItem_{nullptr};  // 绘制拖拽预览图元（橡皮筋矢量，不进 Core 历史）
     bool annotationsVisible_{true};        // 标注图层可见性（图层面板开关）
-    qreal annoHandleSize_{8.0};            // 标注控制点手柄尺寸（场景单位，随缩放换算）
-    qreal multiHandleSize_{8.0};           // 多矩形选区框手柄尺寸（场景单位，随缩放换算）
+    qreal annoHandleSize_{nums::canvas::kFallbackHandleScenePx};  // 标注控制点手柄尺寸（场景单位，随缩放换算；视图下发前的兜底）
+    qreal multiHandleSize_{nums::canvas::kFallbackHandleScenePx}; // 多矩形选区框手柄尺寸（场景单位，随缩放换算；同上）
     int multiBoundsW_{-1};                 // 上次下发给多矩形图元的图像宽（变化时才重推边界）
     int multiBoundsH_{-1};                 // 上次下发给多矩形图元的图像高
     int activeMultiRect_{-1};              // 当前高亮（选中）的多矩形下标（-1 = 无）
 
     int imgW_{0};
     int imgH_{0};
+    qreal viewMarginXScene_ = 0.0;   // 视图注入的左右滚动余量（场景单位，视口宽口径百分比折算而来）
+    qreal viewMarginYScene_ = 0.0;   // 视图注入的上下滚动余量（场景单位，视口高口径百分比折算而来）
+    QRectF gridBounds_;              // 全部网格单元区域的并集（场景坐标；无网格 / 非 L3 时为空矩形）
     QVector<ImageLayerItem*> imageLayerItems_;   // 图片图层落位框（按 layerId 对齐，增量维护）
     bool imagePickMode_{false};                  // 图层拾取模式（默认关）
     ImageLayerItem* pickDragItem_{nullptr};      // 拾取模式下正被场景驱动的拖拽落位框

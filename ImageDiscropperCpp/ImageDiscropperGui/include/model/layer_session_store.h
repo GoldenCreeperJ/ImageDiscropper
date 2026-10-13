@@ -31,11 +31,12 @@
 namespace idc::gui {
 
 // ---------------------------------------------------------------------------
-// LayerSig：图层物化签名——只覆盖 materializeLayer 读取的来源态（kind / 逐层 preprocess / 文件名 /
-//   解码像素布局 / 配方参数 + 目标尺寸），恒不含 transform.x/y/anchor/opacity/zOrder——改落位或
-//   不透明度只重组、不重跑预处理（缺口 1）。解码像素以「空态 + 宽高」作内容代理（同一 ImageLayer 的
-//   decodedPixels 一经注入即随层生命周期不变，改名/换图会经加载路径重建，宽高变化足以触发重算）。
-//   （自 PreprocessController::LayerSig 逐字迁入，纯内聚重构，零语义改动。）
+// LayerSig：图层物化签名——覆盖 materializeLayer（现为整层位图：组装含底色框→缩放→预处理）
+//   读取的全部输入：kind / 逐层 preprocess / 文件名 / 解码像素布局 / 配方参数 / 目标尺寸（所有 kind）/
+//   内层落位与图层框（hasImagePlacement / box / fit / 锚点枢轴偏移 / boxBackdrop），恒不含
+//   transform.x/y/anchor/layerPivot/opacity/zOrder——改落位或不透明度只重组、不重跑（缺口 1）。
+//   注：旧口径下缩放/进框发生在 composeCanvas（与物化解耦，故 tw/th 仅配方层入键、框字段不入）；现缩放/进框
+//   已上移到 materializeLayer 内，整层位图依赖它们，故均须入键。解码像素以「空态 + 宽高」作内容代理。
 // ---------------------------------------------------------------------------
 struct LayerSig {
     int kind{0};                                  // canvas::LayerSourceKind 序号
@@ -45,18 +46,38 @@ struct LayerSig {
     int decH{0};
     bool decEmpty{true};                          // 文件层解码像素布局（空态/尺寸）作内容代理
     int tw{0};
-    int th{0};                                    // 目标尺寸（仅配方层参与签名：makePattern 按尺寸现算）
+    int th{0};                                    // 目标尺寸（所有 kind 均入键：materializeLayer 现按此缩放）
     bool hasRecipe{false};
     std::optional<generate::PatternParams> recipe;
+    // ---- 内层落位 / 图层框（现 materializeLayer 组装阶段读取，故入键）----
+    bool hasPlacement{false};                      // canvas::ImageLayer.hasImagePlacement
+    int boxW{0};
+    int boxH{0};                                    // 图层框尺寸
+    int imageFit{0};                                // canvas::ImageFit 序号
+    int imageAnchor{0};
+    int imagePivot{0};                              // 内层锚点/枢轴（generate::ImageAnchor 序号）
+    int imageX{0};
+    int imageY{0};                                  // 内层自由偏移
+    bool hasBackdrop{false};
+    std::optional<generate::PatternParams> backdrop; // 图层框底色/图案
 
     bool operator==(const LayerSig& o) const {
         if (kind != o.kind || fileName != o.fileName) return false;
         if (decEmpty != o.decEmpty || decW != o.decW || decH != o.decH) return false;
-        if (!(pre.items() == o.pre.items())) return false;   // 预处理队列逐项相等
+        if (pre.items() != o.pre.items()) return false;   // 预处理队列逐项相等
         if (hasRecipe != o.hasRecipe) return false;
         if (hasRecipe && !(recipe == o.recipe)) return false;
-        // 文件层缩放发生在 composeCanvas 的 scaleToTarget（物化与目标尺寸无关）→ 仅配方层比较 targetW/H。
-        if (kind == static_cast<int>(canvas::LayerSourceKind::Recipe) && (tw != o.tw || th != o.th)) return false;
+        // 缩放现发生在 materializeLayer 内（整层位图）→ 目标尺寸对所有 kind 均入键。
+        if (tw != o.tw || th != o.th) return false;
+        // 内层落位 / 图层框：仅启用两级落位时参与（决定组装后的框位图）。
+        if (hasPlacement != o.hasPlacement) return false;
+        if (hasPlacement) {
+            if (boxW != o.boxW || boxH != o.boxH) return false;
+            if (imageFit != o.imageFit || imageAnchor != o.imageAnchor || imagePivot != o.imagePivot) return false;
+            if (imageX != o.imageX || imageY != o.imageY) return false;
+            if (hasBackdrop != o.hasBackdrop) return false;
+            if (hasBackdrop && !(backdrop == o.backdrop)) return false;
+        }
         return true;
     }
 };
@@ -88,7 +109,7 @@ public:
     // 剔除不在 alive 集合内的层（会话 + 位图一并回收）：控制器每次同步后调用，防陈旧位图驻留 / id 复用误命中。
     void prune(const std::unordered_set<int>& alive);
 
-    // 物化位图（缩放前）：以 layerId 索引，可直接作 EngineBridge::composeCanvas 的 materialized 入参（零拷贝透传）。
+    // 物化位图（已组装·缩放·预处理·未落位）：以 layerId 索引，可直接作 EngineBridge::composeCanvas 的 materialized 入参（零拷贝直传）。
     std::unordered_map<int, core::Image>& materialized() { return materialized_; }
     const std::unordered_map<int, core::Image>& materialized() const { return materialized_; }
 

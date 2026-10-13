@@ -76,7 +76,7 @@ public:
     // 当前态的有效管线（[resize?]+steps_）——几何签名与序列化的真相源。
     preprocess::PreprocessPipeline effectivePipeline() const { return makeEffective(resize_, steps_); }
     // 几何签名：对 (origW,origH) 跑有效管线的纯元数据推演（不碰像素），得 {输出宽高, 净旋转象限}。
-    preprocess::PreprocessPipeline::GeometryOut geomSig(int origW, int origH) const {
+    preprocess::PreprocessPipeline::GeometryOut geomSig(const int origW, const int origH) const {
         return effectivePipeline().geometryOutput(origW, origH);
     }
     // 队列灰度推演：任一 GrayOp 使输出恒灰度（下游不恢复彩色）——供灰度后停用「黑白」「色道分离」。
@@ -99,7 +99,7 @@ public:
     //====== 实例：已提交态改写（供 Document 回灌 / 控制器提交成功后落定）======
 
     void setSteps(preprocess::PreprocessPipeline pipeline) { steps_ = std::move(pipeline); }
-    void setResize(std::optional<ResizeTarget> target) { resize_ = target; }
+    void setResize(const std::optional<ResizeTarget> target) { resize_ = target; }
 
     // 会话失效：清空轻队列、独立 resize 与 base_ 缓存（换图 setImage / 重置预处理 resetPreprocess 复用）。
     void clear();

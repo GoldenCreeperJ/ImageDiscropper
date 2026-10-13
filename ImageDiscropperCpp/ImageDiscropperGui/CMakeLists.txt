@@ -27,8 +27,8 @@ else()
     add_compile_options(-Wall -Wextra)
 endif()
 
-# 版本注入（与 CLI 同一形式）：IDC_GUI_VERSION 由根 CMakeLists 提供（产品版本单一来源）；
-# IDC_CORE_VERSION 正常由根经 PARENT_SCOPE 回传。独立配置本子目录时给出占位默认，避免空宏。
+# 版本注入（与 CLI 同一形式）：IDC_GUI_VERSION 与 IDC_CORE_VERSION 均由根 CMakeLists
+# 单一来源透传。独立配置本子目录时给出占位默认，避免空宏。
 if(NOT DEFINED IDC_GUI_VERSION)
     set(IDC_GUI_VERSION "1.0.1")
 endif()
@@ -83,14 +83,31 @@ qt_standard_project_setup()
 #   · 实现在 src/<模块>/（.cpp 与各模块 README.md）。
 # .h 一并列入目标，确保 AUTOMOC 扫描到 Q_OBJECT 头。
 # ---------------------------------------------------------------------------
+# i18n：门面（gui_i18n）+ 重放器（retranslate）+ 常量/契约层聚合头（gui_texts 及其两半）
+#       + 英文译文表（lang_en 两半）——译文表住本层而非 Core，免使 GUI 文案进纯逻辑静态库。
+#         新增一份 lang_xx.cpp 需同时在下方清单登记并在本层 installCatalogs() 里安装；
+#         ident 组与 §7 token **永不进表**（不可译契约），译文缺项由 Core 回退源语言。
+set(IDC_GUI_I18N_SRC
+        include/i18n/gui_i18n.h
+        include/i18n/gui_texts.h
+        include/i18n/gui_texts_base.h
+        include/i18n/gui_texts_detail.h
+        include/i18n/retranslate.h
+        src/i18n/gui_i18n.cpp
+        src/i18n/lang_en.cpp
+        src/i18n/lang_en_detail.cpp
+)
+
 # util：core::Image 与 Qt 图像类型的适配、降采样预览、标注矢量绘制与导出输出预览渲染（视图关注点，非引擎逻辑）。
 set(IDC_GUI_UTIL_SRC
         include/util/annotation_qt_painter.h
+        include/util/theme.h
         include/util/image_qt_adapter.h
         include/util/output_preview_renderer.h
         include/util/path_qt_adapter.h
         include/util/preview_scaler.h
         src/util/annotation_qt_painter.cpp
+        src/util/theme.cpp
         src/util/image_qt_adapter.cpp
         src/util/output_preview_renderer.cpp
         src/util/path_qt_adapter.cpp
@@ -101,12 +118,16 @@ set(IDC_GUI_UTIL_SRC
 set(IDC_GUI_MODEL_SRC
         include/model/annotation_bridge.h
         include/model/annotation_editor.h
+        include/model/config_codec.h
         include/model/document.h
         include/model/engine_bridge.h
         include/model/layer_session_store.h
         include/model/preprocess_session.h
         src/model/annotation_bridge.cpp
+        src/model/annotation_bridge_pending.cpp
         src/model/annotation_editor.cpp
+        src/model/config_codec.cpp
+        src/model/document_canvas.cpp
         src/model/document.cpp
         src/model/engine_bridge.cpp
         src/model/layer_session_store.cpp
@@ -117,28 +138,30 @@ set(IDC_GUI_MODEL_SRC
 #         交互经输入适配器分层：ICanvasInputAdapter 接口 + 桌面实现 DesktopInputAdapter
 #         + 触控实现 TouchInputAdapter（Android/iOS 构造时换装，桌面路径零改动）。
 set(IDC_GUI_CANVAS_SRC
-        include/canvas/z_order.h
+        include/canvas/items/z_order.h
         include/canvas/canvas_input_adapter.h
         include/canvas/canvas_desktop_input_adapter.h
         include/canvas/canvas_touch_input_adapter.h
         include/canvas/canvas_scene.h
         include/canvas/canvas_view.h
-        include/canvas/mask_layer.h
-        include/canvas/grid_layer.h
-        include/canvas/cell_picker_item.h
-        include/canvas/selection_rect_item.h
-        include/canvas/annotation_item.h
-        include/canvas/image_layer_item.h
+        include/canvas/items/mask_layer.h
+        include/canvas/items/grid_layer.h
+        include/canvas/items/cell_picker_item.h
+        include/canvas/items/selection_rect_item.h
+        include/canvas/items/annotation_item.h
+        include/canvas/items/image_layer_item.h
         src/canvas/canvas_desktop_input_adapter.cpp
         src/canvas/canvas_touch_input_adapter.cpp
         src/canvas/canvas_scene.cpp
+        src/canvas/canvas_scene_rects.cpp
+        src/canvas/canvas_scene_annotations.cpp
         src/canvas/canvas_view.cpp
-        src/canvas/mask_layer.cpp
-        src/canvas/grid_layer.cpp
-        src/canvas/cell_picker_item.cpp
-        src/canvas/selection_rect_item.cpp
-        src/canvas/annotation_item.cpp
-        src/canvas/image_layer_item.cpp
+        src/canvas/items/mask_layer.cpp
+        src/canvas/items/grid_layer.cpp
+        src/canvas/items/cell_picker_item.cpp
+        src/canvas/items/selection_rect_item.cpp
+        src/canvas/items/annotation_item.cpp
+        src/canvas/items/image_layer_item.cpp
 )
 
 # panels：左侧模式/极性面板与标注工具/图层面板、右侧参数/导出/图像/标注属性面板。
@@ -155,8 +178,11 @@ set(IDC_GUI_PANELS_SRC
         src/panels/accordion_panel.cpp
         src/panels/left_panel.cpp
         src/panels/param_panel.cpp
+        src/panels/param_panel_pages.cpp
         src/panels/export_panel.cpp
+        src/panels/export_panel_merge.cpp
         src/panels/image_panel.cpp
+        src/panels/image_panel_sections.cpp
         src/panels/tool_panel.cpp
         src/panels/layer_panel.cpp
         src/panels/layer_edit_panel.cpp
@@ -166,21 +192,48 @@ set(IDC_GUI_PANELS_SRC
 # app：主窗口装配壳 + 四个控制器（预览/预处理/标注/历史）+ 状态栏 + 装配建造者；
 #      程序入口 main.cpp 不入 common（两产物各自编译一份，按宏选壳）。
 set(IDC_GUI_APP_SRC
-        include/app/annotation_coordinator.h
-        include/app/doc_history.h
+        include/app/controllers/annotation_coordinator.h
+        include/app/appearance_dialog.h
+        include/app/palette.h
+        include/app/canvas_prefs.h
+        include/app/app_prefs.h
+        include/app/keybindings.h
+        include/app/controllers/canvas_coordinator.h
+        include/app/controllers/config_controller.h
+        include/app/controllers/doc_history.h
+        include/app/controllers/export_controller.h
+        include/app/controllers/key_router.h
         include/app/main_window.h
         include/app/main_window_ui.h
         include/app/new_canvas_dialog.h
-        include/app/preprocess_controller.h
-        include/app/preview_controller.h
+        include/app/forms/pattern_form.h
+        include/app/forms/placement_row.h
+        include/app/controllers/preprocess_controller.h
+        include/app/controllers/preview_controller.h
+        include/app/controllers/session_controller.h
         include/app/status_bar.h
-        src/app/annotation_coordinator.cpp
-        src/app/doc_history.cpp
+        src/app/controllers/annotation_coordinator.cpp
+        src/app/appearance_dialog.cpp
+        src/app/palette.cpp
+        src/app/canvas_prefs.cpp
+        src/app/app_prefs.cpp
+        src/app/keybindings.cpp
+        src/app/controllers/canvas_coordinator.cpp
+        src/app/controllers/config_controller.cpp
+        src/app/controllers/doc_history.cpp
+        src/app/controllers/export_controller.cpp
+        src/app/controllers/key_router.cpp
         src/app/main_window.cpp
+        src/app/main_window_menus.cpp
+        src/app/forms/pattern_form.cpp
+        src/app/forms/placement_row.cpp
         src/app/main_window_ui.cpp
         src/app/new_canvas_dialog.cpp
-        src/app/preprocess_controller.cpp
-        src/app/preview_controller.cpp
+        src/app/controllers/preprocess_controller.cpp
+        src/app/controllers/preprocess_controller_canvas.cpp
+        src/app/controllers/preprocess_controller_commit.cpp
+        src/app/controllers/preview_controller.cpp
+        src/app/controllers/session_controller.cpp
         src/app/status_bar.cpp
 )
 
@@ -188,14 +241,18 @@ set(IDC_GUI_APP_SRC
 #         复用 model/canvas/panels 既有件，零复刻引擎/编排逻辑（SPEC §8.3 行为同构）。
 #         是否编入由 IDC_GUI_MOBILE 配置项控制（见下）。
 set(IDC_GUI_MOBILE_SRC
+        include/mobile/android_export_publish.h
         include/mobile/android_media_store.h
         include/mobile/mobile_shell.h
         include/mobile/mobile_shell_ui.h
         include/mobile/mobile_step_pad.h
+        include/mobile/touch_scroll.h
+        src/mobile/android_export_publish.cpp
         src/mobile/android_media_store.cpp
         src/mobile/mobile_shell.cpp
         src/mobile/mobile_shell_ui.cpp
         src/mobile/mobile_step_pad.cpp
+        src/mobile/touch_scroll.cpp
 )
 
 # ---------------------------------------------------------------------------
@@ -215,6 +272,7 @@ set(IDC_GUI_MOBILE_SRC
 option(IDC_GUI_MOBILE "桌面构建额外产出移动形态可执行 idc_gui_mobile（Android/iOS 不读本开关，恒为单目标移动形态）" ON)
 
 add_library(idc_gui_common OBJECT
+        ${IDC_GUI_I18N_SRC}
         ${IDC_GUI_UTIL_SRC}
         ${IDC_GUI_MODEL_SRC}
         ${IDC_GUI_CANVAS_SRC}

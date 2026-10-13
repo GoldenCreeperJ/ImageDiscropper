@@ -82,17 +82,17 @@ public:
     static core::Image generatePattern(int width, int height, const generate::PatternParams& params);
 
     // 多层画布展平（委托 Core canvas::composeCanvas）：画布先铺全透明底再落**底图 base**（非空则 source-over 铺于 (0,0)），
-    // 再按 zOrder 逐层物化叠加 layers（std::vector<ImageLayer>：配方现算 / 文件用已解码像素 / 空占位跳过，各层先跑其 preprocess）
-    // → 缩放 → source-over 落位到 width×height RGBA 缓冲（越界自然裁剪）。base 缺省为空＝仅透明底 + 叠加层。
+    // 再按 zOrder 逐层物化叠加 layers（std::vector<ImageLayer>：逐层调 materializeLayer 得整层位图后直接落位）
+    // → 逐像素施 opacity → source-over 落位到 width×height RGBA 缓冲（越界自然裁剪）。base 缺省为空＝仅透明底 + 叠加层。
     // 整体显隐由调用方以「传空 layers」实现（Core 不持显隐态）。
     // 产物即「展平后的画布图」，作为 Document 的 original_ 喂给后续画布级预处理→工作图→引擎（引擎仍只收一张展平图）。
-    // materialized（可选）：预物化位图表（key＝layer.id，value＝materializeLayer 缩放前产物）；命中则 composeCanvas
-    // 直取、跳过该层 materializeLayer（改 transform 免于重跑逐层预处理），未命中回退现算。
+    // materialized（可选）：预物化位图表（key＝layer.id，value＝materializeLayer 的已组装·缩放·预处理·未落位产物）；命中则 composeCanvas
+    // 直取、跳过该层 materializeLayer（改 transform.x/y/锚点/不透明度免于重跑），未命中回退现算。
     static core::Image composeCanvas(const std::vector<canvas::ImageLayer>& layers, int width, int height, const core::Image& base = {},
                                      const std::unordered_map<int, core::Image>* materialized = nullptr);
 
-    // 单层物化（委托 Core canvas::materializeLayer）：配方→makePattern / 文件→已解码像素 / 空→空图，再跑该层 preprocess。
-    // 不含缩放落位，供 GUI 按 (layerId, 源/预处理签名) 缓存物化位图、改 transform 只重组不重跑预处理。
+    // 单层物化（委托 Core canvas::materializeLayer）：取源（配方 makePattern / 文件解码像素 / 空→空）→（启用时）合成进带底色图层框
+    // → 按 transform 缩放 → 最后跑该层 preprocess；产出整层位图（未落位）。供 GUI 按 (layerId, 源/框/预处理/目标尺寸签名) 缓存、改 transform 只重组。
     static core::Image materializeLayer(const canvas::ImageLayer& layer);
 
     // 底图展平（委托 Core canvas::composeBase）：把同构的底图 canvas::ImageLayer 展平为 width×height 像素。

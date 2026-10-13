@@ -15,6 +15,7 @@
 #include <QWidget>
 
 #include "model/annotation_bridge.h"
+#include "i18n/retranslate.h"
 
 class QCheckBox;
 
@@ -43,8 +44,19 @@ public:
     void syncFromModel() const;
     // 从 Document 反向同步「图片图层」整体开关：行常驻可见且始终可用；勾选态取整体可见态（blockSignals 防回环）。
     void syncFromDocument() const;
-    // 外部（视图菜单 / 右键「切换预览遮罩」）改动遮罩显隐后，反向同步遮罩复选框（blockSignals 防回环）。
+    // 外部（视图菜单）改动各图层显隐后，反向同步对应复选框（blockSignals 防回环）；
+    // 复选框仍是唯一真相源——菜单只翻转复选框，落地链（信号 → 控制器 → 场景）保持不变。
     void setMaskVisible(bool visible) const;
+    void setBaseVisible(bool visible) const;
+    void setImageVisible(bool visible) const;
+    void setGridVisible(bool visible) const;
+    void setCutLineVisible(bool visible) const;
+    void setSelectionVisible(bool visible) const;
+    void setNumberVisible(bool visible) const;
+    void setAnnotationVisible(bool visible) const;
+
+    // 语言热切换重放：重跑本面板登记的分组标题与各开关文字/tooltip 闭包。
+    void retranslate() { retranslator_.run(); }
 
 signals:
     // 底图图层显示/隐藏（MainWindow 切换画布 base 图元可见性）。
@@ -75,6 +87,8 @@ private:
     QCheckBox* selectionVisible_{nullptr};
     QCheckBox* numberVisible_{nullptr};
     QCheckBox* annoVisible_{nullptr};
+
+    i18n::Retranslator retranslator_;   // 本面板文案重放登记表
 };
 
 } // namespace idc::gui

@@ -6,6 +6,8 @@
 // ============================================================================
 #include "panels/left_panel.h"
 
+#include <algorithm>
+
 #include <QButtonGroup>
 #include <QGroupBox>
 #include <QPushButton>
@@ -13,62 +15,71 @@
 
 #include "engine/engine.h"
 #include "model/document.h"
+#include "util/gui_nums.h"
+#include "i18n/gui_texts.h"
+#include "i18n/gui_i18n.h"
 
 namespace idc::gui {
 namespace {
 
-// 模式按钮的强调样式：L2（核心特色）用橙色强调，其余中性；选中态高亮。
-// 【深色模式】未选态背景为硬编码浅色（#f2f2f2/#fdeede），若不显式指定文字色，
-// 跟随系统深色主题时会继承调色板的白字→白字浅底不可读；故显式给未选态深色文字。
+// 模式按钮的强调样式：未选态底/字/边框走 palette(...) 令牌（随深/浅主题自动给正确字色，
+// 无需再显式给未选态深色文字——旧「【深色模式】硬编码浅底配深字」的临时 hack 已删）；
+// 选中态品牌强调色（蓝 #3b7ddd / 橙 #e67e22）原样保留（均配白字，两主题皆可读）。
+// 注：QSS palette() 角色名按 QPalette 枚举名大小写不敏感匹配、**不带连字符**（buttontext/windowtext/midtext）。
 auto kModeStyle =
-    "QPushButton{padding:6px;border:1px solid #bbb;border-radius:4px;background:#f2f2f2;color:#1b1b1b;}"
+    "QPushButton{padding:6px;border:1px solid palette(mid);border-radius:4px;background:palette(button);color:palette(buttontext);}"
     "QPushButton:checked{background:#3b7ddd;color:#fff;border-color:#3b7ddd;}";
+// L2（核心特色）：刻意保留浅橙弱化底 + 橙描边 + 深字作品牌识别（底恒为浅，故深字两主题皆可读，不随 palette 走）。
 auto kL2Style =
     "QPushButton{padding:6px;border:1px solid #d9a05b;border-radius:4px;background:#fdeede;color:#1b1b1b;}"
     "QPushButton:checked{background:#e67e22;color:#fff;border-color:#e67e22;}";
-// 极性按钮：keep 绿、remove 红，选中态填充对应色。
+// 极性按钮：未选态不覆底/字（交默认 button palette 随主题），仅边框走 palette(mid)；选中态填充对应品牌色。
 auto kKeepStyle =
-    "QPushButton{padding:6px;border:1px solid #bbb;border-radius:4px;}"
+    "QPushButton{padding:6px;border:1px solid palette(mid);border-radius:4px;}"
     "QPushButton:checked{background:#2ecc71;color:#fff;border-color:#2ecc71;}";
 auto kRemoveStyle =
-    "QPushButton{padding:6px;border:1px solid #bbb;border-radius:4px;}"
+    "QPushButton{padding:6px;border:1px solid palette(mid);border-radius:4px;}"
     "QPushButton:checked{background:#e74c3c;color:#fff;border-color:#e74c3c;}";
 
 } // namespace
 
 // 构建面板布局。
 LeftPanel::LeftPanel(QWidget* parent) : QWidget(parent) {
-    setMinimumWidth(220); // 左侧面板下限（实际左栏最小宽由主窗 leftScroll 控制，需容纳标注工具 3 列网格）。
+    setMinimumWidth(nums::panels::kLeftPanelMinWidthPx); // 左侧面板下限（实际左栏最小宽由主窗 leftScroll 控制，需容纳标注工具 3 列网格）。
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(8, 8, 8, 8);
-    root->setSpacing(12); // 分组间距 12px（本目录 README「画布视觉规范」）。
+    root->setContentsMargins(nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx,
+                             nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx);
+    root->setSpacing(nums::panels::kPanelGroupSpacingPx); // 分组间距 12px（本目录 README「画布视觉规范」）。
 
     // ---- 模式切换分组 ----
-    auto* modeBox = new QGroupBox(QStringLiteral("模式"), this);
+    auto* modeBox = new QGroupBox(this);
+    i18n::bindTitle(retranslator_, modeBox, IDC_GT(label, kModeSection));
     auto* modeLay = new QHBoxLayout(modeBox);
-    modeLay->setSpacing(6); // 控件间距 6px。
+    modeLay->setSpacing(nums::panels::kPanelSpacingPx); // 控件间距 6px。
     modeGroup_ = new QButtonGroup(this);
     modeGroup_->setExclusive(true);
 
-    auto* l1Btn = new QPushButton(QStringLiteral("标准提取 (L1)"), modeBox);
+    auto* l1Btn = new QPushButton(modeBox);
+    i18n::bindButton(retranslator_, l1Btn, IDC_GT(menu, kModeL1));
     l1Btn->setCheckable(true);
     l1Btn->setStyleSheet(kModeStyle);
-    l1Btn->setToolTip(QStringLiteral("保留选框内的区域，得到裁剪结果。默认模式，最易上手。"));
+    i18n::bindToolTip(retranslator_, l1Btn, IDC_GT(tooltip, kModeL1Btn));
     modeGroup_->addButton(l1Btn, 1);
     modeLay->addWidget(l1Btn);
 
-    auto* l2Btn = new QPushButton(QStringLiteral("反向剔除 (L2)"), modeBox);
+    auto* l2Btn = new QPushButton(modeBox);
+    i18n::bindButton(retranslator_, l2Btn, IDC_GT(menu, kModeL2));
     l2Btn->setCheckable(true);
     l2Btn->setStyleSheet(kL2Style); // 强调色区分核心特色。
-    l2Btn->setToolTip(QStringLiteral(
-        "每个矩形删除贯穿全图的「竖带 + 横带」（十字带），多矩形时删除区域取并集，保留其余部分。"));
+    i18n::bindToolTip(retranslator_, l2Btn, IDC_GT(tooltip, kModeL2Btn));
     modeGroup_->addButton(l2Btn, 2);
     modeLay->addWidget(l2Btn);
 
-    auto* l3Btn = new QPushButton(QStringLiteral("网格分割 (L3)"), modeBox);
+    auto* l3Btn = new QPushButton(modeBox);
+    i18n::bindButton(retranslator_, l3Btn, IDC_GT(menu, kModeL3));
     l3Btn->setCheckable(true);
     l3Btn->setStyleSheet(kModeStyle);
-    l3Btn->setToolTip(QStringLiteral("以基准点 + 单元尺寸铺满全图，选择单元并排序导出。"));
+    i18n::bindToolTip(retranslator_, l3Btn, IDC_GT(tooltip, kModeL3Btn));
     modeGroup_->addButton(l3Btn, 3);
     modeLay->addWidget(l3Btn);
 
@@ -76,23 +87,26 @@ LeftPanel::LeftPanel(QWidget* parent) : QWidget(parent) {
     root->addWidget(modeBox);
 
     // ---- 极性开关分组 ----
-    auto* polBox = new QGroupBox(QStringLiteral("保留 / 删除"), this);
+    auto* polBox = new QGroupBox(this);
+    i18n::bindTitle(retranslator_, polBox, IDC_GT(label, kPolarityGroupBox));
     auto* polLay = new QHBoxLayout(polBox);
-    polLay->setSpacing(6);
+    polLay->setSpacing(nums::panels::kPanelSpacingPx);
     polarityGroup_ = new QButtonGroup(this);
     polarityGroup_->setExclusive(true);
 
-    auto* keepBtn = new QPushButton(QStringLiteral("保留框内"), polBox);
+    auto* keepBtn = new QPushButton(polBox);
+    i18n::bindButton(retranslator_, keepBtn, IDC_GT(label, kPolarityKeepButton));
     keepBtn->setCheckable(true);
     keepBtn->setStyleSheet(kKeepStyle);
-    keepBtn->setToolTip(QStringLiteral("保留选区内的单元（绿色遮罩）。"));
+    i18n::bindToolTip(retranslator_, keepBtn, IDC_GT(tooltip, kPolarityKeepBtn));
     polarityGroup_->addButton(keepBtn, 0);
     polLay->addWidget(keepBtn);
 
-    auto* removeBtn = new QPushButton(QStringLiteral("删除框内"), polBox);
+    auto* removeBtn = new QPushButton(polBox);
+    i18n::bindButton(retranslator_, removeBtn, IDC_GT(label, kPolarityRemoveButton));
     removeBtn->setCheckable(true);
     removeBtn->setStyleSheet(kRemoveStyle);
-    removeBtn->setToolTip(QStringLiteral("剔除选区内的单元（红色遮罩），保留其余部分。"));
+    i18n::bindToolTip(retranslator_, removeBtn, IDC_GT(tooltip, kPolarityRemoveBtn));
     polarityGroup_->addButton(removeBtn, 1);
     polLay->addWidget(removeBtn);
 
@@ -103,6 +117,17 @@ LeftPanel::LeftPanel(QWidget* parent) : QWidget(parent) {
     // 本面板只放模式切换与保留/删除开关。
 
     root->addStretch(1); // 底部弹性，使分组靠上。
+
+    // i18n 自适应宽度：220 下限按中文标定；英文模式/极性按钮（如「Keep Inside /
+    // Remove Inside」）更长，构造完成后以本面板实测宽抬高下限（取 max），避免截断。
+    setMinimumWidth(std::max(nums::panels::kLeftPanelMinWidthPx, root->sizeHint().width()));
+}
+
+// 语言热切换重放：重跑本面板登记的模式/极性标题与按钮文案闭包，再按新文本重测最小宽。
+void LeftPanel::retranslate() {
+    retranslator_.run();
+    if (const auto* lay = layout())
+        setMinimumWidth(std::max(nums::panels::kLeftPanelMinWidthPx, lay->sizeHint().width()));
 }
 
 // 绑定 Document 并同步一次。

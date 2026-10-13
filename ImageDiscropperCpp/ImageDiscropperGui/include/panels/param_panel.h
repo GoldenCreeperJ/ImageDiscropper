@@ -14,6 +14,7 @@
 #include <QWidget>
 
 #include "engine/engine.h"
+#include "i18n/retranslate.h"
 
 class QComboBox;
 class QSpinBox;
@@ -43,6 +44,10 @@ public:
     void setMode(engine::Tier tier) const;
     // 由 MainWindow 依 Core isCollapsible 结果回灌坍缩可行性提示（L2 页）。
     void setCollapseHint(bool collapsible, const QString& reason) const;
+
+    // 语言热切换重放：重跑三页登记的静态文案闭包（标题/行标签/下拉项/按钮/提示），再重钳当前页高。
+    // 动态回显（网格信息/选择计数/矩形列表行/坍缩提示）由调用方随后的 syncPanels 重派生。
+    void retranslate() { retranslator_.run(); reflowStack(); }
 
     // L2 多矩形：仅刷新列表中第 index 行的坐标文本（若为选中行则同步 spinbox），
     // 不重建整个列表——供画布拖拽期间实时回显矩形尺寸（此时 syncPanels 被跳过）。
@@ -128,6 +133,8 @@ private:
     QComboBox* gSort_{nullptr};
     QCheckBox* gReverse_{nullptr};
     QCheckBox* gSnake_{nullptr};
+
+    i18n::Retranslator retranslator_;   // 本面板文案重放登记表（三页构建时登记）
 };
 
 } // namespace idc::gui

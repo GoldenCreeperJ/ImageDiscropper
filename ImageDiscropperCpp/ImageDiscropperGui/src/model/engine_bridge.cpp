@@ -12,17 +12,20 @@
 #include "generate/pattern.h" // makePattern（generatePattern 委托 Core 程序化生成）。
 #include "canvas/layer.h"     // composeCanvas（多层画布展平，委托 Core canvas 层）。
 
+#include "i18n/gui_texts.h"
+#include "i18n/gui_i18n.h"
+
 namespace idc::gui {
 
 // 从文件解码图像（委托 Core readImageFile）。
 bool EngineBridge::loadImage(const QString& path, core::Image& out, QString& err) {
     if (path.isEmpty()) {
-        err = QStringLiteral("路径为空，无法打开图像");
+        err = IDC_GTR(msg, kBridgeEmptyImagePath);
         return false;
     }
     // Core 统一把常见格式解码为 RGBA；失败（不存在/不可读/格式不支持）返回 false。
     if (!engine::readImageFile(path.toStdString(), out)) {
-        err = QStringLiteral("无法读取图像：%1").arg(path);
+        err = IDC_GTR(msg, kBridgeReadImageFailed).arg(path);
         return false;
     }
     return true;
@@ -56,7 +59,7 @@ engine::Grid EngineBridge::buildGrid(const engine::CutConfig& cut,
 bool EngineBridge::exportResult(const core::Image& work, const engine::EngineConfig& cfg,
                                 const QString& outputPath, QString& err) {
     if (outputPath.isEmpty()) {
-        err = QStringLiteral("未指定输出路径");
+        err = IDC_GTR(msg, kBridgeNoOutputPath);
         return false;
     }
     // 先算（全分辨率），失败则把 Core 的中文原因透传给上层展示。
@@ -67,7 +70,7 @@ bool EngineBridge::exportResult(const core::Image& work, const engine::EngineCon
     }
     // 再落盘：分离模式 outputPath 为目录，合并模式为单图文件路径（由 Core 内部区分）。
     if (!idc::engine::exportImage(res.composition, work, outputPath.toStdString())) {
-        err = QStringLiteral("导出失败：无法写入 %1").arg(outputPath);
+        err = IDC_GTR(msg, kBridgeWriteOutputFailed).arg(outputPath);
         return false;
     }
     return true;
@@ -79,11 +82,11 @@ bool EngineBridge::exportResult(const core::Image& work, const engine::EngineCon
 bool EngineBridge::saveConfig(const QString& path, const engine::EngineConfig& cfg, QString& err,
                               const annotation::AnnotationSet* annotations) {
     if (path.isEmpty()) {
-        err = QStringLiteral("未指定配置文件路径");
+        err = IDC_GTR(msg, kBridgeNoConfigPath);
         return false;
     }
     if (!idc::engine::saveEngineConfig(path.toStdString(), cfg, annotations)) {
-        err = QStringLiteral("无法写入配置文件：%1").arg(path);
+        err = IDC_GTR(msg, kBridgeWriteConfigFailed).arg(path);
         return false;
     }
     return true;
@@ -93,11 +96,11 @@ bool EngineBridge::saveConfig(const QString& path, const engine::EngineConfig& c
 bool EngineBridge::loadConfig(const QString& path, engine::EngineConfig& out, QString& err,
                               annotation::AnnotationSet* annotations) {
     if (path.isEmpty()) {
-        err = QStringLiteral("未指定配置文件路径");
+        err = IDC_GTR(msg, kBridgeNoConfigPath);
         return false;
     }
     if (!idc::engine::loadEngineConfig(path.toStdString(), out, annotations)) {
-        err = QStringLiteral("无法读取或解析配置文件：%1").arg(path);
+        err = IDC_GTR(msg, kBridgeReadConfigFailed).arg(path);
         return false;
     }
     return true;

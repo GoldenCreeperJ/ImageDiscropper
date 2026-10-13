@@ -21,21 +21,20 @@
 #include <QGestureEvent>
 #include <QKeyEvent>
 #include <QPainter>
+#include <QResizeEvent>
 #include <QRubberBand>
 #include <QScrollBar>
+#include <QTransform>
 
 #include "canvas/canvas_desktop_input_adapter.h"
 #include "canvas/canvas_scene.h"
 #include "canvas/canvas_touch_input_adapter.h"
-#include "canvas/selection_rect_item.h"
+#include "canvas/items/selection_rect_item.h"
+#include "app/palette.h"
+#include "app/canvas_prefs.h"
+#include "util/gui_nums.h"
 
 namespace idc::gui {
-namespace {
-// 缩放倍率允许区间（宽松）：最小 5%、最大 4000%，防止无限缩小/放大导致
-// 图像消失、手柄尺寸或变换数值失控（预留足够余量适配各种尺寸图像）。
-constexpr qreal kMinZoom = 0.05;
-constexpr qreal kMaxZoom = 40.0;
-} // namespace
 
 // 构造：抗锯齿、锚点、深灰背景、开启鼠标追踪（回报光标坐标）；按平台注入输入适配器。
 CanvasView::CanvasView(CanvasScene* scene, QWidget* parent)
@@ -45,46 +44,78 @@ CanvasView::CanvasView(CanvasScene* scene, QWidget* parent)
     setResizeAnchor(AnchorViewCenter);
     setDragMode(NoDrag);                     // 拖拽逻辑自管
     setMouseTracking(true);                                 // 无按键也回报光标位置
-    setBackgroundBrush(QColor(45, 45, 45));                 // 画布深灰（本目录 README「画布视觉规范」）
+    setBackgroundBrush(Palette::instance().background());   // 画布深灰（本目录 README「画布视觉规范」；可「视图→外观/配色…」自定义）
 #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
     input_ = std::make_unique<TouchInputAdapter>();         // 触控：合成鼠标路由复用桌面 + pinch/双击（SPEC §8.3）
 #else
     input_ = std::make_unique<DesktopInputAdapter>();
 #endif
     input_->attach(*this);                                  // 适配器自注册（如 grabGesture）
+
+    // Palette 改色联动：重设背景刷 + 刷新网格 pen + 全场景重绘（遮罩/选区/标注 paint 期取色随之变色）。
+    connect(&Palette::instance(), &Palette::changed, this, [this] {
+        setBackgroundBrush(Palette::instance().background());
+        if (scene_) {
+            scene_->refreshPaletteColors();
+            scene_->update();
+        }
+    });
+
+    // CanvasPrefs 交互偏好联动：重钳缩放区间→重算手柄屏幕基准与滚动余量→回设吸附开关。
+    connect(&CanvasPrefs::instance(), &CanvasPrefs::changed, this, [this] {
+        clampZoom();          // 当前倍率可能落在新的[min,max]外，先收敛（updateHandleSize 会重报倍率）。
+        updateHandleSize();   // 手柄/抓边条带/点选阈值随新的屏幕基准、边缘滚动余量随新的视口百分比重算。
+        if (scene_) scene_->applySnapEnabled(CanvasPrefs::instance().snapEnabled());
+    });
 }
 
 // 析构在此定义：此翻译单元已含适配器实现头（完整类型），unique_ptr 释放安全。
 CanvasView::~CanvasView() = default;
 
-// 放大。
-void CanvasView::zoomIn() { zoomBy(1.25); }
-// 缩小。
-void CanvasView::zoomOut() { zoomBy(0.8); }
+// 放大（每档倍率增量取 CanvasPrefs 缩放步进，默认 +25%）。
+void CanvasView::zoomIn() { zoomBy(1.0 + CanvasPrefs::instance().zoomStepPercent() / 100.0); }
+// 缩小（与放大互逆：÷(1+步进)）。
+void CanvasView::zoomOut() { zoomBy(1.0 / (1.0 + CanvasPrefs::instance().zoomStepPercent() / 100.0)); }
 // 复位到 1:1。
 void CanvasView::resetZoom() { resetTransform(); updateHandleSize(); }
-// 适应窗口。
+// 适应窗口：按「内容边界 + 外圈滚动余量（视口各边百分比）」自算倍率，而不是 fitInView(sceneRect)——
+// 场景矩形里的余量是按**当前**缩放折算的场景单位，fit 改掉倍率后 updateScrollMargins 会按新倍率重折算、
+// 场景矩形随之再变，fitInView 一步到位不了（几何上收敛但不精确）。自算可保证该档下场景恰铺满视口
+// → 不出滚动条，且内容恒只占视口的 (1－2×百分比)（与图幅无关、随视口同比）。
+// 关系式（以横向为例）：视口宽 = 内容宽×m11 + 2×百分比×视口宽 → m11 = 视口宽×(1－2×百分比)/内容宽，横纵取小。
+// 铺满的是 contentBounds（原图 ∪ 全部网格单元）而非原图：补白(PAD) 越界块属**内容**，适应窗口时也须完整可见。
 void CanvasView::fitToWindow() {
-    if (scene_ && !scene_->sceneRect().isEmpty()) {
-        fitInView(scene_->sceneRect(), Qt::KeepAspectRatio);
-        clampZoom(); // fit 结果可能超出倍率区间，钳制回边界。
+    if (const QRectF content = scene_ ? scene_->contentBounds() : QRectF(); !content.isEmpty()) {
+        const QSize vp = viewport()->size();
+        // 百分比接近 50% 时余量把视口吃满（因子趋 0）：抬回极小正数保证倍率恒正，宁可少留余量也不丢适配。
+        const qreal keep = std::max(nums::canvas::kFitKeepFloorRatio,
+                                    1.0 - 2.0 * CanvasPrefs::instance().scrollMarginPercent() / 100.0);
+        const qreal target = std::min(vp.width() * keep / content.width(),
+                                      vp.height() * keep / content.height());
+        if (target > 0.0) {
+            setTransform(QTransform().scale(target, target));   // 绝对倍率（非累乘），与 fitInView 同口径。
+            centerOn(content.center());                          // 内容不对称（补白只伸一侧）时居中的也是内容。
+            clampZoom();   // 自算结果可能超出允许区间（极小图 + 极大视口），钳回边界。
+        }
     }
     updateHandleSize();
 }
 
-// 按倍数缩放并钳制到 [kMinZoom, kMaxZoom]：以绝对目标倍率换算增量，避免累积越界。
+// 按倍数缩放并钳制到 CanvasPrefs 允许区间：以绝对目标倍率换算增量，避免累积越界。
 void CanvasView::zoomBy(const qreal factor) {
     const qreal cur = transform().m11();
     if (cur <= 0.0) return;
-    if (const qreal next = std::clamp(cur * factor, kMinZoom, kMaxZoom); !qFuzzyCompare(next, cur)) scale(next / cur, next / cur); // 已达边界则不再缩放。
+    const auto& prefs = CanvasPrefs::instance();
+    if (const qreal next = std::clamp(cur * factor, prefs.zoomMinFactor(), prefs.zoomMaxFactor()); !qFuzzyCompare(next, cur)) scale(next / cur, next / cur); // 已达边界则不再缩放。
     updateHandleSize();
 }
 
-// 把当前变换的缩放钳制回允许区间（供 fitToWindow 等绝对变换后兜底）。
+// 把当前变换的缩放钳制回 CanvasPrefs 允许区间（供 fitToWindow 等绝对变换后兜底）。
 void CanvasView::clampZoom() {
     const qreal cur = transform().m11();
     if (cur <= 0.0) return;
-    if (const qreal c = std::clamp(cur, kMinZoom, kMaxZoom); !qFuzzyCompare(c, cur)) scale(c / cur, c / cur);
+    const auto& prefs = CanvasPrefs::instance();
+    if (const qreal c = std::clamp(cur, prefs.zoomMinFactor(), prefs.zoomMaxFactor()); !qFuzzyCompare(c, cur)) scale(c / cur, c / cur);
 }
 
 // 依当前缩放换算选区手柄的场景尺寸（屏幕基准由适配器提供，桌面同既有的 8 屏幕px），
@@ -93,11 +124,32 @@ void CanvasView::updateHandleSize() {
     const qreal m11 = transform().m11();
     emit zoomChanged(m11);       // 回报当前缩放倍数（所有缩放入口都经过此函数）。
     if (!scene_ || m11 <= 0.0) return;
-    const qreal hs = (input_ ? input_->screenOverlayPx() : 8.0) / m11;
+    // 滚动余量（视口口径百分比）同样随缩放折算为场景单位，与手柄一起在此重算（拆成独立方法供 resize 复用）。
+    updateScrollMargins();
+    const qreal platformBase = input_ ? input_->screenOverlayPx() : nums::canvas::kDesktopOverlayScreenPx;
+    const qreal hs = CanvasPrefs::instance().handleScreenPxOr(platformBase) / m11;
     if (scene_->selectionItem()) scene_->selectionItem()->setHandleSize(hs); // 手柄与抓边条带同步随缩放换算。
     scene_->setMultiRectHandleSize(hs); // L2 多矩形选区框手柄同步随缩放换算。
     scene_->setAnnotationHandleSize(hs); // 标注控制点手柄同步随缩放换算。
     if (scene_->cellPickerItem()) scene_->cellPickerItem()->setOverlayScale(hs); // L3 点选阈值/重绘余量同步随缩放换算。
+}
+
+// 滚动余量注入：横 = 视口宽×百分比、纵 = 视口高×百分比，再除以 m11 折算为场景单位。内容（原图 ∪ 补白单元）
+// 外面恒推同一**视口比例**幅度（不随图幅与缩放档变化，但随窗口大小同比）；只管「外面留多少」，内容边界由
+// 场景自行包住。两个变化源共用本方法：缩放基准（updateHandleSize）与视口尺寸（resizeEvent）。
+void CanvasView::updateScrollMargins() const {
+    if (!scene_) return;
+    const qreal m11 = transform().m11();
+    const QSize vp = viewport()->size();
+    if (m11 <= 0.0 || vp.isEmpty()) return;   // 未显示时视口尺寸无意义，交由首次 resizeEvent 补推。
+    const qreal ratio = CanvasPrefs::instance().scrollMarginPercent() / 100.0;
+    scene_->setScrollMargins(ratio * vp.width() / m11, ratio * vp.height() / m11);
+}
+
+// 视口尺寸变化：余量按视口各边百分比生效，故尺寸变了必须重推场景矩形（手柄只依赖缩放，无需重算）。
+void CanvasView::resizeEvent(QResizeEvent* event) {
+    QGraphicsView::resizeEvent(event);
+    updateScrollMargins();
 }
 
 // 画布四态互斥模式：切换当前交互态；离开标注创建态时复位拖拽手势标志，并按态设光标。
@@ -155,7 +207,8 @@ void CanvasView::keyPressEvent(QKeyEvent* event) {
         event->accept();
         return;
     }
-    const int step = event->modifiers() & Qt::ShiftModifier ? 10 : 1;
+    const int step = event->modifiers() & Qt::ShiftModifier
+        ? nums::canvas::kNudgeStepShiftPx : nums::canvas::kNudgeStepPx;
     switch (event->key()) {
         case Qt::Key_Left:  emit nudgeSelection(-step, 0); event->accept(); return;
         case Qt::Key_Right: emit nudgeSelection(step, 0);  event->accept(); return;
@@ -268,12 +321,15 @@ void CanvasView::gestureMarqueeEnd(const QPoint& viewportPos) {
     rubber_ = false;
     const QRect vr = QRect(rubberStart_, viewportPos).normalized();
     if (rubberBand_) rubberBand_->hide();
-    if (vr.width() > 3 && vr.height() > 3) {
+    if (vr.width() > nums::canvas::kMarqueeMinSizePx && vr.height() > nums::canvas::kMarqueeMinSizePx) {
         const QPointF tl = mapToScene(vr.topLeft());
         const QPointF br = mapToScene(vr.bottomRight());
         emit rubberSelect(QRectF(tl, br).normalized());
     }
 }
+
+// 标注选取态空白按下：纯意图转发，无任何本地状态（选中清除由上层协调器落地）。
+void CanvasView::gestureAnnoBlankPress() { emit annoBlankPressed(); }
 
 // 非绘制态悬停移动：回报光标场景坐标（状态栏）；图元事件交付由适配器 dispatchSceneMove 完成。
 void CanvasView::gestureCursorMoved(const QPoint& viewportPos) {
@@ -282,6 +338,26 @@ void CanvasView::gestureCursorMoved(const QPoint& viewportPos) {
 
 // 步进缩放：适配器只给倍率；钳制与手柄重同步归 zoomBy。
 void CanvasView::gestureStepZoom(const qreal factor) { zoomBy(factor); }
+
+// 步进缩放并锚定指定视口点（桌面滚轮：以光标处为原点）。
+// 手动锚定、不借 AnchorUnderMouse：其内部记录的鼠标位仅在基类 mouseMove/Press 里刷新，而平移 /
+// 绘制悬停路径不经基类（适配器提前 return），读数陈旧会让缩放跳位。此处在缩放前记下锚点视口下的
+// 场景坐标，缩放后解出「把视图中心挪多少，才能使该场景坐标仍落在此视口点」，再 centerOn 对齐。
+void CanvasView::gestureStepZoomAt(const QPoint& anchorViewport, const qreal factor) {
+    const qreal cur = transform().m11();
+    if (cur <= 0.0) return;
+    const auto& prefs = CanvasPrefs::instance();
+    if (const qreal next = std::clamp(cur * factor, prefs.zoomMinFactor(), prefs.zoomMaxFactor()); !qFuzzyCompare(next, cur)) {                       // 已达缩放边界则不变倍。
+        setTransformationAnchor(NoAnchor);                 // 缩放期关锚点，位移完全由下方 centerOn 决定。
+        const QPointF anchorScene = mapToScene(anchorViewport);        // 缩放前锚点下的场景坐标。
+        scale(next / cur, next / cur);
+        const QPointF anchorSceneNow = mapToScene(anchorViewport);     // 缩放后同一视口点下的场景坐标。
+        const QPointF centerNow = mapToScene(viewport()->geometry().center());
+        centerOn(centerNow + (anchorScene - anchorSceneNow));          // 平移使锚点场景坐标重落回此视口点。
+        setTransformationAnchor(AnchorUnderMouse);                     // 恢复既设锚点（工具栏 ± 等仍走原语义）。
+    }
+    updateHandleSize();                                    // 重报倍率并随新缩放换算手柄 / 余量。
+}
 
 // 右键菜单项意图代理：菜单 UI 在桌面适配器，此处仅补发既有意图信号（MainWindow 接线不变）。
 void CanvasView::requestClearCut() { emit clearCutRequested(); }

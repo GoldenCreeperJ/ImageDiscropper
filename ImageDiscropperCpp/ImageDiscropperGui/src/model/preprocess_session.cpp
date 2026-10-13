@@ -15,7 +15,7 @@ namespace idc::gui {
 
 namespace {
 // 几何步判定统一委托 Core preprocess::isGeometryStep（与面板 / 折叠 / 原控制器同源，口径不漂移）。
-inline bool isGeo(const preprocess::PreprocessConfig& cfg) { return preprocess::isGeometryStep(cfg); }
+bool isGeo(const preprocess::PreprocessConfig& cfg) { return preprocess::isGeometryStep(cfg); }
 } // namespace
 
 // 几何块长度 = 首色彩步下标（几何恒在前、色彩恒在后）。

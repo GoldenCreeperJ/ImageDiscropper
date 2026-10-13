@@ -1,6 +1,6 @@
 # util/ — 图像适配、降采样预览与无状态渲染工具
 
-GUI 侧的**视图关注点**工具：Core 类型↔Qt 类型适配、大图降采样、以及从 app/canvas 下沉的无状态渲染（标注矢量绘制、导出离屏预览）；不含任何切割 / 几何 / 引擎逻辑。
+GUI 侧的**视图关注点**工具：Core 类型↔Qt 类型适配、大图降采样、以及从 app/canvas 下沉的无状态渲染（标注矢量绘制、导出离屏预览）。不含任何切割 / 几何 / 引擎逻辑。（i18n 门面的实现与本层英文译文表已迁至 [`src/i18n/`](../i18n/README.md)。）
 
 | 文件                                | 职责                                                                                         |
 |-----------------------------------|--------------------------------------------------------------------------------------------|
@@ -9,6 +9,7 @@ GUI 侧的**视图关注点**工具：Core 类型↔Qt 类型适配、大图降�
 | `preview_scaler.{h,cpp}`          | 大图降采样预览（复用 Core `core::Image::resized`）                                                    |
 | `annotation_qt_painter.{h,cpp}`   | `paintAnnotation`：把单条标注矢量绘到 `QPainter` 的**公共渲染函数**（画布图元与输出预览烘焙共用）                          |
 | `output_preview_renderer.{h,cpp}` | 导出输出预览的**离屏渲染**：`bakeAnnotationsInto`（标注烘焙）+ `composeOutputThumbnail`（按 `Composition` 缩略图） |
+| `i18n/`（子目录）                      | `gui_i18n.cpp` / `lang_en.cpp` / `lang_en_detail.cpp` 已迁入 [`src/i18n/`](../i18n/README.md)，逐文件职责见该目录说明 |
 
 ## image_qt_adapter
 
@@ -52,3 +53,7 @@ GUI 侧的**视图关注点**工具：Core 类型↔Qt 类型适配、大图降�
 
 > 场景坐标统一为原图像素坐标：底图 pixmap 用 `scaleX/scaleY` 变换铺回原图尺寸，
 > 于是遮罩 / 切割线 / 选区可直接按原图坐标叠加（见 canvas/README.md）。
+
+## i18n
+
+i18n 门面的实现与 GUI 英文译文表已迁至 [`src/i18n/`](../i18n/README.md)（`gui_i18n.cpp` 语言决议 + `lang_en.cpp`〔menu/label〕与 `lang_en_detail.cpp`〔tooltip/status/msg〕两张译文表）；装配链与调用时机 / 译文纪律 / 加一门语言 / 热切换重放等详见该目录说明。

@@ -23,6 +23,9 @@
 #include <QStackedWidget>
 
 #include "model/document.h"
+#include "util/gui_nums.h"
+#include "i18n/gui_texts.h"
+#include "i18n/gui_i18n.h"
 
 namespace idc::gui {
 namespace {
@@ -39,19 +42,20 @@ public:
 
 } // namespace
 
-// 创建坐标输入框：范围 [0,100000]，关闭逐键跟踪（提交才触发），回车即生效（NFR-5）。
+// 创建坐标输入框：范围 [0, nums::panels::kCoordLimitPx]，关闭逐键跟踪（提交才触发），回车即生效（NFR-5）。
 QSpinBox* makeCoordSpin(QWidget* parent) {
     auto* s = new QSpinBox(parent);
-    s->setRange(0, 100000);
+    s->setRange(0, nums::panels::kCoordLimitPx);
     s->setKeyboardTracking(false);
-    s->setFixedWidth(90);
+    s->setFixedWidth(nums::panels::kCoordSpinWidthPx);
     return s;
 }
 
 // 构建面板：一个 QStackedWidget 承载 L1/L2/L3 三页。
 ParamPanel::ParamPanel(QWidget* parent) : QWidget(parent) {
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(8, 8, 8, 8);
+    root->setContentsMargins(nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx,
+                             nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx);
     stack_ = new PageSizedStack(this);
     pages_[0] = buildL1Page();
     pages_[1] = buildL2Page();
@@ -93,195 +97,6 @@ void ParamPanel::resizeEvent(QResizeEvent* ev) {
     QWidget::resizeEvent(ev);
     reflowStack();
 }
-
-// L1 页：形状 + 坐标。
-QWidget* ParamPanel::buildL1Page() {
-    auto* page = new QWidget(this);
-    auto* v = new QVBoxLayout(page);
-    v->setContentsMargins(0, 0, 0, 0);
-
-    auto* box = new QGroupBox(QStringLiteral("L1 标准提取"), page);
-    auto* form = new QFormLayout(box);
-    l1Shape_ = new QComboBox(box);
-    l1Shape_->addItems({QStringLiteral("矩形"), QStringLiteral("横带"), QStringLiteral("竖带")});
-    l1Shape_->setToolTip(QStringLiteral("选择保留区域的形状：矩形选框 / 整条横带 / 整条竖带。"));
-    form->addRow(QStringLiteral("形状"), l1Shape_);
-
-    l1x1_ = makeCoordSpin(box); l1y1_ = makeCoordSpin(box);
-    l1x2_ = makeCoordSpin(box); l1y2_ = makeCoordSpin(box);
-    form->addRow(QStringLiteral("x1"), l1x1_);
-    form->addRow(QStringLiteral("y1"), l1y1_);
-    form->addRow(QStringLiteral("x2"), l1x2_);
-    form->addRow(QStringLiteral("y2"), l1y2_);
-    v->addWidget(box);
-
-    auto* note = new QLabel(QStringLiteral("保留选框内的区域。切割线贯穿全图（并非只有框边）；"
-                                          "保留/删除可在左侧切换。"), page);
-    note->setWordWrap(true);
-    v->addWidget(note);
-    v->addStretch(1);
-
-    connect(l1Shape_, &QComboBox::currentIndexChanged, this, &ParamPanel::onL1ShapeChanged);
-    for (const QSpinBox* s : {l1x1_, l1y1_, l1x2_, l1y2_})
-        connect(s, &QSpinBox::valueChanged, this, &ParamPanel::onCoordEdited);
-    return page;
-}
-
-// L2 页：子功能 + 坐标 + 坍缩可行性提示。
-QWidget* ParamPanel::buildL2Page() {
-    auto* page = new QWidget(this);
-    auto* v = new QVBoxLayout(page);
-    v->setContentsMargins(0, 0, 0, 0);
-
-    auto* box = new QGroupBox(QStringLiteral("L2 反向剔除"), page);
-    auto* form = new QFormLayout(box);
-    l2Sub_ = new QComboBox(box);
-    l2Sub_->addItems({QStringLiteral("十字切割"), QStringLiteral("横线切割"),
-                      QStringLiteral("竖线切割"), QStringLiteral("多矩形并集剔除")});
-    l2Sub_->setToolTip(QStringLiteral("每个矩形删除的都是贯穿全图的「竖带 + 横带」（十字带）；多矩形时删除区域取并集。"));
-    form->addRow(QStringLiteral("子功能"), l2Sub_);
-
-    l2x1_ = makeCoordSpin(box); l2y1_ = makeCoordSpin(box);
-    l2x2_ = makeCoordSpin(box); l2y2_ = makeCoordSpin(box);
-    form->addRow(QStringLiteral("x1"), l2x1_);
-    form->addRow(QStringLiteral("y1"), l2y1_);
-    form->addRow(QStringLiteral("x2"), l2x2_);
-    form->addRow(QStringLiteral("y2"), l2y2_);
-    v->addWidget(box);
-
-    // ---- 多矩形并集列表（仅 l2Sub_==MULTI_RECT 显示）----
-    // 追加矩形的主入口是画布框选（MainWindow.onRubberSelect）；此处提供列表可视化 +
-    // 选中项坐标微调（复用上方 x1/y1/x2/y2）+ 删除/清空。面板只搬运，不做并集计算（CONTRIBUTING.md「分层纪律」）。
-    l2MultiBox_ = new QGroupBox(QStringLiteral("多矩形列表"), page);
-    auto* mv = new QVBoxLayout(l2MultiBox_);
-    l2RectList_ = new QListWidget(l2MultiBox_);
-    l2RectList_->setToolTip(QStringLiteral("在画布上拖拽框选追加矩形，也可直接拖动/缩放已有矩形；选中列表项后可在上方坐标框微调或删除。"));
-    mv->addWidget(l2RectList_);
-    auto* mbtnRow = new QHBoxLayout();
-    l2RectDelBtn_ = new QPushButton(QStringLiteral("删除选中"), l2MultiBox_);
-    l2RectClearBtn_ = new QPushButton(QStringLiteral("清空"), l2MultiBox_);
-    mbtnRow->addWidget(l2RectDelBtn_);
-    mbtnRow->addWidget(l2RectClearBtn_);
-    mv->addLayout(mbtnRow);
-    auto* mnote = new QLabel(QStringLiteral("在画布空白处拖拽框选可追加矩形；矩形可直接拖动/四角缩放/拖边调整。删除区域为各矩形十字带（竖带+横带）的并集。"), l2MultiBox_);
-    mnote->setWordWrap(true);
-    mv->addWidget(mnote);
-    l2MultiBox_->setVisible(false); // 默认隐藏，切到 MULTI_RECT 才显示（见 syncFromDocument）。
-    v->addWidget(l2MultiBox_);
-
-    // 坍缩可行性提示：由 MainWindow 依 Core isCollapsible 结果回灌。
-    collapseHint_ = new QLabel(QStringLiteral("坍缩可行性：请先框选选区。"), page);
-    collapseHint_->setWordWrap(true);
-    v->addWidget(collapseHint_);
-
-    auto* outNote = new QLabel(QStringLiteral("输出模式（分离 / 坍缩 / 重排）见右侧「导出」页。"), page);
-    outNote->setWordWrap(true);
-    v->addWidget(outNote);
-
-    // 「转为网格模式编辑」入口：把当前矩形选区送入 L3 逐单元精修。
-    l2ToGridBtn_ = new QPushButton(QStringLiteral("转为网格模式编辑…"), page);
-    l2ToGridBtn_->setToolTip(QStringLiteral("以当前矩形选区的左上为基准点、宽高为单元尺寸，"
-                                            "切换到 L3 网格模式，继续逐单元点选与排序精修。"));
-    v->addWidget(l2ToGridBtn_);
-    v->addStretch(1);
-
-    connect(l2Sub_, &QComboBox::currentIndexChanged, this, &ParamPanel::onL2SubChanged);
-    for (const QSpinBox* s : {l2x1_, l2y1_, l2x2_, l2y2_})
-        connect(s, &QSpinBox::valueChanged, this, &ParamPanel::onCoordEdited);
-    connect(l2ToGridBtn_, &QPushButton::clicked, this, &ParamPanel::onConvertToGrid);
-    connect(l2RectList_, &QListWidget::currentRowChanged, this, &ParamPanel::onRectListSelectionChanged);
-    connect(l2RectDelBtn_, &QPushButton::clicked, this, &ParamPanel::onRectDelClicked);
-    connect(l2RectClearBtn_, &QPushButton::clicked, this, &ParamPanel::onRectClearClicked);
-    return page;
-}
-
-// L3 页：网格定义（基准点 + 单元尺寸 + 余量策略）+ 选择集（全选/反选/清空）+ 排序。
-// 说明：行列数由 Core 依图像边界自动推导（只读回显），面板不输入行列数（CONTRIBUTING.md「分层纪律」）；
-//       画布上可单击单元切换选中、拖拽框选批量选中、CUSTOM 下拖拽调序（见 canvas/cell_picker_item）；本页提供按钮式选择集与排序策略。
-QWidget* ParamPanel::buildL3Page() {
-    auto* page = new QWidget(this);
-    auto* v = new QVBoxLayout(page);
-    v->setContentsMargins(0, 0, 0, 0);
-
-    // ---- 网格定义（FR-L3.1 / FR-L3.2）----
-    auto* defBox = new QGroupBox(QStringLiteral("L3 网格定义"), page);
-    auto* defForm = new QFormLayout(defBox);
-    gx0_ = makeCoordSpin(defBox); gy0_ = makeCoordSpin(defBox);
-    gcw_ = makeCoordSpin(defBox); gch_ = makeCoordSpin(defBox);
-    gcw_->setMinimum(1); gch_->setMinimum(1); // 单元尺寸必须为正（Core Grid::build 要求）。
-    gx0_->setToolTip(QStringLiteral("基准点 x0：竖切割线的起始位置。"));
-    gy0_->setToolTip(QStringLiteral("基准点 y0：横切割线的起始位置。"));
-    gcw_->setToolTip(QStringLiteral("单元宽 cw：相邻竖切割线的间距（像素）。"));
-    gch_->setToolTip(QStringLiteral("单元高 ch：相邻横切割线的间距（像素）。"));
-    defForm->addRow(QStringLiteral("基准点 x0"), gx0_);
-    defForm->addRow(QStringLiteral("基准点 y0"), gy0_);
-    defForm->addRow(QStringLiteral("单元宽 cw"), gcw_);
-    defForm->addRow(QStringLiteral("单元高 ch"), gch_);
-
-    gRemainder_ = new QComboBox(defBox);
-    // 索引与 Core RemainderPolicy 一致：0=DISCARD, 1=KEEP_PARTIAL, 2=PAD。
-    gRemainder_->addItems({QStringLiteral("丢弃残缺"),
-                           QStringLiteral("保留残缺"),
-                           QStringLiteral("补白")});
-    gRemainder_->setToolTip(QStringLiteral("图像边缘的残缺单元如何处理：丢弃、保留、或补白到完整尺寸。"));
-    defForm->addRow(QStringLiteral("余量策略"), gRemainder_);
-
-    gGridInfo_ = new QLabel(QStringLiteral("网格：待计算"), defBox);
-    gGridInfo_->setWordWrap(true);
-    defForm->addRow(QStringLiteral("派生规模"), gGridInfo_);
-    v->addWidget(defBox);
-
-    // ---- 选择集（FR-L3.3）----
-    auto* selBox = new QGroupBox(QStringLiteral("选择集"), page);
-    auto* selV = new QVBoxLayout(selBox);
-    auto* btnRow = new QHBoxLayout();
-    auto* allBtn = new QPushButton(QStringLiteral("全选"), selBox);
-    auto* invBtn = new QPushButton(QStringLiteral("反选"), selBox);
-    auto* clrBtn = new QPushButton(QStringLiteral("清空"), selBox);
-    btnRow->addWidget(allBtn);
-    btnRow->addWidget(invBtn);
-    btnRow->addWidget(clrBtn);
-    selV->addLayout(btnRow);
-    gSelInfo_ = new QLabel(QStringLiteral("已选：0 单元"), selBox);
-    gSelInfo_->setWordWrap(true);
-    selV->addWidget(gSelInfo_);
-    auto* selNote = new QLabel(QStringLiteral("画布上：单击单元切换选中、拖拽框选批量选中。"), selBox);
-    selNote->setWordWrap(true);
-    selV->addWidget(selNote);
-    v->addWidget(selBox);
-
-    // ---- 排序（FR-L3.5）----
-    auto* sortBox = new QGroupBox(QStringLiteral("排序"), page);
-    auto* sortForm = new QFormLayout(sortBox);
-    gSort_ = new QComboBox(sortBox);
-    // 索引与 Core SortStrategy 一致：0=ROW_MAJOR, 1=COLUMN_MAJOR, 2=CUSTOM。
-    gSort_->addItems({QStringLiteral("横优先"),
-                      QStringLiteral("竖优先"),
-                      QStringLiteral("自定义")});
-    gSort_->setToolTip(QStringLiteral("输出顺序：从左到右逐行（横优先）、从上到下逐列（竖优先）、或按点选顺序（自定义）。"));
-    sortForm->addRow(QStringLiteral("策略"), gSort_);
-    gReverse_ = new QCheckBox(QStringLiteral("整体逆序"), sortBox);
-    gSnake_ = new QCheckBox(QStringLiteral("蛇形（隔行/隔列反向）"), sortBox);
-    sortForm->addRow(gReverse_);
-    sortForm->addRow(gSnake_);
-    v->addWidget(sortBox);
-    v->addStretch(1);
-
-    connect(gx0_, &QSpinBox::valueChanged, this, &ParamPanel::onGridOriginEdited);
-    connect(gy0_, &QSpinBox::valueChanged, this, &ParamPanel::onGridOriginEdited);
-    connect(gcw_, &QSpinBox::valueChanged, this, &ParamPanel::onCellSizeEdited);
-    connect(gch_, &QSpinBox::valueChanged, this, &ParamPanel::onCellSizeEdited);
-    connect(gRemainder_, &QComboBox::currentIndexChanged, this, &ParamPanel::onRemainderChanged);
-    connect(gSort_, &QComboBox::currentIndexChanged, this, &ParamPanel::onSortStrategyChanged);
-    connect(gReverse_, &QCheckBox::toggled, this, &ParamPanel::onSortReverseToggled);
-    connect(gSnake_, &QCheckBox::toggled, this, &ParamPanel::onSortSnakeToggled);
-    connect(allBtn, &QPushButton::clicked, this, &ParamPanel::onSelectAllCells);
-    connect(invBtn, &QPushButton::clicked, this, &ParamPanel::onInvertCells);
-    connect(clrBtn, &QPushButton::clicked, this, &ParamPanel::onClearCells);
-    return page;
-}
-
-// 绑定 Document 并同步一次。
 void ParamPanel::setDocument(Document* doc) {
     doc_ = doc;
     syncFromDocument();
@@ -347,9 +162,9 @@ void ParamPanel::syncFromDocument() {
 
     // L3 只读回显：派生行列数与已选单元数。
     const int rows = doc_->gridRows(), cols = doc_->gridCols();
-    gGridInfo_->setText(QStringLiteral("网格：%1 行 × %2 列 · 共 %3 单元")
+    gGridInfo_->setText(IDC_GTR(status, kGridDerivedInfo)
                             .arg(rows).arg(cols).arg(rows * cols));
-    gSelInfo_->setText(QStringLiteral("已选：%1 单元")
+    gSelInfo_->setText(IDC_GTR(status, kGridSelectedInfo)
                            .arg(doc_->selectedCells().size()));
 
     // 「转为网格」按钮：有可转换的选区几何时可用——单选区 rect_ 有效，
@@ -369,7 +184,7 @@ void ParamPanel::syncFromDocument() {
         l2RectList_->clear();
         const auto& rs = doc_->rects();
         for (std::size_t i = 0; i < rs.size(); ++i) {
-            l2RectList_->addItem(QStringLiteral("矩形 %1：(%2,%3)-(%4,%5)")
+            l2RectList_->addItem(IDC_GTR(status, kRectListItem)
                                      .arg(i + 1).arg(rs[i].left).arg(rs[i].top)
                                      .arg(rs[i].right).arg(rs[i].bottom));
         }
@@ -409,9 +224,9 @@ void ParamPanel::setMode(const engine::Tier tier) const {
 void ParamPanel::setCollapseHint(const bool collapsible, const QString& reason) const {
     if (!collapseHint_) return;
     if (collapsible) {
-        collapseHint_->setText(QStringLiteral("坍缩可行：剩余块可紧贴拼成一张图。"));
+        collapseHint_->setText(IDC_GTR(status, kCollapseHintOk));
     } else {
-        collapseHint_->setText(QStringLiteral("坍缩不可行：%1（导出将自动改用分离导出）").arg(reason));
+        collapseHint_->setText(IDC_GTR(status, kCollapseHintFail).arg(reason));
     }
 }
 
@@ -486,7 +301,7 @@ void ParamPanel::updateRectListItem(const int index) const {
     if (index < 0 || index >= static_cast<int>(rs.size())) return;
     const auto& rr = rs[static_cast<std::size_t>(index)];
     if (QListWidgetItem* item = l2RectList_->item(index)) {
-        item->setText(QStringLiteral("矩形 %1：(%2,%3)-(%4,%5)")
+        item->setText(IDC_GTR(status, kRectListItem)
                           .arg(index + 1).arg(rr.left).arg(rr.top).arg(rr.right).arg(rr.bottom));
     }
     if (l2RectList_->currentRow() == index) {   // 选中行同步回 spinbox（实时微调回显）。

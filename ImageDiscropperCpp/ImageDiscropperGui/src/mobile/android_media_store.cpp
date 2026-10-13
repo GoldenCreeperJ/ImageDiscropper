@@ -9,6 +9,9 @@
 
 #include <QFileInfo>
 
+#include "i18n/gui_texts.h"
+#include "i18n/gui_i18n.h"
+
 #if defined(Q_OS_ANDROID)
 #include <QCoreApplication>
 #include <QFile>
@@ -67,7 +70,7 @@ bool writeToContentUri(const QString& contentUri, const QString& srcFilePath, QS
     const QJniObject resolver = contentResolver();
     const QJniObject uri = parseUri(contentUri);
     if (!resolver.isValid() || !uri.isValid()) {
-        err = QStringLiteral("无法获取系统内容解析器");
+        err = IDC_GTR(msg, kMediaNoResolver);
         return false;
     }
     // fd 直写：openFileDescriptor + getFd → QFile 经裸 fd 写入（QFSFileEngine），
@@ -80,7 +83,7 @@ bool writeToContentUri(const QString& contentUri, const QString& srcFilePath, QS
     if (env->ExceptionCheck()) env->ExceptionDescribe();
     env->ExceptionClear();
     if (!pfd.isValid()) {
-        err = QStringLiteral("无法打开目标位置写入");
+        err = IDC_GTR(msg, kMediaOpenWriteFailed);
         return false;
     }
     const jint fd = pfd.callMethod<jint>("getFd");
@@ -90,12 +93,12 @@ bool writeToContentUri(const QString& contentUri, const QString& srcFilePath, QS
     // ParcelFileDescriptor'）——写完由 Java 侧 pfd.close() 正确释放。
     const bool opened = out.open(fd, QIODevice::WriteOnly, QFileDevice::DontCloseHandle);
     if (!opened) {
-        err = QStringLiteral("无法打开目标位置写入");
+        err = IDC_GTR(msg, kMediaOpenWriteFailed);
         return false;
     }
     QFile src(srcFilePath);
     if (!src.open(QIODevice::ReadOnly)) {
-        err = QStringLiteral("无法读取临时导出文件：%1").arg(srcFilePath);
+        err = IDC_GTR(msg, kMediaReadTempFailed).arg(srcFilePath);
         return false;
     }
     constexpr int kChunk = 64 * 1024;
@@ -103,8 +106,8 @@ bool writeToContentUri(const QString& contentUri, const QString& srcFilePath, QS
     bool ok = true;
     while (!src.atEnd()) {
         const qint64 n = src.read(buf, kChunk);
-        if (n <= 0) { ok = false; err = QStringLiteral("读取临时导出文件失败"); break; }
-        if (out.write(buf, n) != n) { ok = false; err = QStringLiteral("写入目标位置失败"); break; }
+        if (n <= 0) { ok = false; err = IDC_GTR(msg, kMediaReadTempError); break; }
+        if (out.write(buf, n) != n) { ok = false; err = IDC_GTR(msg, kMediaWriteTargetFailed); break; }
     }
     src.close();
     out.close();                         // 只关 QFile 缓冲，fd 保持打开（DontCloseHandle）。
@@ -119,7 +122,7 @@ bool insertToGallery(const QString& displayName, const QString& relativePath,
     // QT_ANDROID_MIN_SDK_VERSION 29 保证）。
     const jint sdk = QJniObject::getStaticField<jint>("android/os/Build$VERSION", "SDK_INT");
     if (sdk < 29) {
-        err = QStringLiteral("相册发布需要 Android 10（API 29）及以上");
+        err = IDC_GTR(msg, kMediaApiTooLow);
         return false;
     }
     const QJniObject resolver = contentResolver();
@@ -127,7 +130,7 @@ bool insertToGallery(const QString& displayName, const QString& relativePath,
         "android/provider/MediaStore$Images$Media", "EXTERNAL_CONTENT_URI",
         "Landroid/net/Uri;");
     if (!resolver.isValid() || !collection.isValid()) {
-        err = QStringLiteral("无法获取系统媒体库");
+        err = IDC_GTR(msg, kMediaNoStore);
         return false;
     }
     // 键名即 MediaStore.MediaColumns 常量值（注意 DISPLAY_NAME 为 _display_name，
@@ -154,7 +157,7 @@ bool insertToGallery(const QString& displayName, const QString& relativePath,
     };
     if (tryInsert(true)) { outPending = true; return true; }
     if (tryInsert(false)) { outPending = false; return true; }
-    err = QStringLiteral("媒体库插入失败（格式可能不被支持）");
+    err = IDC_GTR(msg, kMediaInsertFailed);
     return false;
 }
 
@@ -171,7 +174,7 @@ bool finalizePending(const QString& contentUri, QString& err) {
     if (env->ExceptionCheck()) env->ExceptionDescribe();
     env->ExceptionClear();
     if (rows == 0) { // rows==0：行已消失或被提供者拒绝。
-        err = QStringLiteral("媒体库条目完成失败");
+        err = IDC_GTR(msg, kMediaFinalizeFailed);
         return false;
     }
     return true;
@@ -187,7 +190,7 @@ bool deleteContentUri(const QString& contentUri, QString& err) {
     if (env->ExceptionCheck()) env->ExceptionDescribe();
     env->ExceptionClear();
     if (rows == 0) {
-        err = QStringLiteral("清理未完成条目失败");
+        err = IDC_GTR(msg, kMediaCleanupFailed);
         return false;
     }
     return true;

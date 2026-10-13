@@ -1,0 +1,108 @@
+// ============================================================================
+// 文件：canvas/canvas_scene_rects.cpp
+// 作用：CanvasScene 的「L2 多矩形」图元域成员实现（TU 拆分）——多矩形诱导切割线/可拖拽
+//       选区框组/手柄尺寸/拖拽态与高亮。自 canvas_scene.cpp 原封迁出（同 Document 先例：
+//       类不拆、仅分 TU 编译，公有 API 不变）。
+// ============================================================================
+#include "canvas/canvas_scene.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <vector>
+
+#include <QGraphicsSceneMouseEvent>
+#include <QTransform>
+
+#include "canvas/items/z_order.h"
+#include "geometry/shapes.h"
+
+namespace idc::gui {
+
+void CanvasScene::updateMultiRectCutLines(const engine::Grid& grid, const bool show) {
+    gridLayer_.rebuild(*this, grid, imgW_, imgH_, show && cutLinesVisible_, /*asCutLines=*/true);
+}
+
+// 依 Document 多矩形列表刷新可交互的橙色选区框（L2 MULTI_RECT）。每个矩形一个 SelectionRectItem，
+// 可整体移动 / 四角缩放 / 拖边微调，与单矩形选区一致。坐标即原图像素（场景坐标），无需换算。
+// 【拖拽安全】增量维护：按数量增删末位图元、逐个刷新几何；绝不 clear+重建（否则会在拖拽中
+// 删除正在处理鼠标事件的图元→崩溃）；且跳过对正在拖拽图元的回设（避免逐帧量化抖动）。
+// 多矩形不画贯穿切割线（各矩形十字带的并集由遮罩呈现），故 cutEdges 全 false，boundingRect
+// 仅覆盖各自矩形，不阻断在空白处框选追加新矩形。
+void CanvasScene::updateMultiRects(const std::vector<engine::RectRegion>& rects) {
+    const int n = static_cast<int>(rects.size());
+    // 收缩：删除多余末位图元（拖拽期间不会发生删减，防御性跳过正在拖拽者）。
+    while (multiRectItems_.size() > n) {
+        SelectionRectItem* it = multiRectItems_.last();
+        if (it->isDragging()) break;   // 防御：绝不删除正在拖拽的图元。
+        multiRectItems_.removeLast();
+        removeItem(it);
+        delete it;
+    }
+    // 扩张：为新增矩形创建图元并连接编辑信号（发射时按指针查当前下标，避免下标漂移）。
+    while (multiRectItems_.size() < n) {
+        auto* it = new SelectionRectItem();
+        it->setZValue(zorder::kSelection);
+        it->setImageBounds(imgW_, imgH_);
+        it->setHandleSize(multiHandleSize_);
+        it->setCutLinesVisible(cutLinesVisible_);   // 继承图层面板切割线显隐开关。
+        it->setBorderVisible(selectionVisible_);    // 继承图层面板选取边框显隐开关。
+        addItem(it);
+        connect(it, &SelectionRectItem::rectChanged, this, [this, it](const QRectF& r) {
+            if (const int idx = multiRectItems_.indexOf(it); idx >= 0) emit multiRectEdited(idx, r);
+        });
+        // 多矩形拖框开始同样转发交互信号（任一选区框被拖动都清除标注选中）。
+        connect(it, &SelectionRectItem::dragStarted, this, &CanvasScene::selectionInteractionStarted);
+        multiRectItems_.append(it);
+    }
+    // 刷新几何：跳过正在拖拽者（其位置/边界由手势维护，释放时才回设，避免逐帧 prepareGeometryChange 抖动）。
+    // 非拖拽者也只在边界变化/矩形变化时才重推，避免拖拽期间对其余矩形的无谓重绘。
+    const bool boundsChanged = multiBoundsW_ != imgW_ || multiBoundsH_ != imgH_;
+    for (int i = 0; i < multiRectItems_.size(); ++i) {
+        SelectionRectItem* it = multiRectItems_[i];
+        it->setVisible(true);
+        it->setHighlighted(i == activeMultiRect_);   // 高亮当前选中项（仅变化时重绘）。
+        if (i < n && !it->isDragging()) {
+            if (boundsChanged) it->setImageBounds(imgW_, imgH_);
+            const engine::RectRegion& r = rects[static_cast<std::size_t>(i)];
+            const QRectF nr(r.left, r.top,
+                            (r.width()), (r.height()));
+            if (it->rect() != nr) it->setRect(nr);
+        }
+    }
+    multiBoundsW_ = imgW_;
+    multiBoundsH_ = imgH_;
+}
+
+// 清空多矩形选区框（非 MULTI_RECT / 换图时）。
+void CanvasScene::clearMultiRects() {
+    for (auto* item : multiRectItems_) { removeItem(item); delete item; }
+    multiRectItems_.clear();
+    multiBoundsW_ = -1;   // 重置边界缓存，下次重建时重推图像边界。
+    multiBoundsH_ = -1;
+    activeMultiRect_ = -1; // 无矩形时无高亮。
+}
+
+// 设置多矩形选区框的手柄尺寸（同时缓存供后续新建图元使用）。
+void CanvasScene::setMultiRectHandleSize(const qreal sceneUnits) {
+    multiHandleSize_ = sceneUnits;
+    for (SelectionRectItem* it : multiRectItems_) it->setHandleSize(sceneUnits);
+}
+
+// 是否有任一多矩形选区框正被拖拽。
+bool CanvasScene::isDraggingMultiRect() const {
+    for (const SelectionRectItem* it : multiRectItems_)
+        if (it->isDragging()) return true;
+    return false;
+}
+
+// 设置当前高亮（选中）的多矩形下标：对应选区框颜色略微加强，其余恢复普通。
+void CanvasScene::setActiveMultiRect(const int index) {
+    activeMultiRect_ = index;
+    for (int i = 0; i < multiRectItems_.size(); ++i)
+        multiRectItems_[i]->setHighlighted(i == index);
+}
+
+// 依 Document 的选择集与排序策略刷新单元点选图元的高亮。
+
+} // namespace idc::gui

@@ -72,9 +72,9 @@ void AnnotationEditor::changeFillColor(const core::Color& c) {
 // 修改线宽。
 void AnnotationEditor::changeStrokeWidth(const int w) {
     if (annotation::Annotation* a = editableSelected()) {
-        a->style.strokeWidth = std::max(1, w);
+        a->style.strokeWidth = std::max(nums::model::kStrokeWidthMinPx, w);
     } else {
-        currentStrokeWidth_ = std::max(1, w);
+        currentStrokeWidth_ = std::max(nums::model::kStrokeWidthMinPx, w);
     }
 }
 
@@ -91,13 +91,15 @@ void AnnotationEditor::changeFill(const bool fill) {
 void AnnotationEditor::changeText(const std::string& text) { currentText_ = text; }
 
 // 修改当前字号（TEXT 类型使用）。
-void AnnotationEditor::changeFontSize(const double size) { currentFontSize_ = std::max(1.0, size); }
+void AnnotationEditor::changeFontSize(const double size) {
+    currentFontSize_ = std::max(static_cast<double>(nums::model::kFontSizeMinPx), size);
+}
 
 // 修改转角圆角半径：EDIT 模式下就地写到选中形状的几何（无转角概念的形状为空调用），
 // 否则记为下一次绘制的默认圆角半径。与颜色/填充的事后编辑一致：不推历史快照（可撤销的仍是 add/remove）。
 void AnnotationEditor::changeCornerRadius(const double r) {
     const double radius = r < 0.0 ? 0.0 : r;
-    if (annotation::Annotation* a = editableSelected()) {
+    if (const annotation::Annotation* a = editableSelected()) {
         if (a->shape) a->shape->setCornerRadius(radius);
     } else {
         currentCornerRadius_ = radius;
@@ -139,9 +141,9 @@ const annotation::Annotation* AnnotationEditor::selectedAnnotation() const {
 
 // 撤销：把集合栈顶（顶层）标注移入重做栈（AnnotationSet::popBack）；集合为空时不做任何事。
 void AnnotationEditor::revoke() {
-    auto a = set_.popBack();
+    const auto a = set_.popBack();
     if (!a) return;
-    redoStack_.push_back(std::move(*a));
+    redoStack_.push_back(*a);
     selectedIndex_.reset();
 }
 
