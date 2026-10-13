@@ -50,7 +50,8 @@ ImageDiscropper/
 │   ├── ImageDiscropperCore/     #   Core: Grid-Selection-Emit engine + basic image processing (static library)
 │   ├── ImageDiscropperCli/      #   CLI: thin command-line shell (executable idc)
 │   └── ImageDiscropperGui/      #   GUI: Qt 6 desktop frontend (executable idc_gui)
-├── ImageDiscropperRust/         # Rust implementation (planned, not started yet)
+├── ImageDiscropperRust/         # Rust engine implementation (planned: core/cli crates; GUI shell & frontend live in ImageDiscropperWeb)
+├── ImageDiscropperWeb/          # Web frontend monorepo (planned: Tauri/Electron/Wails shells + one shared frontend; RN deferred)
 └── assets/                      # shared assets: icon.svg master + icons/ derivation scripts (derivatives not committed) + sample.png
 ```
 
@@ -141,7 +142,8 @@ Documentation is organized by level; **each level has a clearly delimited scope 
 | ④ Functional spec             | [`SPEC.md`](SPEC.md)                                             | **The single behavioral baseline**: modes / export / boundary cases (E-1~E-8) / NFRs / config schema; contributing conventions live in `CONTRIBUTING.md` |
 | ⑤ Module docs                 | `ImageDiscropper{Core,Cli,Gui}/README.md`                        | Each module's responsibility, API mapping to the spec, build instructions; the GUI README also covers user operations and design notes                   |
 | ⑥ Directory docs              | `README.md` inside every `include/`, `src/`, … subdirectory      | That directory's responsibility boundary, file-splitting rationale, file list (repo-wide directory doc convention)                                       |
-| ⑦ Placeholder implementation  | [`ImageDiscropperRust/README.md`](ImageDiscropperRust/README.md) | Planning status of the Rust implementation                                                                                                               |
+| ⑦ Placeholder implementation  | [`ImageDiscropperRust/README.md`](ImageDiscropperRust/README.md) | Planning status of the Rust engine implementation                                                                                                               |
+| ⑧ Web frontend implementation | [`ImageDiscropperWeb/README.md`](ImageDiscropperWeb/README.md)   | Planned structure, design axioms and shell division of the Web monorepo (Tauri/Electron/Wails; RN deferred)                                              |
 
 ## 📊 Project status
 

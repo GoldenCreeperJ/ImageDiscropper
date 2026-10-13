@@ -25,6 +25,14 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 **依赖方向**：`app → panels/canvas/model → util → Core`（`mobile` 继承 `app`，同向）。`model` 是唯一触碰 Core 引擎/标注的层，
 面板与画布只读写 `Document`/桥，不各自持有真相（降低耦合）。
 
+> **唯一例外（已登记，勿扩大）**：`canvas → app` 存在一条**单向只读**箭头——渲染层在**绘制期 / 构造期**直接读 `app` 的两个偏好单例
+> [`Palette`](include/app/palette.h)（六项语义色）与 [`CanvasPrefs`](include/app/canvas_prefs.h)（吸附/手柄/余量等交互偏好），
+> 以省去每帧注色管道（见 `palette.h` 头注“渲染图元绘制期直接取色”）。持有该箭头的**恒为** 5 个文件：`canvas/canvas_view.cpp`
+> （Palette + CanvasPrefs）、`canvas/items/selection_rect_item.cpp`（Palette + CanvasPrefs）、`canvas/items/grid_layer.cpp`、
+> `canvas/items/mask_layer.cpp`、`canvas/items/annotation_item.cpp`（后三者仅 Palette）。此为刻意取舍、非疏漏：**禁止**沿此方向
+> 新增任何反向依赖（尤其不得让 `canvas` 反向 include `app` 的装配/窗口头，也不得让偏好单例回引画布）；新的取色/取偏好需求一律经
+> 图元构造/`setXxx` 参数下传或 `changed()` 信号联动，不得直接抓 `app` 对象。
+
 ## 数据流（一条主线）
 
 ```

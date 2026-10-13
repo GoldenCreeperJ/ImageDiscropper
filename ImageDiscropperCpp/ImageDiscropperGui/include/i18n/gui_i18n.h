@@ -60,6 +60,15 @@ void setupFromPreference(const QString& pref);
 // 认不出的写法回退源语言。供外观对话框比对「已存偏好」与「当前生效语言」，判定是否需热切换。
 std::string resolveForPreference(const QString& pref);
 
+// 当前生效语言码（透传 Core 只读访问器）：已归一、已回退后的结果，供 UI 回显与「偏好 vs 生效」比对。
+// 业务代码据此判语言，**不再直接调 core::i18n::language()**（门面纪律：上层只认本门面）。
+inline std::string language() { return core::i18n::language(); }
+
+// 判定「按 pref 应生效的语言」是否不同于「当前已生效语言」——不同则需原地重放各窗文案。
+// 供外观对话框 exec() 后兜底：正常热切换已由 languageApplied 触发重放，此处仅补漏（见 setupFromPreference 注释）。
+// 只读、无副作用；pref 由调用方传入（门面不反向依赖 app 层 UiPrefs，保持 util→app 无箭头）。
+inline bool needsRetranslate(const QString& pref) { return resolveForPreference(pref) != language(); }
+
 } // namespace idc::gui::i18n
 
 // ---------------------------------------------------------------------------

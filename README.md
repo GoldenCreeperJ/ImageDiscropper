@@ -49,7 +49,8 @@ ImageDiscropper/
 │   ├── ImageDiscropperCore/     #   Core：Grid-Selection-Emit 统一引擎 + 基础图像处理（静态库）
 │   ├── ImageDiscropperCli/      #   CLI：命令行薄壳（可执行 idc）
 │   └── ImageDiscropperGui/      #   GUI：Qt 6 桌面前端（可执行 idc_gui）
-├── ImageDiscropperRust/         # Rust 实现（规划中，尚未开始）
+├── ImageDiscropperRust/         # Rust 引擎实现（规划中：core/cli 两 crate；GUI 壳与前端在 ImageDiscropperWeb）
+├── ImageDiscropperWeb/          # Web 前端实现 monorepo（规划中：Tauri/Electron/Wails 壳 + 一份共享前端；RN 暂缓）
 └── assets/                      # 共享资产：icon.svg 图标母版 + icons/ 派生脚本（派生物不入库）+ sample.png 样例图
 ```
 
@@ -139,7 +140,8 @@ idc extract --input photo.jpg --rect 100,100,300,250 --output out.png   # L1：�
 | ④ 功能规格     | [`SPEC.md`](SPEC.md)                                             | **唯一行为基线**：模式 / 导出 / 边界（E-1~E-8）/ NFR / 配置 schema；贡献规范见 `CONTRIBUTING.md` |
 | ⑤ 模块说明     | `ImageDiscropper{Core,Cli,Gui}/README.md`                        | 各模块职责、与规格的 API 映射、构建方式；Gui README 另含用户操作速览与设计说明                           |
 | ⑥ 目录说明     | 各 `include/`、`src/` 等子目录内的 `README.md`                           | 该目录的职责边界、分块依据、文件清单（全仓库目录说明约定）                                             |
-| ⑦ 占位实现     | [`ImageDiscropperRust/README.md`](ImageDiscropperRust/README.md) | Rust 实现的规划状态说明                                                            |
+| ⑦ 占位实现     | [`ImageDiscropperRust/README.md`](ImageDiscropperRust/README.md) | Rust 引擎实现的规划状态说明                                                            |
+| ⑧ Web 前端实现 | [`ImageDiscropperWeb/README.md`](ImageDiscropperWeb/README.md)   | Web monorepo 的规划结构、设计公理与各壳分工（Tauri/Electron/Wails；RN 暂缓）               |
 
 ## 📊 项目状态
 

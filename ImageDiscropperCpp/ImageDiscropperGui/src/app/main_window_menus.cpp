@@ -611,8 +611,7 @@ void MainWindowUi::buildViewMenu(MainWindow* w, QMenuBar* bar) {
         QObject::connect(&dlg, &AppearanceDialog::themeApplied, w, [w] { w->update(); });
         dlg.exec();
         // 关闭后兜底：若尚未应用的语言变更（理论上对话框已即时应用）再原地重放一次，保证一致。
-        if (i18n::resolveForPreference(UiPrefs::instance().language())
-                != core::i18n::language())
+        if (i18n::needsRetranslate(UiPrefs::instance().language()))
             w->retranslateUi();
     });
 

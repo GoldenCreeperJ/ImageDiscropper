@@ -312,8 +312,7 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
         QObject::connect(&dlg, &AppearanceDialog::themeApplied, w, [w] { w->update(); });
         dlg.exec();
         // 关闭后兜底：若尚存未应用的语言差异再原地重放一次（同桌面触发）。
-        if (i18n::resolveForPreference(UiPrefs::instance().language())
-                != core::i18n::language())
+        if (i18n::needsRetranslate(UiPrefs::instance().language()))
             w->retranslateUi();
     });
     // 重排前二次确认（与桌面「导出设置→重排前二次确认」同一 UiPrefs 应用级态）：行为同构。
