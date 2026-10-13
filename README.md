@@ -35,7 +35,9 @@ ImageDiscropper 是一款**本地运行**的图像切割工具。所有功能都
 - **多层画布模型**：**画布**（输出边界与工作图尺寸）＝ **底图**（基座，由打开图像 / 生成 / 图案得来）+ 其上叠放的**图层**数组；一张图片按落点分为**底图图片**（入底图、走 `generate` 段、位图靠 `--input`）与**图层图片**（入图层栈、走 `layers` 段、位图靠 assets 引用）。术语权威定义见 [`SPEC.md`](SPEC.md) §2.2。
 - **本地处理、无损优先**（NFR-1/2）：图像不上传服务器；切割为纯像素搬运，仅 JPEG 输出有损。
 - **GUI + CLI 双前端**：Qt 6 桌面端（实时预览、拖拽切割线、撤销重做）+ 命令行 `idc`（可脚本化、配置驱动）。
-- **界面文案可切语言（简中 / English）**：三层共用一张自研译文目录（不依赖 Qt Linguist），GUI 走「外观/交互」的语言下拉（**重启生效**），CLI 走 `--lang` / 环境变量链；源语言 zh-CN，缺译自动回退。机制见 [`ImageDiscropperCpp/README.md`](ImageDiscropperCpp/README.md)「三层共用的 i18n」。
+- **界面文案可切语言（简中 / English）**：三层共用一张自研译文目录（不依赖 Qt Linguist），GUI 走「外观/交互」的语言下拉（**选中即生效**、原地重放不重启），CLI 走 `--lang` / 环境变量链；源语言 zh-CN，缺译自动回退。机制见 [`ImageDiscropperCpp/README.md`](ImageDiscropperCpp/README.md)「三层共用的 i18n」。
+- **全局深浅色主题**：「跟随系统 / 浅色 / 深色」三态（跟随系统下运行期随 OS 翻转），画布配色与交互手感可经「外观/交互」对话框自定义、跨会话记住。
+- **自定义快捷键**：15 条命令统一注册表，可在「外观/交互 → 快捷键」页改绑（即时生效、跨会话保存、冲突检测、可解绑），帮助文案不再写死键名。
 
 ```text
 原图 → ① 切割线集合 → ② 诱导网格 → ③ 选择集 → ④ 极性(Keep/Remove) → ⑤ 排布导出(Collapse/Rearrange)
@@ -94,7 +96,7 @@ cmake --build build
 ctest --test-dir build
 ```
 
-产物位于构建目录 `bin/`：`idc(.exe)`、`idc_gui(.exe)`、`demo(.exe)`。
+产物位于构建目录 `bin/`：`idc(.exe)`、`idc_gui(.exe)`、`idc_gui_mobile(.exe)`（移动形态预览）；测试目标（`IDC_BUILD_TESTS=ON`，默认开启）另产出 `demo(.exe)` 与 `unit_tests` / `cli_tests`。
 （CLion 用户可直接以 `ImageDiscropperCpp/` 为 CMake 源目录打开工程，CLion 会识别 Presets。）
 
 每次提交由 GitHub Actions（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）自动验证：**桌面三平台 Release 构建 + 全套测试 + 移动双端（Android / iOS）构建打包**（依赖缓存命中后分钟级）；**应用图标亦由 CI 动态构建并经产物流转供给各构建腿**（仓库仅提交 svg 母版，细节见 [`assets/icons/README.md`](assets/icons/README.md)）；其余验证手动运行（[`.github/workflows/cpp-verify.yml`](.github/workflows/cpp-verify.yml)）。
@@ -145,11 +147,12 @@ idc extract --input photo.jpg --rect 100,100,300,250 --output out.png   # L1：�
 
 ## 📊 项目状态
 
-| 阶段      | 范围                                 | 状态                                           |
-|---------|------------------------------------|----------------------------------------------|
-| **MVP** | 统一引擎 + L2 反向剔除 + L1 标准提取 + 分离/坍缩导出 | ✅ 已落地                                        |
-| **v2**  | L3 网格分割（排序 + 重排合并）+ 配置预设、多矩形并集剔除   | ✅ 已落地                                        |
-| **v3**  | 基础图像处理（FR-1）、标注图层                  | ✅ 已落地                                        |
+| 阶段      | 范围                                               | 状态    |
+|---------|--------------------------------------------------|-------|
+| **MVP** | 统一引擎 + L2 反向剔除 + L1 标准提取 + 分离/坍缩导出               | ✅ 已落地 |
+| **v2**  | L3 网格分割（排序 + 重排合并）+ 配置预设、多矩形并集剔除                 | ✅ 已落地 |
+| **v3**  | 基础图像处理（FR-1）、标注图层                                | ✅ 已落地 |
+| **v4**  | 多层画布、预处理声明式队列、配置存取、i18n（简中/English）、深浅色主题、自定义快捷键 | ✅ 已落地 |
 
 ## 📄 许可
 

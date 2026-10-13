@@ -36,7 +36,9 @@ This project is primarily AI-led (~99%), and the documentation is AI-generated a
 - **Multi-layer canvas model**: a **canvas** (output boundary & working-image size) = a **base** (the underlay, from an opened image / generation / pattern) plus an array of **layers** stacked above it. An image is placed either as a **base image** (into the base, via the `generate` section, bitmap supplied by `--input`) or a **layer image** (into the layer stack, via the `layers` section, bitmap referenced from assets). Authoritative terms: [`SPEC.md`](SPEC.md) §2.2.
 - **Local processing, lossless first** (NFR-1/2): images never leave your machine; cutting is pure pixel relocation — only JPEG output is lossy.
 - **GUI + CLI frontends**: Qt 6 desktop app (live preview, draggable cut lines, undo/redo) plus the `idc` command line (scriptable, config-driven).
-- **Switchable UI language (Simplified Chinese / English)**: all three layers share one hand-rolled translation catalog (no Qt Linguist involved). The GUI picks it from the language drop-down in *Appearance / Interaction…* (**takes effect after restart**); the CLI uses `--lang` / the environment-variable chain. The source language is zh-CN and untranslated keys fall back to it automatically. Mechanism: [`ImageDiscropperCpp/README.md`](ImageDiscropperCpp/README.md) (Chinese).
+- **Switchable UI language (Simplified Chinese / English)**: all three layers share one hand-rolled translation catalog (no Qt Linguist involved). The GUI picks it from the language drop-down in *Appearance / Interaction…* (**applies immediately** — texts are replayed in place, no restart); the CLI uses `--lang` / the environment-variable chain. The source language is zh-CN and untranslated keys fall back to it automatically. Mechanism: [`ImageDiscropperCpp/README.md`](ImageDiscropperCpp/README.md) (Chinese).
+- **Global light / dark theme**: three modes — follow system / light / dark (follow-system re-applies when the OS scheme flips at runtime); canvas colors and interaction preferences are customizable via the *Appearance / Interaction…* dialog and remembered across sessions.
+- **Customizable shortcuts**: 15 commands in one registry, rebindable on the *Appearance / Interaction → Shortcuts* page (applies immediately, saved across sessions, conflict detection, unbindable); help text no longer hard-codes key names.
 
 ```text
 Source → ① cut-line set → ② induced grid → ③ selection set → ④ polarity (Keep/Remove) → ⑤ emit (Collapse/Rearrange)
@@ -95,7 +97,7 @@ cmake --build build
 ctest --test-dir build
 ```
 
-Binaries land in the build directory's `bin/`: `idc(.exe)`, `idc_gui(.exe)`, `demo(.exe)`.
+Binaries land in the build directory's `bin/`: `idc(.exe)`, `idc_gui(.exe)`, `idc_gui_mobile(.exe)` (mobile-form preview); test targets (`IDC_BUILD_TESTS=ON`, on by default) additionally produce `demo(.exe)`, `unit_tests` and `cli_tests`.
 (CLion users can open `ImageDiscropperCpp/` directly as the CMake source directory; CLion picks up the presets.)
 
 Every push is verified by GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): **three-platform desktop Release builds plus the full test suite plus both mobile target builds (Android / iOS packaging)** (minute-level with a warm dependency cache); **app icons are likewise built dynamically in CI and piped to the build legs as products** (only the svg master is committed — see [`assets/icons/README.md`](assets/icons/README.md)); other verification runs manually ([`.github/workflows/cpp-verify.yml`](.github/workflows/cpp-verify.yml)).
@@ -147,11 +149,12 @@ Documentation is organized by level; **each level has a clearly delimited scope 
 
 ## 📊 Project status
 
-| Phase   | Scope                                                                                           | Status                                                                                       |
-|---------|-------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
-| **MVP** | Unified engine + L2 reverse erasing + L1 extraction + separate/collapse export                  | ✅ Done                                                                                       |
-| **v2**  | L3 grid splitting (ordering + rearrange composition) + config presets, multi-rect union erasing | ✅ Done                                                                                       |
-| **v3**  | Basic image processing (FR-1), annotation layer                                                 | ✅ Done                                                                                       |
+| Phase   | Scope                                                                                                                              | Status |
+|---------|------------------------------------------------------------------------------------------------------------------------------------|--------|
+| **MVP** | Unified engine + L2 reverse erasing + L1 extraction + separate/collapse export                                                     | ✅ Done |
+| **v2**  | L3 grid splitting (ordering + rearrange composition) + config presets, multi-rect union erasing                                    | ✅ Done |
+| **v3**  | Basic image processing (FR-1), annotation layer                                                                                    | ✅ Done |
+| **v4**  | Multi-layer canvas, declarative preprocess queue, config save/load, i18n (zh-CN/English), light/dark theme, customizable shortcuts | ✅ Done |
 
 ## 📄 License
 
