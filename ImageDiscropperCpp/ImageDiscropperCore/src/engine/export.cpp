@@ -12,6 +12,7 @@
 // ============================================================================
 #include "engine/export.h"
 
+#include "i18n/core_texts.h" // 命名模板缺省串与 {name} 回退占位名（常量层）
 #include "engine/image_io.h"
 
 #include <algorithm>
@@ -87,7 +88,7 @@ void replaceAll(std::string& s, const std::string& from, const std::string& to) 
 // {row}/{col} → 源网格行/列号（非网格来源即 -1 时按 0 处理）。
 std::string applyNaming(const std::string& tpl, const std::string& name, const int index,
                         const int row, const int col) {
-    std::string out = tpl.empty() ? std::string("{name}_{index:03d}") : tpl;
+    std::string out = tpl.empty() ? std::string(core::texts::defaults::kNamingTemplate) : tpl;
     replaceAll(out, "{name}", name);
     replaceAll(out, "{index:03d}", zeroPad(index, kIndexWidth));
     replaceAll(out, "{index}", std::to_string(index));
@@ -115,7 +116,7 @@ bool exportSeparate(const Composition& composition, const core::Image& source,
 
     // 命名模板 {name} 取文件夹名（无法取得时回退 "region"）；取 u8string 保证非 ASCII 文件夹名作命名代币时仍为 UTF-8。
     std::string name = dir.filename().u8string();
-    if (name.empty() || name == "." || name == "..") name = "region";
+    if (name.empty() || name == "." || name == "..") name = core::texts::defaults::kRegionFallbackName;
 
     const ExportFormat fmt = composition.format;
     const std::string ext = extForFormat(fmt);

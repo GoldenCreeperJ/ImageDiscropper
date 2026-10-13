@@ -10,8 +10,11 @@
 #include <utility>
 
 #include "annotation/rasterizer.h"
+#include "core/core_nums.h" // 命中容差单一真相源（常量层）
 
 namespace idc::annotation {
+
+namespace nums = core::nums; // 简写常量层命名空间（仅本文件内可见）
 
 // ===========================================================================
 // Annotation 拷贝语义
@@ -103,7 +106,7 @@ void AnnotationSet::restore(std::vector<Annotation> items) {
 // 判定规则：
 //   - 填充形状：使用 Path::contains 判断点是否在内部
 //   - 未填充形状：使用 Path::distanceToOutline 判断点是否靠近轮廓
-//     （容差 = 5.0 + strokeWidth）
+//     （容差 = nums::annotation::kHitTolerancePx + strokeWidth）
 std::optional<std::size_t> AnnotationSet::hitTest(const core::Point2D& p) const {
     for (std::size_t i = items_.size(); i-- > 0;) {
         const Annotation& ps = items_[i];
@@ -116,7 +119,8 @@ std::optional<std::size_t> AnnotationSet::hitTest(const core::Point2D& p) const 
             if (path.contains(p.x, p.y)) return i;
         }
         // 其余情况按轮廓距离判定
-        if (const double dist = path.distanceToOutline(p.x, p.y); dist < 5.0 + ps.style.strokeWidth) return i;
+        if (const double dist = path.distanceToOutline(p.x, p.y);
+            dist < nums::annotation::kHitTolerancePx + ps.style.strokeWidth) return i;
     }
     return std::nullopt;
 }

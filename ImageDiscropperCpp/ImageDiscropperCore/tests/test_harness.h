@@ -22,6 +22,17 @@
         }                                                                      \
     } while (0)
 
+// 带动态说明文本的断言：用于「读文件 / 解析目录」这类光看表达式无法定位的失败。
+// 与 CHECK 的区别只在于多一个会在失败时插流的 msg（求值仅在失败路径上发生）。
+#define CHECK_MSG(expr, msg)                                                   \
+    do {                                                                       \
+        if (!(expr)) {                                                         \
+            std::cerr << "CHECK_MSG failed: " #expr " -- " << (msg) << " @ "    \
+                      << __FILE__ << ":" << __LINE__ << "\n";                  \
+            std::exit(1);                                                      \
+        }                                                                      \
+    } while (0)
+
 // ---------------------------------------------------------------------------
 // 引擎验收测试段（定义于独立 .cpp，由 test_main.cpp 的 main() 调用）。
 //   testEnginePipeline —— SPEC §3 功能：L1/L2 保留尺寸与四角位置、极性开关、L3 网格/选择/排序/重排。
@@ -30,6 +41,8 @@
 //   testEngineConfigJson —— SPEC §7 配置存取：字段往返 + annotations 段带样式往返 + 向后兼容。
 //   testAnnoParseText    —— SPEC §7 标注文本段级解析：parseAnnotationsFromJsonText 单对象/根数组/累积/回滚/逐条强制校验/空串。
 //   testAnnoAnchorRoundTrip —— SPEC §7 约束图元锚点往返：buildShape(锚点)→shapeToJson(反解)→shapeFromJson 顶点级一致。
+//   testI18nCore    —— i18n 机制内核：表登记 / 语言码归一 / 缺译回退 / 源语言不建表（放最后一段，会改全局语言态）。
+//   testI18nCatalog —— i18n 目录对账：孤儿键 / 重复键 / 跳层撞键 / 契约组越界 fail + 各组覆盖率打印（不改进程级语言态）。
 // ---------------------------------------------------------------------------
 void testEnginePipeline();
 void testEngineExport();
@@ -37,3 +50,5 @@ void testEngineBoundary();
 void testEngineConfigJson();
 void testAnnoParseText();
 void testAnnoAnchorRoundTrip();
+void testI18nCore();
+void testI18nCatalog();

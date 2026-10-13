@@ -10,7 +10,13 @@
 #            原 history 模块并入 core，HistoryManager<T> 现为 idc::core 成员。）
 # ============================================================================
 cmake_minimum_required(VERSION 3.28)
-project(ImageDiscropperCore LANGUAGES CXX VERSION 1.0.1)
+
+# 版本单一来源：作为子工程时由根 CMakeLists 透传 IDC_CORE_VERSION（发版只改根 project()）；
+# 独立配置本子目录时回退占位，避免空 project VERSION。
+if(NOT DEFINED IDC_CORE_VERSION)
+    set(IDC_CORE_VERSION "1.0.1")   # 独立构建回退（正常发版走根工程，勿在此维护版本）
+endif()
+project(ImageDiscropperCore LANGUAGES CXX VERSION ${IDC_CORE_VERSION})
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -42,6 +48,15 @@ set(IDC_CORE_SRC
         src/core/point.cpp
         src/core/image.cpp
         src/core/history_manager.cpp
+)
+
+# i18n：三层共用的进程级语言状态内核（零 Qt）+ Core 自己的英文表
+#       （报因与图案名属 Core 文案，三层共用一份；GUI / CLI 的表仍住各自层，见其 src/i18n/lang_en.cpp）。
+#         加一门语言 = 各层新增一份 lang_xx.cpp + 在该层 installCatalogs() 登记一行 +
+#         include/i18n/core_i18n.h 补一个语言码，重编即可；无构建期工具链，zh-CN 不建表（走回退）。
+set(IDC_CORE_I18N_SRC
+        src/i18n/core_i18n.cpp
+        src/i18n/lang_en.cpp
 )
 
 # geometry：标注图形几何（ShapeType / Shape / Path）
@@ -93,6 +108,7 @@ set(IDC_ENGINE_SRC
 
 add_library(image_discropper_core STATIC
     ${IDC_CORE_SRC}
+    ${IDC_CORE_I18N_SRC}
     ${IDC_GEOMETRY_SRC}
     ${IDC_ANNOTATION_SRC}
     ${IDC_PREPROCESS_SRC}
@@ -131,6 +147,8 @@ if(IDC_BUILD_TESTS)
             tests/test_engine_export.cpp
             tests/test_engine_boundary.cpp
             tests/test_engine_config_json.cpp
+            tests/test_i18n_core.cpp        # i18n 机制内核（零 Qt）：表登记 / 语言码归一 / 缺译回退 / 占位符替换断言
+            tests/test_i18n_catalog.cpp     # i18n 目录对账（零 Qt）：孤儿键 / 重复键 / 跨层撞键 / 契约组越界 / %N 占位符一致 + 覆盖率
             # 跨模块直编：GUI 的标注编辑会话（零 Qt 依赖）——供会话语义（撤销/重做/选中跟随）回归。
             ../ImageDiscropperGui/src/model/annotation_editor.cpp
             # 跨模块直编：GUI 的预处理会话（零 Qt 依赖）——供 geo→color 不变式/归一化/baseDirty/签名回归。
@@ -139,17 +157,11 @@ if(IDC_BUILD_TESTS)
             ../ImageDiscropperGui/src/model/layer_session_store.cpp
     )
     target_link_libraries(unit_tests PRIVATE image_discropper_core)
+    # 目录对账要同时读三层的常量层头与译文表，故注入源码根（`/..` 在子工程与独立构建下都是仓库内根）。
+    get_filename_component(IDC_I18N_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+    target_compile_definitions(unit_tests PRIVATE IDC_TEXTS_SOURCE_ROOT="${IDC_I18N_ROOT}")
     # 仅为直编 annotation_editor.cpp 与 test_main 引 model/annotation_editor.h 开放 GUI include 根。
     target_include_directories(unit_tests PRIVATE ../ImageDiscropperGui/include)
 
     add_test(NAME unit_tests COMMAND unit_tests)
-endif()
-
-# ---------------------------------------------------------------------------
-# 作为子工程被根 CMakeLists 引入时，向父作用域回传 Core 版本号，供 CLI 的
-# --version 输出 "idc <version> (core <core-version>)"。
-# 独立构建（Core 即顶层）时跳过——此时不存在父作用域。
-# ---------------------------------------------------------------------------
-if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    set(IDC_CORE_VERSION "${PROJECT_VERSION}" PARENT_SCOPE)
 endif()

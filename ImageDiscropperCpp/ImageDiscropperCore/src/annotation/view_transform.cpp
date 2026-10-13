@@ -4,6 +4,8 @@
 // ============================================================================
 #include "annotation/view_transform.h"
 
+#include "core/core_nums.h"  // 缩放量化因子与默认倍率（常量层）
+
 #include <algorithm>
 #include <cmath>
 
@@ -42,7 +44,7 @@ void ViewTransform::scaleAboutPoint(const double wheelRotation, const core::Poin
     // 计算新 scale（wheelRotation > 0 时缩小，< 0 时放大）
     const double newScale = std::clamp(scale_ - wheelRotation * scaleStep_, minScale_, maxScale_);
     // 保留两位小数（四舍五入），避免缩放值出现过长的浮点尾数
-    scale_ = std::round(newScale * 100.0) / 100.0;
+    scale_ = std::round(newScale * core::nums::annotation::kScaleRoundingFactor) / core::nums::annotation::kScaleRoundingFactor;
     // 反解新 offset，使得 anchor 仍然对应 oldLogical
     offset_ = {anchor.x - oldLogical.x * scale_, anchor.y - oldLogical.y * scale_};
 }
@@ -51,7 +53,7 @@ void ViewTransform::scaleAboutPoint(const double wheelRotation, const core::Poin
 void ViewTransform::fitToViewport(const int imageWidth, const int imageHeight,
                                   const int viewportWidth, const int viewportHeight) {
     if (imageWidth <= 0 || imageHeight <= 0) {
-        scale_ = 1.0;
+        scale_ = core::nums::annotation::kDefaultViewScale;
         offset_ = {0.0, 0.0};
         return;
     }
@@ -59,7 +61,7 @@ void ViewTransform::fitToViewport(const int imageWidth, const int imageHeight,
     const double sy = static_cast<double>(viewportHeight) / imageHeight;
     const double s = std::clamp(std::min(sx, sy), minScale_, maxScale_);
     // 保留两位小数
-    scale_ = std::round(s * 100.0) / 100.0;
+    scale_ = std::round(s * core::nums::annotation::kScaleRoundingFactor) / core::nums::annotation::kScaleRoundingFactor;
     offset_ = {(viewportWidth - imageWidth * scale_) / 2.0,
                (viewportHeight - imageHeight * scale_) / 2.0};
 }

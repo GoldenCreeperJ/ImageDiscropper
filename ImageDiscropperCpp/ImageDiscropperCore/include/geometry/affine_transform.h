@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "core/core_nums.h"
 #include "core/point.h"
 #include "geometry/path.h"
 
@@ -85,7 +86,7 @@ public:
     double determinant() const { return a * d - b * c; }
 
     bool isIdentity() const {
-        constexpr double kEps = 1e-12;
+        constexpr double kEps = core::nums::geometry::kMatrixEps; // 浮点容差取常量层，与 inverse() 同值同源
         return std::fabs(a - 1.0) < kEps && std::fabs(d - 1.0) < kEps &&
                std::fabs(b) < kEps && std::fabs(c) < kEps &&
                std::fabs(tx) < kEps && std::fabs(ty) < kEps;
@@ -94,7 +95,7 @@ public:
     // 逆变换（行列式近 0 时退化返回单位矩阵，避免除零；用于把世界坐标点映回局部做命中判定）。
     AffineTransform inverse() const {
         const double det = determinant();
-        if (std::fabs(det) < 1e-12) return identity();
+        if (std::fabs(det) < core::nums::geometry::kMatrixEps) return identity();
         return {
             d / det, -b / det, -c / det, a / det,
             (c * ty - d * tx) / det, (b * tx - a * ty) / det,

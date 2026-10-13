@@ -19,6 +19,8 @@
 #include <vector>
 
 #include "core/color.h"
+#include "core/core_nums.h"   // emit.quality 出厂默认与范围（常量层）
+#include "i18n/core_texts.h"  // 命名模板缺省串（常量层）
 #include "engine/grid.h"
 #include "engine/region.h"
 #include "engine/region_set.h"
@@ -78,8 +80,8 @@ struct CompositionParams {
     std::optional<int> cellHeight;                   // 重排单元高（可选）
     core::Color padColor{core::kTransparent};        // 空位/余量填充色（默认透明）
     ExportFormat format{ExportFormat::PNG};          // 导出格式
-    std::string naming{"{name}_{index:03d}"};        // 分离导出命名模板（SPEC §4.1）
-    int quality{90};                                 // 有损格式质量参数
+    std::string naming{core::texts::defaults::kNamingTemplate};  // 分离导出命名模板（SPEC §4.1）
+    int quality{core::nums::engine::kDefaultQuality};             // 有损格式质量参数
     bool keepMetadata{false};                        // 是否保留元数据（NFR-9）
 };
 
@@ -103,8 +105,8 @@ struct Composition {
     std::vector<Placement> placements;
     // 导出设置（compose 从 CompositionParams 透传，供 exportImage 落盘时使用）：
     ExportFormat format{ExportFormat::PNG};    // 导出图像格式
-    std::string naming{"{name}_{index:03d}"};  // 分离导出命名模板（{name}/{index}/{index:03d}/{row}/{col}）
-    int quality{90};                           // 有损格式（JPEG/WebP）质量参数
+    std::string naming{core::texts::defaults::kNamingTemplate};  // 分离导出命名模板（{name}/{index}/{index:03d}/{row}/{col}）
+    int quality{core::nums::engine::kDefaultQuality};             // 有损格式（JPEG/WebP）质量参数
     core::Color padColor{core::kTransparent};  // 合并画布空位/余量填充色（exportMerged 使用）
 };
 

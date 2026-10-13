@@ -5,11 +5,15 @@
 // ============================================================================
 #include "geometry/path.h"
 
+#include "core/core_nums.h" // 展平容差下限 / 分段上限 / 零长阈值单一真相源（常量层）
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
 
 namespace idc::geometry {
+
+namespace nums = core::nums; // 简写常量层命名空间（仅本文件内可见）
 
 // 判断点是否位于包围盒内部（含边界）。
 bool BoundingBox::contains(const double px, const double py) const {
@@ -103,8 +107,8 @@ static void flattenQuad(Path& out, const double cx, const double cy, const doubl
     const double mx = (x0 + x1) / 2.0;
     const double my = (y0 + y1) / 2.0;
     const double dev = std::hypot(cx - mx, cy - my);
-    int steps = static_cast<int>(std::ceil(std::sqrt(dev / std::max(flatness, 1e-6))));
-    steps = std::clamp(steps, 2, 64);
+    int steps = static_cast<int>(std::ceil(std::sqrt(dev / std::max(flatness, nums::geometry::kFlatnessFloor))));
+    steps = std::clamp(steps, 2, nums::geometry::kMaxQuadSegments);
     for (int i = 1; i <= steps; ++i) {
         const double t = static_cast<double>(i) / steps;
         const double u = 1.0 - t;
@@ -120,8 +124,8 @@ static void flattenCubic(Path& out, const double c1x, const double c1y, const do
     const double dev = std::max(
         std::hypot(c1x - (2 * x0 + x1) / 3.0, c1y - (2 * y0 + y1) / 3.0),
         std::hypot(c2x - (x0 + 2 * x1) / 3.0, c2y - (y0 + 2 * y1) / 3.0));
-    int steps = static_cast<int>(std::ceil(std::sqrt(dev / std::max(flatness, 1e-6))));
-    steps = std::clamp(steps, 2, 96);
+    int steps = static_cast<int>(std::ceil(std::sqrt(dev / std::max(flatness, nums::geometry::kFlatnessFloor))));
+    steps = std::clamp(steps, 2, nums::geometry::kMaxCubicSegments);
     for (int i = 1; i <= steps; ++i) {
         const double t = static_cast<double>(i) / steps;
         const double u = 1.0 - t;
@@ -212,7 +216,7 @@ static double pointToSegmentDistance(const double px, const double py,
     const double dx = x2 - x1;
     const double dy = y2 - y1;
     const double lenSq = dx * dx + dy * dy;
-    if (lenSq <= 1e-12) return std::hypot(px - x1, py - y1);
+    if (lenSq <= nums::geometry::kZeroLengthEps) return std::hypot(px - x1, py - y1);   // 零长边：按端点距离算
     double t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
     t = std::clamp(t, 0.0, 1.0);
     const double projX = x1 + t * dx;

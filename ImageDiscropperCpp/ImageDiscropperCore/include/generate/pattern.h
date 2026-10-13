@@ -14,7 +14,10 @@
 // ============================================================================
 #pragma once
 
+#include <string>
+
 #include "core/color.h"
+#include "core/core_nums.h"  // 图案参数出厂默认（常量层）
 #include "core/image.h"
 
 namespace idc::generate {
@@ -40,7 +43,7 @@ inline constexpr long long kMaxTotalPixels = 64LL * 1000 * 1000;
 //   RadialRays     —— 以图像中心为顶点的放射扇区，双色交替，扇区数由 period 定标。
 //   HueGradient    —— 全色相彩虹渐变，沿 orientation 轴扫 H∈[0,1)；period 为一个彩虹循环的像素宽（全饱和全明度、不透明）。
 //   Noise          —— 确定性伪随机噪声（由 seed 定种、同 seed+同尺寸恒同图，供 C++/Rust 逐像素对拍）；
-//                      noiseMode 选 全彩 RGB / 灰度 / 双色(bg↔fg 随机)；orientation/period/lineWidth/dotRadius 无效。
+//                      noiseMode 选 全彩 RGB / 灰度 / 双色(bg fg 随机)；orientation/period/lineWidth/dotRadius 无效。
 // ---------------------------------------------------------------------------
 enum class PatternKind {
     Solid,
@@ -79,8 +82,10 @@ enum class ImageAnchor {
     BottomLeft, BottomCenter, BottomRight,
 };
 
-// 返回图案类型的中文名（供 GUI 下拉/提示展示）。
-const char* patternKindName(PatternKind kind);
+// 返回图案类型的**显示名**（供 GUI 下拉 / 错误提示展示）：按当前语言取译文，源语言下就是中文。
+//   返回 std::string 而非 const char*：非源语言时译文来自查表得到的临时串，返回指针会悬空。
+//   落盘与比较用的 §7 token 不走本函数（见 texts::defaults::kPatternKind* 与 gen*Token 两套映射）。
+std::string patternKindName(PatternKind kind);
 
 // ---------------------------------------------------------------------------
 // PatternParams：一次生成的全部可调参数（GUI 采集后原样搬运，无引擎语义）。
@@ -90,9 +95,9 @@ struct PatternParams {
     core::Color background{core::kWhite};   // 底色（alpha 生效；渐变起点色）
     core::Color foreground{core::kBlack};   // 前景/图案色（渐变终点色）
     Orientation orientation{Orientation::Horizontal};
-    int period{32};      // 周期 / 格子边长 / 环间距（px）；内部钳到 >=2
-    int lineWidth{1};    // 网格线 / 同心环线宽（px）；内部钳到 >=1
-    int dotRadius{2};    // 点阵点半径（px）；内部钳到 >=1
+    int period{core::nums::generate::kDefaultPeriod};      // 周期 / 格子边长 / 环间距（px）；内部钳到 >=2
+    int lineWidth{core::nums::generate::kDefaultLineWidth}; // 网格线 / 同心环线宽（px）；内部钳到 >=1
+    int dotRadius{core::nums::generate::kDefaultDotRadius}; // 点阵点半径（px）；内部钳到 >=1
     int seed{0};         // 噪声种子（仅 Noise 用，>=0；同 seed+同尺寸恒同图）
     NoiseMode noiseMode{NoiseMode::FullColor};   // 噪声配色模式（仅 Noise 用）
 

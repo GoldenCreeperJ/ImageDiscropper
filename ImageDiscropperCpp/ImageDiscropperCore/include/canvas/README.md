@@ -20,5 +20,5 @@
 
 **约定**：`composeCanvas` 恒输出 `RGBA`；非法尺寸（宽或高 ≤ 0，或超护栏）返回空图（与 `makePattern` 同口径）。
 `layers` 内存顺序不敏感，合成恒按 `zOrder` 升序（同 `zOrder` 维持原相对序，稳定排序）。画布**恒铺全透明底、无画布级背景**；叠加层整体显隐由调用方（GUI）以传空 `layers` 实现，Core 不持显隐态。`decodedPixels` **不入配置**，仅 `sourceKind==File` 且上层已解码时非空；配方 / 占位时为空。
-`Recipe` 层据 `generate::makePattern` 现算、可逐字节复现（供 C++↔Rust 逐像素对拍）；`File` 层只对拍结构（落位 / z 序 / 管线声明）。
+`Recipe` 层据 `generate::makePattern` 现算、可逐字节复现（供 C++ Rust 逐像素对拍）；`File` 层只对拍结构（落位 / z 序 / 管线声明）。
 source-over 与 `generate` 共用同一 `core::compositeOver` 真相源。

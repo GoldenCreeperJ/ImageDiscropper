@@ -10,6 +10,9 @@
 // ============================================================================
 #include "engine/engine.h"
 
+#include "i18n/core_i18n.h"   // IDC_KTR：执行失败报因取译文（缺译文回退常量层）
+#include "i18n/core_texts.h" // 报因文本单一真相源（常量层 texts::msg）
+
 #include <vector>
 
 namespace idc::engine {
@@ -86,18 +89,18 @@ static EngineResult runEngineImpl(const SourceInfo& source, const int clipW, con
 
     // --- 前置校验：尺寸合法性（非正视为空输入）。---
     if (source.width <= 0 || source.height <= 0) {
-        result.error = "源图像为空，无法切割";
+        result.error = IDC_KTR(msg, kEngineSourceEmpty);
         return result;
     }
 
     // --- E-1：选框/矩形退化校验（贯穿全图的切割线需有效区间）。---
     if (config.cut.generator == CutGenerator::RECT &&
         config.cut.rect.width() <= 0 && config.cut.rect.height() <= 0) {
-        result.error = "选框退化（E-1）：矩形宽高均非正，无法生成切割线";
+        result.error = IDC_KTR(msg, kEngineRectDegenerate);
         return result;
     }
     if (config.cut.generator == CutGenerator::MULTI_RECT && config.cut.rects.empty()) {
-        result.error = "多矩形为空（E-1）：无矩形可用于切割";
+        result.error = IDC_KTR(msg, kEngineMultiRectEmpty);
         return result;
     }
 
@@ -110,7 +113,7 @@ static EngineResult runEngineImpl(const SourceInfo& source, const int clipW, con
         grid = induceGrid(lines, source);
     }
     if (grid.cellCount() == 0) {
-        result.error = "切割未产生有效网格（E-1/E-5）：单元尺寸或图像尺寸非正，无法铺设";
+        result.error = IDC_KTR(msg, kEngineNoGrid);
         return result;
     }
     const int cellCount = static_cast<int>(grid.cellCount());
@@ -129,7 +132,7 @@ static EngineResult runEngineImpl(const SourceInfo& source, const int clipW, con
 
     // --- E-6：删除区为空（REMOVE 极性却无单元被选中剔除）。---
     if (config.cut.polarity == Polarity::REMOVE && selection.selectedCount() == 0) {
-        result.error = "删除区为空（E-6）：无单元被选中剔除";
+        result.error = IDC_KTR(msg, kEngineDeleteSetEmpty);
         return result;
     }
 
@@ -139,7 +142,7 @@ static EngineResult runEngineImpl(const SourceInfo& source, const int clipW, con
 
     // --- E-7 / E-6：保留区为空（删除区覆盖全图或选择集为空）。---
     if (kept.empty()) {
-        result.error = "保留集为空（E-7）：删除区覆盖全图或选择集为空";
+        result.error = IDC_KTR(msg, kEngineKeepSetEmpty);
         return result;
     }
 
@@ -162,14 +165,13 @@ static EngineResult runEngineImpl(const SourceInfo& source, const int clipW, con
     const bool merged = emitParams.mode == EmitMode::MERGED;
     // 显式选择重排但非 L3 → 直接报错（不静默改布局）。
     if (merged && emitParams.layout == MergeLayout::REARRANGE && !isL3) {
-        result.error = "合并重排仅 L3 网格模式支持：请改用合并坍缩或分离导出";
+        result.error = IDC_KTR(msg, kEngineRearrangeNeedsL3);
         return result;
     }
     // MERGED+COLLAPSE 但不可坍缩：L3 降级为重排（SPEC §4.4 推论）；L1/L2 无重排可用 → 报错。
     if (merged && emitParams.layout == MergeLayout::COLLAPSE && !result.collapsible) {
         if (!isL3) {
-            result.error = "保留集不可坍缩（SPEC §4.4），且 L1/L2 不支持合并重排："
-                           "请调整切割线使删除区覆盖整行/整列，或改用分离导出";
+            result.error = IDC_KTR(msg, kEngineNotCollapsible);
             return result;
         }
         emitParams.layout = MergeLayout::REARRANGE;
@@ -186,7 +188,7 @@ EngineResult runEngine(const core::Image& image, const EngineConfig& config) {
     // --- 前置校验：源图像。---
     if (image.empty()) {
         EngineResult r;
-        r.error = "源图像为空，无法切割";
+        r.error = IDC_KTR(msg, kEngineSourceEmpty);
         return r;
     }
 
@@ -198,7 +200,7 @@ EngineResult runEngine(const core::Image& image, const EngineConfig& config) {
     const core::Image& work = hasPreprocess ? preprocessed : image;
     if (work.empty()) {
         EngineResult r;
-        r.error = "预处理后图像为空，无法切割";
+        r.error = IDC_KTR(msg, kEngineSourceEmptyAfterPreprocess);
         return r;
     }
 

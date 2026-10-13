@@ -47,6 +47,24 @@ public:
     //   width/height —— resize 设绝对值、rotate 90/270 交换宽高，gray/invert/split/flip 保持；
     //   rotQuad     —— 所有 rotate 角度累加后 mod 4（0..3），忽略 flip（不入签名）。
     GeometryOut geometryOutput(int width, int height) const;
+
+    // ---------------------------------------------------------------------------
+    // 轴对齐矩形的几何映射（与 applyOne/remapD4/resize 的逐像素几何严格同口径）。
+    //   用途：GUI 画布底图 = 画布级有效管线作用到 composeCanvas 产物（工作图坐标系），而图层落位框
+    //   来自 canvas::layerPlacement（画布坐标系）。施加画布级几何步（rotate/flip/resize）后两坐标系分叉，
+    //   故需把落位框正向映射到工作图坐标系、把拖动增量逆向映射回画布坐标系，使选框与合成内容对齐、随光标同向。
+    // ---------------------------------------------------------------------------
+    // 映射后的矩形（输出图坐标系，左上原点，连续坐标：x/y 可非整、width/height 为跨度）。
+    struct MappedRect { double x; double y; double width; double height; };
+
+    // 正向：把输入图（inW×inH）坐标系内的轴对齐矩形 [x,y,width,height]（连续坐标），按本管线**依序**各几何步
+    //   映到输出坐标系：色彩步（gray/invert/split）直通；resize 按输出/输入尺寸线性缩放；rotate(90/180/270)/flip
+    //   做刚体（含镜像）顶点对射后取包围盒。空管线 / 仅色彩步 → 原样返回。
+    MappedRect mapRectGeometry(double x, double y, double width, double height, int inW, int inH) const;
+
+    // 逆向：把输出（工作图）坐标系内的一处平移增量 (dx,dy) 映回输入（画布）坐标系增量（逆序撤销各几何步的
+    //   线性部分：resize 缩放取倒数、rotate/flip 用其逆变换；色彩步直通）。inW/inH 为输入（画布）尺寸。
+    void mapDeltaToInput(double dx, double dy, int inW, int inH, double& outDx, double& outDy) const;
 };
 
 // 便捷函数：直接对一张图像应用单个操作，返回结果。

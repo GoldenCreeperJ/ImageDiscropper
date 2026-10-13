@@ -9,12 +9,16 @@
 // ============================================================================
 #include "annotation/rasterizer.h"
 
+#include "core/core_nums.h" // 展平容差与描边下限单一真相源（常量层）
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <vector>
 
 namespace idc::annotation {
+
+namespace nums = core::nums; // 简写常量层命名空间（仅本文件内可见）
 
 // ---------------------------------------------------------------------------
 // 内部工具：Alpha 混合（src-over）
@@ -178,12 +182,12 @@ void rasterize(core::Image& image, const geometry::Shape& shape, const PaintStyl
 
     // 1. 展平路径（取世界路径：已套用形状的非破坏性变换，故缩放/旋转/翻转后的烧录与画布一致）。
     const geometry::Path path = shape.worldPath();
-    const geometry::Path flat = path.flattened(0.5);
+    const geometry::Path flat = path.flattened(nums::geometry::kRasterFlatnessPx);
     const auto polys = extractPolylines(flat);
     if (polys.empty()) return;
 
     const bool isLine = shape.type() == geometry::ShapeType::LINE;
-    const int strokeW = std::max(1, style.strokeWidth);
+    const int strokeW = std::max(nums::annotation::kMinStrokeWidth, style.strokeWidth);
 
     // 2. 填充（LINE 不填充；用独立 fillColor 填内部）
     if (style.fill && !isLine) {

@@ -8,8 +8,8 @@
 # 分块依据：
 #   - Core 必须先于 CLI 引入：CLI 链接 image_discropper_core 静态库目标，
 #     该目标须在 CLI 子目录处理前已存在（CMake 目标按引入顺序对后续兄弟目录可见）。
-#   - Core 以 PARENT_SCOPE 向本作用域回传 IDC_CORE_VERSION，供 CLI 的 --version
-#     打印 "(core <core-version>)"。
+#   - 版本单一来源在根 project()，向 Core / CLI / GUI 透传（见下方「版本单一来源」块）；
+#     CLI --version 打印 "(core <core-version>)" 所用的 IDC_CORE_VERSION 即由此而来。
 # 说明：使用 CLion / 命令行时，应以本目录为 CMake 源目录加载工程（CLion 会识别
 #       CMakePresets.json 中的预设）。vcpkg 工具链（Stb / WebP / nlohmann_json）
 #       由 Core 以 PRIVATE 方式接入，CLI/GUI 只经 Core 公共头间接使用，无需感知第三方库。
@@ -46,15 +46,20 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 # ---------------------------------------------------------------------------
+# 版本单一来源（发版只改上方 project() 的 VERSION）：向 Core / CLI / GUI 三层透传。
+#   · 产品版本 = 根工程 PROJECT_VERSION → CLI 与 GUI 同源。
+#   · IDC_CORE_VERSION 默认同产品版本；如需 Core 库版本独立演进，仅改本行。
+#   各子工程独立配置本身目录时另自带占位回退，故脱离根也能构建（见其 CMakeLists）。
+# ---------------------------------------------------------------------------
+set(IDC_CLI_VERSION  "${PROJECT_VERSION}")
+set(IDC_GUI_VERSION  "${PROJECT_VERSION}")
+set(IDC_CORE_VERSION "${PROJECT_VERSION}")
+
+# ---------------------------------------------------------------------------
 # 子工程引入（顺序即依赖顺序）。
 # ---------------------------------------------------------------------------
 # Core：纯逻辑静态库 image_discropper_core。
 add_subdirectory(ImageDiscropperCore)
-
-# CLI / GUI 版本 = 根工程版本（产品版本单一来源：根 project() 一处维护，
-# 发版时只改这里）；Core 版本由上方 add_subdirectory 经 PARENT_SCOPE 回传（库版本独立）。
-set(IDC_CLI_VERSION "${PROJECT_VERSION}")
-set(IDC_GUI_VERSION "${PROJECT_VERSION}")
 
 # CLI：命令行薄壳 idc。
 add_subdirectory(ImageDiscropperCli)

@@ -230,10 +230,10 @@ void testEnginePipeline() {
         cfg.cut.rect = RectRegion(30, 20, 70, 60);
         cfg.cut.polarity = Polarity::REMOVE;
         cfg.emitParams.mode = EmitMode::MERGED;
-        cfg.emitParams.layout = MergeLayout::REARRANGE; // L2 重排 → 拒绝
+        cfg.emitParams.layout = MergeLayout::REARRANGE; // 非网格模式重排 → 拒绝
         const EngineResult r = runEngine(img, cfg);
         CHECK(!r.ok);
-        CHECK(r.error.find("L3") != std::string::npos);
+        CHECK(r.error.find("网格") != std::string::npos);
     }
 
     // ---- 排序策略：Sequence::build 生成序号（FR-L3.5）。----

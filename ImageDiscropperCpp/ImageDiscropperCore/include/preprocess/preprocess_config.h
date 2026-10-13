@@ -7,6 +7,8 @@
 #include <string>
 #include <variant>
 
+#include "i18n/core_texts.h" // 通道掩码 token 单一真相源（常量层）
+
 namespace idc::preprocess {
 
 // ---------------------------------------------------------------------------
@@ -37,13 +39,13 @@ struct GrayOp {
 
 // 通道分离：mask 为长度 3 的字符串（"1" 保留、"0" 置零）。灰度图无 R/G/B，返回副本不变。
 struct SplitOp {
-    std::string mask = "111";
+    std::string mask = core::texts::defaults::kMaskAllOn;
     bool operator==(const SplitOp& o) const { return mask == o.mask; }
 };
 
 // 通道反色：mask 为长度 3 的字符串（"1" 反色、"0" 保留）。灰度图：mask 全 "0"（"000"）为空操作，否则逐字节取反（255-v）。
 struct InvertOp {
-    std::string mask = "111";
+    std::string mask = core::texts::defaults::kMaskAllOn;
     bool operator==(const InvertOp& o) const { return mask == o.mask; }
 };
 

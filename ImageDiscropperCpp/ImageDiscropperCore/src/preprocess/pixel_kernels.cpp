@@ -8,10 +8,17 @@
 // ============================================================================
 #include "pixel_kernels.h"
 
+#include "core/core_nums.h"   // 参数边界（常量层）
+#include "i18n/core_texts.h"  // 通道掩码 token（常量层）
+
 #include <algorithm>
 #include <cstdint>
 
 namespace idc::preprocess {
+
+// 常量层别名（仅本 TU 可见）：通道掩码 token 与掩码长度。
+namespace masks = core::texts::defaults;
+namespace nums = core::nums;
 
 // 内部工具：归一化角度到 [0, 360)。
 static int normalizeAngle(const int angle) {
@@ -136,8 +143,8 @@ core::Image channelMap(const core::Image& src, const std::string& k, const std::
     std::uint8_t* d = out.data();
     const std::size_t n = src.sizeInBytes();
 
-    const std::string km = k.size() == 3 ? k : std::string("111");
-    const std::string jm = j.size() == 3 ? j : std::string("000");
+    const std::string km = k.size() == nums::preprocess::kMaskLength ? k : std::string(masks::kMaskAllOn);
+    const std::string jm = j.size() == nums::preprocess::kMaskLength ? j : std::string(masks::kMaskAllOff);
     std::uint8_t ka[3], ja[3];
     for (int c = 0; c < 3; ++c) {
         ka[c] = km[c] == '1' ? 0xFF : 0x00;
@@ -161,22 +168,23 @@ core::Image invertChannels(const core::Image& src, const std::string& mask) {
     if (src.empty()) return src.clone();
     if (src.isGray()) {
         // 灰度单亮度通道：mask 全 '0' 不反色（与彩色恒等语义对齐），否则对每字节取 255-v。
-        if (const std::string m = mask.size() == 3 ? mask : std::string("111"); m == "000") return src.clone();
+        if (const std::string m = mask.size() == nums::preprocess::kMaskLength ? mask : std::string(masks::kMaskAllOn);
+            m == masks::kMaskAllOff) return src.clone();
         core::Image out(src.width(), src.height(), src.format());
         const std::size_t n = src.sizeInBytes();
         for (std::size_t i = 0; i < n; ++i) out.data()[i] = static_cast<std::uint8_t>(src.data()[i] ^ 0xFF);  // 255 - v
         return out;
     }
-    const std::string m = mask.size() == 3 ? mask : std::string("111");
-    return channelMap(src, "111", m);
+    const std::string m = mask.size() == nums::preprocess::kMaskLength ? mask : std::string(masks::kMaskAllOn);
+    return channelMap(src, masks::kMaskAllOn, m);
 }
 
 // 按通道分离：mask 中 '0' 位置对应的通道被置 0，'1' 位置保留。即 channelMap(mask, "000") 特例。
 // 灰度图无 R/G/B 之分，直接返回副本。
 core::Image splitChannels(const core::Image& src, const std::string& mask) {
     if (src.empty() || src.isGray()) return src.clone();
-    const std::string m = mask.size() == 3 ? mask : std::string("111");
-    return channelMap(src, m, "000");
+    const std::string m = mask.size() == nums::preprocess::kMaskLength ? mask : std::string(masks::kMaskAllOn);
+    return channelMap(src, m, masks::kMaskAllOff);
 }
 
 } // namespace idc::preprocess

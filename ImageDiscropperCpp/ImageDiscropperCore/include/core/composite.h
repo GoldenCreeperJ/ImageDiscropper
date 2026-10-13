@@ -17,17 +17,17 @@
 namespace idc::core {
 
 // source-over 合成：把半透明源色 src 盖到目标色 dst 上（非预乘 alpha）。
-inline core::Color compositeOver(const core::Color& dst, const core::Color& src) {
+inline Color compositeOver(const Color& dst, const Color& src) {
     if (src.a == 255) return src;
     if (src.a == 0) return dst;
     const double sa = src.a / 255.0;
     const double da = dst.a / 255.0;
     const double oa = sa + da * (1.0 - sa);
-    if (oa <= 0.0) return core::Color(0, 0, 0, 0);
+    if (oa <= 0.0) return Color(0, 0, 0, 0);
     auto ch = [&](const std::uint8_t s, const std::uint8_t d) {
         return static_cast<std::uint8_t>(std::lround(std::clamp((s * sa + d * da * (1.0 - sa)) / oa, 0.0, 255.0)));
     };
-    return core::Color(ch(src.r, dst.r), ch(src.g, dst.g), ch(src.b, dst.b),
+    return Color(ch(src.r, dst.r), ch(src.g, dst.g), ch(src.b, dst.b),
                        static_cast<std::uint8_t>(std::lround(std::clamp(oa * 255.0, 0.0, 255.0))));
 }
 

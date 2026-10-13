@@ -603,6 +603,104 @@ static void testPreprocess() {
     const auto [width1, height1, rotQuad1] = pg2.geometryOutput(10, 20);
     CHECK(rotQuad1 == 1 && width1 == 20 && height1 == 10);
 
+    // ---- mapRectGeometry / mapDeltaToInput：画布坐标系↔工作图坐标系的矩形/增量几何映射 ----
+    // 口径与逐像素几何一致（连续坐标）：供 GUI 把 layerPlacement 落位框映到底图坐标系、拖动增量逆映回画布。
+    {
+        // 空管线 / 仅色彩步 → 恒等直通。
+        preprocess::PreprocessPipeline iden;
+        const auto r0 = iden.mapRectGeometry(2, 3, 4, 5, 10, 6);
+        CHECK(r0.x == 2 && r0.y == 3 && r0.width == 4 && r0.height == 5);
+        iden.add(preprocess::GrayOp{});
+        iden.add(preprocess::InvertOp{});
+        const auto r0g = iden.mapRectGeometry(2, 3, 4, 5, 10, 6);
+        CHECK(r0g.x == 2 && r0g.y == 3 && r0g.width == 4 && r0g.height == 5);
+        double idx0 = 7.0, idy0 = -2.0;
+        iden.mapDeltaToInput(7, -2, 10, 6, idx0, idy0);
+        CHECK(idx0 == 7 && idy0 == -2);
+    }
+    {
+        // rotate90CW（输入 10×6）：(px,py)->(curH-py, px)，矩形 (2,1,4,3) 角点后包围盒：
+        //   x0=6-4=2, y0=2, x1=6-1=5, y1=6 → (2,2,3,4)。
+        preprocess::PreprocessPipeline q; q.add(preprocess::RotateOp{90});
+        const auto r90 = q.mapRectGeometry(2, 1, 4, 3, 10, 6);
+        CHECK(r90.x == 2 && r90.y == 2 && r90.width == 3 && r90.height == 4);
+        // 拖动增量逆映射：正向 (dx,dy)->(-dy,dx)，逆为 (dy,-dx)。
+        double ox = 0, oy = 0;
+        q.mapDeltaToInput(3, 5, 10, 6, ox, oy);
+        CHECK(ox == 5 && oy == -3);
+    }
+    {
+        // rotate180（10×6）：矩形 (2,1,4,3) → x0=10-6=4, y0=6-4=2 → (4,2,4,3)；增量自逆取反。
+        preprocess::PreprocessPipeline q; q.add(preprocess::RotateOp{180});
+        const auto r = q.mapRectGeometry(2, 1, 4, 3, 10, 6);
+        CHECK(r.x == 4 && r.y == 2 && r.width == 4 && r.height == 3);
+        double ox = 0, oy = 0;
+        q.mapDeltaToInput(3, 5, 10, 6, ox, oy);
+        CHECK(ox == -3 && oy == -5);
+    }
+    {
+        // rotate270CW（10×6）：(px,py)->(py, curW-px)，包围盒 (1,4,3,4)；正向增量 (dy,-dx) → 逆 (-dy,dx)。
+        preprocess::PreprocessPipeline q; q.add(preprocess::RotateOp{270});
+        const auto r = q.mapRectGeometry(2, 1, 4, 3, 10, 6);
+        CHECK(r.x == 1 && r.y == 4 && r.width == 3 && r.height == 4);
+        double ox = 0, oy = 0;
+        q.mapDeltaToInput(3, 5, 10, 6, ox, oy);
+        CHECK(ox == -5 && oy == 3);
+    }
+    {
+        // flipH（10×6）：矩形 (2,1,4,3) → x0=10-6=4 → (4,1,4,3)；dx 取反、dy 不变。
+        preprocess::PreprocessPipeline q; q.add(preprocess::FlipOp{true});
+        const auto r = q.mapRectGeometry(2, 1, 4, 3, 10, 6);
+        CHECK(r.x == 4 && r.y == 1 && r.width == 4 && r.height == 3);
+        double ox = 0, oy = 0;
+        q.mapDeltaToInput(3, 5, 10, 6, ox, oy);
+        CHECK(ox == -3 && oy == 5);
+        // flipV：y0=6-4=2 → (2,2,4,3)；dy 取反。
+        preprocess::PreprocessPipeline qv; qv.add(preprocess::FlipOp{false});
+        const auto rv = qv.mapRectGeometry(2, 1, 4, 3, 10, 6);
+        CHECK(rv.x == 2 && rv.y == 2 && rv.width == 4 && rv.height == 3);
+        qv.mapDeltaToInput(3, 5, 10, 6, ox, oy);
+        CHECK(ox == 3 && oy == -5);
+    }
+    {
+        // resize（10×6 → 20×12，因子 2）：矩形与增量同比例正向；逆映射取倒数。
+        preprocess::PreprocessPipeline q; q.add(preprocess::ResizeOp{20, 12});
+        const auto r = q.mapRectGeometry(2, 1, 4, 3, 10, 6);
+        CHECK(r.x == 4 && r.y == 2 && r.width == 8 && r.height == 6);
+        double ox = 0, oy = 0;
+        q.mapDeltaToInput(6, 8, 10, 6, ox, oy);
+        CHECK(ox == 3 && oy == 4);
+        // 非正尺寸 → 空操作（直通）。
+        preprocess::PreprocessPipeline qb; qb.add(preprocess::ResizeOp{0, 0});
+        const auto rb = qb.mapRectGeometry(2, 1, 4, 3, 10, 6);
+        CHECK(rb.x == 2 && rb.y == 1 && rb.width == 4 && rb.height == 3);
+    }
+    {
+        // 复合链（resize 2× → rot90）逐步与整体一致；矩形映后的中心与逐像素正映射同口径。
+        // resize → (4,2,8,6) @ 20×12；rot90（curH=12）：nx0=12-8=4, ny0=4, nx1=12-2=10, ny1=12 → (4,4,6,8)。
+        preprocess::PreprocessPipeline q2;
+        q2.add(preprocess::ResizeOp{20, 12});
+        q2.add(preprocess::RotateOp{90});
+        const auto rc = q2.mapRectGeometry(2, 1, 4, 3, 10, 6);
+        CHECK(rc.x == 4 && rc.y == 4 && rc.width == 6 && rc.height == 8);
+        // 增量：正向 resize×2 再 rot90 (dx,dy)->(-2dy,2dx)；逆：先 rot90⁻¹ (dy,-dx) 再 resize⁻¹ ÷2。
+        double ox = 0, oy = 0;
+        q2.mapDeltaToInput(4, 8, 10, 6, ox, oy);
+        CHECK(ox == 4 && oy == -2);   // (8/2, -4/2) = (4,-2)
+    }
+    {
+        // 正/逆一致性：[Rot90, FlipH] 的增量正映为 (dx,dy)->(dy,dx)（自逆），
+        //   故 mapDeltaToInput 连施两次应还原原增量。
+        preprocess::PreprocessPipeline q;
+        q.add(preprocess::RotateOp{90});
+        q.add(preprocess::FlipOp{true});
+        double cx = 0, cy = 0;
+        q.mapDeltaToInput(5, -2, 10, 6, cx, cy);        // 第一次逆映 → (-2,5)
+        double bx = 0, by = 0;
+        q.mapDeltaToInput(cx, cy, 10, 6, bx, by);       // 第二次逆映（自逆）→ 还原 (5,-2)
+        CHECK(bx == 5 && by == -2);                    // 往返还原原增量
+    }
+
     // ---- 折叠/执行融合回归队列：applyExec 与逐步 apply 逐像素等价（声明层 folded() 已删除）----
     // 非方形渐变图：区分 rotate90/270 的宽高互换、flip 的 H/V 轴向，且内容逐像素唯一（镜像/旋转可辨）。
     auto buildFoldImg = [] {
@@ -1391,6 +1489,40 @@ static void testCanvas() {
                 CHECK(viaBase.getPixel(x, y) == viaCanvas.getPixel(x, y));
     }
 
+    // ---- 整层生效（色彩及底色）：源空但带底色框 + Invert → 框底色一起被反色（旧口径预处理早于进框、底色不受影响）----
+    {
+        ImageLayer a; a.id = 20; a.sourceKind = LayerSourceKind::File;   // decodedPixels 空（仅靠底色框呈现）
+        a.hasImagePlacement = true; a.boxWidth = 2; a.boxHeight = 2;
+        generate::PatternParams bd; bd.kind = generate::PatternKind::Solid; bd.background = green;
+        a.boxBackdrop = bd;
+        a.preprocess.add(preprocess::InvertOp{"111"});
+        a.transform.inCanvasAnchor = generate::ImageAnchor::TopLeft;
+        a.transform.layerPivot = generate::ImageAnchor::TopLeft;
+        const std::vector st = {a};
+        const core::Image out = composeCanvas(st, 2, 2);
+        CHECK(out.getPixel(0, 0) == core::Color(255, 0, 255, 255));   // 绿底反色成品红（证明预处理作用于含底色的整层）
+    }
+
+    // ---- 整层生效（几何驱动足迹）：源 2×4 + 目标框 2×4 + Rotate90 → 落位 4×2（宽高互换、不被拉回旧框）----
+    {
+        ImageLayer a; a.id = 21; a.sourceKind = LayerSourceKind::File;
+        a.decodedPixels = solid(2, 4, red);
+        a.transform.width = 2; a.transform.height = 4;    // 旧口径下 scaleToTarget 会把旋转结果硬拉回 2×4
+        a.preprocess.add(preprocess::RotateOp{90});
+        const auto p = layerPlacement(a, 8, 8);
+        CHECK(p.has_value() && p->width == 4 && p->height == 2);   // 几何步改变最终足迹（4×2）
+    }
+
+    // ---- 整层生效（resize 步设新尺寸、覆盖 transform 目标）：源 4×4 + transform 2×2 + Resize6×3 → 落位 6×3 ----
+    {
+        ImageLayer a; a.id = 22; a.sourceKind = LayerSourceKind::File;
+        a.decodedPixels = solid(4, 4, blue);
+        a.transform.width = 2; a.transform.height = 2;
+        a.preprocess.add(preprocess::ResizeOp{6, 3});
+        const auto p = layerPlacement(a, 20, 20);
+        CHECK(p.has_value() && p->width == 6 && p->height == 3);
+    }
+
     std::cout << "[canvas] OK\n";
 }
 
@@ -1415,6 +1547,8 @@ int main() {
     testEngineConfigJson(); // 配置 JSON 存取（SPEC §7，含 annotations 段）
     testAnnoParseText();    // 标注 JSON 文本段级解析（SPEC §7，供 CLI 复用）
     testAnnoAnchorRoundTrip(); // 约束图元锚点往返（buildShape ↔ shapeToJson/FromJson 顶点级一致）
+    testI18nCatalog();   // i18n 目录对账：读源码树比三层「常量层 ↔ 译文表」，孤儿键 / 重复键 / 跨层撞键即红
+    testI18nCore();      // i18n 机制内核（本段会改进程级语言态，故置于最后，收尾已复位到源语言）
     std::cout << "all tests passed.\n";
     return 0;
 }

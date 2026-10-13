@@ -3,30 +3,36 @@
 // 作用：实现 makePattern 与各图案类型的逐像素生成（见同名头文件说明）。
 // 分块依据：先按类型铺一张底色（Solid 直接返回），再对纹理类逐像素判定前景/背景；
 //           渐变类走颜色插值，图案类走整除/取模或极坐标判定。所有输出恒为 RGBA。
+// 显示名：patternKindName 不返回中文字面量，而是经 IDC_KTR 按当前语言现取（源语言下逐字节回到中文）；
+//         它与落盘用的 §7 图案 token（defaults::kPatternKind* / gen*Token）是互无关的两套值。
 // ============================================================================
 #include "generate/pattern.h"
+
+#include "i18n/core_i18n.h"   // IDC_KTR：图案显示名的门面
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <string>
 
 namespace idc::generate {
 
-const char* patternKindName(const PatternKind kind) {
+std::string patternKindName(const PatternKind kind) {
     switch (kind) {
-        case PatternKind::Solid:          return "纯色";
-        case PatternKind::LinearGradient: return "线性渐变";
-        case PatternKind::RadialGradient: return "径向渐变";
-        case PatternKind::Checkerboard:   return "棋盘格";
-        case PatternKind::Stripes:        return "条纹";
-        case PatternKind::GridLines:      return "网格线";
-        case PatternKind::DotGrid:        return "点阵";
-        case PatternKind::Concentric:     return "同心环";
-        case PatternKind::RadialRays:     return "放射线";
-        case PatternKind::HueGradient:   return "色相渐变";
-        case PatternKind::Noise:          return "噪声";
+        case PatternKind::Solid:          return IDC_KTR(msg, kPatternSolid);
+        case PatternKind::LinearGradient: return IDC_KTR(msg, kPatternLinearGradient);
+        case PatternKind::RadialGradient: return IDC_KTR(msg, kPatternRadialGradient);
+        case PatternKind::Checkerboard:   return IDC_KTR(msg, kPatternCheckerboard);
+        case PatternKind::Stripes:        return IDC_KTR(msg, kPatternStripes);
+        case PatternKind::GridLines:      return IDC_KTR(msg, kPatternGridLines);
+        case PatternKind::DotGrid:        return IDC_KTR(msg, kPatternDotGrid);
+        case PatternKind::Concentric:     return IDC_KTR(msg, kPatternConcentric);
+        case PatternKind::RadialRays:     return IDC_KTR(msg, kPatternRadialRays);
+        case PatternKind::HueGradient:   return IDC_KTR(msg, kPatternHueGradient);
+        case PatternKind::Noise:          return IDC_KTR(msg, kPatternNoise);
     }
-    return "纯色";
+    // 枚举外的值（理论上不可达）：与旧实现同义兜底到「纯色」。
+    return IDC_KTR(msg, kPatternSolid);
 }
 
 namespace {
@@ -54,9 +60,9 @@ int floorDiv(const int v, const int p) {
 //   与迭代顺序无关、跨编译器/跨语言（Rust 按同常量同位宽复现）可逐像素对拍。
 std::uint32_t hash32(const std::uint32_t seed, const int x, const int y, const std::uint32_t salt) {
     std::uint32_t h = seed
-                      ^ (static_cast<std::uint32_t>(x) * 0x9E3779B9u)
-                      ^ (static_cast<std::uint32_t>(y) * 0x85EBCA6Bu)
-                      ^ (salt * 0xC2B2AE35u);
+                      ^ static_cast<std::uint32_t>(x) * 0x9E3779B9u
+                      ^ static_cast<std::uint32_t>(y) * 0x85EBCA6Bu
+                      ^ salt * 0xC2B2AE35u;
     h ^= h >> 16; h *= 0x7FEB352Du;
     h ^= h >> 15; h *= 0x84D297ADu;
     h ^= h >> 16;
@@ -80,9 +86,9 @@ core::Image makePattern(int width, int height, const PatternParams& params) {
     const core::Color fg = params.foreground;
 
     // 参数钳到合法下限。
-    const int period = std::max(2, params.period);
-    const int lineWidth = std::max(1, params.lineWidth);
-    const int dotRadius = std::max(1, params.dotRadius);
+    const int period = std::max(core::nums::generate::kMinPeriod, params.period);
+    const int lineWidth = std::max(core::nums::generate::kMinLineWidth, params.lineWidth);
+    const int dotRadius = std::max(core::nums::generate::kMinDotRadius, params.dotRadius);
 
     // 底色先铺满：Solid 即终点，纹理类在此基础上叠前景。
     img.fill(bg);
@@ -96,7 +102,7 @@ core::Image makePattern(int width, int height, const PatternParams& params) {
             const int span = params.orientation == Orientation::Horizontal ? width : height;
             for (int y = 0; y < height; ++y) {
                 for (int x = 0; x < width; ++x) {
-                    const double t = span > 1 ? (params.orientation == Orientation::Horizontal ? x : y) / double(span - 1) : 0.0;
+                    const double t = span > 1 ? (params.orientation == Orientation::Horizontal ? x : y) / static_cast<double>(span - 1) : 0.0;
                     img.setPixel(x, y, lerp(bg, fg, t));
                 }
             }
@@ -123,14 +129,14 @@ core::Image makePattern(int width, int height, const PatternParams& params) {
         case PatternKind::Stripes: {
             // 条纹四向：水平=竖条(随 x)、垂直=横条(随 y)、斜↘(沿 x−y)、斜↗(沿 x+y)。
             const Orientation o = params.orientation;
-            const bool diag = (o == Orientation::DiagonalDown || o == Orientation::DiagonalUp);
-            const bool alongX = (o == Orientation::Horizontal);
-            const bool mainDiag = (o == Orientation::DiagonalDown);   // ↘ 沿 (x−y)、↗ 沿 (x+y)
+            const bool diag = o == Orientation::DiagonalDown || o == Orientation::DiagonalUp;
+            const bool alongX = o == Orientation::Horizontal;
+            const bool mainDiag = o == Orientation::DiagonalDown;   // ↘ 沿 (x−y)、↗ 沿 (x+y)
             for (int y = 0; y < height; ++y) {
                 for (int x = 0; x < width; ++x) {
                     int band;
                     if (diag) {
-                        const int v = mainDiag ? (x - y) : (x + y);   // ↗ 恒 ≥0，↘ 可负→floorDiv
+                        const int v = mainDiag ? x - y : x + y;   // ↗ 恒 ≥0，↘ 可负→floorDiv
                         band = floorDiv(v, period);
                     } else {
                         band = (alongX ? x : y) / period;             // 直向坐标恒 ≥0
@@ -181,7 +187,7 @@ core::Image makePattern(int width, int height, const PatternParams& params) {
         case PatternKind::RadialRays: {
             const double refR = 0.5 * std::min(width, height);
             constexpr double twoPi = 2.0 * kPi;
-            const int sectors = std::max(4, static_cast<int>(std::lround(twoPi * refR / period)));
+            const int sectors = std::max(core::nums::generate::kMinRadialSectors, static_cast<int>(std::lround(twoPi * refR / period)));
             for (int y = 0; y < height; ++y) {
                 for (int x = 0; x < width; ++x) {
                     double ang = std::atan2(y - cy, x - cx);

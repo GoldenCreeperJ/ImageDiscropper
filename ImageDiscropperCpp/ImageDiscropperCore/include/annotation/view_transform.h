@@ -5,6 +5,7 @@
 // ============================================================================
 #pragma once
 
+#include "core/core_nums.h"  // 缩放默认 / 范围 / 步长（常量层）
 #include "core/point.h"
 
 namespace idc::annotation {
@@ -49,11 +50,11 @@ public:
     void setScaleStep(const double step) { scaleStep_ = step; }
 
 private:
-    double scale_{1.0};
+    double scale_{core::nums::annotation::kDefaultViewScale};
     core::Point2D offset_{0.0, 0.0};
-    double minScale_{0.05};
-    double maxScale_{10.0};
-    double scaleStep_{0.1};
+    double minScale_{core::nums::annotation::kMinViewScale};
+    double maxScale_{core::nums::annotation::kMaxViewScale};
+    double scaleStep_{core::nums::annotation::kViewScaleStep};
 };
 
 } // namespace idc::annotation

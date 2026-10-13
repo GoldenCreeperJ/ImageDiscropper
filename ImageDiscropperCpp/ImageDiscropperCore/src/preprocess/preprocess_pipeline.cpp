@@ -16,8 +16,15 @@
 
 #include "pixel_kernels.h"
 
+#include "core/core_nums.h"   // 参数边界（常量层）
+#include "i18n/core_texts.h"  // 通道掩码 token（常量层）
+
 namespace idc::preprocess {
 namespace {
+
+// 常量层别名（文件内私有）：通道掩码 token 与掩码长度。
+namespace masks = core::texts::defaults;
+namespace nums = core::nums;
 
 // 归一旋转角到象限 0..3（90° 步长），与 pixel_kernels.cpp 的 normalizeAngle 同口径。
 int rotateQuad(const int angle) {
@@ -26,8 +33,8 @@ int rotateQuad(const int angle) {
     return a / 90 % 4;
 }
 
-// 掩码规范化：与 pixel_kernels 色彩核完全同口径——长度非 3 视为 "111"（保证融合执行与 applyOne 逐像素一致）。
-std::string normMask3(const std::string& m) { return m.size() == 3 ? m : std::string("111"); }
+// 掩码规范化：与 pixel_kernels 色彩核完全同口径——长度非 3 视为全通道（保证融合执行与 applyOne 逐像素一致）。
+std::string normMask3(const std::string& m) { return m.size() == nums::preprocess::kMaskLength ? m : std::string(masks::kMaskAllOn); }
 
 // 逐通道掩码复合：pre-gray 段将任意 Split/Invert 序列折成单映射 f(v)=(v&K)^J。
 // Split(m): K&=m, J&=m；Invert(m): J^=m（逐通道 '0'/'1'）。alpha 全程不动，与 applyOne 一致。
@@ -58,13 +65,13 @@ using ExecStep = std::variant<ExecChannelMap, ExecGray, ExecGrayInvert, ExecD4, 
 std::vector<ExecStep> buildExecPlan(const std::vector<PreprocessConfig>& steps, const bool inputIsGray) {
     std::vector<ExecStep> plan;
     int r = 0, f = 0;                    // D4 累加器：g = Fh(f) ∘ Rot(r)
-    std::string k = "111", j = "000";    // pre-gray 位映射累加器
+    std::string k = masks::kMaskAllOn, j = masks::kMaskAllOff;    // pre-gray 位映射累加器
     bool gray = inputIsGray;             // 灰度态单调不回退（几何 / resize 均保持灰度）
     int parity = 0;                      // 灰度整幅取反奇偶
     const auto flushMap = [&] {
-        if (!gray && (k != "111" || j != "000")) plan.emplace_back(ExecChannelMap{k, j});
-        k = "111";
-        j = "000";
+        if (!gray && (k != masks::kMaskAllOn || j != masks::kMaskAllOff)) plan.emplace_back(ExecChannelMap{k, j});
+        k = masks::kMaskAllOn;
+        j = masks::kMaskAllOff;
     };
     const auto flushInvert = [&] {
         if (gray && parity != 0) {
@@ -98,8 +105,8 @@ std::vector<ExecStep> buildExecPlan(const std::vector<PreprocessConfig>& steps, 
                     gray = true;
                 }
             } else if (gray) {
-                // 单通道：Split 死步丢弃；非全 '0' 掩码的 Invert 整幅翻一次（非 3 长归 "111" 同口径）。
-                if (const auto* inv = std::get_if<InvertOp>(&cfg); inv && normMask3(inv->mask) != "000")
+                // 单通道：Split 死步丢弃；非全 '0' 掩码的 Invert 整幅翻一次（非 3 长归全通道同口径）。
+                if (const auto* inv = std::get_if<InvertOp>(&cfg); inv && normMask3(inv->mask) != masks::kMaskAllOff)
                     parity ^= 1;
             } else if (const auto* sp = std::get_if<SplitOp>(&cfg)) {
                 const std::string m = normMask3(sp->mask);
@@ -134,7 +141,7 @@ core::Image applyExecStep(const core::Image& src, const ExecStep& st) {
             return src.toGray();
         }
         else if constexpr (std::is_same_v<T, ExecGrayInvert>) {
-            return invertChannels(src, "111");
+            return invertChannels(src, masks::kMaskAllOn);
         }
         else if constexpr (std::is_same_v<T, ExecD4>) {
             return remapD4(src, op.quad, op.flipH);
@@ -222,6 +229,106 @@ PreprocessPipeline::GeometryOut PreprocessPipeline::geometryOutput(const int wid
         }, cfg);
     }
     return {w, h, rotQuad};
+}
+
+// 正向矩形映射：把 [x0,y0]-[x1,y1] 矩形（连续坐标）随各几何步映到输出坐标系，逐步追踪当前尺寸 curW×curH。
+//   各步顶点对射与 pixel_kernels 的逐像素正映射严格同口径（去 -1 的连续坐标版）：
+//     rotate 90CW  (px,py)->(curH-py, px)，尺寸互换；  180 ->(curW-px, curH-py)；  270CW ->(py, curW-px)，尺寸互换；
+//     flipH (px,py)->(curW-px, py)；  flipV ->(px, curH-py)；  resize 线性缩放 sx=tw/curW, sy=th/curH。
+//   矩形映 4 角后取包围盒（轴对齐映轴对齐，90 倍旋转/翻转仍轴对齐）。
+PreprocessPipeline::MappedRect PreprocessPipeline::mapRectGeometry(
+        const double x, const double y, const double width, const double height,
+        const int inW, const int inH) const {
+    double x0 = x, y0 = y, x1 = x + width, y1 = y + height;
+    int curW = inW, curH = inH;
+    for (const auto& cfg : items()) {
+        std::visit([&](const auto& op) {
+            using T = std::decay_t<decltype(op)>;
+            if constexpr (std::is_same_v<T, RotateOp>) {
+                if (const int norm = (op.angle % 360 + 360) % 360; norm == 90) {
+                    const double nx0 = curH - y1, ny0 = x0, nx1 = curH - y0, ny1 = x1;
+                    x0 = nx0; y0 = ny0; x1 = nx1; y1 = ny1;
+                    std::swap(curW, curH);
+                } else if (norm == 180) {
+                    const double nx0 = curW - x1, ny0 = curH - y1, nx1 = curW - x0, ny1 = curH - y0;
+                    x0 = nx0; y0 = ny0; x1 = nx1; y1 = ny1;
+                } else if (norm == 270) {
+                    const double nx0 = y0, ny0 = curW - x1, nx1 = y1, ny1 = curW - x0;
+                    x0 = nx0; y0 = ny0; x1 = nx1; y1 = ny1;
+                    std::swap(curW, curH);
+                }
+            } else if constexpr (std::is_same_v<T, FlipOp>) {
+                if (op.horizontal) {
+                    const double nx0 = curW - x1, nx1 = curW - x0;
+                    x0 = nx0; x1 = nx1;
+                } else {
+                    const double ny0 = curH - y1, ny1 = curH - y0;
+                    y0 = ny0; y1 = ny1;
+                }
+            } else if constexpr (std::is_same_v<T, ResizeOp>) {
+                if (op.width > 0 && op.height > 0 && curW > 0 && curH > 0) {
+                    const double sx = static_cast<double>(op.width) / curW;
+                    const double sy = static_cast<double>(op.height) / curH;
+                    x0 *= sx; x1 *= sx; y0 *= sy; y1 *= sy;
+                    curW = op.width; curH = op.height;
+                }
+            }
+            // Gray/Split/Invert：不碰几何，矩形直通。
+        }, cfg);
+    }
+    return {x0, y0, x1 - x0, y1 - y0};
+}
+
+// 逆向增量映射：先正向走一遍记录每个几何步及其输入尺寸，再逆序施加各步线性部分的逆变换，
+//   把输出（工作图）坐标系的平移增量 (dx,dy) 映回输入（画布）坐标系。与 mapRectGeometry 互逆：
+//     resize 正为 (dx*tw/inW, dy*th/inH) → 逆取倒数；  rotate90 正 (dx,dy)->(-dy,dx) → 逆 (dy,-dx)；
+//     rotate270 正 ->(dy,-dx) → 逆 (-dy,dx)；  rotate180 / flip 自逆。色彩步不改变向量。
+void PreprocessPipeline::mapDeltaToInput(const double dx, const double dy,
+                                          const int inW, const int inH,
+                                          double& outDx, double& outDy) const {
+    struct GeomStep { enum Kind { Rotate, Flip, Resize } kind;
+                     int angle{0}; bool horizontal{false}; int tw{0}; int th{0}; int inW{0}; int inH{0}; };
+    std::vector<GeomStep> steps;
+    int curW = inW, curH = inH;
+    for (const auto& cfg : items()) {
+        std::visit([&](const auto& op) {
+            using T = std::decay_t<decltype(op)>;
+            if constexpr (std::is_same_v<T, RotateOp>) {
+                if (const int norm = (op.angle % 360 + 360) % 360; norm == 90 || norm == 180 || norm == 270) {
+                    steps.push_back({GeomStep::Rotate, norm, false, 0, 0, curW, curH});
+                    if (norm == 90 || norm == 270) std::swap(curW, curH);
+                }
+            } else if constexpr (std::is_same_v<T, FlipOp>) {
+                steps.push_back({GeomStep::Flip, 0, op.horizontal, 0, 0, curW, curH});
+            } else if constexpr (std::is_same_v<T, ResizeOp>) {
+                if (op.width > 0 && op.height > 0) {
+                    steps.push_back({GeomStep::Resize, 0, false, op.width, op.height, curW, curH});
+                    curW = op.width; curH = op.height;
+                }
+            }
+        }, cfg);
+    }
+    double vx = dx, vy = dy;
+    for (auto it = steps.rbegin(); it != steps.rend(); ++it) {
+        switch (it->kind) {
+            case GeomStep::Resize:
+                if (it->tw > 0 && it->th > 0 && it->inW > 0 && it->inH > 0) {
+                    vx *= static_cast<double>(it->inW) / it->tw;
+                    vy *= static_cast<double>(it->inH) / it->th;
+                }
+                break;
+            case GeomStep::Rotate:
+                if (it->angle == 90) { const double nx = vy, ny = -vx; vx = nx; vy = ny; }        // 逆 90CW
+                else if (it->angle == 270) { const double nx = -vy, ny = vx; vx = nx; vy = ny; }  // 逆 270CW
+                else { vx = -vx; vy = -vy; }                                                     // 180 自逆
+                break;
+            case GeomStep::Flip:
+                if (it->horizontal) vx = -vx; else vy = -vy;
+                break;
+        }
+    }
+    outDx = vx;
+    outDy = vy;
 }
 
 } // namespace idc::preprocess

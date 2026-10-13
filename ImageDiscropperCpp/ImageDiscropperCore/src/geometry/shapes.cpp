@@ -7,6 +7,8 @@
 // ============================================================================
 #include "geometry/shapes.h"
 
+#include "core/core_nums.h" // 零长边阈值单一真相源（常量层）
+
 #include <algorithm>
 #include <cmath>
 
@@ -39,7 +41,7 @@ Path buildFilletPath(const std::vector<core::Point2D>& pts, const bool closed, c
         const double dx = to.x - from.x;
         const double dy = to.y - from.y;
         len = std::hypot(dx, dy);
-        if (len <= 1e-12) return core::Point2D{0.0, 0.0};
+        if (len <= core::nums::geometry::kZeroLengthEps) return core::Point2D{0.0, 0.0}; // 零长边：返回零向量
         return core::Point2D{dx / len, dy / len};
     };
 

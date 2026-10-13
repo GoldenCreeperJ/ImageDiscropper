@@ -10,6 +10,8 @@
 // ============================================================================
 #include "engine/image_io.h"
 
+#include "core/core_nums.h" // 质量范围上下限（常量层）
+
 // stb_image（解码）+ stb_image_write（编码）：全工程仅此一处定义各自实现宏（header-only 库要求）。
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -70,7 +72,7 @@ bool encodeWebP(const core::Image& image, const int quality, std::vector<std::ui
     const int w = image.width();
     const int h = image.height();
     std::uint8_t* enc = nullptr;
-    const float q = static_cast<float>(std::clamp(quality, 1, 100));
+    const auto q = static_cast<float>(std::clamp(quality, core::nums::engine::kQualityMin, core::nums::engine::kQualityMax));
     const std::size_t n = WebPEncodeRGBA(rgba.data(), w, h, w * 4, q, &enc);
     if (n == 0 || enc == nullptr) { WebPFree(enc); return false; }
     out.assign(enc, enc + n);
@@ -129,7 +131,7 @@ bool encodeImageToMemory(const core::Image& image, const ExportFormat format,
         }
         case ExportFormat::JPEG: {
             const std::vector<std::uint8_t> rgb = toRGBBuffer(image, jpegBg);
-            const int q = std::clamp(quality, 1, 100);
+            const int q = std::clamp(quality, core::nums::engine::kQualityMin, core::nums::engine::kQualityMax);
             return stbi_write_jpg_to_func(stbAppendCallback, &out, w, h, 3, rgb.data(), q) != 0;
         }
         case ExportFormat::WEBP:

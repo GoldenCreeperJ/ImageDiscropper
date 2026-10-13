@@ -17,6 +17,7 @@
 #include "annotation/annotation_set.h"
 
 #include "../json_common.h" // idc::jsonutil 助手 + 标注段交换函数声明（实现在 annotation 模块）
+#include "engine_config_json_internal.h" // 枚举串/颜色/各段 toJson/fromJson 助手区（detail 命名空间）
 
 #include <nlohmann/json.hpp>
 
@@ -29,319 +30,17 @@
 
 namespace idc::engine {
 namespace {
-
-using json = nlohmann::json;
-
-// 与 annotation 共用的宽容读取 / 颜色助手（单一真相源见 src/json_common.h）。
-using jsonutil::at;
-using jsonutil::colorFromHex;
-using jsonutil::colorToHex;
-using jsonutil::jBool;
-using jsonutil::jDouble;
-using jsonutil::jInt;
-using jsonutil::jStr;
-
-// ---------------------------------------------------------------------------
-// 枚举 ↔ 短横线小写串（SPEC §7：如 "row-major" / "multi-rect"）。
-// ---------------------------------------------------------------------------
-const char* tierName(const Tier t) {
-    switch (t) { case Tier::L1: return "L1"; case Tier::L2: return "L2"; case Tier::L3: return "L3"; }
-    return "L2";
-}
-Tier tierFromName(const std::string& s) {
-    if (s == "L1") return Tier::L1;
-    if (s == "L3") return Tier::L3;
-    return Tier::L2;
-}
-
-const char* generatorName(const CutGenerator g) {
-    switch (g) {
-        case CutGenerator::RECT: return "rect";
-        case CutGenerator::HORIZONTAL_LINE: return "horizontal";
-        case CutGenerator::VERTICAL_LINE: return "vertical";
-        case CutGenerator::MULTI_RECT: return "multi-rect";
-        case CutGenerator::GRID: return "grid";
-    }
-    return "rect";
-}
-CutGenerator generatorFromName(const std::string& s) {
-    if (s == "horizontal") return CutGenerator::HORIZONTAL_LINE;
-    if (s == "vertical") return CutGenerator::VERTICAL_LINE;
-    if (s == "multi-rect") return CutGenerator::MULTI_RECT;
-    if (s == "grid") return CutGenerator::GRID;
-    return CutGenerator::RECT;
-}
-
-const char* polarityName(const Polarity p) {
-    return p == Polarity::KEEP ? "keep" : "remove";
-}
-Polarity polarityFromName(const std::string& s) {
-    return s == "keep" ? Polarity::KEEP : Polarity::REMOVE;
-}
-
-const char* strategyName(const SortStrategy s) {
-    switch (s) {
-        case SortStrategy::ROW_MAJOR: return "row-major";
-        case SortStrategy::COLUMN_MAJOR: return "column-major";
-        case SortStrategy::CUSTOM: return "custom";
-    }
-    return "row-major";
-}
-SortStrategy strategyFromName(const std::string& s) {
-    if (s == "column-major") return SortStrategy::COLUMN_MAJOR;
-    if (s == "custom") return SortStrategy::CUSTOM;
-    return SortStrategy::ROW_MAJOR;
-}
-
-const char* emitModeName(const EmitMode m) {
-    return m == EmitMode::SEPARATE ? "separate" : "merged";
-}
-EmitMode emitModeFromName(const std::string& s) {
-    return s == "separate" ? EmitMode::SEPARATE : EmitMode::MERGED;
-}
-
-const char* layoutName(const MergeLayout l) {
-    return l == MergeLayout::COLLAPSE ? "collapse" : "rearrange";
-}
-MergeLayout layoutFromName(const std::string& s) {
-    return s == "rearrange" ? MergeLayout::REARRANGE : MergeLayout::COLLAPSE;
-}
-
-const char* formatName(const ExportFormat f) {
-    switch (f) {
-        case ExportFormat::PNG: return "png";
-        case ExportFormat::JPEG: return "jpeg";
-        case ExportFormat::WEBP: return "webp";
-        case ExportFormat::BMP: return "bmp";
-    }
-    return "png";
-}
-ExportFormat formatFromName(const std::string& s) {
-    if (s == "jpeg" || s == "jpg") return ExportFormat::JPEG;
-    if (s == "webp") return ExportFormat::WEBP;
-    if (s == "bmp") return ExportFormat::BMP;
-    return ExportFormat::PNG;
-}
-
-const char* remainderName(const RemainderPolicy r) {
-    switch (r) {
-        case RemainderPolicy::DISCARD: return "discard";
-        case RemainderPolicy::KEEP_PARTIAL: return "keep-partial";
-        case RemainderPolicy::PAD: return "pad";
-    }
-    return "discard";
-}
-RemainderPolicy remainderFromName(const std::string& s) {
-    if (s == "keep-partial") return RemainderPolicy::KEEP_PARTIAL;
-    if (s == "pad") return RemainderPolicy::PAD;
-    return RemainderPolicy::DISCARD;
-}
-
-// 图案类型 / 方向 ↔ 短横线小写串（与 CLI `--pattern` / `--orientation` 取值同一套 token）。
-// 命名为 gen*Token 以避免与 generate::patternKindName 产 ADL 歧义。
-const char* genKindToken(const generate::PatternKind k) {
-    switch (k) {
-        case generate::PatternKind::Solid: return "solid";
-        case generate::PatternKind::LinearGradient: return "linear-gradient";
-        case generate::PatternKind::RadialGradient: return "radial-gradient";
-        case generate::PatternKind::Checkerboard: return "checkerboard";
-        case generate::PatternKind::Stripes: return "stripes";
-        case generate::PatternKind::GridLines: return "grid-lines";
-        case generate::PatternKind::DotGrid: return "dot-grid";
-        case generate::PatternKind::Concentric: return "concentric";
-        case generate::PatternKind::RadialRays: return "radial-rays";
-        case generate::PatternKind::HueGradient: return "hue-gradient";
-        case generate::PatternKind::Noise: return "noise";
-    }
-    return "solid";
-}
-generate::PatternKind genKindFromToken(const std::string& s) {
-    if (s == "linear-gradient") return generate::PatternKind::LinearGradient;
-    if (s == "radial-gradient") return generate::PatternKind::RadialGradient;
-    if (s == "checkerboard") return generate::PatternKind::Checkerboard;
-    if (s == "stripes") return generate::PatternKind::Stripes;
-    if (s == "grid-lines") return generate::PatternKind::GridLines;
-    if (s == "dot-grid") return generate::PatternKind::DotGrid;
-    if (s == "concentric") return generate::PatternKind::Concentric;
-    if (s == "radial-rays") return generate::PatternKind::RadialRays;
-    if (s == "hue-gradient") return generate::PatternKind::HueGradient;
-    if (s == "noise") return generate::PatternKind::Noise;
-    return generate::PatternKind::Solid;
-}
-const char* genOrientationToken(const generate::Orientation o) {
-    switch (o) {
-        case generate::Orientation::Horizontal: return "horizontal";
-        case generate::Orientation::Vertical: return "vertical";
-        case generate::Orientation::DiagonalDown: return "diagonal-down";
-        case generate::Orientation::DiagonalUp: return "diagonal-up";
-    }
-    return "horizontal";
-}
-generate::Orientation genOrientationFromToken(const std::string& s) {
-    if (s == "vertical") return generate::Orientation::Vertical;
-    if (s == "diagonal-down") return generate::Orientation::DiagonalDown;
-    if (s == "diagonal-up") return generate::Orientation::DiagonalUp;
-    return generate::Orientation::Horizontal;
-}
-
-// 噪声配色模式 ↔ 串（仅 Noise 用）。
-const char* genNoiseToken(const generate::NoiseMode m) {
-    switch (m) {
-        case generate::NoiseMode::FullColor: return "full-color";
-        case generate::NoiseMode::Grayscale: return "grayscale";
-        case generate::NoiseMode::TwoColor: return "two-color";
-    }
-    return "full-color";
-}
-generate::NoiseMode genNoiseFromToken(const std::string& s) {
-    if (s == "grayscale") return generate::NoiseMode::Grayscale;
-    if (s == "two-color") return generate::NoiseMode::TwoColor;
-    return generate::NoiseMode::FullColor;
-}
-
-// 落位锚点 ↔ 串：图层 transform（inCanvasAnchor/layerPivot）用。「贴图图案」已移除，
-//   旧配置里的 imageAnchor/imagePivot 键因对应字段不存在而被宽容读取自然忽略。
-const char* genAnchorToken(const generate::ImageAnchor a) {
-    switch (a) {
-        case generate::ImageAnchor::TopLeft: return "top-left";
-        case generate::ImageAnchor::TopCenter: return "top-center";
-        case generate::ImageAnchor::TopRight: return "top-right";
-        case generate::ImageAnchor::MiddleLeft: return "middle-left";
-        case generate::ImageAnchor::Center: return "center";
-        case generate::ImageAnchor::MiddleRight: return "middle-right";
-        case generate::ImageAnchor::BottomLeft: return "bottom-left";
-        case generate::ImageAnchor::BottomCenter: return "bottom-center";
-        case generate::ImageAnchor::BottomRight: return "bottom-right";
-    }
-    return "center";
-}
-generate::ImageAnchor genAnchorFromToken(const std::string& s) {
-    if (s == "top-left") return generate::ImageAnchor::TopLeft;
-    if (s == "top-center") return generate::ImageAnchor::TopCenter;
-    if (s == "top-right") return generate::ImageAnchor::TopRight;
-    if (s == "middle-left") return generate::ImageAnchor::MiddleLeft;
-    if (s == "middle-right") return generate::ImageAnchor::MiddleRight;
-    if (s == "bottom-left") return generate::ImageAnchor::BottomLeft;
-    if (s == "bottom-center") return generate::ImageAnchor::BottomCenter;
-    if (s == "bottom-right") return generate::ImageAnchor::BottomRight;
-    return generate::ImageAnchor::Center;
-}
-
-// ImageFit ↔ token（内层源图→图层框适应方式）。
-const char* imageFitToken(const canvas::ImageFit f) {
-    switch (f) {
-        case canvas::ImageFit::Crop: return "crop";
-        case canvas::ImageFit::Stretch: return "stretch";
-        case canvas::ImageFit::Native: return "native";
-    }
-    return "crop";
-}
-canvas::ImageFit imageFitFromToken(const std::string& s) {
-    if (s == "stretch") return canvas::ImageFit::Stretch;
-    if (s == "native") return canvas::ImageFit::Native;
-    return canvas::ImageFit::Crop;
-}
-
-// ---------------------------------------------------------------------------
-// PatternParams ↔ JSON：顶层 generate 段与每个 layers[i].source.recipe 共用同一映射，
-//   避免两处各写一份造成字段漂移。位图恒不入配置。
-// ---------------------------------------------------------------------------
-json patternParamsToJson(const generate::PatternParams& g) {
-    json gen;
-    gen["kind"] = genKindToken(g.kind);
-    gen["background"] = colorToHex(g.background);
-    gen["foreground"] = colorToHex(g.foreground);
-    gen["orientation"] = genOrientationToken(g.orientation);
-    gen["period"] = g.period;
-    gen["lineWidth"] = g.lineWidth;
-    gen["dotRadius"] = g.dotRadius;
-    gen["seed"] = g.seed;
-    gen["noiseMode"] = genNoiseToken(g.noiseMode);
-    return gen;
-}
-generate::PatternParams patternParamsFromJson(const json& gen) {
-    generate::PatternParams g;
-    g.kind = genKindFromToken(jStr(at(gen, "kind"), "solid"));
-    g.background = colorFromHex(jStr(at(gen, "background"), "#FFFFFFFF"));
-    g.foreground = colorFromHex(jStr(at(gen, "foreground"), "#FF000000"));
-    g.orientation = genOrientationFromToken(jStr(at(gen, "orientation"), "horizontal"));
-    g.period = jInt(at(gen, "period"), 32);
-    g.lineWidth = jInt(at(gen, "lineWidth"), 1);
-    g.dotRadius = jInt(at(gen, "dotRadius"), 2);
-    g.seed = jInt(at(gen, "seed"), 0);
-    g.noiseMode = genNoiseFromToken(jStr(at(gen, "noiseMode"), "full-color"));
-    return g;
-}
-
-// ---------------------------------------------------------------------------
-// 矩形 / 网格 / optional<int> 子对象映射。
-// ---------------------------------------------------------------------------
-json rectToJson(const RectRegion& r) {
-    return json{{"x1", r.left}, {"y1", r.top}, {"x2", r.right}, {"y2", r.bottom}};
-}
-RectRegion rectFromJson(const json& v) {
-    return RectRegion(jInt(at(v, "x1"), 0), jInt(at(v, "y1"), 0),
-                      jInt(at(v, "x2"), 0), jInt(at(v, "y2"), 0));
-}
-
-// 网格参数 ↔ JSON：仅「基准点 + 单元尺寸 + 余量策略」（SPEC §3.4.3）；
-// 行列数由图像边界自动推导，不作为配置字段（无 gap / cols / rows）。
-json gridToJson(const GridParams& g) {
-    return json{
-        {"originX", g.originX}, {"originY", g.originY},
-        {"cellWidth", g.cellWidth}, {"cellHeight", g.cellHeight},
-        {"remainder", remainderName(g.remainder)},
-    };
-}
-GridParams gridFromJson(const json& v) {
-    GridParams g;
-    g.originX = jInt(at(v, "originX"), 0); g.originY = jInt(at(v, "originY"), 0);
-    g.cellWidth = jInt(at(v, "cellWidth"), 1); g.cellHeight = jInt(at(v, "cellHeight"), 1);
-    g.remainder = remainderFromName(jStr(at(v, "remainder"), "discard"));
-    return g;
-}
-
-json optIntToJson(const std::optional<int>& o) {
-    return o.has_value() ? json(*o) : json(nullptr);
-}
-std::optional<int> jsonToOptInt(const json& v) {
-    if (v.is_number_integer()) return v.get<int>();
-    if (v.is_number_float()) return static_cast<int>(v.get<double>());
-    return std::nullopt; // null 或缺失 → 无值。
-}
-
-// ---------------------------------------------------------------------------
-// 预处理步骤 ↔ {op, ...params}（SPEC §7 preprocess 数组）。
-// ---------------------------------------------------------------------------
-json preprocessToJson(const preprocess::PreprocessConfig& cfg) {
-    using namespace preprocess;
-    json o;
-    switch (configType(cfg)) {
-        case PreprocessType::GRAY:
-            o["op"] = "gray"; break;
-        case PreprocessType::SPLIT:
-            o["op"] = "split"; o["mask"] = std::get<SplitOp>(cfg).mask; break;
-        case PreprocessType::INVERT:
-            o["op"] = "invert"; o["mask"] = std::get<InvertOp>(cfg).mask; break;
-        case PreprocessType::ROTATE:
-            o["op"] = "rotate"; o["deg"] = std::get<RotateOp>(cfg).angle; break;
-        case PreprocessType::FLIP:
-            o["op"] = "flip"; o["axis"] = std::get<FlipOp>(cfg).horizontal ? "horizontal" : "vertical"; break;
-        case PreprocessType::RESIZE:
-            o["op"] = "resize"; o["width"] = std::get<ResizeOp>(cfg).width; o["height"] = std::get<ResizeOp>(cfg).height; break;
-    }
-    return o;
-}
+using namespace detail;   // 枚举串与各段 JSON 助手（engine_config_json_internal.h）
 
 bool preprocessFromJson(const json& v, preprocess::PreprocessConfig& out) {
     using namespace preprocess;
-    const std::string op = jStr(at(v, "op"), "");
+    const std::string op = jStr(at(v, keys::pre::kOp), "");
     if (op == "gray") { out = GrayOp{}; return true; }
-    if (op == "split") { SplitOp s; s.mask = jStr(at(v, "mask"), "111"); out = s; return true; }
-    if (op == "invert") { InvertOp s; s.mask = jStr(at(v, "mask"), "111"); out = s; return true; }
-    if (op == "rotate") { RotateOp s; s.angle = jInt(at(v, "deg"), 0); out = s; return true; }
-    if (op == "flip") { FlipOp s; s.horizontal = jStr(at(v, "axis"), "horizontal") == "horizontal"; out = s; return true; }
-    if (op == "resize") { ResizeOp s; s.width = jInt(at(v, "width"), 0); s.height = jInt(at(v, "height"), 0); out = s; return true; }
+    if (op == "split") { SplitOp s; s.mask = jStr(at(v, keys::pre::kMask), defs::kMaskAllOn); out = s; return true; }
+    if (op == "invert") { InvertOp s; s.mask = jStr(at(v, keys::pre::kMask), defs::kMaskAllOn); out = s; return true; }
+    if (op == "rotate") { RotateOp s; s.angle = jInt(at(v, keys::pre::kDeg), 0); out = s; return true; }
+    if (op == "flip") { FlipOp s; s.horizontal = jStr(at(v, keys::pre::kAxis), defs::kFlipAxisHorizontal) == defs::kFlipAxisHorizontal; out = s; return true; }
+    if (op == "resize") { ResizeOp s; s.width = jInt(at(v, keys::common::kWidth), 0); s.height = jInt(at(v, keys::common::kHeight), 0); out = s; return true; }
     // 旧 "opacity" 步已不再是预处理（不透明度上移为图层合成期参数）：这里不再识别→未知 op 返回 false 被调用方跳过
     //（图层预处理内的旧 opacity 步由 layerFromJson 专门迁移到 transform.opacity；顶层画布级旧 opacity 无对应→丢弃）。
     return false;
@@ -370,88 +69,88 @@ canvas::LayerSourceKind layerSourceKindFromStr(const std::string& s) {
 json layerToJson(const canvas::ImageLayer& layer) {
     json o;
     json source;
-    source["kind"] = layerSourceKindToken(layer.sourceKind);
+    source[keys::common::kKind] = layerSourceKindToken(layer.sourceKind);
     if (layer.sourceKind == canvas::LayerSourceKind::Recipe && layer.recipe)
-        source["recipe"] = patternParamsToJson(*layer.recipe);
+        source[keys::layer::kRecipe] = patternParamsToJson(*layer.recipe);
     else if (layer.sourceKind == canvas::LayerSourceKind::File)
-        source["file"] = layer.fileName;   // 仅存相对名；像素不入配置（缺失时上层降级为占位）。
-    o["source"] = source;
+        source[keys::common::kFile] = layer.fileName;   // 仅存相对名；像素不入配置（缺失时上层降级为占位）。
+    o[keys::config::kSource] = source;
 
     json t;
-    t["inCanvasAnchor"] = genAnchorToken(layer.transform.inCanvasAnchor);
-    t["layerPivot"] = genAnchorToken(layer.transform.layerPivot);
-    t["x"] = layer.transform.x;
-    t["y"] = layer.transform.y;
-    t["width"] = layer.transform.width;
-    t["height"] = layer.transform.height;
-    t["opacity"] = layer.transform.opacity;   // 合成期 alpha 乘子（0..255）。
-    o["transform"] = t;
+    t[keys::layer::kInCanvasAnchor] = genAnchorToken(layer.transform.inCanvasAnchor);
+    t[keys::layer::kLayerPivot] = genAnchorToken(layer.transform.layerPivot);
+    t[keys::common::kX] = layer.transform.x;
+    t[keys::common::kY] = layer.transform.y;
+    t[keys::common::kWidth] = layer.transform.width;
+    t[keys::common::kHeight] = layer.transform.height;
+    t[keys::common::kOpacity] = layer.transform.opacity;   // 合成期 alpha 乘子（0..255）。
+    o[keys::common::kTransform] = t;
 
-    o["zOrder"] = layer.zOrder;
+    o[keys::common::kZOrder] = layer.zOrder;
 
     // 内层两级落位（仅启用时写入；缺省段在旧配置中不存在 → 读取端默认 hasImagePlacement=false）。
     if (layer.hasImagePlacement) {
         json ip;
-        ip["fit"] = imageFitToken(layer.imageFit);
-        ip["boxWidth"] = layer.boxWidth;
-        ip["boxHeight"] = layer.boxHeight;
-        ip["imageAnchor"] = genAnchorToken(layer.imageAnchor);
-        ip["imagePivot"] = genAnchorToken(layer.imagePivot);
-        ip["x"] = layer.imageX;
-        ip["y"] = layer.imageY;
-        if (layer.boxBackdrop) ip["backdrop"] = patternParamsToJson(*layer.boxBackdrop);
-        o["imagePlacement"] = ip;
+        ip[keys::layer::kFit] = imageFitToken(layer.imageFit);
+        ip[keys::layer::kBoxWidth] = layer.boxWidth;
+        ip[keys::layer::kBoxHeight] = layer.boxHeight;
+        ip[keys::layer::kImageAnchor] = genAnchorToken(layer.imageAnchor);
+        ip[keys::layer::kImagePivot] = genAnchorToken(layer.imagePivot);
+        ip[keys::common::kX] = layer.imageX;
+        ip[keys::common::kY] = layer.imageY;
+        if (layer.boxBackdrop) ip[keys::layer::kBackdrop] = patternParamsToJson(*layer.boxBackdrop);
+        o[keys::layer::kImagePlacement] = ip;
     }
 
     json pre = json::array();
     for (const preprocess::PreprocessConfig& step : layer.preprocess.items())
         pre.push_back(preprocessToJson(step));
-    o["preprocess"] = pre;
+    o[keys::common::kPreprocess] = pre;
     return o;
 }
 
 canvas::ImageLayer layerFromJson(const json& v) {
     canvas::ImageLayer layer;
-    const json& source = at(v, "source");
-    layer.sourceKind = layerSourceKindFromStr(jStr(at(source, "kind"), "empty"));
+    const json& source = at(v, keys::config::kSource);
+    layer.sourceKind = layerSourceKindFromStr(jStr(at(source, keys::common::kKind), defs::kLayerSourceEmpty));
     if (layer.sourceKind == canvas::LayerSourceKind::Recipe) {
-        if (const json& r = at(source, "recipe"); r.is_object()) layer.recipe = patternParamsFromJson(r);
+        if (const json& r = at(source, keys::layer::kRecipe); r.is_object()) layer.recipe = patternParamsFromJson(r);
         else layer.sourceKind = canvas::LayerSourceKind::Empty;   // 声明 recipe 却无 recipe 体→降级空占位
     } else if (layer.sourceKind == canvas::LayerSourceKind::File) {
-        layer.fileName = jStr(at(source, "file"), "");
+        layer.fileName = jStr(at(source, keys::common::kFile), "");
     }
 
-    const json& t = at(v, "transform");
-    layer.transform.inCanvasAnchor = genAnchorFromToken(jStr(at(t, "inCanvasAnchor"), "center"));
-    layer.transform.layerPivot = genAnchorFromToken(jStr(at(t, "layerPivot"), "center"));
-    layer.transform.x = jInt(at(t, "x"), 0);
-    layer.transform.y = jInt(at(t, "y"), 0);
-    layer.transform.width = jInt(at(t, "width"), 0);
-    layer.transform.height = jInt(at(t, "height"), 0);
-    layer.transform.opacity = std::clamp(jInt(at(t, "opacity"), 255), 0, 255);
+    const json& t = at(v, keys::common::kTransform);
+    layer.transform.inCanvasAnchor = genAnchorFromToken(jStr(at(t, keys::layer::kInCanvasAnchor), defs::kAnchorCenter));
+    layer.transform.layerPivot = genAnchorFromToken(jStr(at(t, keys::layer::kLayerPivot), defs::kAnchorCenter));
+    layer.transform.x = jInt(at(t, keys::common::kX), 0);
+    layer.transform.y = jInt(at(t, keys::common::kY), 0);
+    layer.transform.width = jInt(at(t, keys::common::kWidth), 0);
+    layer.transform.height = jInt(at(t, keys::common::kHeight), 0);
+    layer.transform.opacity = std::clamp(jInt(at(t, keys::common::kOpacity), nums::engine::kDefaultOpacity), 0, 255);
 
-    layer.zOrder = jInt(at(v, "zOrder"), 0);
+    layer.zOrder = jInt(at(v, keys::common::kZOrder), 0);
 
     // 内层两级落位（可选段）：存在则启用 hasImagePlacement，缺失保持关闭（旧配置）。
-    if (v.contains("imagePlacement")) {
-        const json& ip = v["imagePlacement"];
+    if (v.contains(keys::layer::kImagePlacement)) {
+        const json& ip = v[keys::layer::kImagePlacement];
         layer.hasImagePlacement = true;
-        layer.imageFit = imageFitFromToken(jStr(at(ip, "fit"), "crop"));
-        layer.boxWidth = jInt(at(ip, "boxWidth"), 0);
-        layer.boxHeight = jInt(at(ip, "boxHeight"), 0);
-        layer.imageAnchor = genAnchorFromToken(jStr(at(ip, "imageAnchor"), "center"));
-        layer.imagePivot = genAnchorFromToken(jStr(at(ip, "imagePivot"), "center"));
-        layer.imageX = jInt(at(ip, "x"), 0);
-        layer.imageY = jInt(at(ip, "y"), 0);
-        if (ip.contains("backdrop")) layer.boxBackdrop = patternParamsFromJson(ip["backdrop"]);
+        layer.imageFit = imageFitFromToken(jStr(at(ip, keys::layer::kFit), defs::kImageFitCrop));
+        layer.boxWidth = jInt(at(ip, keys::layer::kBoxWidth), 0);
+        layer.boxHeight = jInt(at(ip, keys::layer::kBoxHeight), 0);
+        layer.imageAnchor = genAnchorFromToken(jStr(at(ip, keys::layer::kImageAnchor), defs::kAnchorCenter));
+        layer.imagePivot = genAnchorFromToken(jStr(at(ip, keys::layer::kImagePivot), defs::kAnchorCenter));
+        layer.imageX = jInt(at(ip, keys::common::kX), 0);
+        layer.imageY = jInt(at(ip, keys::common::kY), 0);
+        if (ip.contains(keys::layer::kBackdrop)) layer.boxBackdrop = patternParamsFromJson(ip[keys::layer::kBackdrop]);
     }
 
-    if (const json& pre = at(v, "preprocess"); pre.is_array()) {
+    if (const json& pre = at(v, keys::common::kPreprocess); pre.is_array()) {
         for (const json& step : pre) {
             // 旧配置迁移：图层预处理内的 "opacity" 步→折叠为 transform.opacity（不再当预处理步）。
-            if (jStr(at(step, "op"), "") == "opacity") {
-                const int mul = std::clamp(jInt(at(step, "mul"), 255), 0, 255);
-                const int add = std::clamp(jInt(at(step, "add"), 0), 0, 255);
+            if (jStr(at(step, keys::pre::kOp), "") == defs::kPreStepOpacity) {
+                const int mul = std::clamp(jInt(at(step, keys::pre::kMul), nums::engine::kDefaultOpacity), 0, 255);
+                const int add = std::clamp(jInt(at(step, keys::pre::kAdd), 0), 0, 255);
                 layer.transform.opacity = std::clamp(mul == 0 ? add : mul + add, 0, 255);   // 乘算≈mul、设定≈add（有损近似）。
                 continue;
             }
@@ -476,53 +175,53 @@ json baseToJson(const canvas::ImageLayer& base) {
     if (base.recipe) gen.update(patternParamsToJson(*base.recipe));
     // 底图整体不透明度（合成期 alpha 乘子 0..255）：随段写入 opacity 键，供 GUI 载入回填 baseOpacity、
     //   CLI 在边界施加淡出。旧配置无此键 → baseFromJson 读缺省 255，行为不变。
-    gen["opacity"] = base.transform.opacity;
+    gen[keys::common::kOpacity] = base.transform.opacity;
     // 底图色彩预处理步（仅色彩合法：gray/invert/split；几何/resize 会改画布尺寸，写出时过滤掉）。
     //   缺省空 → 不写 preprocess 键（旧配置无此键 → baseFromJson 读为空）。
     json pre = json::array();
     for (const preprocess::PreprocessConfig& step : base.preprocess.items())
         if (preprocess::isColorStep(step)) pre.push_back(preprocessToJson(step));
-    if (!pre.empty()) gen["preprocess"] = pre;
+    if (!pre.empty()) gen[keys::common::kPreprocess] = pre;
     // 内层落位（把外部输入图 / 图案按落位摆入画布时启用）：追加 fit/box*/image* + backdrop 图案；不写文件路径。
     if (base.hasImagePlacement) {
-        gen["fit"] = imageFitToken(base.imageFit);
-        gen["boxWidth"] = base.boxWidth;
-        gen["boxHeight"] = base.boxHeight;
-        gen["imageAnchor"] = genAnchorToken(base.imageAnchor);
-        gen["imagePivot"] = genAnchorToken(base.imagePivot);
-        gen["x"] = base.imageX;
-        gen["y"] = base.imageY;
-        if (base.boxBackdrop) gen["backdrop"] = patternParamsToJson(*base.boxBackdrop);
+        gen[keys::layer::kFit] = imageFitToken(base.imageFit);
+        gen[keys::layer::kBoxWidth] = base.boxWidth;
+        gen[keys::layer::kBoxHeight] = base.boxHeight;
+        gen[keys::layer::kImageAnchor] = genAnchorToken(base.imageAnchor);
+        gen[keys::layer::kImagePivot] = genAnchorToken(base.imagePivot);
+        gen[keys::common::kX] = base.imageX;
+        gen[keys::common::kY] = base.imageY;
+        if (base.boxBackdrop) gen[keys::layer::kBackdrop] = patternParamsToJson(*base.boxBackdrop);
     }
     return gen;
 }
 canvas::ImageLayer baseFromJson(const json& gen) {
     canvas::ImageLayer base;   // transform 恒等、zOrder=0（底位）、sourceKind 默认：均为 ImageLayer 默认。
     // 底图整体不透明度：读 opacity（缺省 255）→ transform.opacity；上层（GUI Document / CLI config）据此在合成边界施加淡出。
-    base.transform.opacity = std::clamp(jInt(at(gen, "opacity"), 255), 0, 255);
+    base.transform.opacity = std::clamp(jInt(at(gen, keys::common::kOpacity), nums::engine::kDefaultOpacity), 0, 255);
     // 底图色彩预处理（可选 preprocess 数组）：仅接受色彩步（gray/invert/split），几何/resize 步忽略
     //   （底图预处理不改画布尺寸 / 坐标基准；还原端遇非法几何步静默丢弃）。旧配置无此段 → 空。
-    if (const json& preArr = at(gen, "preprocess"); preArr.is_array()) {
+    if (const json& preArr = at(gen, keys::common::kPreprocess); preArr.is_array()) {
         for (const json& step : preArr) {
             if (preprocess::PreprocessConfig cfg; preprocessFromJson(step, cfg) && preprocess::isColorStep(cfg)) base.preprocess.add(cfg);
         }
     }
     // 图案键存在（含 "kind"）→ 解析配方并置 Recipe；否则 recipe 留空（底图为运行时 --input 位图，仅存落位参数）。
-    if (gen.contains("kind")) {
+    if (gen.contains(keys::common::kKind)) {
         base.sourceKind = canvas::LayerSourceKind::Recipe;
         base.recipe = patternParamsFromJson(gen);   // 旧配置仅图案键 → 与旧 generate 等价。
     }
     // 内层落位（存在任一落位键即启用）。
-    if (gen.contains("fit") || gen.contains("boxWidth") || gen.contains("imageAnchor")) {
+    if (gen.contains(keys::layer::kFit) || gen.contains(keys::layer::kBoxWidth) || gen.contains(keys::layer::kImageAnchor)) {
         base.hasImagePlacement = true;
-        base.imageFit = imageFitFromToken(jStr(at(gen, "fit"), "crop"));
-        base.boxWidth = jInt(at(gen, "boxWidth"), 0);
-        base.boxHeight = jInt(at(gen, "boxHeight"), 0);
-        base.imageAnchor = genAnchorFromToken(jStr(at(gen, "imageAnchor"), "center"));
-        base.imagePivot = genAnchorFromToken(jStr(at(gen, "imagePivot"), "center"));
-        base.imageX = jInt(at(gen, "x"), 0);
-        base.imageY = jInt(at(gen, "y"), 0);
-        if (gen.contains("backdrop")) base.boxBackdrop = patternParamsFromJson(gen["backdrop"]);
+        base.imageFit = imageFitFromToken(jStr(at(gen, keys::layer::kFit), defs::kImageFitCrop));
+        base.boxWidth = jInt(at(gen, keys::layer::kBoxWidth), 0);
+        base.boxHeight = jInt(at(gen, keys::layer::kBoxHeight), 0);
+        base.imageAnchor = genAnchorFromToken(jStr(at(gen, keys::layer::kImageAnchor), defs::kAnchorCenter));
+        base.imagePivot = genAnchorFromToken(jStr(at(gen, keys::layer::kImagePivot), defs::kAnchorCenter));
+        base.imageX = jInt(at(gen, keys::common::kX), 0);
+        base.imageY = jInt(at(gen, keys::common::kY), 0);
+        if (gen.contains(keys::layer::kBackdrop)) base.boxBackdrop = patternParamsFromJson(gen[keys::layer::kBackdrop]);
     }
     return base;
 }
@@ -535,84 +234,84 @@ json engineConfigToJson(const EngineConfig& config, const annotation::Annotation
     json root;
 
     // source：原图尺寸。
-    root["source"] = json{{"width", config.source.width}, {"height", config.source.height}};
+    root[keys::config::kSource] = json{{keys::common::kWidth, config.source.width}, {keys::common::kHeight, config.source.height}};
 
     // opacity：画布级整体不透明度（顶层可选键，0..255，255＝不透明）。缺省 255 时仍写出（观感一致、无歧义）。
-    root["opacity"] = config.canvasOpacity;
+    root[keys::common::kOpacity] = config.canvasOpacity;
 
     // preprocess：基础图像处理步骤数组。
     json pre = json::array();
     for (const preprocess::PreprocessConfig& step : config.preprocess.items())
         pre.push_back(preprocessToJson(step));
-    root["preprocess"] = pre;
+    root[keys::common::kPreprocess] = pre;
 
     // cut：层级 / 生成器 / 几何参数 / 极性。
     json cut;
-    cut["tier"] = tierName(config.cut.tier);
-    cut["generator"] = generatorName(config.cut.generator);
-    cut["polarity"] = polarityName(config.cut.polarity);
+    cut[keys::config::kTier] = tierName(config.cut.tier);
+    cut[keys::config::kGenerator] = generatorName(config.cut.generator);
+    cut[keys::config::kPolarity] = polarityName(config.cut.polarity);
     if (config.cut.generator == CutGenerator::MULTI_RECT) {
         json rs = json::array();
         for (const RectRegion& r : config.cut.rects) rs.push_back(rectToJson(r));
-        cut["params"] = json{{"rects", rs}};
+        cut[keys::config::kParams] = json{{keys::config::kRects, rs}};
     } else if (config.cut.generator == CutGenerator::GRID) {
-        cut["params"] = gridToJson(config.cut.grid);
+        cut[keys::config::kParams] = gridToJson(config.cut.grid);
     } else {
-        cut["params"] = rectToJson(config.cut.rect);
+        cut[keys::config::kParams] = rectToJson(config.cut.rect);
     }
-    root["cut"] = cut;
+    root[keys::config::kCut] = cut;
 
     // select：L3 显式选择集（单元序号）。std::vector<int> 直接映射为 JSON 数组。
-    root["select"] = config.selectedCells;
+    root[keys::config::kSelect] = config.selectedCells;
 
     // order：排序策略 + reverse/snake；sequence 预留（自定义序由上层 Sequence 承载）。
     json order;
-    order["strategy"] = strategyName(config.order.strategy);
-    order["reverse"] = config.order.reverse;
-    order["snake"] = config.order.snake;
-    order["sequence"] = nullptr;
-    root["order"] = order;
+    order[keys::config::kStrategy] = strategyName(config.order.strategy);
+    order[keys::config::kReverse] = config.order.reverse;
+    order[keys::config::kSnake] = config.order.snake;
+    order[keys::config::kSequence] = nullptr;
+    root[keys::config::kOrder] = order;
 
     // emit：输出模式 / 合并布局 / 格式 / 命名 / 质量 / 元数据。
     json merge;
-    merge["layout"] = layoutName(config.emitParams.layout);
-    merge["cols"] = optIntToJson(config.emitParams.cols);
-    merge["rows"] = optIntToJson(config.emitParams.rows);
-    merge["cellWidth"] = optIntToJson(config.emitParams.cellWidth);
-    merge["cellHeight"] = optIntToJson(config.emitParams.cellHeight);
-    merge["padColor"] = colorToHex(config.emitParams.padColor);
+    merge[keys::config::kLayout] = layoutName(config.emitParams.layout);
+    merge[keys::config::kCols] = optIntToJson(config.emitParams.cols);
+    merge[keys::config::kRows] = optIntToJson(config.emitParams.rows);
+    merge[keys::config::kCellWidth] = optIntToJson(config.emitParams.cellWidth);
+    merge[keys::config::kCellHeight] = optIntToJson(config.emitParams.cellHeight);
+    merge[keys::config::kPadColor] = colorToHex(config.emitParams.padColor);
     // arrange：重排填充顺序（仅 REARRANGE 用；与顶层 order 选择排序正交）。
     json arrange;
-    arrange["strategy"] = strategyName(config.emitParams.mergeOrder.strategy);
-    arrange["reverse"] = config.emitParams.mergeOrder.reverse;
-    arrange["snake"] = config.emitParams.mergeOrder.snake;
-    merge["arrange"] = arrange;
+    arrange[keys::config::kStrategy] = strategyName(config.emitParams.mergeOrder.strategy);
+    arrange[keys::config::kReverse] = config.emitParams.mergeOrder.reverse;
+    arrange[keys::config::kSnake] = config.emitParams.mergeOrder.snake;
+    merge[keys::config::kArrange] = arrange;
     json emit;
-    emit["mode"] = emitModeName(config.emitParams.mode);
-    emit["merge"] = merge;
-    emit["format"] = formatName(config.emitParams.format);
-    emit["naming"] = config.emitParams.naming;
-    emit["quality"] = config.emitParams.quality;
-    emit["keepMetadata"] = config.emitParams.keepMetadata;
-    root["emit"] = emit;
+    emit[keys::config::kMode] = emitModeName(config.emitParams.mode);
+    emit[keys::config::kMerge] = merge;
+    emit[keys::config::kFormat] = formatName(config.emitParams.format);
+    emit[keys::config::kNaming] = config.emitParams.naming;
+    emit[keys::config::kQuality] = config.emitParams.quality;
+    emit[keys::config::kKeepMetadata] = config.emitParams.keepMetadata;
+    root[keys::config::kEmit] = emit;
 
     // generate：底图描述（可选段）——缺省省略（表示用外部输入图，非生成底图）。
     //   底图＝同构 canvas::ImageLayer：纯图案底图序列化与旧「generate」逐字段等价；带落位时追加
     //   fit/box*/image*/backdrop 键（**不含 file 路径**，外部图凭运行时 --input 供给以保批处理复用）。尺寸恒取 source.width/height。
     if (config.base.has_value())
-        root["generate"] = baseToJson(*config.base);
+        root[keys::config::kGenerate] = baseToJson(*config.base);
 
     // layers：多层画布（可选段）——缺省省略（表示单一输入图/生成源，无图层）。直接以数组承载。
     if (config.layers.has_value()) {
         json arr = json::array();
         for (const canvas::ImageLayer& layer : *config.layers) arr.push_back(layerToJson(layer));
-        root["layers"] = arr;
+        root[keys::config::kLayers] = arr;
     }
 
     // annotations：标注列表（可选段）——集合为空或无标注时省略，保持旧文件观感不变。
     // 段内逐条序列化实现归属 annotation 模块（经 json_common.h 交换 JSON 片段）。
     if (annoSet != nullptr && !annoSet->annotations().empty())
-        root["annotations"] = annotation::annotationsSegmentToJson(*annoSet);
+        root[keys::config::kAnnotations] = annotation::annotationsSegmentToJson(*annoSet);
 
     return root;
 }
@@ -625,30 +324,30 @@ bool engineConfigFromJson(const json& value, EngineConfig& out, annotation::Anno
     out = EngineConfig{}; // 先复位为默认，再逐字段覆盖。
 
     // source。
-    const json& src = at(value, "source");
-    out.source.width = jInt(at(src, "width"), 0);
-    out.source.height = jInt(at(src, "height"), 0);
+    const json& src = at(value, keys::config::kSource);
+    out.source.width = jInt(at(src, keys::common::kWidth), 0);
+    out.source.height = jInt(at(src, keys::common::kHeight), 0);
 
     // opacity（顶层可选键）：画布级整体不透明度，缺省 255、夹 [0,255]（旧配置无键 → 不透明、行为不变）。
-    out.canvasOpacity = std::clamp(jInt(at(value, "opacity"), 255), 0, 255);
+    out.canvasOpacity = std::clamp(jInt(at(value, keys::common::kOpacity), nums::engine::kDefaultOpacity), 0, 255);
 
     // preprocess。
     out.preprocess.clear();
-    if (const json& pre = at(value, "preprocess"); pre.is_array()) {
+    if (const json& pre = at(value, keys::common::kPreprocess); pre.is_array()) {
         for (const json& step : pre) {
             if (preprocess::PreprocessConfig cfg; preprocessFromJson(step, cfg)) out.preprocess.add(cfg);
         }
     }
 
     // cut。
-    const json& cut = at(value, "cut");
-    out.cut.tier = tierFromName(jStr(at(cut, "tier"), "L2"));
-    out.cut.generator = generatorFromName(jStr(at(cut, "generator"), "rect"));
-    out.cut.polarity = polarityFromName(jStr(at(cut, "polarity"), "remove"));
-    const json& params = at(cut, "params");
+    const json& cut = at(value, keys::config::kCut);
+    out.cut.tier = tierFromName(jStr(at(cut, keys::config::kTier), defs::kTierL2));
+    out.cut.generator = generatorFromName(jStr(at(cut, keys::config::kGenerator), defs::kGeneratorRect));
+    out.cut.polarity = polarityFromName(jStr(at(cut, keys::config::kPolarity), defs::kPolarityRemove));
+    const json& params = at(cut, keys::config::kParams);
     if (out.cut.generator == CutGenerator::MULTI_RECT) {
         out.cut.rects.clear();
-        if (const json& rs = at(params, "rects"); rs.is_array())
+        if (const json& rs = at(params, keys::config::kRects); rs.is_array())
             for (const json& r : rs) out.cut.rects.push_back(rectFromJson(r));
     } else if (out.cut.generator == CutGenerator::GRID) {
         out.cut.grid = gridFromJson(params);
@@ -658,53 +357,53 @@ bool engineConfigFromJson(const json& value, EngineConfig& out, annotation::Anno
 
     // select。
     out.selectedCells.clear();
-    if (const json& sel = at(value, "select"); sel.is_array())
+    if (const json& sel = at(value, keys::config::kSelect); sel.is_array())
         for (const json& s : sel) out.selectedCells.push_back(jInt(s, 0));
 
     // order。
-    const json& order = at(value, "order");
-    out.order.strategy = strategyFromName(jStr(at(order, "strategy"), "row-major"));
-    out.order.reverse = jBool(at(order, "reverse"), false);
-    out.order.snake = jBool(at(order, "snake"), false);
+    const json& order = at(value, keys::config::kOrder);
+    out.order.strategy = strategyFromName(jStr(at(order, keys::config::kStrategy), defs::kStrategyRowMajor));
+    out.order.reverse = jBool(at(order, keys::config::kReverse), false);
+    out.order.snake = jBool(at(order, keys::config::kSnake), false);
 
     // emit。
-    const json& emit = at(value, "emit");
-    out.emitParams.mode = emitModeFromName(jStr(at(emit, "mode"), "merged"));
-    out.emitParams.format = formatFromName(jStr(at(emit, "format"), "png"));
-    out.emitParams.naming = jStr(at(emit, "naming"), "{name}_{index:03d}");
-    out.emitParams.quality = jInt(at(emit, "quality"), 90);
-    out.emitParams.keepMetadata = jBool(at(emit, "keepMetadata"), false);
-    const json& merge = at(emit, "merge");
-    out.emitParams.layout = layoutFromName(jStr(at(merge, "layout"), "collapse"));
-    out.emitParams.cols = jsonToOptInt(at(merge, "cols"));
-    out.emitParams.rows = jsonToOptInt(at(merge, "rows"));
-    out.emitParams.cellWidth = jsonToOptInt(at(merge, "cellWidth"));
-    out.emitParams.cellHeight = jsonToOptInt(at(merge, "cellHeight"));
+    const json& emit = at(value, keys::config::kEmit);
+    out.emitParams.mode = emitModeFromName(jStr(at(emit, keys::config::kMode), defs::kEmitModeMerged));
+    out.emitParams.format = formatFromName(jStr(at(emit, keys::config::kFormat), defs::kFormatPng));
+    out.emitParams.naming = jStr(at(emit, keys::config::kNaming), defs::kNamingTemplate);
+    out.emitParams.quality = jInt(at(emit, keys::config::kQuality), nums::engine::kDefaultQuality);
+    out.emitParams.keepMetadata = jBool(at(emit, keys::config::kKeepMetadata), false);
+    const json& merge = at(emit, keys::config::kMerge);
+    out.emitParams.layout = layoutFromName(jStr(at(merge, keys::config::kLayout), defs::kLayoutCollapse));
+    out.emitParams.cols = jsonToOptInt(at(merge, keys::config::kCols));
+    out.emitParams.rows = jsonToOptInt(at(merge, keys::config::kRows));
+    out.emitParams.cellWidth = jsonToOptInt(at(merge, keys::config::kCellWidth));
+    out.emitParams.cellHeight = jsonToOptInt(at(merge, keys::config::kCellHeight));
     // 兼容 SPEC §7 示例的 "cellSize"：{width,height} / {w,h} / [w,h] 三种写法。
     if (!out.emitParams.cellWidth && !out.emitParams.cellHeight) {
-        if (const json& cs = at(merge, "cellSize"); cs.is_array() && cs.size() >= 2) {
+        if (const json& cs = at(merge, keys::config::kCellSize); cs.is_array() && cs.size() >= 2) {
             out.emitParams.cellWidth = jInt(cs[0], 0);
             out.emitParams.cellHeight = jInt(cs[1], 0);
         } else if (cs.is_object()) {
-            const int w = cs.contains("width") ? jInt(at(cs, "width"), 0) : jInt(at(cs, "w"), 0);
-            const int h = cs.contains("height") ? jInt(at(cs, "height"), 0) : jInt(at(cs, "h"), 0);
+            const int w = cs.contains(keys::common::kWidth) ? jInt(at(cs, keys::common::kWidth), 0) : jInt(at(cs, keys::common::kW), 0);
+            const int h = cs.contains(keys::common::kHeight) ? jInt(at(cs, keys::common::kHeight), 0) : jInt(at(cs, keys::common::kH), 0);
             out.emitParams.cellWidth = w;
             out.emitParams.cellHeight = h;
         }
     }
-    out.emitParams.padColor = colorFromHex(jStr(at(merge, "padColor"), "#00000000"));
+    out.emitParams.padColor = colorFromHex(jStr(at(merge, keys::config::kPadColor), defs::kPadColorTransparent));
     // arrange：重排填充顺序（缺失取默认 row-major / 无 reverse / 无 snake）。
-    const json& arrange = at(merge, "arrange");
-    out.emitParams.mergeOrder.strategy = strategyFromName(jStr(at(arrange, "strategy"), "row-major"));
-    out.emitParams.mergeOrder.reverse = jBool(at(arrange, "reverse"), false);
-    out.emitParams.mergeOrder.snake = jBool(at(arrange, "snake"), false);
+    const json& arrange = at(merge, keys::config::kArrange);
+    out.emitParams.mergeOrder.strategy = strategyFromName(jStr(at(arrange, keys::config::kStrategy), defs::kStrategyRowMajor));
+    out.emitParams.mergeOrder.reverse = jBool(at(arrange, keys::config::kReverse), false);
+    out.emitParams.mergeOrder.snake = jBool(at(arrange, keys::config::kSnake), false);
 
     // generate（可选段）：缺段或非对象 → 无底图（std::nullopt）。解析为同构 canvas::ImageLayer。
-    if (const json& gen = at(value, "generate"); gen.is_object())
+    if (const json& gen = at(value, keys::config::kGenerate); gen.is_object())
         out.base = baseFromJson(gen);   // 位图 / 外部文件不入配置：落位底图源图由上层凭运行时 --input 注入 decodedPixels。
 
     // layers（可选段）：缺段 → 无图层（std::nullopt）。直接以数组承载（不再兼容旧对象形）。
-    if (const json& ls = at(value, "layers"); ls.is_array()) {
+    if (const json& ls = at(value, keys::config::kLayers); ls.is_array()) {
         std::vector<canvas::ImageLayer> layers;
         for (const json& lv : ls) layers.push_back(layerFromJson(lv));
         // 注：File 层的 decodedPixels 不经配置还原（位图不入配置）；由上层（CLI/GUI）按相对名从 assets 解码注入。
@@ -715,7 +414,7 @@ bool engineConfigFromJson(const json& value, EngineConfig& out, annotation::Anno
     // 逐条严格校验、任一非法即整档载入失败（不静默丢弃）——重建逻辑归属 annotation 模块
     // （经 json_common.h 交换 JSON 片段，annoErr 回传逐条原因）。
     if (annoSet != nullptr) {
-        if (!annotation::annotationsFromSegmentJson(at(value, "annotations"), *annoSet, annoErr))
+        if (!annotation::annotationsFromSegmentJson(at(value, keys::config::kAnnotations), *annoSet, annoErr))
             return false;
     }
 

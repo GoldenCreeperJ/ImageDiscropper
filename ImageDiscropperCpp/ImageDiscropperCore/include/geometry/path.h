@@ -8,6 +8,7 @@
 
 #include <vector>
 
+#include "core/core_nums.h"
 #include "core/point.h"
 
 namespace idc::geometry {
@@ -89,16 +90,16 @@ public:
     BoundingBox bounds() const;
 
     // 将所有曲线段离散化为折线段，flatness 越小折线越精细。
-    // 返回新的 Path，不修改原路径。
-    Path flattened(double flatness = 1.0) const;
+    // 返回新的 Path，不修改原路径。默认容差取常量层 geometry::kDefaultFlatnessPx。
+    Path flattened(double flatness = core::nums::geometry::kDefaultFlatnessPx) const;
 
     // 判断点是否位于路径内部（偶奇规则）。仅对闭合路径有意义。
     // 内部先扁平化，再做经典扫描线判定。
-    bool contains(double px, double py, double flatness = 0.5) const;
+    bool contains(double px, double py, double flatness = core::nums::geometry::kHitFlatnessPx) const;
 
     // 计算点到路径最近线段的距离（扁平化后按线段距离取最小）。
     // 用于命中检测：返回实际距离，由调用方自行与容差比较。
-    double distanceToOutline(double px, double py, double flatness = 0.5) const;
+    double distanceToOutline(double px, double py, double flatness = core::nums::geometry::kHitFlatnessPx) const;
 
     // 平移整条路径。
     void translate(double dx, double dy);

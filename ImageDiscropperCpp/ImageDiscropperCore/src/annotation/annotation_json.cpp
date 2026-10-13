@@ -7,8 +7,15 @@
 //       调用本文件，公共头只暴露 parseAnnotationsFromJsonText（std 级 API，不外泄 nlohmann）。
 // 说明：本次为**纯搬家重构**——函数体逐字迁移，未改任何容差 / 缺省值 / 校验语义（向后兼容旧配置文件）。
 //       通用 JSON 助手（at/jInt/… / colorToHex/colorFromHex）来自 src/json_common.h（idc::jsonutil），与 engine 共用一份。
+// 常量层：键名 keys:: / 兜底默认串 defs:: / 默认数字 nums:: 三个别名仅在本文件匿名
+//       命名空间内可见；校验报因一律走门面 IDC_KTR / IDC_KTRF（缺译文自动回退常量层）。
+//       文本值与旧字面量逐字节相同（含全角标点与尾随空格），改动须同步 include/i18n/core_texts.h。
 // ============================================================================
 #include "annotation/annotation_json.h"
+
+#include "core/core_nums.h"  // 字号 / 描边 / 退化容差默认值单一真相源（常量层）
+#include "i18n/core_i18n.h"   // IDC_KTR / IDC_KTRF：报因取译文（缺译文回退常量层）
+#include "i18n/core_texts.h" // §7 JSON 键名单一真相源（常量层）
 
 #include "../json_common.h" // idc::jsonutil 助手 + 片段函数声明（本文件给出实现）
 
@@ -34,6 +41,11 @@ namespace {
 
 using json = nlohmann::json;
 using geometry::ShapeType;
+
+// §7 annotations 段键名 / 兜底默认串 / 默认数字的别名（单一真相源见 include/i18n/core_texts.h ）。
+namespace keys = core::texts::jsonkey;
+namespace defs = core::texts::defaults;
+namespace nums = core::nums;
 
 // 与 engine 共用的宽容读取 / 颜色助手（单一真相源见 src/json_common.h）。
 using jsonutil::at;
@@ -191,8 +203,8 @@ json transformToJson(const geometry::Shape& s) {
     if (m.isIdentity() && s.obbScaleX() == 1.0 && s.obbScaleY() == 1.0 && s.obbRotationDeg() == 0.0)
         return json(nullptr);
     return json{
-        {"matrix", json::array({m.a, m.b, m.c, m.d, m.tx, m.ty})},
-        {"scaleX", s.obbScaleX()}, {"scaleY", s.obbScaleY()}, {"rotationDeg", s.obbRotationDeg()},
+        {keys::anno::kMatrix, json::array({m.a, m.b, m.c, m.d, m.tx, m.ty})},
+        {keys::anno::kScaleX, s.obbScaleX()}, {keys::anno::kScaleY, s.obbScaleY()}, {keys::anno::kRotationDeg, s.obbRotationDeg()},
     };
 }
 
@@ -200,153 +212,177 @@ json transformToJson(const geometry::Shape& s) {
 void transformFromJson(const json& v, geometry::Shape& s) {
     if (!v.is_object()) return;
     geometry::AffineTransform m;
-    if (const json& mat = at(v, "matrix"); mat.is_array() && mat.size() >= 6) {
+    if (const json& mat = at(v, keys::anno::kMatrix); mat.is_array() && mat.size() >= 6) {
         m = geometry::AffineTransform(jDouble(mat[0], 1.0), jDouble(mat[1], 0.0), jDouble(mat[2], 0.0),
                                       jDouble(mat[3], 1.0), jDouble(mat[4], 0.0), jDouble(mat[5], 0.0));
     }
-    s.restoreTransformState(m, jDouble(at(v, "scaleX"), 1.0), jDouble(at(v, "scaleY"), 1.0),
-                            jDouble(at(v, "rotationDeg"), 0.0));
+    s.restoreTransformState(m, jDouble(at(v, keys::anno::kScaleX), 1.0), jDouble(at(v, keys::anno::kScaleY), 1.0),
+                            jDouble(at(v, keys::anno::kRotationDeg), 0.0));
 }
 
 // 形状 → JSON：按具体类分派几何字段（局部坐标，不含变换；变换另经 transform 字段）。
 json shapeToJson(const geometry::Shape& s) {
     json o;
-    o["type"] = annoShapeTypeName(s.type());
+    o[keys::common::kType] = annoShapeTypeName(s.type());
     if (const auto* text = dynamic_cast<const geometry::TextShape*>(&s)) {
-        o["x"] = text->x(); o["y"] = text->y();
-        o["text"] = text->text();
-        o["fontSize"] = text->fontSize();
+        o[keys::common::kX] = text->x(); o[keys::common::kY] = text->y();
+        o[keys::anno::kText] = text->text();
+        o[keys::anno::kFontSize] = text->fontSize();
     } else if (const auto* ell = dynamic_cast<const geometry::EllipseShape*>(&s)) {
         // 圆/椭圆：反解双锚点写出（圆心 p1 + 定形点 p2），与 shapeFromJson 的锚点→buildShape 路径互逆。
         const double cx = ell->centerX(), cy = ell->centerY();
         const double rx = ell->radiusX(), ry = ell->radiusY();
-        o["x1"] = cx; o["y1"] = cy;
-        if (s.type() == ShapeType::CIRCLE) { o["x2"] = cx + rx; o["y2"] = cy; }   // 圆：p2 取水平向圆上点，半径 = rx
-        else { o["x2"] = cx + rx; o["y2"] = cy + ry; }                             // 椭圆：p2 编码两半轴 (rx, ry)
+        o[keys::common::kX1] = cx; o[keys::common::kY1] = cy;
+        if (s.type() == ShapeType::CIRCLE) { o[keys::common::kX2] = cx + rx; o[keys::common::kY2] = cy; }   // 圆：p2 取水平向圆上点，半径 = rx
+        else { o[keys::common::kX2] = cx + rx; o[keys::common::kY2] = cy + ry; }                             // 椭圆：p2 编码两半轴 (rx, ry)
     } else if (const auto* path = dynamic_cast<const geometry::PathShape*>(&s)) {
         json segs = json::array();
         for (const auto&[type, coords] : path->path().segments())
-            segs.push_back(json{{"t", segTypeName(type)}, {"coords", coords}});
-        o["segments"] = std::move(segs);
+            segs.push_back(json{{keys::anno::kSegType, segTypeName(type)}, {keys::anno::kCoords, coords}});
+        o[keys::anno::kSegments] = std::move(segs);
     } else if (const auto* poly = dynamic_cast<const geometry::PolygonShape*>(&s)) {
         if (isAnchorConstrained(poly->type())) {
             // 约束图元：反解双锚点写出（与 shapeFromJson 的锚点→buildShape 路径互逆）。
             double ax1 = 0, ay1 = 0, ax2 = 0, ay2 = 0;
             anchorFromConstrained(*poly, ax1, ay1, ax2, ay2);
-            o["x1"] = ax1; o["y1"] = ay1; o["x2"] = ax2; o["y2"] = ay2;
-            o["cornerRadius"] = poly->cornerRadius();
+            o[keys::common::kX1] = ax1; o[keys::common::kY1] = ay1; o[keys::common::kX2] = ax2; o[keys::common::kY2] = ay2;
+            o[keys::common::kCornerRadius] = poly->cornerRadius();
         } else {
             json pts = json::array();
             for (const core::Point2D& p : poly->points()) pts.push_back(json::array({p.x, p.y}));
-            o["points"] = std::move(pts);
-            o["closed"] = poly->closed();
-            o["cornerRadius"] = poly->cornerRadius();
+            o[keys::common::kPoints] = std::move(pts);
+            o[keys::common::kClosed] = poly->closed();
+            o[keys::common::kCornerRadius] = poly->cornerRadius();
         }
     } else {
         return nullptr; // 未知形状类（理论不可达）：由调用方跳过。
     }
-    o["transform"] = transformToJson(s);
+    o[keys::common::kTransform] = transformToJson(s);
     return o;
 }
 
 // JSON → 形状（严格校验）：非法时写 reason 返回 nullptr。双锚点图元（约束多边形 + 圆/椭圆）经 buildShape(p1,p2) 派生、恒合法，
 // line/polyline 直连顶点、path/text 直连参数并逐项校验；type 缺失/未知一律报错。
+// 数值存在性助手：键须为数字，否则记 reason 并返回 false。
+bool needNumField(const json& v, const char* key, double& out, std::string& reason) {
+    const json& jv = at(v, key);
+    if (!jv.is_number()) { reason = IDC_KTRF(msg, kErrMissingNumField, key); return false; }
+    out = jv.get<double>();
+    return true;
+}
+
+// 锚点约束形状（矩形/正方形/菱形/等腰/等边/直角/等腰直角三角）：x1,y1,x2,y2 两锚点 + 逐类型退化校验
+// + 可选 cornerRadius，几何经 buildShape 派生。
+std::unique_ptr<geometry::Shape> anchoredShapeFromJson(const json& v, const ShapeType type, std::string& reason) {
+    double x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+    if (!(needNumField(v, keys::common::kX1, x1, reason) && needNumField(v, keys::common::kY1, y1, reason)
+          && needNumField(v, keys::common::kX2, x2, reason) && needNumField(v, keys::common::kY2, y2, reason))) return nullptr;
+    const double dx = x2 - x1, dy = y2 - y1;
+    constexpr double eps = nums::annotation::kDegenerateEpsPx;
+    bool ok = true;
+    std::string why;   // 取译文后为值类型（非 const char*）：下面与 kErrAnchorDegenerate 拼接。
+    switch (type) {
+        case ShapeType::RECTANGLE:      ok = std::abs(dx) > eps && std::abs(dy) > eps; why = IDC_KTR(msg, kErrRectSize); break;
+        case ShapeType::SQUARE:         ok = std::max(std::abs(dx), std::abs(dy)) > eps; why = IDC_KTR(msg, kErrSquareSize); break;
+        case ShapeType::RHOMBUS:        ok = std::abs(dx) > eps && std::abs(dy) > eps; why = IDC_KTR(msg, kErrRhombusSize); break;
+        case ShapeType::ISOS_TRIANGLE:  ok = std::abs(dx) > eps && std::abs(dy) > eps; why = IDC_KTR(msg, kErrIsosTriangleSize); break;
+        case ShapeType::EQU_TRIANGLE:   ok = std::max(std::abs(dx), std::abs(dy) / std::sqrt(3.0)) > eps; why = IDC_KTR(msg, kErrEquTriangleSize); break;
+        case ShapeType::RECT_TRIANGLE:  ok = std::abs(dx) > eps && std::abs(dy) > eps; why = IDC_KTR(msg, kErrRectTriangleSize); break;
+        case ShapeType::EQU_RECT_TRIANGLE: ok = std::max(std::abs(dx), std::abs(dy)) > eps; why = IDC_KTR(msg, kErrEquRectTriangleSize); break;
+        default: break;
+    }
+    if (!ok) { reason = IDC_KTR(msg, kErrAnchorDegenerate) + why; return nullptr; }
+    ShapeRequest req;
+    req.p1 = core::Point2D{x1, y1};
+    req.p2 = core::Point2D{x2, y2};
+    req.type = type;
+    req.cornerRadius = std::max(0.0, jDouble(at(v, keys::common::kCornerRadius), 0.0));
+    return buildShape(req);
+}
+
+// 直线 / 折线：points 顶点数组（LINE 恰 2 顶点、POLYLINE ≥2）+ 可选 closed/cornerRadius。
+std::unique_ptr<geometry::Shape> lineShapeFromJson(const json& v, const ShapeType type, std::string& reason) {
+    const json& pts = at(v, keys::common::kPoints);
+    if (!pts.is_array()) { reason = IDC_KTR(msg, kErrNoPoints); return nullptr; }
+    std::vector<core::Point2D> points;
+    for (const json& p : pts)
+        if (p.is_array() && p.size() >= 2 && p[0].is_number() && p[1].is_number())
+            points.emplace_back(p[0].get<double>(), p[1].get<double>());
+    if (type == ShapeType::LINE && points.size() != 2) { reason = IDC_KTR(msg, kErrLineNeeds2Points); return nullptr; }
+    if (type == ShapeType::POLYLINE && points.size() < 2) { reason = IDC_KTR(msg, kErrPolylineNeedsPoints); return nullptr; }
+    return std::make_unique<geometry::PolygonShape>(std::move(points), type,
+                                                    jBool(at(v, keys::common::kClosed), false),
+                                                    std::max(0.0, jDouble(at(v, keys::common::kCornerRadius), 0.0)));
+}
+
+// 圆/椭圆改走锚点：p1=圆心、p2 定形（圆：半径=|p1p2|；椭圆：半轴=|Δx|,|Δy|），几何经 buildShape 派生恒合法。
+std::unique_ptr<geometry::Shape> ellipseShapeFromJson(const json& v, const ShapeType type, std::string& reason) {
+    double x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+    if (!(needNumField(v, keys::common::kX1, x1, reason) && needNumField(v, keys::common::kY1, y1, reason)
+          && needNumField(v, keys::common::kX2, x2, reason) && needNumField(v, keys::common::kY2, y2, reason))) return nullptr;
+    const double dx = x2 - x1, dy = y2 - y1;
+    constexpr double eps = nums::annotation::kDegenerateEpsPx;
+    if (type == ShapeType::CIRCLE) {
+        if (std::hypot(dx, dy) <= eps) { reason = IDC_KTR(msg, kErrCircleDegenerate); return nullptr; }
+    } else { // ELLIPSE：两半轴均须 > 0（杜绝退化扁平椭圆）
+        if (std::abs(dx) <= eps || std::abs(dy) <= eps) { reason = IDC_KTR(msg, kErrEllipseDegenerate); return nullptr; }
+    }
+    ShapeRequest req;
+    req.type = type;
+    req.p1 = core::Point2D{x1, y1};
+    req.p2 = core::Point2D{x2, y2};
+    return buildShape(req);
+}
+
+// PATH：M/L/Q/C/Z 段序列（逐段校验坐标个数，全部无效才判错）。
+std::unique_ptr<geometry::Shape> pathShapeFromJson(const json& v, const ShapeType type, std::string& reason) {
+    const json& segs = at(v, keys::anno::kSegments);
+    if (!segs.is_array() || segs.empty()) { reason = IDC_KTR(msg, kErrPathNoSegments); return nullptr; }
+    geometry::Path path;
+    int added = 0;
+    for (const json& seg : segs) {
+        const std::string t = jStr(at(seg, keys::anno::kSegType), "M");
+        const json& c = at(seg, keys::anno::kCoords);
+        if (!c.is_array()) continue;
+        const auto d = [&](const std::size_t i) { return i < c.size() && c[i].is_number() ? c[i].get<double>() : 0.0; };
+        if (t == "M" && c.size() >= 2) { path.moveTo(d(0), d(1)); ++added; }
+        else if (t == "L" && c.size() >= 2) { path.lineTo(d(0), d(1)); ++added; }
+        else if (t == "Q" && c.size() >= 4) { path.quadTo(d(0), d(1), d(2), d(3)); ++added; }
+        else if (t == "C" && c.size() >= 6) { path.cubicTo(d(0), d(1), d(2), d(3), d(4), d(5)); ++added; }
+        else if (t == "Z") { path.closePath(); ++added; }
+    }
+    if (added == 0) { reason = IDC_KTR(msg, kErrPathNoSegment); return nullptr; }
+    return std::make_unique<geometry::PathShape>(std::move(path), type);
+}
+
+// TEXT：text 内容 + x/y 落点 + 正 fontSize。
+std::unique_ptr<geometry::Shape> textShapeFromJson(const json& v, std::string& reason) {
+    const json& fj = at(v, keys::anno::kFontSize);
+    double fontSize = nums::annotation::kDefaultFontSizePx;
+    if (fj.is_number()) { fontSize = fj.get<double>(); if (!(fontSize > 0)) { reason = IDC_KTR(msg, kErrFontSizeNotPositive); return nullptr; } }
+    else if (!fj.is_null()) { reason = IDC_KTR(msg, kErrFontSizeNotNumber); return nullptr; }
+    return std::make_unique<geometry::TextShape>(jStr(at(v, keys::anno::kText), defs::kAnnotationText),
+                                                 jDouble(at(v, keys::common::kX), 0.0), jDouble(at(v, keys::common::kY), 0.0), fontSize);
+}
+
+// JSON → 形状（按 type 分派到上面五个域解析器；几何退化/字段非法时写 reason 返回 nullptr）。
+// 成功后再施加可选 transform（缩放/旋转）。
 std::unique_ptr<geometry::Shape> shapeFromJson(const json& v, std::string& reason) {
-    const json& tv = at(v, "type");
-    if (!tv.is_string()) { reason = "缺少 type 字段"; return nullptr; }
+    const json& tv = at(v, keys::common::kType);
+    if (!tv.is_string()) { reason = IDC_KTR(msg, kErrNoTypeField); return nullptr; }
     const std::string ts = tv.get<std::string>();
     const std::optional<ShapeType> maybeType = strictShapeTypeFromName(ts);
-    if (!maybeType) { reason = "未知 type：'" + ts + "'"; return nullptr; }
+    if (!maybeType) { reason = IDC_KTR(msg, kErrUnknownType) + ts + "'"; return nullptr; }
     const ShapeType type = *maybeType;
 
-    // 数值存在性助手：键须为数字，否则记 reason 并返回 false。
-    const auto needNum = [&](const char* key, double& out) -> bool {
-        const json& jv = at(v, key);
-        if (!jv.is_number()) { reason = std::string("缺少或非法数值字段 '") + key + "'"; return false; }
-        out = jv.get<double>();
-        return true;
-    };
-
     std::unique_ptr<geometry::Shape> shape;
-    if (isAnchorConstrained(type)) {
-        double x1 = 0, y1 = 0, x2 = 0, y2 = 0;
-        if (!(needNum("x1", x1) && needNum("y1", y1) && needNum("x2", x2) && needNum("y2", y2))) return nullptr;
-        const double dx = x2 - x1, dy = y2 - y1;
-        constexpr double eps = 1e-3;
-        bool ok = true;
-        auto why = "";
-        switch (type) {
-            case ShapeType::RECTANGLE:      ok = std::abs(dx) > eps && std::abs(dy) > eps; why = "矩形宽高须大于 0"; break;
-            case ShapeType::SQUARE:         ok = std::max(std::abs(dx), std::abs(dy)) > eps; why = "正方形边长须大于 0"; break;
-            case ShapeType::RHOMBUS:        ok = std::abs(dx) > eps && std::abs(dy) > eps; why = "菱形两半对角线须大于 0"; break;
-            case ShapeType::ISOS_TRIANGLE:  ok = std::abs(dx) > eps && std::abs(dy) > eps; why = "等腰三角形半底与高须大于 0"; break;
-            case ShapeType::EQU_TRIANGLE:   ok = std::max(std::abs(dx), std::abs(dy) / std::sqrt(3.0)) > eps; why = "等边三角形尺寸须大于 0"; break;
-            case ShapeType::RECT_TRIANGLE:  ok = std::abs(dx) > eps && std::abs(dy) > eps; why = "直角三角形两直角边须大于 0"; break;
-            case ShapeType::EQU_RECT_TRIANGLE: ok = std::max(std::abs(dx), std::abs(dy)) > eps; why = "等腰直角三角形直角边须大于 0"; break;
-            default: break;
-        }
-        if (!ok) { reason = std::string("锚点退化：") + why; return nullptr; }
-        ShapeRequest req;
-        req.p1 = core::Point2D{x1, y1};
-        req.p2 = core::Point2D{x2, y2};
-        req.type = type;
-        req.cornerRadius = std::max(0.0, jDouble(at(v, "cornerRadius"), 0.0));
-        shape = buildShape(req);
-    } else if (type == ShapeType::LINE || type == ShapeType::POLYLINE) {
-        const json& pts = at(v, "points");
-        if (!pts.is_array()) { reason = "缺少 points 数组"; return nullptr; }
-        std::vector<core::Point2D> points;
-        for (const json& p : pts)
-            if (p.is_array() && p.size() >= 2 && p[0].is_number() && p[1].is_number())
-                points.emplace_back(p[0].get<double>(), p[1].get<double>());
-        if (type == ShapeType::LINE && points.size() != 2) { reason = "直线 points 须恰为 2 顶点"; return nullptr; }
-        if (type == ShapeType::POLYLINE && points.size() < 2) { reason = "折线 points 须 ≥2 顶点"; return nullptr; }
-        shape = std::make_unique<geometry::PolygonShape>(std::move(points), type,
-                                                         jBool(at(v, "closed"), false),
-                                                         std::max(0.0, jDouble(at(v, "cornerRadius"), 0.0)));
-    } else if (type == ShapeType::ELLIPSE || type == ShapeType::CIRCLE) {
-        // 圆/椭圆改走锚点：p1=圆心、p2 定形（圆：半径=|p1p2|；椭圆：半轴=|Δx|,|Δy|），几何经 buildShape 派生恒合法。
-        double x1 = 0, y1 = 0, x2 = 0, y2 = 0;
-        if (!(needNum("x1", x1) && needNum("y1", y1) && needNum("x2", x2) && needNum("y2", y2))) return nullptr;
-        const double dx = x2 - x1, dy = y2 - y1;
-        constexpr double eps = 1e-3;
-        if (type == ShapeType::CIRCLE) {
-            if (std::hypot(dx, dy) <= eps) { reason = "锚点退化：圆的半径须大于 0"; return nullptr; }
-        } else { // ELLIPSE：两半轴均须 > 0（杜绝退化扁平椭圆）
-            if (std::abs(dx) <= eps || std::abs(dy) <= eps) { reason = "锚点退化：椭圆两半轴须大于 0"; return nullptr; }
-        }
-        ShapeRequest req;
-        req.type = type;
-        req.p1 = core::Point2D{x1, y1};
-        req.p2 = core::Point2D{x2, y2};
-        shape = buildShape(req);
-    } else if (type == ShapeType::PATH) {
-        const json& segs = at(v, "segments");
-        if (!segs.is_array() || segs.empty()) { reason = "path 缺少非空 segments 数组"; return nullptr; }
-        geometry::Path path;
-        int added = 0;
-        for (const json& seg : segs) {
-            const std::string t = jStr(at(seg, "t"), "M");
-            const json& c = at(seg, "coords");
-            if (!c.is_array()) continue;
-            const auto d = [&](const std::size_t i) { return i < c.size() && c[i].is_number() ? c[i].get<double>() : 0.0; };
-            if (t == "M" && c.size() >= 2) { path.moveTo(d(0), d(1)); ++added; }
-            else if (t == "L" && c.size() >= 2) { path.lineTo(d(0), d(1)); ++added; }
-            else if (t == "Q" && c.size() >= 4) { path.quadTo(d(0), d(1), d(2), d(3)); ++added; }
-            else if (t == "C" && c.size() >= 6) { path.cubicTo(d(0), d(1), d(2), d(3), d(4), d(5)); ++added; }
-            else if (t == "Z") { path.closePath(); ++added; }
-        }
-        if (added == 0) { reason = "path 无有效段"; return nullptr; }
-        shape = std::make_unique<geometry::PathShape>(std::move(path), type);
-    } else { // TEXT
-        const json& fj = at(v, "fontSize");
-        double fontSize = 200.0;
-        if (fj.is_number()) { fontSize = fj.get<double>(); if (!(fontSize > 0)) { reason = "文字 fontSize 须为正"; return nullptr; } }
-        else if (!fj.is_null()) { reason = "文字 fontSize 须为数值"; return nullptr; }
-        shape = std::make_unique<geometry::TextShape>(jStr(at(v, "text"), "A"),
-                                                      jDouble(at(v, "x"), 0.0), jDouble(at(v, "y"), 0.0), fontSize);
-    }
-    transformFromJson(at(v, "transform"), *shape);
+    if (isAnchorConstrained(type)) shape = anchoredShapeFromJson(v, type, reason);
+    else if (type == ShapeType::LINE || type == ShapeType::POLYLINE) shape = lineShapeFromJson(v, type, reason);
+    else if (type == ShapeType::ELLIPSE || type == ShapeType::CIRCLE) shape = ellipseShapeFromJson(v, type, reason);
+    else if (type == ShapeType::PATH) shape = pathShapeFromJson(v, type, reason);
+    else shape = textShapeFromJson(v, reason);   // TEXT
+    if (!shape) return nullptr;
+    transformFromJson(at(v, keys::common::kTransform), *shape);
     return shape;
 }
 
@@ -355,11 +391,11 @@ json annotationToJson(const Annotation& a) {
     if (!a.shape) return nullptr;
     json o = shapeToJson(*a.shape);
     if (o.is_null()) return o;
-    o["color"] = colorToHex(a.style.color);
-    o["fillColor"] = colorToHex(a.style.fillColor);
-    o["strokeWidth"] = a.style.strokeWidth;
-    o["fill"] = a.style.fill;
-    o["zOrder"] = a.zOrder;   // 叠放次序（0＝最底、大＝顶）：显式落盘，与数组位置一致。
+    o[keys::anno::kColor] = colorToHex(a.style.color);
+    o[keys::anno::kFillColor] = colorToHex(a.style.fillColor);
+    o[keys::anno::kStrokeWidth] = a.style.strokeWidth;
+    o[keys::common::kFill] = a.style.fill;
+    o[keys::common::kZOrder] = a.zOrder;   // 叠放次序（0＝最底、大＝顶）：显式落盘，与数组位置一致。
     return o;
 }
 
@@ -369,23 +405,23 @@ Annotation annotationFromJson(const json& v, std::string& reason, const int fall
     Annotation a;
     a.shape = shapeFromJson(v, reason);
     if (!a.shape) return a;
-    if (const json& cj = at(v, "color"); cj.is_string() && !isValidHexColor(cj.get<std::string>())) {
-        reason = "color 非法十六进制：'" + cj.get<std::string>() + "'"; a.shape.reset(); return a;
+    if (const json& cj = at(v, keys::anno::kColor); cj.is_string() && !isValidHexColor(cj.get<std::string>())) {
+        reason = IDC_KTR(msg, kErrBadColor) + cj.get<std::string>() + "'"; a.shape.reset(); return a;
     }
-    if (const json& fj = at(v, "fillColor"); fj.is_string() && !isValidHexColor(fj.get<std::string>())) {
-        reason = "fillColor 非法十六进制：'" + fj.get<std::string>() + "'"; a.shape.reset(); return a;
+    if (const json& fj = at(v, keys::anno::kFillColor); fj.is_string() && !isValidHexColor(fj.get<std::string>())) {
+        reason = IDC_KTR(msg, kErrBadFillColor) + fj.get<std::string>() + "'"; a.shape.reset(); return a;
     }
-    if (const json& sw = at(v, "strokeWidth"); !sw.is_null() && !sw.is_number_integer()) {
-        reason = "strokeWidth 须为整数"; a.shape.reset(); return a;
+    if (const json& sw = at(v, keys::anno::kStrokeWidth); !sw.is_null() && !sw.is_number_integer()) {
+        reason = IDC_KTR(msg, kErrStrokeWidthNotInt); a.shape.reset(); return a;
     }
-    if (const json& zo = at(v, "zOrder"); !zo.is_null() && !zo.is_number_integer()) {
-        reason = "zOrder 须为整数"; a.shape.reset(); return a;
+    if (const json& zo = at(v, keys::common::kZOrder); !zo.is_null() && !zo.is_number_integer()) {
+        reason = IDC_KTR(msg, kErrZOrderNotInt); a.shape.reset(); return a;
     }
-    a.style.color = colorFromHex(jStr(at(v, "color"), "#FF000000"));
-    a.style.fillColor = colorFromHex(jStr(at(v, "fillColor"), "#FF000000"));
-    a.style.strokeWidth = jInt(at(v, "strokeWidth"), 2);
-    a.style.fill = jBool(at(v, "fill"), false);
-    a.zOrder = jInt(at(v, "zOrder"), fallbackZOrder);   // 缺字段回退为数组下标
+    a.style.color = colorFromHex(jStr(at(v, keys::anno::kColor), defs::kAnnotationColor));
+    a.style.fillColor = colorFromHex(jStr(at(v, keys::anno::kFillColor), defs::kAnnotationColor));
+    a.style.strokeWidth = jInt(at(v, keys::anno::kStrokeWidth), nums::annotation::kDefaultStrokeWidth);
+    a.style.fill = jBool(at(v, keys::common::kFill), false);
+    a.zOrder = jInt(at(v, keys::common::kZOrder), fallbackZOrder);   // 缺字段回退为数组下标
     return a;
 }
 
@@ -416,17 +452,17 @@ bool annotationsFromSegmentJson(const nlohmann::json& arrValue, AnnotationSet& s
             ++idx;
             std::string reason;
             if (!item.is_object()) {
-                reason = "非对象条目";
+                reason = IDC_KTR(msg, kErrNotAnObject);
             } else {
                 if (Annotation a = annotationFromJson(item, reason, static_cast<int>(idx - 1)); a.shape)
                     items.push_back(std::move(a));
             }
-            if (!reason.empty()) errs.push_back("第 " + std::to_string(idx) + " 个标注元素：" + reason);
+            if (!reason.empty()) errs.push_back(IDC_KTRF(msg, kErrAnnoItemPrefix, std::to_string(idx), reason));
         }
     }
     if (!errs.empty()) {
         if (annoErr != nullptr) {
-            *annoErr = "配置 annotations 段存在非法条目：";
+            *annoErr = IDC_KTR(msg, kErrAnnoSectionInvalid);
             for (const std::string& e : errs) *annoErr += "\n  - " + e;
         }
         return false;
@@ -447,7 +483,7 @@ bool annotationsFromSegmentJson(const nlohmann::json& arrValue, AnnotationSet& s
 bool parseAnnotationsFromJsonText(const std::string& text,
                                   std::vector<Annotation>& out,
                                   std::string& err) {
-    if (text.empty()) { err = "标注 JSON 为空"; return false; }
+    if (text.empty()) { err = IDC_KTR(msg, kErrAnnoTextEmpty); return false; }
     try {
         const json value = json::parse(text);
         std::vector<Annotation> built; // 本批临时产物：无错才整体追加到 out。
@@ -457,34 +493,34 @@ bool parseAnnotationsFromJsonText(const std::string& text,
             ++idx;
             std::string reason;
             if (!item.is_object()) {
-                reason = "非对象条目";
+                reason = IDC_KTR(msg, kErrNotAnObject);
             } else {
                 if (Annotation a = annotationFromJson(item, reason, static_cast<int>(idx - 1)); a.shape)
                     built.push_back(std::move(a));
             }
-            if (!reason.empty()) errs.push_back("第 " + std::to_string(idx) + " 个元素：" + reason);
+            if (!reason.empty()) errs.push_back(IDC_KTRF(msg, kErrAnnoElementPrefix, std::to_string(idx), reason));
         };
         if (value.is_array()) {
             for (const json& item : value) addOne(item);
         } else if (value.is_object()) {
             addOne(value);
         } else {
-            err = "标注 JSON 根须为对象（单条标注）或数组（多条标注）";
+            err = IDC_KTR(msg, kErrAnnoRootType);
             return false;
         }
         if (!errs.empty()) {
-            err = "标注校验失败：";
+            err = IDC_KTR(msg, kErrAnnoValidationFailed);
             for (const std::string& e : errs) err += "\n  - " + e;
             return false;
         }
-        if (built.empty()) { err = "标注 JSON 无有效条目"; return false; }
+        if (built.empty()) { err = IDC_KTR(msg, kErrAnnoNoValidEntry); return false; }
         // 单来源批内按 zOrder 稳定排序（等值保序）；跨批/与已有集合合并的相对顺序由调用方（out 追加序）决定。
         std::stable_sort(built.begin(), built.end(),
                          [](const Annotation& x, const Annotation& y) { return x.zOrder < y.zOrder; });
         for (auto& a : built) out.push_back(std::move(a));
         return true;
     } catch (const json::exception& e) {
-        err = std::string("标注 JSON 解析失败：") + e.what();
+        err = IDC_KTR(msg, kErrAnnoParseFailed) + e.what();
         return false;
     }
 }

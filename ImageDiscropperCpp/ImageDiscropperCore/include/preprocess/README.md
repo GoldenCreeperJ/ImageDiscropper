@@ -18,9 +18,10 @@
    插入越界钳制为追加、增删改越界忽略等边界策略由容器代劳），自身只保留与像素/几何语义绑定的方法：
    按序执行 `apply`、执行层融合入口 `applyExec`（与 `apply` 逐像素等价；色彩步折单次位映射 `(v&K)^J`、几何步折单次 D4 重排，
    以 `resize` 为块界），纯元数据 `geometryOutput`（输出尺寸 +
-   净旋转象限推演，供 GUI 几何签名使用）。
+   净旋转象限推演，供 GUI 几何签名使用），矩形/增量几何映射 `mapRectGeometry` / `mapDeltaToInput`
+   （与逐像素几何同口径的正/逆变换：供 GUI 把图层落位框从画布坐标系映到工作图坐标系、拖动增量逆映回画布坐标系）。
 
-| 文件                      | 职责                                                                                                                                     |
-|-------------------------|----------------------------------------------------------------------------------------------------------------------------------------|
-| `preprocess_config.h`   | 预处理类型枚举 `PreprocessType`、各步骤参数（含 `ResizeOp`）与 `PreprocessConfig` 变体、`makeDefaultConfig` / `configType` / `isColorStep`                 |
-| `preprocess_pipeline.h` | 预处理流水线 `PreprocessPipeline`：**公开继承** `core::Pipeline<PreprocessConfig>` 承载存储 + CRUD；`apply` 执行、`applyExec` 执行层融合、`geometryOutput` 几何推演 |
+| 文件                      | 职责                                                                                                                                                                                                       |
+|-------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `preprocess_config.h`   | 预处理类型枚举 `PreprocessType`、各步骤参数（含 `ResizeOp`）与 `PreprocessConfig` 变体、`makeDefaultConfig` / `configType` / `isColorStep`                                                                                   |
+| `preprocess_pipeline.h` | 预处理流水线 `PreprocessPipeline`：**公开继承** `core::Pipeline<PreprocessConfig>` 承载存储 + CRUD；`apply` 执行、`applyExec` 执行层融合、`geometryOutput` 几何推演、`mapRectGeometry`/`mapDeltaToInput` 矩形/增量几何映射（正/逆，供 GUI 图层落位跨坐标系） |

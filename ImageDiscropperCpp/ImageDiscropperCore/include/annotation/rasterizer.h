@@ -5,6 +5,7 @@
 #pragma once
 
 #include "core/color.h"
+#include "core/core_nums.h"
 #include "core/image.h"
 #include "geometry/shapes.h"
 
@@ -14,7 +15,7 @@ namespace idc::annotation {
 struct PaintStyle {
     core::Color color{core::kBlack};        // 边框 / 描边色
     core::Color fillColor{core::kBlack};    // 填充色（fill 为真且非 LINE 时用于内部）
-    int strokeWidth{2};   // 描边宽度（像素），最小 1
+    int strokeWidth{core::nums::annotation::kDefaultStrokeWidth};   // 描边宽度（像素），最小 1
     bool fill{false};     // 是否填充；对 LINE 类型无效
     bool antialias{true}; // 抗锯齿开关（简化实现，仅对描边生效）
 };

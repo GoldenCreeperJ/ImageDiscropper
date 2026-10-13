@@ -1,8 +1,8 @@
 // ============================================================================
 // 文件：include/canvas/layer.h
 // 作用：多层画布的数据模型与像素合成（纯逻辑、零 GUI 依赖）——ImageLayer（叠加层的来源 +
-//       落位变换 + 逐层声明式预处理）与 composeCanvas（先落**底图 base**、再按 zOrder 逐层物化 →
-//       缩放 → source-over 落位，写入画布尺寸缓冲，越界自然裁剪）。叠加层集合直接以
+//       落位变换 + 逐层声明式预处理）与 composeCanvas（先落**底图 base**、再按 zOrder 逐层物化（组装+缩放+预处理）→
+//       source-over 落位，写入画布尺寸缓冲，越界自然裁剪）。叠加层集合直接以
 //       std::vector<ImageLayer> 承载（无 LayerStack 包装；画布恒铺透明底，无画布级背景概念）。
 // 分块依据：Core 只承载「无头侧也成立」的数据与像素能力；每层的**交互会话态**（选中/编辑/
 //       base_ 缓存编排）归 GUI 的 PreprocessSession，Core 绝不引用 GUI 类型（分层纪律）。
@@ -95,20 +95,21 @@ struct ImageLayer {
 };
 
 // ---------------------------------------------------------------------------
-// materializeLayer：物化单层的「预处理后位图」（配方→makePattern / 文件→解码像素 / 空→空图，
-//   再跑该层 preprocess.applyExec）。不含缩放与落位（那是 composeCanvas 的合成期职责），
-//   故 GUI 可按 (layerId, preprocess 签名) 缓存本结果，改 transform 时不重跑预处理。
-//   不读取磁盘：File 源依赖 decodedPixels 已被上层注入；未注入则视为空图（占位）。
+// materializeLayer：物化单层的「整层位图」（已组装·已缩放·已预处理·未落位）：取源（配方→makePattern /
+//   文件→解码像素 / 空→空图）→（启用两级落位时）合成进带 boxBackdrop 底色的图层框 → 按 transform 缩放 →
+//   **最后**跑该层 preprocess.applyExec。预处理置于组装/缩放之后：色彩连图层框底色一起变、几何改变最终落位足迹。
+//   不含落位定位（那是 composeCanvas 的合成期职责），故 GUI 可按 (layerId, 来源/框/预处理/目标尺寸签名)
+//   缓存本结果，改 transform.x/y/锚点/不透明度时不重跑。不读取磁盘：File 源依赖 decodedPixels 已被上层注入；未注入则视为空图（占位）。
 // ---------------------------------------------------------------------------
 core::Image materializeLayer(const ImageLayer& layer);
 
 // ---------------------------------------------------------------------------
 // composeCanvas：产出 width×height 的 RGBA 画布图。画布先铺满全透明底，再落**底图 base**
 //   （非空则 source-over 铺于 (0,0)、按画布尺寸自然裁剪/留空），最后按 zOrder 升序逐层叠加
-//   layers（std::vector<ImageLayer>，只装叠加层、**不含底图**）：物化 → 按 transform 缩放 → 逐像素施 transform.opacity 作 alpha 乘子
+//   layers（std::vector<ImageLayer>，只装叠加层、**不含底图**）：逐层物化（materializeLayer：组装含底色框→缩放→预处理）→ 逐像素施 transform.opacity 作 alpha 乘子
 //   → 依锚点/枢轴/自由偏移定位 → source-over 落位；越出画布的像素写入 w×h 缓冲时自然裁剪。
 //   base 为空（默认）＝无底图，仅透明底 + 叠加层。整体显隐由调用方（GUI）以「传空 layers」实现，Core 不持显隐态。
-//   materialized（可选）：预物化位图表（key＝layer.id，value＝materializeLayer 的**缩放前**产物）；
+//   materialized（可选）：预物化位图表（key＝layer.id，value＝materializeLayer 的**已组装·缩放·预处理·未落位**产物）；
 //   命中则直接取用、跳过本层 materializeLayer（GUI 会话层据此缓存避免拖动时重跑全层预处理），未命中回退现算。
 //   非法尺寸（<=0 或超护栏）→ 返回空图（与 makePattern 同口径）。
 // ---------------------------------------------------------------------------
@@ -138,7 +139,7 @@ core::Image composeBase(const ImageLayer& base, int width, int height,
 // ---------------------------------------------------------------------------
 // LayerPlacement：单层在画布坐标系（左上原点）下的落位矩形。供上层（如 GUI 画布）做
 //   图片图层拾取（包围盒命中、重叠取最顶）与拖拽定位——与 composeCanvas 完全同口径
-//   （物化 → 合成期缩放 → 锚点/枢轴/自由偏移定位），是落位几何的单一真相源。
+//   （materializeLayer 整层位图 → 锚点/枢轴/自由偏移定位），是落位几何的单一真相源。
 //   x/y 可负、矩形可越出画布（未裁剪，与合成期裁剪前的落位包围盒一致）。
 // ---------------------------------------------------------------------------
 struct LayerPlacement {

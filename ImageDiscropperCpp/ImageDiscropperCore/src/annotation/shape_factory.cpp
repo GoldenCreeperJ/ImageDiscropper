@@ -5,6 +5,8 @@
 // ============================================================================
 #include "annotation/shape_factory.h"
 
+#include "core/core_nums.h" // 锚点退化容差单一真相源（常量层）
+
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -15,6 +17,8 @@
 #endif
 
 namespace idc::annotation {
+
+namespace nums = core::nums; // 简写常量层命名空间（仅本文件内可见）
 
 namespace {
 
@@ -61,6 +65,8 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
     const double dx = x2 - x1;
     const double dy = y2 - y1;
     const double distance = std::hypot(dx, dy);
+    // 锚点退化容差：取自常量层，与各形状的尺寸判废阈值同一处调参。
+    constexpr double kEps = nums::annotation::kDegenerateEpsPx;
 
     switch (req.type) {
         case ShapeType::LINE:
@@ -88,7 +94,7 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
             // 落点为中心，|dx|、|dy| 为两半轴。
             const double a = std::abs(dx);
             const double b = std::abs(dy);
-            if (a < 1e-3 && b < 1e-3) {
+            if (a < kEps && b < kEps) {
                 return degenerateLine(x1, y1, x1, y1);
             }
             return std::make_unique<geometry::EllipseShape>(
@@ -111,7 +117,7 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
         case ShapeType::SQUARE: {
             // 落点为正方形的一个顶点，边长取 max(|dx|,|dy|)，轴对齐、朝光标所在象限生长（不随拖动旋转）。
             const double side = std::max(std::abs(dx), std::abs(dy));
-            if (side < 1e-3) {
+            if (side < kEps) {
                 return degenerateLine(x1, y1, x1, y1);
             }
             const double gx = dx >= 0 ? 1.0 : -1.0;
@@ -130,7 +136,7 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
             // 起点为中心，|dx|、|dy| 为半对角线
             const double halfD1 = std::abs(dx);
             const double halfD2 = std::abs(dy);
-            if (halfD1 < 1e-3 && halfD2 < 1e-3) {
+            if (halfD1 < kEps && halfD2 < kEps) {
                 return degenerateLine(x1, y1, x1, y1);
             }
             std::vector<core::Point2D> pts = {
@@ -147,7 +153,7 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
             // 起点为底边中点，|dx| 为半底边，|dy| 为高
             const double halfBase = std::abs(dx);
             const double height = std::abs(dy);
-            if (halfBase < 1e-3 && height < 1e-3) {
+            if (halfBase < kEps && height < kEps) {
                 return degenerateLine(x1, y1, x1, y1);
             }
             const double signY = y2 >= y1 ? -1.0 : 1.0;
@@ -164,7 +170,7 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
             // 等边三角形：参照等腰——落点为底边中点，底边水平，顶角朝光标竖向生长（不随拖动旋转）。
             // 等边只有一个自由度：取 |dx|（半底边）与 |dy|/√3（由高反推的半底边）较大者，使形状跟随光标主方向放大。
             const double halfBase = std::max(std::abs(dx), std::abs(dy) / std::sqrt(3.0));
-            if (halfBase < 1e-3) {
+            if (halfBase < kEps) {
                 return degenerateLine(x1, y1, x1, y1);
             }
             const double height = std::sqrt(3.0) * halfBase;             // 等边高 = √3/2·边长 = √3·半底边
@@ -180,7 +186,7 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
 
         case ShapeType::RECT_TRIANGLE: {
             // 直角三角形：落点为直角顶点，两直角边分别沿轴取 dx、dy（不再用斜边点 p2）。
-            if (std::abs(dx) < 1e-3 && std::abs(dy) < 1e-3) {
+            if (std::abs(dx) < kEps && std::abs(dy) < kEps) {
                 return degenerateLine(x1, y1, x1, y1);
             }
             std::vector<core::Point2D> pts = {
@@ -193,7 +199,7 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
         case ShapeType::EQU_RECT_TRIANGLE: {
             // 等腰直角三角形：落点为直角顶点，两直角边等长 = max(|dx|,|dy|)，沿轴朝光标象限（不随拖动旋转）。
             const double leg = std::max(std::abs(dx), std::abs(dy));
-            if (leg < 1e-3) {
+            if (leg < kEps) {
                 return degenerateLine(x1, y1, x1, y1);
             }
             const double gx = dx >= 0 ? 1.0 : -1.0;
