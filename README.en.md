@@ -1,5 +1,7 @@
 # ImageDiscropper
 
+<p align="center"><img src="assets/icon-readme.png" width="128" alt="ImageDiscropper icon"></p>
+
 [![CI](https://github.com/GoldenCreeperJ/ImageDiscropper/actions/workflows/ci.yml/badge.svg)](https://github.com/GoldenCreeperJ/ImageDiscropper/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20iOS-lightgrey)](.github/workflows/ci.yml)
@@ -34,6 +36,7 @@ This project is primarily AI-led (~99%), and the documentation is AI-generated a
 - **Multi-layer canvas model**: a **canvas** (output boundary & working-image size) = a **base** (the underlay, from an opened image / generation / pattern) plus an array of **layers** stacked above it. An image is placed either as a **base image** (into the base, via the `generate` section, bitmap supplied by `--input`) or a **layer image** (into the layer stack, via the `layers` section, bitmap referenced from assets). Authoritative terms: [`SPEC.md`](SPEC.md) §2.2.
 - **Local processing, lossless first** (NFR-1/2): images never leave your machine; cutting is pure pixel relocation — only JPEG output is lossy.
 - **GUI + CLI frontends**: Qt 6 desktop app (live preview, draggable cut lines, undo/redo) plus the `idc` command line (scriptable, config-driven).
+- **Switchable UI language (Simplified Chinese / English)**: all three layers share one hand-rolled translation catalog (no Qt Linguist involved). The GUI picks it from the language drop-down in *Appearance / Interaction…* (**takes effect after restart**); the CLI uses `--lang` / the environment-variable chain. The source language is zh-CN and untranslated keys fall back to it automatically. Mechanism: [`ImageDiscropperCpp/README.md`](ImageDiscropperCpp/README.md) (Chinese).
 
 ```text
 Source → ① cut-line set → ② induced grid → ③ selection set → ④ polarity (Keep/Remove) → ⑤ emit (Collapse/Rearrange)

@@ -1,5 +1,7 @@
 # ImageDiscropper
 
+<p align="center"><img src="assets/icon-readme.png" width="128" alt="ImageDiscropper 图标"></p>
+
 [![CI](https://github.com/GoldenCreeperJ/ImageDiscropper/actions/workflows/ci.yml/badge.svg)](https://github.com/GoldenCreeperJ/ImageDiscropper/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20iOS-lightgrey)](.github/workflows/ci.yml)
@@ -33,6 +35,7 @@ ImageDiscropper 是一款**本地运行**的图像切割工具。所有功能都
 - **多层画布模型**：**画布**（输出边界与工作图尺寸）＝ **底图**（基座，由打开图像 / 生成 / 图案得来）+ 其上叠放的**图层**数组；一张图片按落点分为**底图图片**（入底图、走 `generate` 段、位图靠 `--input`）与**图层图片**（入图层栈、走 `layers` 段、位图靠 assets 引用）。术语权威定义见 [`SPEC.md`](SPEC.md) §2.2。
 - **本地处理、无损优先**（NFR-1/2）：图像不上传服务器；切割为纯像素搬运，仅 JPEG 输出有损。
 - **GUI + CLI 双前端**：Qt 6 桌面端（实时预览、拖拽切割线、撤销重做）+ 命令行 `idc`（可脚本化、配置驱动）。
+- **界面文案可切语言（简中 / English）**：三层共用一张自研译文目录（不依赖 Qt Linguist），GUI 走「外观/交互」的语言下拉（**重启生效**），CLI 走 `--lang` / 环境变量链；源语言 zh-CN，缺译自动回退。机制见 [`ImageDiscropperCpp/README.md`](ImageDiscropperCpp/README.md)「三层共用的 i18n」。
 
 ```text
 原图 → ① 切割线集合 → ② 诱导网格 → ③ 选择集 → ④ 极性(Keep/Remove) → ⑤ 排布导出(Collapse/Rearrange)

@@ -19,7 +19,7 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 | `model`  | `include/model/`  | [src/model/](src/model/README.md)   | 会话状态单一真相源 `Document`、唯一触碰切割引擎的 `EngineBridge`、唯一驱动 Core 标注的 `AnnotationBridge`                                                                                          |
 | `canvas` | `include/canvas/` | [src/canvas/](src/canvas/README.md) | QGraphicsView/Scene 画布：图层化渲染底图/遮罩/切割线/选区/标注矢量叠加 + 交互                                                                                                                    |
 | `panels` | `include/panels/` | [src/panels/](src/panels/README.md) | 左侧模式/极性面板与标注工具/图层面板、右侧参数/导出/图像/标注属性面板                                                                                                                                   |
-| `app`    | `include/app/`    | [src/app/](src/app/README.md)       | 主窗口装配壳 `MainWindow` + 四个控制器（预览/预处理/标注/历史）+ 状态栏组件 + 装配建造者 `MainWindowUi`、程序入口                                                                                            |
+| `app`    | `include/app/`    | [src/app/](src/app/README.md)       | 主窗口装配壳 `MainWindow` + 八个控制器（预览/预处理/标注/历史/画布交互/会话/导出/配置）+ 键表分派 `KeyRouter` + 状态栏组件 + 装配建造者 `MainWindowUi`、程序入口                                                           |
 | `mobile` | `include/mobile/` | [src/mobile/](src/mobile/README.md) | 移动端形态（与 app 并列）：`MobileShell` 继承 `MainWindow` 换装骨架（画布为主 + 底部工具条/抽屉）+ 无键盘补偿控件；复用既有面板/画布/模型，零复刻编排逻辑；桌面作为独立产物 `idc_gui_mobile` 与 `idc_gui` 并列输出（CMake 开关 `IDC_GUI_MOBILE`） |
 
 **依赖方向**：`app → panels/canvas/model → util → Core`（`mobile` 继承 `app`，同向）。`model` 是唯一触碰 Core 引擎/标注的层，
@@ -58,9 +58,9 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│ 菜单栏：文件 / 编辑 / 图像 / 标注 / 视图 / 帮助                    │
+│ 菜单栏：文件 / 编辑 / 模式 / 预处理 / 图片 / 标注 / 视图 / 帮助    │
 ├───────────────────────────────────────────────────────────────┤
-│ 工具栏：新建 打开 导出 | 撤销 重做 | 放大 缩小 适应 | 模式切换(L1/L2/L3)│
+│ 工具栏：新建 打开 导出 | 加载配置 保存配置 | 撤销 重做 | 放大 缩小 适应 | 模式切换(L1/L2/L3) | 重置全部│
 ├──────────┬────────────────────────────────┬───────────────────┤
 │ 左侧面板  │         中央画布                │   右侧面板         │
 │ (约340px)│      (QGraphicsView)           │  (约300px, 选项卡) │
@@ -80,21 +80,65 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 
 ### 画布视觉规范（配色）
 
-| 元素              | 颜色                                                                | 含义                     |
-|-----------------|-------------------------------------------------------------------|------------------------|
-| 画布背景            | 深灰 `rgb(45,45,45)`                                                | 图像以外的空白区               |
-| 保留块遮罩           | 绿色半透明 `rgba(0,200,0,60)`（`mask_layer.cpp` `kKeepColor`）           | 将被保留的区域                |
-| 删除块遮罩           | 红色半透明 `rgba(200,0,0,60)`（`kDeleteColor`）                          | 将被删除的区域                |
-| 切割线 / 选区边框      | 橙色 `rgb(255,140,0)`，高亮 `rgb(255,90,0)`；填充 `rgba(255,165,0,30~60)` | 贯穿全图的直线；切割线即选区边的延伸     |
-| 网格线（L3）         | 灰色 `rgb(150,150,150)`，1px 虚线                                      | Core 诱导网格              |
-| 多矩形诱导切割线（L2）    | 橙色 `rgb(255,140,0)` 实线                                            | 多矩形并集网格                |
-| 标注高亮 / 手柄       | 蓝色 `rgb(0,160,230)`；旋转手柄白底蓝边圆形（与缩放手柄区分）                           | 选中标注的 OBB 手柄           |
-| 单元编号角标（L3 自定义序） | 黑底 `rgba(0,0,0,175)` + 白字，13px bold，圆角 3px                        | 每个已选单元左上角的 1-based 序号  |
-| 工具按钮            | 中性底 `#f2f2f2` + 深色字 `#1b1b1b`；选中态蓝 `#3b7ddd` + 白字                 | 深色模式下显式指定文字色，避免白字浅底不可读 |
-| 线宽              | 选区 / 切割线 / 标注手柄用 cosmetic pen                                     | 屏幕线宽恒定，不随缩放变粗          |
-| 面板间距            | 内边距 8px、控件间距 6px、分组间距 12px                                        | 各面板统一布局                |
-| 字体 / 文案         | 界面文字全中文；`QStringLiteral` 包裹字面量                                    | —                      |
-| 反馈              | 错误经 `notify()` 写状态栏、限时显示（非模态）；所有交互 100ms 内视觉反馈                    | —                      |
+> 下表为**出厂默认色**。六项核心语义色（保留/删除遮罩、选区/切割线、标注选中、网格线、画布背景）及其填充 alpha 可在 **`视图 → 外观/交互…`**（移动端为工具条 **`更多 → 外观/交互…`**）的**上区「画布配色」**自定义（`AppearanceDialog`），经 `Palette` 单例持有、`QSettings` **应用级**持久化（跨会话记住，**不随图像 §7 配置往返**）；改动即时生效并联动重绘（`mask_layer`/`selection_rect_item`/`grid_layer`/`annotation_item`/`canvas_view` 绘制期取色）。「恢复默认」同时回退配色（`Palette`）与交互（`CanvasPrefs`）两单例。高亮态、角标、按钮选中色等为代码内**派生色**，不开放配置。
+
+| 元素              | 颜色（出厂默认）                                                               | 含义                     |
+|-----------------|------------------------------------------------------------------------|------------------------|
+| 画布背景            | 深灰 `rgb(45,45,45)`                                                     | 图像以外的空白区               |
+| 保留块遮罩           | 绿色半透明 `rgba(0,200,0,60)`（`Palette::keepColor` + `keepAlpha`）           | 将被保留的区域                |
+| 删除块遮罩           | 红色半透明 `rgba(200,0,0,60)`（`Palette::deleteColor` + `deleteAlpha`）       | 将被删除的区域                |
+| 切割线 / 选区边框      | 橙色 `rgb(255,140,0)`，高亮为其 R 通道压暗派生；填充 alpha 可配（`selectionFillAlpha`）    | 贯穿全图的直线；切割线即选区边的延伸     |
+| 网格线（L3）         | 灰色 `rgb(150,150,150)`，1px 虚线（`Palette::gridColor`）                     | Core 诱导网格              |
+| 多矩形诱导切割线（L2）    | 橙色 `rgb(255,140,0)` 实线（随选区色 `Palette::selectionColor`）                 | 多矩形并集网格                |
+| 标注高亮 / 手柄       | 蓝色 `rgb(0,160,230)`（`Palette::annotationColor`）；旋转手柄白底蓝边圆形（派生，与缩放手柄区分） | 选中标注的 OBB 手柄           |
+| 单元编号角标（L3 自定义序） | 黑底 `rgba(0,0,0,175)` + 白字，13px bold，圆角 3px                             | 每个已选单元左上角的 1-based 序号  |
+| 工具按钮            | 中性底 `#f2f2f2` + 深色字 `#1b1b1b`；选中态蓝 `#3b7ddd` + 白字                      | 深色模式下显式指定文字色，避免白字浅底不可读 |
+| 线宽              | 选区 / 切割线 / 标注手柄用 cosmetic pen                                          | 屏幕线宽恒定，不随缩放变粗          |
+| 面板间距            | 内边距 8px、控件间距 6px、分组间距 12px                                             | 各面板统一布局                |
+| 字体 / 文案         | 界面文字全中文；`QStringLiteral` 包裹字面量                                         | —                      |
+| 反馈              | 错误经 `notify()` 写状态栏、限时显示（非模态）；所有交互 100ms 内视觉反馈                         | —                      |
+
+### 画布交互配置
+
+> **入口速查（配色 / 交互 / 语言 / 吸附——桌面与移动同源）**：
+>
+> | 想改什么                             | 桌面入口                                 | 移动入口                       |
+> |----------------------------------|--------------------------------------|----------------------------|
+> | 画布配色（6 色 + 3 alpha）              | `视图 → 外观/交互…`（**上区**「画布配色」）          | `更多 → 外观/交互…`（上区）          |
+> | 手柄尺寸 / 边缘滚动余量 / 缩放步进·区间 / 新建默认尺寸 | `视图 → 外观/交互…`（**中区**「画布交互」）          | `更多 → 外观/交互…`（中区）          |
+> | 界面语言                             | `视图 → 外观/交互…`（**下区**「应用语言」，**重启生效**） | `更多 → 外观/交互…`（下区，与桌面同一对话框） |
+> | 选区吸附开关                           | `视图 → 选区吸附`（可勾选，直接开关）                | `更多 → 选区吸附`（可勾选）           |
+>
+> 记忆要点：**颜色、数值、语言都在 `外观/交互…` 一个对话框里**（上区配色、中区交互、下区应用语言，该顺序即对话框实状）；**唯独选区吸附不在对话框**，而是菜单上一项可勾选开关（避免同一开关在两处 UI 同步）。对话框底部的「恢复默认」只回退配色与交互两单例，**不重置语言**。
+
+GUI 层的**交互/视图手感偏好**（与配色同属「纯呈现偏好」，经 `CanvasPrefs` 单例持有、`QSettings` **应用级**持久化，跨会话记住；**不进 §7 `EngineConfig`、不进 `DocHistory` 撤销栈**，与 CLI 无感）。分两类落点：
+
+- **选区吸附——运行时开关**：`视图 → 选区吸附`（移动端 `更多 → 选区吸附`）为**可勾选 `QAction`**，切换拖动选区/边时是否自动吸附到图像边缘 `(0/W/H)` 与中线 `(W/2,H/2)`。勾选态存 `CanvasPrefs`，变更即时经 `CanvasPrefs::changed()` 联动 `CanvasView` → `CanvasScene::applySnapEnabled` 回设全部已存在选区图元（无需重建），并跨会话记住。**不放进对话框**（避免菜单勾选态与对话框数值双 UI 同步）。
+- **手柄 / 边缘余量 / 缩放 / 新建默认——数值偏好**：并入 **`外观/交互…`** 对话框**中区「画布交互」**（桌面与移动同一模态弹窗，控件内取触控下限）：
+
+| 项         | 控件                               | 取值 / 缺省                                 | 作用                                                                                                                                                                                                                            |
+|-----------|----------------------------------|-----------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 手柄/命中屏幕基准 | `handlePxSpin_`                  | 0＝跟随平台默认（桌面 8px / 触控 12px）；4–64 显式覆盖    | 换算选区手柄、抓边条带、点选阈值的屏幕基准（`CanvasView::updateHandleSize` = 基准 / 缩放，NFR-7 / SPEC §8.3）                                                                                                                                             |
+| 边缘滚动余量    | `scrollMarginSpin_`              | 0–50%（0 显示为「不留」），缺省 3                   | 画布内容（原图 ∪ L3 补白单元）**外面**可平移的幅度，按**视口各边百分比**（左右取宽、上下取高，故可不等量）；`CanvasView::updateScrollMargins` 按 `百分比×视口边 / 缩放` 注入 `CanvasScene::setScrollMargins`，与图幅、缩放档无关而随窗口同比（故 `resizeEvent` 同步重推；内容边界本身不受此项限制，补白块恒完整可滚入）；0 则平移到图像边缘就卡住 |
+| 缩放步进      | `zoomStepSpin_`                  | 1–100%，缺省 25（×1.25 / ÷1.25）             | 工具栏 / 菜单 / 移动按钮 `zoomIn/zoomOut` 每档倍率增量（滚轮步进属桌面设备语义，留 `DesktopInputAdapter`，不开放）                                                                                                                                              |
+| 缩放区间      | `zoomMinSpin_`/`zoomMaxSpin_`    | 下限 1–9999%、上限 (下限+1)–10000%，缺省 5%–4000% | `zoomBy/clampZoom` 倍率钳制区间（setter 维护「min < max」不变式）                                                                                                                                                                            |
+| 新建默认尺寸    | `newWidthSpin_`/`newHeightSpin_` | 1–65535，缺省 1024×768                     | 「新建画布」对话框初值；每次确定回写记住上次（`rememberNewCanvasSize` 仅落盘、不发 `changed()`——新建尺寸无当前画布联动）                                                                                                                                               |
+
+> **已知前提（非遗漏）**：① 代码库**无「角度吸附」**——旋转为连续量（`obbRotationDeg`），未提供吸附步长，故不开放该项（贸然新增会改变交互语义）；② **手柄/命中尺寸是动态换算量**（`screenOverlayPx() / 缩放`，屏幕线宽恒定不随缩放变粗），故配置口径为「屏幕基准 px 覆盖 + 0 自动」而非静态像素；③ 吸附目标仅图像边缘 + 中心，**网格线吸附仍未接入**（见「已知限制」）。
+
+> **手柄/命中尺寸的覆盖范围（已配置化）**：`handlePx`（上述上表首行）一个屏幕基准即统辖**单矩形选区手柄 / L2 多矩形选区框手柄 / 标注 OBB 缩放手柄（8 缩 1 旋）与命中半径 / L3 单元点选阈值**——`CanvasView::updateHandleSize` 把 `handleScreenPxOr(平台基准) / 缩放` 同一下发给四类图元（含抓边条带半宽与吸附触发阈值），故改这一处即全局同步，不逐类拆分（当前无此需求，保持单一真相源）。无独立「命中容差」设置：其等于手柄屏幕基准（桌面缺省 8px / 触控 12px+）。
+
+### 会话记忆与杂项偏好
+
+GUI 的**跨会话应用级记忆 / 低频交互开关**（经 `UiPrefs` 单例持有、`QSettings` `ui/` 组**应用级**持久化；与配色 `palette/`、画布交互 `canvas/` 分家，三组互不耦合；**不进 §7 `EngineConfig`、不进 `DocHistory` 撤销栈**，与 CLI 无感（例外：`ui/language` 只供 GUI 启动时决议界面语言，CLI 走自己的 `--lang` / 环境变量链，两者互不读写对方的开关）。`UiPrefs` 非 QObject、无即时联动消费者（语言项也**不接 `applyAll()`**，只写偏好并提示重启）：最近文件菜单经 `aboutToShow` 懒重建读取、导出确认在 `onExport` 调用点即时读取）：
+
+| 想改 / 想用    | 桌面入口                                           | 移动入口                                          | 行为                                                                                                                                                                                                        |
+|------------|------------------------------------------------|-----------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 最近打开文件 MRU | `文件 → 最近打开`（子菜单，点条目即打开；末项「清除最近记录」）             | —（移动仅本地固定目录，不入 MRU）                           | 载入成功后本地可再开路径自动入列（有序、上限 8、重复前移；`content://` 不入）                                                                                                                                                            |
+| 上次打开目录     | `文件 → 打开图像` 对话框起始目录                            | —                                             | 打开成功后回写该图所在目录，下次对话框从此起步                                                                                                                                                                                   |
+| 上次导出目录     | `文件 → 导出`（分离走目录 / 其余走另存为）对话框起始目录               | —                                             | 选定输出后回写，下次从此起步（与 `Document` 本次会话 `outputDir/outputFile` 正交）                                                                                                                                               |
+| 导出重排前二次确认  | `文件 → 导出设置 → 重排前二次确认`（可勾选，默认开）                 | `更多 → 重排前二次确认`（可勾选，行为同构）                      | 开：遇合并重排参数风险弹模态确认；关：跳过直接导出（内联红字警告恒显示，不受此开关影响）                                                                                                                                                              |
+| 界面语言       | `视图 → 外观/交互…` 的「应用语言」下拉（跟随系统 / 简体中文 / English） | `更多 → 外观/交互…` 同一对话框的下区（**无移动端门控**，偏好缺省「跟随系统」） | **重启生效**（语言只在 `QApplication` 构造后、顶层窗口构造前决议一次，重建窗口会丢文档）；`auto` 取 `QLocale::system()` 前缀映射，未知写法回退源语言 zh-CN；键 `ui/language`，项数据取 `ident::kLangAuto` 与 Core 的 `kSourceLanguage` / `kLangCodeEn`（真相源在上，本层不复制值） |
 
 ### 预处理（图像页：声明式队列编辑器）
 
@@ -117,7 +161,7 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 | 重置    | —                       | 清空整条队列、工作图还原为原图       |
 
 > **几何签名尺寸门**：队列改动后用 `PreprocessPipeline::geometryOutput(w,h)` **纯元数据推演**输出尺寸与净旋转象限（不碰像素）；
-> 仅当**尺寸或净旋转象限变化**时才清除失效选区与标注（坐标基于旧尺寸），同维度改参（如换角度 90→180 但尺寸不变、改灰度阈值）保留选区。
+> 仅当**尺寸或净旋转象限变化**时才清除失效框选（坐标基于旧几何）；标注、图片图层与色彩预处理**恒保留**（resize/rotate 不清它们），尺寸与象限均不变的改参（如改灰度阈值）保留框选。
 > 大图缩放/重采样可能耗时，期间会弹出「处理中」进度对话框（不可取消），完成后自动关闭。
 >
 > **已知取舍**：预处理队列**不纳入 Ctrl+Z 全局撤销**（全局撤销只覆盖切割参数态），如需回退请删改队列步骤或「重置预处理」。
@@ -230,14 +274,14 @@ GUI 是 Core（`image_discropper_core` 静态库）的**纯消费者**：只采�
 - **命名模板**：仅分离导出，控制输出文件名。
 - **导出前预览缩略图**：实时展示输出效果（合并模式按真实画布等比缩放、所见即所得；分离模式拼成缩略触图）。
 - **导出时烧录标注**：勾选后标注合成进像素随切割落位。
-- **重排专属**：列数/行数（0＝自动推导）、单元宽/高（0＝用保留块原尺寸）、填充色、填充顺序（行/列优先 + 蛇形 + 倒序）、「按格数自动」按钮；当 `cols×rows < 保留块数` 或单元尺寸 < 网格单元尺寸时给出内联红字警告 + 导出前弹窗二次确认。
+- **重排专属**：列数/行数（0＝自动推导）、单元宽/高（0＝用保留块原尺寸）、填充色、填充顺序（行/列优先 + 蛇形 + 倒序）、「按格数自动」按钮；当 `cols×rows < 保留块数` 或单元尺寸 < 网格单元尺寸时给出内联红字警告 + 导出前弹窗二次确认（该确认弹窗可由「文件 → 导出设置 → 重排前二次确认」关闭——`UiPrefs`，关则跳过直接导出，内联红字警告不受影响）。
 
 ### 新建画布（空白 / 程序生成）
 
 无需外部文件也能从零建一张画布：**文件 → 新建画布…（`Ctrl+N`）**（工具栏「新建」、移动端底部条「新建」同源），
 弹出 `NewCanvasDialog` 采集：
 
-- **尺寸**：宽 × 高（1 .. 65535，默认 1024×768）。
+- **尺寸**：宽 × 高（1 .. 65535，初值取 `CanvasPrefs` 新建默认尺寸，缺省 1024×768；**对话框确定时回写记住上次**，可在 `外观/交互…` 中区改缺省）。
 - **底色**：点击色块弹出取色对话框（开启 alpha 通道）直接选 RGBA——alpha `0` 即全透明画布；**不另设独立数值控件**。
 - **图案**（程序生成）：纯色 / 线性渐变 / 径向渐变 / 棋盘格 / 条纹 / 网格线 / 点阵 / 同心环 / 放射线 / 色相渐变 / 噪声（斜纹已并入条纹、同心方框已并入同心环，均由「方向」下拉选形状；旧「图片」图案已彻底移除）；
   随类型联动出可用参数（方向（条纹 4 向含↘↗ / 同心环（圆环·方环））、周期/格径/环间距/条纹带间距/色相波长（初值 128）、线宽、点半径，噪声另带种子与配色模式 全彩/灰度/双色），无关行自动收起。**附加图片（可选）**已从图案拆出为独立区块：开关默认关（可纯图案直接导出），勾选后“选择源图” + 适应方式三选（**裁剪**：源图原生贴入图层框、超框自然裁；**拉伸**：源图 resize 铺满图层框、忽略宽高比；**原生**：图层框恒等于源图尺寸）+ 图层框宽高 + 落位 9 锚点（居中 + 8 靠边）/枢轴/自由偏移；未勾图或源图缺失时相应控件禁用/隐藏，适应结果经 `composeCanvas` 两段合成烘入像素。
@@ -255,17 +299,18 @@ GUI 不复现任何图案算法（CONTRIBUTING.md「分层纪律」）。产出�
 
 > **术语基线见 [SPEC §2.2](../../SPEC.md)（权威定义）**：**画布**（输出边界 / 工作图尺寸）＝ **底图**（基座＝ input 生态位，同构 `canvas::ImageLayer`、钉最底、不入 `layers`）+ 其上叠放的**图层**数组；一张图片按落点分为**底图图片**（入底图、走 §7 `generate` 段、位图靠 `--input`）与**图层图片**（入图层栈、走 `layers` 段、位图靠 assets 引用）。GUI 的「图片图层」是 `ImageLayer` 的界面标签（§2.2 简称「图层」）、「底图 / 标注 / 遮罩 / 网格线」是图层面板的**显示叠加开关**（非 `layers` 数据层），「附加图片」是新建 / 添加对话框的**图片处理交互入口**（非数据层概念）。
 
-**多图层是「画布层」而非「引擎层」概念**——承重不变：`runEngine(const core::Image&, config)` 永远只收**一张展平的画布图 + 空 preprocess**，Grid-Selection-Emit / export / preview / CLI 主链零改动。图层数据模型 `canvas::ImageLayer`（以 `std::vector<ImageLayer>` 数组承载）与合成 `composeCanvas`（依底图 base→叠加层展平：画布无级背景、恒铺全透明底，base 非空先铺 (0,0)，叠加层按 `zOrder` 升序逐层物化 → 按 `transform` 缩放 → 逐像素施 `transform.opacity` 作 alpha 乘子 `a'=(a·opacity+127)/255`（255＝不透明，灰度层因 getPixel 视作 a=255 同样生效）→ 落位 → source-over 写入画布尺寸缓冲、越界自然裁剪）均在 **Core**；`composeCanvas` 另收可选 `materialized`（`unordered_map<layerId, 缩放前物化位图>`）预物化表，命中直取、未命中回退 `materializeLayer`。每层的 `PreprocessSession`（GUI 声明态包装 + `base_` 缓存编排）归 **GUI**。
+**多图层是「画布层」而非「引擎层」概念**——承重不变：`runEngine(const core::Image&, config)` 永远只收**一张展平的画布图 + 空 preprocess**，Grid-Selection-Emit / export / preview / CLI 主链零改动。图层数据模型 `canvas::ImageLayer`（以 `std::vector<ImageLayer>` 数组承载）与合成 `composeCanvas`（依底图 base→叠加层展平：画布无级背景、恒铺全透明底，base 非空先铺 (0,0)，叠加层按 `zOrder` 升序逐层物化（`materializeLayer`：组装含底色框 → 按 `transform` 缩放 → **最后**跑逐层 `preprocess`，故色彩连图层框底色一起变、几何改变最终落位足迹）→ 逐像素施 `transform.opacity` 作 alpha 乘子 `a'=(a·opacity+127)/255`（255＝不透明，灰度层因 getPixel 视作 a=255 同样生效）→ 落位 → source-over 写入画布尺寸缓冲、越界自然裁剪）均在 **Core**；`composeCanvas` 另收可选 `materialized`（`unordered_map<layerId, 已组装·缩放·预处理·未落位位图>`）预物化表，命中直取、未命中回退 `materializeLayer`。每层的 `PreprocessSession`（GUI 声明态包装 + `base_` 缓存编排）归 **GUI**。
 
 - **载入触发**：仅当配置携 `layers` 段时 `Document::hasLayers()` 为真，进入图层画布态；左侧「图层编辑」面板（`LayerEditPanel`）方启用编辑，单图态下控件禁用并提示。
 - **图层编辑面板**（`LayerEditPanel`）：列图片图层（按 `zOrder` 升序）、点选切换预处理当前目标、上/下移一层、删除、**添加图片图层**（`onAddImageLayer`：复用 `NewCanvasDialog` 采参——按「附加图片开关」(`producesLayerCanvas()`) 分派：勾选附加图片→对话框**两段合成**（图片按所选适应模式先入图层框、再叠到图案/底色 base，与新建画布同语义）的整幅结果图作 `ImageLayer{File}` 内容、**落位恒等**；未勾图→取 `resultParams()` 产 `ImageLayer{Recipe}`（配方随配置往返、可逐像素复现）；均不撑大画布）、编辑落位 `transform`（画布锚点 + 图片枢轴各 9 向 + 自由 x/y + 目标宽高 + 不透明度 `opacity`）、改画布尺寸。**不透明度 `opacitySpin_` 依当前预处理目标三元路由**（不再“未选即底图”）：Layer 目标→该层 `transform.opacity`（发 `layerTransformRequested`）；Base 目标→底图整体 `Document::baseOpacity`（发 `baseOpacityRequested`→`setBaseOpacity`）；Canvas 目标→画布级 `Document::canvasOpacity`（发 `canvasOpacityRequested`→`setCanvasOpacity` + `PreprocessController::replayCanvasPreprocess`）。控件只要有图层画布即启用、`syncFromDocument` 依当前目标回填对应值（`syncing_` 防回环）；仅乘 alpha、不触发图案重算；Base/Canvas 目标时落位控件禁用、仅透明度可用。面板只发意图信号，`MainWindow` 落 `Document` 声明态 CRUD → `layersChanged` → `PreprocessController::recomposeLayerCanvas` 重组 `working_`。与「图层」面板（`LayerPanel`，画布叠加显示开关）职责不同。
 - **底图（画布基座＝input 生态位）**：由「打开图像」/「新建画布图案」/ 载入图得来，**独立于图层栈（不入 `layers`、不带 `transform`、不可拖拽 / 删除 / 排序）**；`Document::canvasBase()`（图层态→`baseImage_`、单图态→`original_`）在 `recomposeLayerCanvas` 作 base 喂 `composeCanvas` 落底。图层面板「底图」开关（`baseVisibilityChanged`→`CanvasScene::setBaseVisible`）**仅切换画布预览图元可见性、不改导出合成**（导出时底图恒落底）；程序图案底图的配方存于 `baseLayer_`（同构 `canvas::ImageLayer`：纯图案 `recipe` 或新建画布附图片的**内层落位声明**（只存落位、不存路径，位图运行时由 `--input` 供）），随 §7 `generate` 段往返、可复现。**底图整体不透明度**：`Document::baseOpacity_`（运行态 0..255、缺省 255）把整张底图按合成期逐像素 alpha 乘子 `a'=(a·opacity+127)/255` 整体淡出、作用于最终合成（预览与导出一致）；**`composeBase` 不烘焙此值**（内存 `baseLayer_->transform.opacity` 恒归一 255）——透明度恒由 `Document::fadedCanvasBase()`（`canvasBase()` 的 `canvas::applyAlpha` 淡出副本）在 `PreprocessController::recomposeLayerCanvas` / `composeLayerCanvasForExport` 作 `composeCanvas` base 入参时施加（**单一应用点、防双淡**）；真值随 §7 `generate` 段 `opacity` 键往返（保存 `buildSerializableConfig` 回写、载入 `applyEngineConfig` 回填 `baseOpacity_` 并归一声明），旧配置无该键→缺省 255 行为不变。**底图现可于图片拾取态点选为预处理 / 透明度目标**（点画布内非图层处→`CanvasScene::basePickRequested`→`Document::selectBase(true)` 且清 `selectedLayerId_`，与选层互斥；点画布外→`pickDeselectRequested` 取消图层/底图/标注全部选中回画布目标），但仍不入栈 / 不可拖拽 / 改落位 / 删除 / 排序；其**色彩预处理**（仅 gray/invert/split，存运行态 `baseSession_`）与 `baseOpacity_` 一并入 `fadedCanvasBase` 边界单次施加（先跑色彩步 `baseSession_.effectivePipeline().applyExec` 再 `applyAlpha`、`baseImage_` 保持未处理原始像素），色彩步随 §7 `generate` 段 `preprocess` 往返（`buildSerializableConfig` 回写、`applyEngineConfig` 取色彩步入 `baseSession_` 且置空喂 `composeBase` 的底图声明 `preprocess` 以杜绝双应用）。**画布级整体不透明度** `Document::canvasOpacity_`（运行态 0..255、缺省 255）作用于合成 + 画布预处理后的整幅 `working_`，恒在 `commitPipeline::doWork` 末尾 + `composeLayerCanvasForExport` 尾部 `canvas::applyAlpha` 单次施加（working_ 从基准重放、非累加、无双淡），随 §7 顶层 `opacity` 键往返。
 - **叠加图层整体显隐**：所有图片图层由图层面板（`LayerPanel`）的单一开关控制（**GUI 运行态标志 `Document::imageLayersVisible_`、不入 §7 配置**，对标 `layersBurnIn_`）——关→重组/导出时传空图层数组，所有图片层一起退出 `composeCanvas` 展平合成与拾取（仅见底图、落位框一并隐藏；底图不受此门控）；图片图层的交互（拖拽落位）统一由全局四态 ImagePick 门控，**不逐层拆分可见性 / 可交互性**。
+- **落位框坐标映射（随画布级几何对齐）**：场景/底图坐标空间是**工作图坐标系**（working ＝ composeCanvas 产物再过画布级有效管线几何步），而 `canvas::layerPlacement` 产出**画布坐标系**落位矩形——两坐标系仅在无画布级几何步时重合。`PreviewController::rebuildPreviewPixmap` 以 `PreprocessSession::makeEffective(doc_->resizeTarget(), doc_->steps())` 现算画布级有效管线传入 `CanvasScene::updateImageLayers`，场景内逐矩形经 Core `PreprocessPipeline::mapRectGeometry` **正向映射**后落位（与逐像素几何同口径：刚体/镜像顶点对射取包围盒 + resize 线性缩放；空管线/仅色彩步→恒等直通零回归），使选框随画布级 rotate/flip/resize 同步变换、拾取命中对齐；`imageLayerMoved` 拖拽增量 (dx,dy) 来自场景坐标系，`CanvasCoordinator` 经 `mapDeltaToInput` **逆映射**回画布坐标增量再取整累加进 `transform.x/y`，杜绝画布级几何后拖动方向错乱（GUI 不自算几何，分层纪律）。
 - **预处理按目标三元驱动**：`ImagePanel` 顶部显式标注当前目标（选中图片图层＝「图片图层」、选中底图＝「底图」、否则＝「画布」，由 `Document::preprocessTarget()` 裁决）；队列编辑经 `PreprocessController::commitActive` 落到 `Document::activeSession()`（选中层会话 / 底图 `baseSession_` / 画布会话）。**Base 目标仅开放色彩预处理**——`syncFromDocument` 禁用「几何操作」区（`geoBox_`）与「画布尺寸」区（`sizeBox_`），仅留色彩操作；底图色彩步经 `updateBasePreprocess` 过滤 `isColorStep` 后写 `baseSession_`（`resize_` 恒空），在 `fadedCanvasBase` 边界施加、不烘焙进 `baseImage_`。
 - **不透明度属合成概念、不属像素预处理**：旧 `preprocess::OpacityOp` 已从管线彻底移除（变体仅 `GrayOp/SplitOp/InvertOp/RotateOp/FlipOp/ResizeOp`），改由图层合成期字段 `canvas::ImageTransform.opacity` 承载（逐像素 alpha 乘子），因而灰度图层的不透明度不再因 GRAY 无 alpha 而静默失效；面板「色彩操作」区不再有透明度项，改由图层编辑面板的「不透明度」spin 调节。旧配置里图层 preprocess 内的 `opacity` 步在载入时迁移为 `transform.opacity`（乘算取 `mul+add`、设定取 `add`），顶层 preprocess 的 `opacity` 步丢弃。
-- **逐层物化缓存（拖动不重跑预处理）**：`recomposeLayerCanvas` 先按图层来源签名（kind / 逐层 preprocess / 文件名 / 解码像素布局 / 配方参数 + 目标尺寸，**恒不含 `transform.x/y/anchor/opacity/zOrder`**）刷新 `PreprocessController` 的 `layerMat_` 缓存，再把它作 `composeCanvas` 的 `materialized` 入参——改落位 / 不透明度（拖动、调 opacity）签名不变 → 命中缓存位图、跳过 `materializeLayer`（文件层不重跑 `applyExec`、配方层不重跑 `makePattern`）；仅来源态真变（换图 / 改逐层预处理 / 改配方尺寸）才重跑。大图多图层拖动因此不再逐帧全量物化。
-- **画布尺寸变化只清框选**：`Document::setCanvasSize` 仅清空框选（rect/cells/网格），图片图层与标注保留（可存在于画布外，未被选中即不呈现）——与「图像预处理几何变化清标注/选区」是不同门。
-- **越界与边界（预览不裁剪）**：画布矩形（工作图尺寸）是**导出边界**——图层内容经 `composeCanvas` 落位越界自然裁剪（超画布像素不入展平工作图，与导出同口径）；但**预览不做场景 item-clipping**：`CanvasScene` 构造不设裁剪开关（Qt6 已移除 `QGraphicsView::setItemClippingEnabled`，且产品决定不启用越界裁剪），故标注 `AnnotationItem`（含 OBB 手柄）与图层落位框 `ImageLayerItem` 的矢量渲染皆可越出 `sceneRect`、在视口内自由可见（便于把标注画到画布外编辑）；而图层**像素画面**因烘到画布尺寸的 working 图仍限在画布内——两类越界行为不同属预期取舍。
+- **逐层物化缓存（改落位不重跑）**：`recomposeLayerCanvas` 先按图层签名（kind / 逐层 preprocess / 文件名 / 解码像素布局 / 配方参数 / **目标尺寸（所有 kind）** / **图层框与内层落位**（hasImagePlacement / box / fit / 锚点枢轴偏移 / boxBackdrop），**恒不含 `transform.x/y/anchor/layerPivot/opacity/zOrder`**）刷新 `PreprocessController` 的 `layerMat_` 缓存（缓存现存整层位图），再把它作 `composeCanvas` 的 `materialized` 入参——改落位 / 不透明度（拖动、调 opacity）签名不变 → 命中缓存位图、跳过 `materializeLayer`；仅来源/预处理/目标尺寸/图层框真变（换图 / 改逐层预处理 / **改目标尺寸或图层框底色**）才重跑（因缩放与预处理现均在 `materializeLayer` 内、整层位图依赖它们）。大图多图层拖动（纯平移）因此仍逐帧命中缓存。
+- **画布尺寸变化只清框选**：`Document::setCanvasSize` 仅清空框选（rect/cells/网格），图片图层与标注保留（可存在于画布外，未被选中即不呈现）——与「图像预处理尺寸门」同一口径（两者均只清框选、恒保留图层与标注）。
+- **越界与边界（预览不裁剪）**：画布矩形（工作图尺寸）是**导出边界**——图层内容经 `composeCanvas` 落位越界自然裁剪（超画布像素不入展平工作图，与导出同口径）；但**预览不做场景 item-clipping**：`CanvasScene` 构造不设裁剪开关（Qt6 已移除 `QGraphicsView::setItemClippingEnabled`，且产品决定不启用越界裁剪），故标注 `AnnotationItem`（含 OBB 手柄）与图层落位框 `ImageLayerItem` 的矢量渲染皆可越出 `sceneRect`、在视口内自由可见（便于把标注画到画布外编辑）；而图层**像素画面**因烘到画布尺寸的 working 图仍限在画布内——两类越界行为不同属预期取舍。**滚动范围例外**：视图滚动条范围来自 `sceneRect`，故 `CanvasScene::applySceneExtent` 把场景矩形设为**内容边界 + 外圈余量**，否则图大于窗时平移到图像边缘就卡住、边缘手柄与标注被视口边贴死。内容边界 `contentBounds()` = 原图 ∪ 全部网格单元区域：补白(PAD) 的越界块属**内容**、必须完整进滚动范围（被屏幕口径的值夹住的话，放大后可滚进来的部分越来越小、边界块永远看不全；内容可以不对称，整幅场景小于视口时 Qt 居中的正是内容）。余量是**视口口径**的百分比（`CanvasPrefs::scrollMarginPercent`，缺省 3、0＝不留，`外观/交互…` 中区可改）：横向取视口宽、纵向取视口高（故左右与上下可不等量），由 `CanvasView::updateScrollMargins()` 按 `百分比×视口边 / m11` 折算注入 `setScrollMargins`，与图幅与缩放档无关、随窗口同比——该方法是缩放基准（`updateHandleSize()`，全站唯一汇聚点，`CanvasPrefs::changed()` 亦走此入口即时重算）与视口尺寸（`resizeEvent()`）两个变化源共用。`fitToWindow` 同步改为按内容自算倍率（`fitInView(sceneRect)` 在余量随倍率重折算下一步到位不了），适应窗口时场景恰铺满视口→不出滚动条、内容恒占视口的 (1－2×百分比)，且补白块在适应窗口时也完整可见。非 L3 / 非补白时内容边界就是原图 → 三种余量策略与其余模式完全同口径；详见 `src/canvas/README.md`。
 - **图片只有 `ImageLayer` 一类**：旧「贴图图案」（`PatternKind::Image`）已彻底移除，图片不再作为一种图案，而只作为「新建画布 / 添加图片」对话框的**可选附加层**（三适应模式：裁剪 / 拉伸 / 原生，经 `composeCanvas` 两段合成烘入像素）；`ImageLayer`（「图片图层」，可指文件）为唯一图片类型。DocHistory 快照切「layers + 完整声明管线」形（对齐 `buildSerializableConfig`），像素不入快照。
 
 ### 配置文件加载 / 保存
@@ -320,7 +365,7 @@ GUI 不复现任何图案算法（CONTRIBUTING.md「分层纪律」）。产出�
    重排的 cols/rows 首次由**保留块数开方**自动填入（cols=ceil(√n)、rows=ceil(n/cols)，用户可再改）；当 cols×rows < 保留块数、
    或单元宽/高 < 网格单元宽/高时，面板内联**红字警告** + 导出前**弹窗二次确认**；填充顺序（行/列优先 + 蛇形 + 倒序）与 L3 选择排序正交，写回 `Document.mergeOrder_`。
 8. **标注矢量叠加、仅导出时烧录**：标注层与底图**分离**——每个 Core `Annotation` 对应一个 `AnnotationItem`（`QGraphicsObject`），
-   用 `Shape::worldPath()`→`QPainterPath` 矢量叠加绘制（含非破坏性变换，z=`kAnnotation`），**不改底图像素**；同维度预处理不清标注。
+   用 `Shape::worldPath()`→`QPainterPath` 矢量叠加绘制（含非破坏性变换，z=`kAnnotation`），**不改底图像素**；预处理（含尺寸变化）不清标注。
    **烧录仅在导出时发生**：`AnnotationBridge::burnIn(base)` 以**当前工作图**为底逐个调 Core `rasterize` 合成（不复用会话 `AnnotationEditor` 所持底图 `image_`，其可能预处理后陈旧），
    再送引擎切割——标注随像素被切开。标注几何/命中/光栅化全在 Core，GUI 只采集手势/翻译参数/渲染；
    标注撤销/重做复用 `AnnotationEditor` 内建 `revoke()/redo()`（条目级会话态）。
@@ -340,8 +385,8 @@ GUI 不复现任何图案算法（CONTRIBUTING.md「分层纪律」）。产出�
    （规格 SPEC §7 schema 的 JSON，GUI 不自实现 JSON、不感知 nlohmann）；加载走 `Document::applyEngineConfig` 反向映射回各状态字段（生成器+tier 还原 L1 形状/L2 子功能，
    并守卫「非 L3 不得重排」「网格单元尺寸为正」不变式），且**加载本身入同一撤销栈**（可一步撤销回载入前）。
    **标注随配置往返（SPEC §7 annotations 段）**：保存时把 `AnnotationBridge::layer()` 一并交给 `saveConfig` 序列化；加载时 Core 先把标注收进**临时层**，
-   待 `applyLoadedQueue` 队列重放（含尺寸门清标注）**之后**再 `AnnotationBridge::replaceAnnotations` 整体覆盖真实层
-   （顺序纪律：先重放预处理、再还原标注，否则刚载入的标注会被尺寸门误清）；还原走 Core `restoreAnnotations`（不推撤销快照），
+   待 `applyLoadedQueue` 队列重放**之后**再 `AnnotationBridge::replaceAnnotations` 整体覆盖真实层
+   （尺寸门现仅清框选、不清标注；仍先重放后还原，保证覆盖落在重放后的终态几何上）；还原走 Core `restoreAnnotations`（不推撤销快照），
    **不纳入 DocHistory 文档撤销栈**（已知限制：撤销一次参数会把标注留在还原后状态）。
 12. **导出前输出图像预览（只渲染不重算）**：导出面板新增 `previewLabel_` 缩略图，由 `util::composeOutputThumbnail`（`util/output_preview_renderer`，无状态自由函数）按
    `refreshPreview` **已算好**的 `EngineResult.composition` 渲染——**不再跑 Core、不落盘**：把 `rebuildPreviewPixmap` 缓存的**小源图**
@@ -350,15 +395,23 @@ GUI 不复现任何图案算法（CONTRIBUTING.md「分层纪律」）。产出�
    （working→小图放大系数）映射，故即便原图 8000×8000 也只在小图上运算（**像素少、速度快**）。面板只负责展示（`setPreviewPixmap`，仅缩不放）；**渲染逻辑下沉到 `util/`（离屏预览），app 层（`PreviewController`）只编排缓存与门控**。
    **B（烧录可见）**：`exportPreviewSource()` 委托 `util::bakeAnnotationsInto`，在「导出时烧录标注」开启且有标注时，把各标注按 `worldPath` 矢量绘到小源图副本（working→小图变换，文字绘字形；实际绘制复用 `util::paintAnnotation`，与画布图元同一外观）——**只烘焙一次**，随后逐块 blit 自动让标注随像素被切割落位，与真实导出一致；细线在大图上按缩略比例自然淡化（忠实）。
    **A（按需渲染）**：`updateExportPreview` 先缓存 `lastComposition_/lastExportResOk_`，再由 `renderExportPreviewFromCache` 仅在「导出」页为当前选项卡时渲染，否则置 `exportPreviewDirty_`；`onRightTabChanged` 切回该页时用缓存补渲染。烧录开关/标注变更（`onBurnInChanged`/`onAnnoBridgeChanged`，仅烧录开启时）**不重跑 Core**，仅用缓存重渲染缩略图（切割几何不受标注影响），保证预览实时。
+13. **界面文案走自研 i18n 目录（不接 Qt Linguist）**：文案真相源是 `texts::` 常量层（中文 = 源语言与回退值），使用点写
+    `IDC_GTR(分组, 常量名)`——宏在预处理器里同时拼出键 `分组::常量名` 并取到同名中文常量作回退值，**两处同源**，手写键串不可能拼错。
+    不走 `tr()`/`lupdate`/`.ts`/`.qm`：lupdate 抽不到常量层的值，`.qm` 又是 Qt6 内部二进制格式（零 Qt 的 Core / CLI 读不了）；
+    英文表以 **C++ 表文件编译期内嵌**（`src/i18n/lang_en.cpp` 及其拆分的 `src/i18n/lang_en_detail.cpp`），与 CLI / Core 共用 Core 的同一份进程级语言状态——一份机制三层用，
+    且不把 qttools 拖进依赖图（它无条件拖 `host:qttools[linguist]` → `[designer]` → `qtbase[network,png]`，会重编 host+target qtbase 并使 CI 整树缓存 miss）。
+    `texts::ident` 与 §7 JSON token **永不进表**（不可译契约）。一期**重启生效**：`MainWindow` 按值持有 `Document`，
+    重建窗口会丢文档，而 464 处构造期文案需 `retranslate()` 通道才能热切换（属二期）；源语言 zh-CN **不建表**（全部回退），
+    故中文下行为与未接 i18n 时逐字节相同。机制详见根 [`../README.md`](../README.md)「三层共用的 i18n」。
 
 ## 已核对的 Core API（均来自实际头文件，非假设）
 
 - 编排：`engine::runEngine(const core::Image&, const EngineConfig&) -> EngineResult{ok,error,kept,collapsible,composition}`（内部 apply preprocess）；`engine::runEngineGeometry(const SourceInfo&, const EngineConfig&)`（仅按尺寸跑几何、忽略 preprocess，供预览）。
-- 预处理：`preprocess::PreprocessConfig = variant<GrayOp,SplitOp,InvertOp,RotateOp,FlipOp,ResizeOp>`（不透明度**已不再是像素预处理步**（旧 `OpacityOp` 已删）——上移为图层合成期字段 `canvas::ImageTransform.opacity`，逐像素 alpha 乘子 `a'=(a·opacity+127)/255`，语义属合成概念而非像素变换，且使灰度图层不透明度不再因 GRAY 无 alpha 而失效）；`PreprocessPipeline{add,insert,remove,setStep,moveUp,moveDown,clear,steps,apply,applyExec,geometryOutput(w,h)->GeometryOut{width,height,rotQuad}}`（声明式队列；其存储 + CRUD **公开继承 `core::Pipeline<PreprocessConfig>`**——与元素类型无关的泛型有序步骤队列骨架，GUI 不直调基类接口；`applyExec` 为执行层融合入口，与 `apply` 逐像素等价）。
+- 预处理：`preprocess::PreprocessConfig = variant<GrayOp,SplitOp,InvertOp,RotateOp,FlipOp,ResizeOp>`（不透明度**已不再是像素预处理步**（旧 `OpacityOp` 已删）——上移为图层合成期字段 `canvas::ImageTransform.opacity`，逐像素 alpha 乘子 `a'=(a·opacity+127)/255`，语义属合成概念而非像素变换，且使灰度图层不透明度不再因 GRAY 无 alpha 而失效）；`PreprocessPipeline{add,insert,remove,setStep,moveUp,moveDown,clear,steps,apply,applyExec,geometryOutput(w,h)->GeometryOut{width,height,rotQuad},mapRectGeometry(x,y,w,h,inW,inH)->MappedRect,mapDeltaToInput(dx,dy,inW,inH,outDx&,outDy&)}`（声明式队列；其存储 + CRUD **公开继承 `core::Pipeline<PreprocessConfig>`**——与元素类型无关的泛型有序步骤队列骨架，GUI 不直调基类接口；`applyExec` 为执行层融合入口，与 `apply` 逐像素等价；`mapRectGeometry`/`mapDeltaToInput` 为与逐像素几何同口径的矩形正映/增量逆映，供图层落位框跨画布/工作图坐标系映射）。
 - 切割线：`engine::generateCutLines(const CutConfig&, const SourceInfo&) -> CutLineSet`。
 - 配置：`EngineConfig{source,generate(optional<PatternParams>),preprocess,cut,selectedCells,order,emitParams}`；
   `CutConfig{tier,generator(RECT/HORIZONTAL_LINE/VERTICAL_LINE/MULTI_RECT/GRID),rect,rects,grid,polarity}`。
-- 配置存取：`engine::saveEngineConfig(path, cfg[, annotations])` / `engine::loadEngineConfig(path, out&[, annotations])`（SPEC §7 schema JSON，可选标注层指针：保存附带 `annotations` 段、加载还原到该层（缺段＝清空）；nlohmann 在 Core 侧 PRIVATE）。
+- 配置存取：`engine::saveEngineConfig(path, cfg[, annotations])` / `engine::loadEngineConfig(path, out&[, annotations])`（SPEC §7 schema JSON，可选标注层指针：保存附带 `annotations` 段、加载还原到该层（缺段＝清空）；Core 的第 4 出参 `std::string* annoErr`（标注段逐条报因，专为 CLI 而设）本层不消费、传 `nullptr`：状态栏为单行文本会把多行报因压平，且加载失败已弹模态框告知（产品决定）；nlohmann 在 Core 侧 PRIVATE）。
 - 撤销历史：`core::HistoryManager<T>{push,popToRedo,popFromRedo,top,canUndo,canRedo,undoSize,clearAll}`（模板头实现，原 `history` 模块已并入 `core`；GUI 以 `T=EngineConfig` 实例化）。
 - 导出：`CompositionParams{mode,layout,mergeOrder,cols,rows,cellWidth,cellHeight,padColor,format,naming,quality,keepMetadata}`
   （`mergeOrder` = 重排填充顺序 `MergeOrder{strategy,reverse,snake}`，仅 REARRANGE、与选择排序正交）；
@@ -417,7 +470,7 @@ scheduleHistoryCapture（500ms 防抖）──► docHistory_ 压入 EngineConfi
 - **拖拽期防抖**：`isDraggingSelection()` / `isDraggingMultiRect()` 期间跳过 `syncPanels()` 与对正在拖图元的回设，
   避免逐帧量化抖动与「拖拽不跟手」；释放时照常同步一次。
 - **吸附**：`selection_rect_item` 的 `snap1(v, th, targets)` 在拖动/缩放时对图像边缘 `(0/W/H)` 与中心 `(W/2,H/2)`
-  吸附，阈值默认 8px；Move 模式整体平移、Resize 模式逐边吸附（保持尺寸不突变）。
+  吸附，阈值默认 8px；Move 模式整体平移、Resize 模式逐边吸附（保持尺寸不突变）。开关为**运行时可切换**（`视图/更多 → 选区吸附` 可勾选 `QAction`，存 `CanvasPrefs`），详见「画布交互配置」。
 - **L3 单元交互**：`CellPickerItem` 支持单击切换、框选（`cellsIntersecting`）、自定义序拖拽调序
   （被拖单元橙粗框、目标单元黄虚线框），并在 CUSTOM 排序下以设备像素绘制序号角标（字号恒定屏幕大小）。
 - **绘制态门控**：SELECT 工具时 `setAnnotationDrawActive(false)`，画布维持橡皮筋选区/单元交互；
@@ -434,7 +487,7 @@ scheduleHistoryCapture（500ms 防抖）──► docHistory_ 压入 EngineConfi
 - **轻操作队列（两独立列表 → 单一底层队列）**：`ImagePanel` 以「几何操作」「色彩操作」两个列表呈现，行号经 `geoRowCount()` 映射为**扁平下标**（色彩行＝几何行数 + 色彩行号），发队列编辑信号（`stepAppendRequested(cfg)` / `stepReplaceRequested(index,cfg)` /
   `stepRemoveRequested(index)` / `stepMoveRequested(index,down)` / `resetRequested()`）→ `PreprocessController` 对应槽（`onStepAppend/Replace/Remove/Move`、`onResetPreprocess`）。控制器维持「几何块在前 + 色彩块在后」不变式：几何步插到几何块尾、色彩步追加队尾，跨类上下移忽略。
   两者均汇入公共收尾 `commitPipeline(nextSteps, nextResize, okMsg, busyText)`：以「新轻队列 + 新 resize」为结果态，先用有效管线（`[resize?]+steps_`）
-  经 `geometryOutput` **推演几何签名**判断尺寸/净旋转象限是否变（变则先清失效选区与标注），再基于 `base_` 缓存重放——**仅 resize 前缀变化（baseDirty）才重烤 `base_`**（唯一重采样点），
+  经 `geometryOutput` **推演几何签名**判断尺寸/净旋转象限是否变（变则先清失效框选；标注/图层/色彩预处理恒保留），再基于 `base_` 缓存重放——**仅 resize 前缀变化（baseDirty）才重烤 `base_`**（唯一重采样点），
   轻编辑复用 `base_` 只跑轻后缀。忙碌框门控收紧为「baseDirty **且**确有 resize 需重采样」才弹（无 resize 的每步编辑不弹框、不改尺寸则不复位缩放，消除卡顿感）。
   实际像素变换经 `EngineBridge` 调 Core，**面板不碰 Core、不持真相**；`resetRequested` 清空 resize 与整条队列、还原原图。原图始终保留。
 - **选中跟随**：上/下移某步后，`ImagePanel` 记住被移动项的新下标（`pendingSelectRow_`），`syncFromDocument` 重建列表后据此高亮跟随，而非停留在原下标（那会指向被换上来的另一操作）。
@@ -473,6 +526,18 @@ scheduleHistoryCapture（500ms 防抖）──► docHistory_ 压入 EngineConfi
 > Core 支持后：在 `AnnotationBridge::AnnoTool` 加枚举、`tool_panel.cpp` 的 `kTools[]` 加一行、
 > `util::paintAnnotation`/`AnnotationItem` 走 `worldPath()` 自动获得渲染，无需在 GUI 补几何。
 
+### 新增 / 修改一条界面文案
+
+1. 在 `include/i18n/gui_texts.h`（转发至 `gui_texts_base.h`〔menu / label〕/ `gui_texts_detail.h`〔tooltip / status / msg〕）的对应组加一条
+   `inline constexpr char kXxx[] = "中文原文";`——**中文即源语言**，它同时是未译语言的回退值。
+2. 使用点写 `IDC_GTR(分组, kXxx)`（返回 `QString`）；需先存后转的清单表位写 `IDC_GT(...)`（返回 `TextRef`，循环内 `qs(ref)`）。
+   **绝不手写键串**：键由宏在预处理器里拼出，拼错只会让编译器报「常量未定义」。
+3. 不可译的东西不往 `texts::` 放：QSettings 键 / MIME / objectName / 快捷键 / §7 JSON token 一律进 `texts::ident`（恒不查表）。
+4. 要给英文：menu / label 在 `src/i18n/lang_en.cpp`、tooltip / status / msg 在 `src/i18n/lang_en_detail.cpp` 同一分组块里补一行 `{"分组::kXxx", "English"}`（与常量层同序、分块中文注释）；
+   带 `%1..%9` 的条目**编号是契约**（按编号取参，语序可自由调），`(&X)` 助记符的字母、`…`/`×`/`°`/`—`/`§7`/`\n` 逐字沿用。
+5. 不补译也不影响使用（自动回退中文），但 `unit_tests` 里的 `test_i18n_catalog` 会兜住写错键名、重复登记、
+   契约组越界与跨层撞键（均为 fail），并打印各组覆盖率。改完跑一次全量 `ctest` 即可。
+
 ### 调用 Core 的纪律
 
 - 任何切割/几何/排序/极性/导出/JSON/编码逻辑**一律调 Core**，GUI 不重复实现。
@@ -490,6 +555,9 @@ scheduleHistoryCapture（500ms 防抖）──► docHistory_ 压入 EngineConfi
 | 队列重放性能（已用 base_ 缓存 + 独立 resize 根治） | base_ 缓存重放                        | resize 已从可排序队列剥离为独立常驻设置，`base_` = resize(original)（无 resize 则原图副本）：轻操作队列编辑**恒复用 `base_`、不重采样、不弹框**；仅 resize 目标变化才重烤 `base_` 并（有实际重采样时）弹框。**代价**：额外常驻一张 `base_`（见下行内存）。 |
 | 队列编辑不可撤销                           | 不纳入 `Ctrl+Z`                      | 删/改/移步骤后文档撤销栈找不回（旧模型同样没有，非回归）；队列模型天然支持单步撤销，属未实现的机会项                                                                                                                    |
 | 大图内存驻留                             | `original_`+`base_`+`working_` 三份 | 工作图常驻、预览从全分辨率 `working_` 降采样；`base_` 缓存根治重放性能后新增第三份常驻图（前缀重放产物，随换图 / 重置预处理失效）；「`working_` 不常驻 / `previewBase` 小图重放」的进一步优化未实现                                            |
+| 界面语言热切换                            | 只支持**重启生效**                       | 464 处构造期文案（菜单 / 面板 / 控件标签）需逐处建 `retranslate()` 通道；而重建窗口会丢 `MainWindow` 按值持有的 `Document`，不可取（决策 #13）。`status` / `msg` 本已是使用期现取，二期只需给构造期那批接通道                            |
+| `label` / `tooltip` 英文译文           | 未逐条补齐（缺译自动回退中文）                   | 一期只译使用期现取、改完即在英文下可见的三组（`menu` / `status` / `msg`）；缺译不报错也不留空。进度由 `tests/test_i18n_catalog.cpp` 的覆盖率报表跟踪（只打印不 fail）                                                      |
+| Qt 自带控件文字（标准文件对话框按钮等）              | 恒为 Qt 默认语言                        | 需 Qt 官方 `qtbase_zh_CN.qm`（与本工程的自研目录无关，也不受 `ui/language` 控制），一期不处理                                                                                                      |
 | 8000×8000 ≥30fps                   | 未正式验证                             | 预览已用降采样副本满足设计目标，但性能验收尚未落地实测（NFR-3）                                                                                                                                     |
 
 ## 构建

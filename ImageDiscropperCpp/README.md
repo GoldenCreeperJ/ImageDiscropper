@@ -47,6 +47,52 @@ CLI ──────┘
 按依赖顺序先引入 Core 再引入 CLI 与 GUI、开放 `ctest`。第三方库（stb / libwebp / nlohmann_json）
 由 Core 以 PRIVATE 封装，CLI / GUI 经 Core 公共头间接使用，无需感知；GUI 另需 vcpkg 的 qtbase。
 
+### 2.1 三层共用的 i18n（多语言文案）
+
+三层各有一份**常量层**（`core_texts.h` / `cli_texts.h` / `gui_texts.h`），其中的中文文案即**源语言**；
+面向人的可译组经门面宏查表取译文，**不引入 Qt Linguist / `tr()` / `lupdate` / `.ts` / `.qm`**
+（lupdate 抽不到常量层的值，且 `.qm` 是 Qt6 内部二进制格式，零 Qt 的 Core / CLI 读不了）。
+
+| 层    | 门面宏                                   | 进目录的组                                           | 英文译文表                                                             |
+|------|---------------------------------------|-------------------------------------------------|-------------------------------------------------------------------|
+| Core | `IDC_KTR` / `IDC_KTRF`                | `msg`                                           | `ImageDiscropperCore/src/i18n/lang_en.cpp`                        |
+| CLI  | `IDC_CTR`                             | `msg` / `help`                                  | `ImageDiscropperCli/src/i18n/lang_en.cpp`（+ `lang_en_help.cpp`）   |
+| GUI  | `IDC_GTR`（→`QString`）/ `IDC_GT`（清单表位） | `menu` / `label` / `tooltip` / `status` / `msg` | `ImageDiscropperGui/src/i18n/lang_en.cpp`（+ `lang_en_detail.cpp`） |
+
+约定要点：
+
+- **键 = `分组::常量名`**，由预处理器从常量名拼出，回退值就是同名的中文常量 —— 两处同源，手写键串不可能拼错。
+- 三层把表登记给 Core 的同一份**进程级语言状态**；源语言 zh-CN **不建表**，全部走回退，故中文路径逐字节零行为变化。
+- **不可译契约永不进表**：GUI `texts::ident`、CLI `opt` / `cmd` / `env`、以及 SPEC §7 JSON token（键名 / 枚举值）。
+- 缺译文自动回退源语言，译文可逐批补；`ImageDiscropperCore/tests/test_i18n_catalog.cpp` 反向解析常量层做对账 ——
+  孤儿键 / 层内重复键 / 跨层撞键一律 fail，覆盖率只打印不 fail。
+- 生效方式：**GUI 重启生效**（`视图 → 外观/交互…` 的「应用语言」下拉，落 `QSettings ui/language`）；
+  **CLI 按调用生效**，优先级 `--lang <code>` > `IDC_LANG` > `LC_ALL` > `LANG` > zh-CN；移动端与桌面共用同一外观/交互对话框的语言下拉（偏好缺省「跟随系统」，改后同样重启生效）。
+- **加一门语言 = 新增一份 `lang_xx.cpp` + 在本层 `installCatalogs()` 登记一行 + `core_i18n.h` 补一个语言码**，重编即可，无需构建期工具链。
+
+**一期边界与二期遗留**：一期只做「机制 + 中文源语言 + 英文示范译文 + 重启生效」，以下结构性功课
+留待真正扩量英文或加第二门语言时再补，均**不影响当前中文路径**：
+
+- **复数机制**：计量词嵌在整句模板里（`已导出 %1 张…` / `%1 个标注` / `%1 单元` / `%3 层`），
+  译成英文需按数量变形（one/few/many）。Qt `tr("%n")` 内建复数规则，自研门面暂无——扩量英文时须先补一层
+  按 number 选单的复数表，或把量词改写为不依赖单复数的句式。
+- **列宽自适应（已处理，且本就与译文无关）**：曾把 CLI `nums::help::k*OptWidth` 列宽、GUI
+  `nums::panels::kCoordSpinWidthPx` / `kLeftPanelMinWidthPx` 列为「译文变长会截断」的遗留，核查后确认它们
+  pad 的内容都**不随语言变**：CLI 定宽列对齐的是不可译用法列（`hp::kUse*`＝选项名 + ASCII 占位符），现已改由
+  `src/help.cpp` 的 constexpr `optWidth()` 按各命令实际打印的串长编译期取 max（加/减选项自动跟进，
+  根除旧手数 off-by-one，无需再手设常量）；GUI 坐标框 `kCoordSpinWidthPx` 是纯数字 `QSpinBox`（无前后缀 / 无
+  specialValueText），左栏 `kLeftPanelMinWidthPx` 已取 `std::max(下限, sizeHint)` 运行时自适应——三者均不构成
+  i18n 截断风险，故移出待补清单。
+- **动态常驻文本需重放**：状态栏提示（`交互模式：%1 | 预处理目标：%2`）、`notify` 弹示等**运行期现取**的文案，
+  语言切换（重启生效）后不会自动重写；若二期改热切换，须在语言变更钩子里用**当前状态**再取一遍译文覆盖，否则留旧语言至下次事件。
+- **模板化列表行需重建**：预处理队列行（`status::kStepInvertDesc` 等）、多矩形列表、最近打开菜单——每行是「数据 + 模板」产物，
+  热切换钩子里须按当前数据重新生成整行，而非只换静态标签。
+- **RTL 布局**：若加右起语言（阿拉伯语等），除译文外还须同步切 `LayoutDirection`，镜像固定布局 / 图标方向，非纯文案工作。
+- **已打开窗口的临时 UI**：正在显示的对话框 / 菜单在下次构建前不随语言事件刷新（通常可接受，热切换时同理）。
+
+> 句式纪律见 [`ImageDiscropperCore/include/i18n/core_i18n.h`](ImageDiscropperCore/include/i18n/core_i18n.h) 头注：
+> 句中嵌运行期值一律写「单条整句 + `%N`」（配 `IDC_KTRF` / `IDC_CTRF`），**不拆 lead/mid/tail 碎片**——拆开后译者无法重组语序。
+
 ---
 
 ## 3. 与功能规格核心概念的映射
@@ -88,7 +134,7 @@ CLI 命令与规格功能的对应（详见 [`ImageDiscropperCli/README.md`](Ima
 ```bash
 cmake --preset windows-debug   # Windows：Ninja + MSVC；Linux/macOS 用 linux-debug / macos-debug
 cmake --build build/windows-debug    # 产出 bin/idc(.exe)、idc_gui(.exe) 与 demo(.exe)
-ctest --test-dir build/windows-debug --output-on-failure   # 同时运行 Core unit_tests 与 CLI cli_tests（集成用例 IT-1~IT-25）
+ctest --test-dir build/windows-debug --output-on-failure   # 同时运行 Core unit_tests 与 CLI cli_tests（集成用例 IT-1~IT-53，覆盖矩阵见 ImageDiscropperCli/tests/README.md）
 ```
 
 首次配置自动安装清单依赖（qtbase 较慢）。手动方式（清单模式自动生效）：

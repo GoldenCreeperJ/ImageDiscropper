@@ -2,13 +2,13 @@
 # ============================================================================
 # 文件：assets/icons/regenerate.sh
 # 作用：应用图标全流程派生（幂等、跨平台，供本地与 CI 动态构建）——
-#       ① assets/icon.svg（矢量母版，VTracer 出品，背景填充 #242F00）
+#       ① assets/icon.svg（矢量母版，VTracer 出品，背景填充 #b9c495）
 #          → 光栅化 1024 母版 assets/icon.png（iOS 硬性要求：无 alpha，脚本内校验）；
 #       ② 1024 母版 → 各平台尺寸（ffmpeg lanczos）；
 #       ③ Windows idc.ico（9 尺寸条目，ffmpeg 多流 mux；条目为经典 BMP/DIB——
 #          兼容性最强，PNG 条目仅是 Vista+ 扩展，故不求 PNG；无需 PowerShell）；
 #       ④ svg 复制为 Linux scalable 图标；
-#       ⑤ Android 自适应：从 SVG **剥离背景路径**（fill=#242F00，图形内部不含同色）
+#       ⑤ Android 自适应：从 SVG **剥离背景路径**（fill=#b9c495，图形内部不含同色）
 #          得前景 SVG → 光栅 1024 → 缩 432；背景层为纯色。确定性 100%、零阈值。
 #       ⑥ Android 模板密度系列（ImageDiscropperCpp/packaging/android/res/mipmap-*，Qt 打包源目录）。
 # 依赖：Inkscape（或 rsvg-convert）、ffmpeg、python3（仅 ⑤ 剥离背景路径）。
@@ -69,6 +69,9 @@ resize() { # $1=size $2=dst（从母版）
 resize_from() { # $1=src $2=size $3=dst（从任意源）
   "$FFMPEG" -y -loglevel error -i "$1" -vf "scale=$2:$2:flags=lanczos" "$3"
 }
+# README 展示用小图（128px，**入库**——GitHub 不渲染 SVG，README 以 PNG 展示图标）。
+# 直角版（圆角经 geq 逐像素硬判定、无抗锯齿，观感差，已放弃）。
+resize 128 "$ROOT/assets/icon-readme.png"
 for s in 16 20 24 32 40 48 64 128 256; do resize $s "$ICONS/windows/icon-$s.png"; done
 resize 50 "$ICONS/windows/StoreLogo-50.png"
 for s in 16 32 64 128 256 512 1024; do resize $s "$ICONS/mac/icon_${s}x${s}.png"; done
@@ -102,21 +105,21 @@ cp "$ROOT/assets/icon.svg" "$ICONS/linux/scalable/apps/imagediscropper.svg"
 
 # ---------------------------------------------------------------------------
 # ⑤ Android 自适应：剥离背景路径得前景 SVG → 光栅 1024 → 缩 432；背景纯色。
-#    （图形内部不含 #242F00，剥离即精确前景，无阈值/无 chromakey 误伤）
+#    （图形内部不含 #b9c495，剥离即精确前景，无阈值/无 chromakey 误伤）
 # ---------------------------------------------------------------------------
 echo "== ⑤ Android 自适应前后景（SVG 路径剥离）=="
 "$PYTHON" - "$ROOT/assets/icon.svg" "$ICONS/android/icon_foreground.svg" <<'PYEOF'
 import re, sys
 src, dst = sys.argv[1], sys.argv[2]
 svg = open(src, encoding="utf-8").read()
-# VTracer 输出为自闭合 <path ... />；删除全部 fill="#242F00" 的背景路径（图形内部不含同色）。
-svg = re.sub(r'<path[^>]*fill="#242F00"[^>]*/>', '', svg)
+# 背景元素为 fill="#b9c495" 的矩形（<rect/>）；图形内部不含同色，删除即精确前景（兼容旧 path 形态）。
+svg = re.sub(r'<(?:rect|path)[^>]*fill="#b9c495"[^>]*/>', '', svg)
 open(dst, "w", encoding="utf-8").write(svg)
 PYEOF
 rasterize "$ICONS/android/icon_foreground.svg" 1024 "$ICONS/android/ic_foreground_1024.png"
 resize_from "$ICONS/android/ic_foreground_1024.png" 432 "$ICONS/android/ic_foreground.png"
 # 注意：color 源默认 yuv420p，RGB→YUV→RGB 会偏 2（如 0x2F→0x2D）；图内 format=rgb24 使其直出。
-"$FFMPEG" -y -loglevel error -f lavfi -i "color=c=0x242F00:s=432x432,format=rgb24" -frames:v 1 \
+"$FFMPEG" -y -loglevel error -f lavfi -i "color=c=0xb9c495:s=432x432,format=rgb24" -frames:v 1 \
     "$ICONS/android/ic_background.png"
 echo "OK：ic_foreground/ic_background（SVG 路径剥离，确定性 100%）"
 
