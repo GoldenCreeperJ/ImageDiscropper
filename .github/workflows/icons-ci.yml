@@ -48,13 +48,15 @@ jobs:
           mkdir -p /tmp/icontools && cd /tmp/icontools
           # Inkscape 1.4.3 官方 AppImage；免 FUSE 解包（runner 无 libfuse2），
           # squashfs-root/AppRun 即可执行入口。
-          curl -fsSL -o inkscape.AppImage \
+          # 下载健壮性：--http1.1 规避 HTTP/2 流断开（curl 92 PROTOCOL_ERROR 常见于这两个源）；
+          # --retry-all-errors 对协议类瞬时错误重试 3 次（默认 --retry 只覆盖超时/5xx）。
+          curl -fsSL --http1.1 --retry 3 --retry-all-errors --retry-delay 2 -o inkscape.AppImage \
             "https://media.inkscape.org/dl/resources/file/Inkscape-e7c3feb-x86_64.AppImage"
           chmod +x inkscape.AppImage
           ./inkscape.AppImage --appimage-extract >/dev/null
           rm inkscape.AppImage
           # ffmpeg 8.0.1 静态构建（johnvansickle）；curl -f：404 立即红而非拿到错误页。
-          curl -fsSL -o ffmpeg.tar.xz \
+          curl -fsSL --http1.1 --retry 3 --retry-all-errors --retry-delay 2 -o ffmpeg.tar.xz \
             "https://johnvansickle.com/ffmpeg/old-releases/ffmpeg-8.0.1-amd64-static.tar.xz"
           tar -xJf ffmpeg.tar.xz
           mv ffmpeg-8.0.1-amd64-static ffmpeg
