@@ -22,6 +22,9 @@
 #include <QWidget>
 
 #include "mobile/mobile_shell_ui.h"
+#include "util/gui_nums.h"
+#include "i18n/gui_texts.h"
+#include "i18n/gui_i18n.h"
 
 // 版本号经 CMake 编译期宏注入；独立配置本目录时回退占位版本（与构建说明一致）。
 #ifndef IDC_GUI_VERSION
@@ -32,8 +35,12 @@ namespace idc::gui {
 
 // 构造：装配顺序＝部件 → 抽屉 → 状态栏 → 工具条 → initCore（基类接线，顺序承重）。
 MobileShell::MobileShell(QWidget* parent) : MainWindow(MobileShellTag{}, parent) {
-    setWindowTitle(QStringLiteral("ImageDiscropper GUI %1").arg(QStringLiteral(IDC_GUI_VERSION)));
-    resize(480, 960);                      // 竖屏典型比例；横屏同为合法形态（§8.3 双布局）。
+    constexpr auto titleRef = IDC_GT(label, kWindowTitleFmt);   // 与 app/main_window.cpp 同源一条
+    setWindowTitle(i18n::qs(titleRef).arg(QStringLiteral(IDC_GUI_VERSION)));
+    addRetranslate([this, titleRef] {
+        setWindowTitle(i18n::qs(titleRef).arg(QStringLiteral(IDC_GUI_VERSION)));
+    });
+    resize(nums::mobile::kWindowWidthPx, nums::mobile::kWindowHeightPx);   // 竖屏典型比例；横屏同为合法形态（§8.3 双布局）。
     setStyleSheet(QLatin1String(kTouchChromeStyle));
 
     MobileShellUi::buildCentral(this);
@@ -68,11 +75,13 @@ void MobileShell::applyOrientationLayout() {
         // 横屏：抽屉改停右侧（与画布左右分屏），宽占 2/5；展开/收起可见态不变。
         // 布局自外向内＝[画布 | 抽屉 | 工具条]：工具条最右、抽屉居右、画布仍为主。
         addDockWidget(Qt::RightDockWidgetArea, drawer);
-        resizeDocks({drawer}, {width() * 2 / 5}, Qt::Horizontal);
+        resizeDocks({drawer}, {width() * nums::mobile::kDrawerLandscapeWidthNum / nums::mobile::kDrawerRatioDen},
+                    Qt::Horizontal);
     } else {
         // 竖屏：回到底部，高占 3/5。
         addDockWidget(Qt::BottomDockWidgetArea, drawer);
-        resizeDocks({drawer}, {height() * 3 / 5}, Qt::Vertical);
+        resizeDocks({drawer}, {height() * nums::mobile::kDrawerPortraitHeightNum / nums::mobile::kDrawerRatioDen},
+                    Qt::Vertical);
     }
 
     // 工具条换停靠区（QMainWindow::addToolBar 对已在窗口内的工具条即迁移）。
@@ -89,9 +98,18 @@ void MobileShell::applyOrientationLayout() {
         const auto buttons = host->findChildren<QToolButton*>(QString(), Qt::FindDirectChildrenOnly);
         for (int i = 0; i < buttons.size(); ++i)
             grid->addWidget(buttons[i], landscape ? i : 0, landscape ? 0 : i);
+        // 尺寸策略随形态：竖屏按文字实测宽（Fixed：宽度＝max(sizeHint, 建造时 setMinimumWidth 的实测宽)，
+        // 长标签如英文 Zoom In/Out 不裁）；横屏单列内横向填充（Expanding：铺满列宽，消除窄按钮右侧空白）。
+        for (auto* b : buttons) {
+            auto sp = b->sizePolicy();
+            sp.setHorizontalPolicy(landscape ? QSizePolicy::Expanding : QSizePolicy::Fixed);
+            b->setSizePolicy(sp);
+        }
+        // 横屏：0 列加 stretch，Expanding 按钮方能撑满 scroller 定宽；竖屏：列不 stretch，AlignLeft 保持左聚不拉伸。
+        grid->setColumnStretch(0, landscape ? 1 : 0);
         grid->setAlignment(landscape ? Qt::AlignTop : Qt::AlignLeft);   // 不拉伸剩余空间。
     }
-    // 条带尺寸策略随形态：竖屏定高 48 横向铺展；横屏定宽＝单列内容宽、纵向填充侧栏。
+    // 条带尺寸策略随形态：竖屏定高（nums::mobile::kStripHeightPx）横向铺展；横屏定宽＝单列内容宽、纵向填充侧栏。
     scroller->setMinimumHeight(0);
     scroller->setMaximumHeight(QWIDGETSIZE_MAX);
     scroller->setMinimumWidth(0);
@@ -99,10 +117,10 @@ void MobileShell::applyOrientationLayout() {
     if (landscape) {
         // 定宽到单列内容（宽扁条实测修复，详见 src/mobile/README.md「触控精度与方向」）。
         if (grid) grid->activate();
-        scroller->setFixedWidth(host ? host->sizeHint().width() : 96);
+        scroller->setFixedWidth(host ? host->sizeHint().width() : nums::mobile::kStripFallbackWidthPx);
         scroller->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
     } else {
-        scroller->setFixedHeight(48);
+        scroller->setFixedHeight(nums::mobile::kStripHeightPx);
         scroller->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     }
     addToolBar(landscape ? Qt::RightToolBarArea : Qt::BottomToolBarArea, tb);

@@ -11,6 +11,8 @@
 
 #include <QWidget>
 
+#include "util/gui_nums.h"
+
 namespace idc::gui {
 
 // ---------------------------------------------------------------------------
@@ -26,7 +28,7 @@ signals:
     void nudgeRequested(int dx, int dy);
 
 private:
-    int step_{1};   // 当前倍率（中央按钮切换）
+    int step_{nums::canvas::kNudgeStepPx};   // 当前倍率（中央按钮切换）
 };
 
 } // namespace idc::gui

@@ -16,37 +16,35 @@
 #include <functional>
 #include <initializer_list>
 #include <utility>
+#include <algorithm>
 
 #include <QAction>
-#include <QActionGroup>
-#include <QApplication>
-#include <QComboBox>
 #include <QDockWidget>
 #include <QGridLayout>
-#include <QLineEdit>
 #include <QMainWindow>
 #include <QMenu>
-#include <QMouseEvent>
-#include <QPlainTextEdit>
+#include <QMessageBox>
 #include <QScrollArea>
-#include <QScrollBar>
-#include <QScroller>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QToolBar>
 #include <QToolButton>
-#include <QTouchEvent>
 #include <QVBoxLayout>
 #include <QWidgetAction>
-#include <QWheelEvent>
 
-#include "app/annotation_coordinator.h"
+#include "app/controllers/config_controller.h"
+#include "app/controllers/export_controller.h"
+#include "app/appearance_dialog.h"
+#include "app/canvas_prefs.h"
+#include "app/app_prefs.h"
 #include "app/main_window.h"
-#include "app/preprocess_controller.h"
+#include "app/controllers/preprocess_controller.h"
+#include "app/controllers/session_controller.h"
 #include "app/status_bar.h"
 #include "canvas/canvas_scene.h"
 #include "canvas/canvas_view.h"
 #include "mobile/mobile_step_pad.h"
+#include "mobile/touch_scroll.h"
 #include "panels/annotation_prop_panel.h"
 #include "panels/export_panel.h"
 #include "panels/image_panel.h"
@@ -55,161 +53,20 @@
 #include "panels/left_panel.h"
 #include "panels/param_panel.h"
 #include "panels/tool_panel.h"
+#include "util/gui_nums.h"
+#include "i18n/gui_texts.h"
+#include "i18n/gui_i18n.h"
+#include "i18n/retranslate.h"
+
+// 版本号经 CMake 编译期宏注入；独立配置本目录时回退占位版本（与构建说明一致）。
+#ifndef IDC_GUI_VERSION
+#define IDC_GUI_VERSION "dev"
+#endif
+#ifndef IDC_CORE_VERSION
+#define IDC_CORE_VERSION "dev"
+#endif
 
 namespace idc::gui {
-namespace {
-
-/// 底部工具条滚轮重定向：QScrollArea 默认滚轮处理驱动的是**垂直**滚动条——横向条带里
-/// 会出现「上下滚动」的错乱。拦截视口链（含悬停在按钮上时）的 Wheel 事件，
-/// 换算成水平位移；无溢出/非滚轮事件不消费（交回默认链）。
-class WheelToHScrollFilter : public QObject {
-public:
-    explicit WheelToHScrollFilter(QScrollBar* target, QObject* parent = nullptr)
-        : QObject(parent), target_(target) {}
-
-protected:
-    bool eventFilter(QObject* /*obj*/, QEvent* ev) override {
-        if (ev->type() != QEvent::Wheel) return false;
-        const auto* we = dynamic_cast<QWheelEvent*>(ev);
-        const int dx = we->angleDelta().x();
-        const int dy = we->angleDelta().y();
-        const int step = dx != 0 ? dx : dy;   // 横向滚轮（触控板）优先，否则竖轮横用。
-        if (step == 0) return true;           // 纯高精度横抖：吞掉即可。
-        // 无水平溢出（含横屏单列形态）：交回默认链——横屏单列时默认竖滚正是想要的。
-        if (target_->minimum() == target_->maximum()) return false;
-        target_->setValue(target_->value() - step);
-        return true;
-    }
-
-private:
-    QScrollBar* target_;
-};
-
-// 触控滚动接管（QScroller 替代）：QScroller 在 Android 上的属性通道不完整——
-// 过冲属性经 QPA 不生效（回弹关不干净），且其 click-through 合成会在拖拽释放时
-// 向条带按钮投递点击（「滑动时按下按钮」的元凶——MaxClickThroughVelocity 只挡
-// 快速甩动，慢速收尾照样投递）。自定义过滤器替代：全程消费触摸事件（合成鼠标
-// 无从干扰），累计位移超阈值（kTapThreshold）即按增量滚动——滚动条自身钳制，
-// 无过冲无回弹；未超阈值（真轻点）在释放时人工合成一次 press-release 触发子部件点击。
-class TouchScrollFilter : public QObject {
-public:
-    explicit TouchScrollFilter(QScrollArea* area, QObject* parent = nullptr)
-        : QObject(parent), area_(area) {
-        area_->viewport()->installEventFilter(this);
-        area_->viewport()->setAttribute(Qt::WA_AcceptTouchEvents);
-    }
-
-protected:
-    bool eventFilter(QObject* /*watched*/, QEvent* event) override {
-        switch (event->type()) {
-            case QEvent::TouchBegin:
-            case QEvent::TouchUpdate:
-            case QEvent::TouchEnd: {
-                const auto* te = dynamic_cast<QTouchEvent*>(event);
-                if (event->type() == QEvent::TouchBegin && !te->points().isEmpty()) {
-                    // 落在文本输入类控件（输入框/数字框/下拉框）上的触摸序列放行：
-                    // 文字选择、拖动删除、光标定位需要 Qt 原生的合成鼠标事件，
-                    // 被本过滤器消费则「删除都删不了」（真机反馈）。
-                    passThrough_ = isTextEntryWidgetAt(te->points().first().position());
-                    if (passThrough_) return false;
-                }
-                if (passThrough_) {
-                    if (event->type() == QEvent::TouchEnd) passThrough_ = false;
-                    return false; // 放行整条序列，交 Qt 合成鼠标处理。
-                }
-                handleTouch(te);
-                return true; // 全程消费：点击只由本过滤器合成，绝不误投。
-            }
-            default:
-                return false;
-        }
-    }
-
-    // 命中点（及其祖先）是否文本输入类控件——这类控件保留原生触摸语义。
-    bool isTextEntryWidgetAt(const QPointF& viewportPos) const {
-        const QPoint gp = area_->viewport()->mapToGlobal(viewportPos.toPoint());
-        QWidget* w = QApplication::widgetAt(gp);
-        while (w) {
-            if (qobject_cast<QLineEdit*>(w) || qobject_cast<QTextEdit*>(w)
-                || qobject_cast<QPlainTextEdit*>(w) || qobject_cast<QAbstractSpinBox*>(w)
-                || qobject_cast<QComboBox*>(w))
-                return true;
-            w = w->parentWidget();
-        }
-        return false;
-    }
-
-private:
-    void handleTouch(const QTouchEvent* event) {
-        if (event->points().isEmpty()) return;
-        const QPointF pos = event->points().first().position();
-        switch (event->type()) {
-            case QEvent::TouchBegin:
-                tracking_ = true;
-                moved_ = false;
-                lastPos_ = pos;
-                total_ = QPointF();
-                break;
-            case QEvent::TouchUpdate: {
-                if (!tracking_) break;
-                const QPointF delta = pos - lastPos_;
-                lastPos_ = pos;
-                total_ += delta;
-                if (!moved_ && total_.manhattanLength() < kTapThreshold) break; // 轻点抖动容忍区内。
-                moved_ = true;
-                // 内容跟手：手指位移反作用于滚动条值（上/左滑 → 值增大）。
-                area_->horizontalScrollBar()->setValue(
-                    area_->horizontalScrollBar()->value() + qRound(-delta.x()));
-                area_->verticalScrollBar()->setValue(
-                    area_->verticalScrollBar()->value() + qRound(-delta.y()));
-                break;
-            }
-            case QEvent::TouchEnd:
-                if (tracking_ && !moved_) synthesizeTap(pos);
-                tracking_ = false;
-                break;
-            default:
-                break;
-        }
-    }
-
-    // 人工点击合成：widgetAt 深查命中部件（透过条带容器直达按钮），发一对鼠标
-    // press-release；只处理本滚动区子树内的目标。
-    void synthesizeTap(const QPointF& viewportPos) const {
-        const QWidget* vp = area_->viewport();
-        const auto global = QPointF(vp->mapToGlobal(viewportPos.toPoint()));
-        QWidget* child = QApplication::widgetAt(global.toPoint());
-        if (!child || !vp->isAncestorOf(child)) return;
-        const auto local = QPointF(child->mapFromGlobal(global.toPoint()));
-        QMouseEvent press(QEvent::MouseButtonPress, local, global,
-                          Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
-        QMouseEvent release(QEvent::MouseButtonRelease, local, global,
-                            Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
-        QApplication::sendEvent(child, &press);
-        QApplication::sendEvent(child, &release);
-    }
-
-    static constexpr qreal kTapThreshold = 6.0; // 轻点抖动容忍（px）；超过即判为滑动。
-    QScrollArea* area_;
-    bool passThrough_ = false; // 本序列落在文本输入控件上：放行交 Qt 原生处理。
-    bool tracking_ = false;
-    bool moved_ = false;
-    QPointF lastPos_;
-    QPointF total_;
-};
-
-// 移动端全部滚动区（抽屉页/分组/底部条带）统一换装上述过滤器；
-// 桌面预览保持 QScroller 鼠标协调器模式（无触摸事件，不受影响）。
-void installTouchScroll(QScrollArea* area) {
-#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
-    new TouchScrollFilter(area, area); // 父对象持有生命周期，随滚动区销毁。
-#else
-    QScroller::grabGesture(area->viewport(), QScroller::LeftMouseButtonGesture);
-#endif
-}
-} // namespace
-
-// 中央区＝画布本体（「画布为主」）；面板创建与注入逐行对齐桌面 buildCentral（同一套类，零改动）。
 void MobileShellUi::buildCentral(MainWindow* w) {
     w->scene_ = new CanvasScene(w);
     w->view_ = new CanvasView(w->scene_, w);
@@ -240,15 +97,21 @@ void MobileShellUi::buildCentral(MainWindow* w) {
 //（页面经滚动包裹后的兼容比较已做在 preview_controller 的 showingExportPage）。
 void MobileShellUi::buildDrawer(MainWindow* w) {
     auto* tabs = new QTabWidget(w);   // 移动端保持选择式（rightTabs_ 成员为双型共用 QWidget*）。
-    // 抽屉最小尺寸＝设计下限（320×240，真机横/竖屏均放得下；无界回压的实测修复
-    // 与取值依据见 src/mobile/README.md「触控精度与方向」）。
-    tabs->setMinimumSize(320, 240);
+    // 抽屉最小尺寸＝设计下限（nums::mobile::kDrawerMinWidthPx × kDrawerMinHeightPx，
+    // 真机横/竖屏均放得下；无界回压的实测修复与取值依据见 src/mobile/README.md「触控精度与方向」）。
+    tabs->setMinimumSize(nums::mobile::kDrawerMinWidthPx, nums::mobile::kDrawerMinHeightPx);
+
+    // 页签标题：建页即设当前值 + 登记按新语言重放 tabText 的闭包（就地改字、不重建）。
+    auto addI18nTab = [tabs, w](QWidget* content, const i18n::TextRef& ref) {
+        const int idx = tabs->addTab(content, i18n::qs(ref));
+        i18n::bindTabText(w->retranslator_, tabs, idx, ref);
+    };
 
     // 页 1「模式/图层」：桌面左侧一组（模式极性 + 标注工具 + 图层）竖排可滚动。
     auto* groupContainer = new QWidget(w);
     auto* groupLayout = new QVBoxLayout(groupContainer);
     groupLayout->setContentsMargins(0, 0, 0, 0);
-    groupLayout->setSpacing(6);
+    groupLayout->setSpacing(nums::panels::kPanelSpacingPx);
     groupLayout->addWidget(w->left_);
     groupLayout->addWidget(w->toolPanel_);
     groupLayout->addWidget(w->layerPanel_);
@@ -258,7 +121,7 @@ void MobileShellUi::buildDrawer(MainWindow* w) {
     groupScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     groupScroll->setWidget(groupContainer);
     installTouchScroll(groupScroll);
-    tabs->addTab(groupScroll, QStringLiteral("模式"));
+    addI18nTab(groupScroll, IDC_GT(label, kModeSection));
 
     // 每页套纵向 QScrollArea：高度不够时页内上下滚动（参数/导出页天然比抽屉高）；
     // 横向 AlwaysOff——内容随抽屉宽自适应（minimumSizeHint 无界回压的实测修复
@@ -274,14 +137,14 @@ void MobileShellUi::buildDrawer(MainWindow* w) {
         return sa;
     };
 
-    tabs->addTab(scrollPage(w->layerEditPanel_), QStringLiteral("图片"));
-    tabs->addTab(scrollPage(w->imagePanel_), QStringLiteral("预处理"));
-    tabs->addTab(scrollPage(w->annoPropPanel_), QStringLiteral("标注"));
-    tabs->addTab(scrollPage(w->param_), QStringLiteral("参数"));
-    tabs->addTab(scrollPage(w->exportPanel_), QStringLiteral("导出"));
+    addI18nTab(scrollPage(w->layerEditPanel_), IDC_GT(label, kSecImage));
+    addI18nTab(scrollPage(w->imagePanel_), IDC_GT(label, kSecPreprocess));
+    addI18nTab(scrollPage(w->annoPropPanel_), IDC_GT(label, kSecAnnotation));
+    addI18nTab(scrollPage(w->param_), IDC_GT(label, kSecParam));
+    addI18nTab(scrollPage(w->exportPanel_), IDC_GT(label, kExportBoxTitle));
     w->rightTabs_ = tabs;
 
-    auto* drawer = new QDockWidget(QStringLiteral("面板"), w);
+    auto* drawer = new QDockWidget(IDC_GTR(label, kPanelToggle), w);
     drawer->setObjectName(QLatin1String(kDrawerName));
     drawer->setFeatures(QDockWidget::NoDockWidgetFeatures);   // 不可拖出/关闭（形态固定）。
     drawer->setTitleBarWidget(new QWidget(drawer));           // 空标题栏 = 隐藏标题。
@@ -290,10 +153,10 @@ void MobileShellUi::buildDrawer(MainWindow* w) {
     drawer->hide();   // 画布为主：默认收起，按需展开。
 }
 
-// 状态栏精简（SPEC §8.3）：只留模式/保留块数/缩放，详情入抽屉；提示仍限时弹出可见。
+// 状态栏精简（SPEC §8.3）：紧凑模式隐藏坐标/RGB/提示标签，只留缩放；模式/保留块数
+// 已随状态栏瘦身并入提示线（CanvasCoordinator「交互模式：…」hint），提示仍经 showMessage 限时弹出。
 void MobileShellUi::buildStatus(MainWindow* w) {
     w->status_ = new StatusBar(w);
-    w->status_->setModeTier(w->doc_.mode());
     w->status_->setCompactMode(true);
     w->setStatusBar(w->status_);
 }
@@ -304,7 +167,7 @@ void MobileShellUi::buildStatus(MainWindow* w) {
 // 另配滚轮横滚；细节见 src/mobile/README.md「触控精度与方向」）；初始态＝竖屏单行，方向
 // 翻转由 applyOrientationLayout 零重建重排。
 void MobileShellUi::buildBottomBar(MainWindow* w) {
-    auto* tb = new QToolBar(QStringLiteral("触控工具条"), w);
+    auto* tb = new QToolBar(IDC_GTR(label, kMobileToolBarTitle), w);
     tb->setObjectName(QLatin1String(kToolBarName));
     w->addToolBar(Qt::BottomToolBarArea, tb);
     tb->setMovable(false);
@@ -315,14 +178,15 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
     scroller->setWidgetResizable(true);   // 内容尺寸由布局最小尺寸（按钮 44pt 之和）撑开。
     scroller->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);   // 不出滚动条，只靠拖拽/滚轮。
     scroller->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    scroller->setFixedHeight(48);
+    scroller->setFixedHeight(nums::mobile::kStripHeightPx);
     scroller->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     auto* host = new QWidget(scroller);
     // 单 grid 双向复用：竖屏全在行 0（横向单行），横屏全在列 0（竖向单列）；
     // 方向切换由 applyOrientationLayout 重加同一批 widget，不重建、状态无损。
     auto* lay = new QGridLayout(host);
-    lay->setContentsMargins(2, 2, 2, 2);
-    lay->setSpacing(4);
+    lay->setContentsMargins(nums::mobile::kStripMarginPx, nums::mobile::kStripMarginPx,
+                           nums::mobile::kStripMarginPx, nums::mobile::kStripMarginPx);
+    lay->setSpacing(nums::mobile::kStripSpacingPx);
     lay->setAlignment(Qt::AlignLeft);     // 内容窄于视口时按钮不拉伸。
     int stripIndex = 0;                   // 条带槽位序（添加顺序即重排顺序）。
     scroller->setWidget(host);
@@ -337,78 +201,68 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
         new WheelToHScrollFilter(scroller->horizontalScrollBar(), scroller));
 
     // 把一个 QAction 做成 44pt 文本按钮入条带（启用态/勾选态经 defaultAction 自动同步）。
-    auto addButton = [host, lay, &stripIndex](QAction* a) {
+    // 宽度按文字实测强制下限：Fixed 策略下布局取宽 = max(sizeHint, minimumWidth)，而纯文本
+    // autoRaise 按钮的 sizeHint 会低估（英文 Zoom In/Out 因此被裁），故显式用字体度量算宽，
+    // 并在语言切换后随新文字重算（登记到 retranslator_）。
+    auto fitButtonWidth = [](QToolButton* b, const QString& text) {
+        const int need = b->fontMetrics().horizontalAdvance(text)
+                       + nums::mobile::kStripButtonHPadPx;
+        b->setMinimumWidth(std::max(nums::mobile::kMinButtonSizePt, need));
+    };
+    auto addButton = [host, lay, &stripIndex, w, fitButtonWidth](QAction* a) {
         auto* b = new QToolButton(host);
         b->setDefaultAction(a);
         b->setToolButtonStyle(Qt::ToolButtonTextOnly);
         b->setAutoRaise(true);
+        b->setSizePolicy(QSizePolicy::Fixed, b->sizePolicy().verticalPolicy());
+        fitButtonWidth(b, a->text());
+        w->retranslator_.add([b, a, fitButtonWidth] { fitButtonWidth(b, a->text()); });
         lay->addWidget(b, 0, stripIndex++);   // 初始竖屏：全入行 0。
         return b;
     };
-    // 便捷：把一个动作接到主窗口槽上并加入条带（context 统一为 w，随窗口销毁）。
-    auto addAct = [w, addButton](const QString& text, void (MainWindow::*slot)()) {
-        const auto a = new QAction(text, w);
-        QObject::connect(a, &QAction::triggered, w, slot);
-        addButton(a);
-        return a;
-    };
-    auto addLambda = [w, addButton](const QString& text, std::function<void()> fn) {
-        const auto a = new QAction(text, w);
+    // 便捷：把一个动作接到 lambda 上并加入条带（context 统一为 w，随窗口销毁）。
+    auto addLambda = [w, addButton](const i18n::TextRef& ref, std::function<void()> fn) {
+        const auto a = new QAction(i18n::qs(ref), w);
+        i18n::bindAction(w->retranslator_, a, ref);
         QObject::connect(a, &QAction::triggered, w, [fn = std::move(fn)] { fn(); });
         addButton(a);
         return a;
     };
 
-    addAct(QStringLiteral("新建"), &MainWindow::onNew);
-    addAct(QStringLiteral("打开"), &MainWindow::onOpen);
-    addAct(QStringLiteral("导出"), &MainWindow::onExport);
+    // 新建/打开/导出与桌面菜单同源：转发各域控制器（会话/导出）。
+    addLambda(IDC_GT(label, kTbNew), [w] { w->session_->onNew(); });
+    addLambda(IDC_GT(label, kTbOpen), [w] { w->session_->onOpen(); });
+    addLambda(IDC_GT(label, kExportBoxTitle), [w] { w->export_->onExport(); });
 
     // 撤销/重做常驻（SPEC §8.3 无键盘补偿）：无菜单，故在本建造者创建动作并回填成员；
     // 不绑快捷键（触控无键盘；启用态仍由 onHistoryAvailabilityChanged 回灌同一成员）。
-    w->aUndo_ = new QAction(QStringLiteral("撤销"), w);
+    w->aUndo_ = new QAction(i18n::qs(IDC_GT(label, kTbUndo)), w);
+    i18n::bindAction(w->retranslator_, w->aUndo_, IDC_GT(label, kTbUndo));
     QObject::connect(w->aUndo_, &QAction::triggered, w, &MainWindow::onUndo);
     addButton(w->aUndo_);
-    w->aRedo_ = new QAction(QStringLiteral("重做"), w);
+    w->aRedo_ = new QAction(i18n::qs(IDC_GT(label, kTbRedo)), w);
+    i18n::bindAction(w->retranslator_, w->aRedo_, IDC_GT(label, kTbRedo));
     QObject::connect(w->aRedo_, &QAction::triggered, w, &MainWindow::onRedo);
     addButton(w->aRedo_);
 
-    addLambda(QStringLiteral("缩小"), [w] { w->view_->zoomOut(); });
-    addLambda(QStringLiteral("放大"), [w] { w->view_->zoomIn(); });
-    addLambda(QStringLiteral("适应"), [w] { w->view_->fitToWindow(); });   // 与双击适应同源。
+    addLambda(IDC_GT(menu, kZoomOut), [w] { w->view_->zoomOut(); });
+    addLambda(IDC_GT(menu, kZoomIn), [w] { w->view_->zoomIn(); });
+    addLambda(IDC_GT(label, kTbFit), [w] { w->view_->fitToWindow(); });   // 与双击适应同源。
 
-    // 模式切换（互斥组回填 modeAction* 成员）：syncPanels 的勾选回灌与 onModeAction 与桌面同源。
-    auto* group = new QActionGroup(w);
-    group->setExclusive(true);
-    w->modeActionL1_ = group->addAction(QStringLiteral("L1"));
-    w->modeActionL2_ = group->addAction(QStringLiteral("L2"));
-    w->modeActionL3_ = group->addAction(QStringLiteral("L3"));
-    for (QAction* a : {w->modeActionL1_, w->modeActionL2_, w->modeActionL3_}) {
-        a->setCheckable(true);
-        addButton(a);
-    }
-    w->modeActionL1_->setChecked(true);
-    QObject::connect(w->modeActionL1_, &QAction::triggered, w, [w] { w->onModeAction(1); });
-    QObject::connect(w->modeActionL2_, &QAction::triggered, w, [w] { w->onModeAction(2); });
-    QObject::connect(w->modeActionL3_, &QAction::triggered, w, [w] { w->onModeAction(3); });
+    // 模式切换与极性不设工具条按钮（移动端「一个功能一个地方」纪律，见 src/mobile/README）：
+    // 常驻抽屉「模式」页（LeftPanel 模式/极性开关，与桌面左栏同面板同链路、勾选回显同源）。
 
-    // 极性按钮（替代 K/R 键；勾选态回显由抽屉「模式」页的桌面面板承担，同一 Document）。
-    addLambda(QStringLiteral("保留"), [w] { w->onPolarityShortcut(false); });
-    addLambda(QStringLiteral("删除"), [w] { w->onPolarityShortcut(true); });
-
-    // 「删除」标注（替代 Delete 键）：与菜单/键盘同走 AnnotationCoordinator 一个槽。
-    // （annotation_ 在 initCore 里创建，lambda 延迟到点击时才取——构造顺序无碍。）
-    addLambda(QStringLiteral("删标注"), [w] { w->annotation_->onAnnoDeleteSelected(); });
-
-    // 「取消/完成」（替代 Esc）：绘制态 → annoEscape（收笔/取消预览，与键盘 Esc 同信号）；
-    // 否则 → 清除选区（与桌面 Esc 快捷键的菜单动作同槽）。
-    addLambda(QStringLiteral("取消"), [w] {
-        if (w->view_->annotationDrawActive()) w->view_->requestAnnoEscape();
-        else w->onClearCut();
-    });
+    // 删标注/取消不设工具条按钮（移动端「一个功能一个地方」纪律）：删除选中标注在抽屉
+    // 「标注」页「删除选中标注」按钮（与桌面 Delete 键/标注菜单同槽）；取消（绘制态收笔/
+    // 清选区）由长按手势覆盖——绘制态长按＝收笔，普通态长按菜单「清除切割线」（等价右键）。
 
     // 8 向步进盘（替代方向键）：QMenu + QWidgetAction 弹出，nudge → requestNudge 同链路。
     auto* padButton = new QToolButton(host);
-    padButton->setText(QStringLiteral("步进"));
+    i18n::bindButton(w->retranslator_, padButton, IDC_GT(label, kTbStepPad));
+    // 与 addButton 同源：Fixed + 按文字实测宽（语言切换后重算）。
+    padButton->setSizePolicy(QSizePolicy::Fixed, padButton->sizePolicy().verticalPolicy());
+    fitButtonWidth(padButton, padButton->text());
+    w->retranslator_.add([padButton, fitButtonWidth] { fitButtonWidth(padButton, padButton->text()); });
     padButton->setPopupMode(QToolButton::InstantPopup);
     auto* padMenu = new QMenu(padButton);
     auto* padAction = new QWidgetAction(padMenu);
@@ -420,31 +274,90 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
     padButton->setMenu(padMenu);
     lay->addWidget(padButton, 0, stripIndex++);
 
-    // 「更多」：桌面菜单里低频项的触控等价物（配置存取 FR-L3.8、清除全部标注二次确认）。
+    // 「更多」：桌面菜单里低频项的触控等价物（配置存取 FR-L3.8、重置全部、重置视图、
+    // 使用说明/关于/退出）；清除全部标注不在此——已在抽屉「标注」页按钮，一个功能一个地方。
     auto* moreButton = new QToolButton(host);
-    moreButton->setText(QStringLiteral("更多"));
+    i18n::bindButton(w->retranslator_, moreButton, IDC_GT(label, kTbMore));
+    // 与 addButton 同源：Fixed + 按文字实测宽（语言切换后重算）。
+    moreButton->setSizePolicy(QSizePolicy::Fixed, moreButton->sizePolicy().verticalPolicy());
+    fitButtonWidth(moreButton, moreButton->text());
+    w->retranslator_.add([moreButton, fitButtonWidth] { fitButtonWidth(moreButton, moreButton->text()); });
     moreButton->setPopupMode(QToolButton::InstantPopup);
     auto* moreMenu = new QMenu(moreButton);
-    const QAction* aLoad = moreMenu->addAction(QStringLiteral("加载配置…"));
-    QObject::connect(aLoad, &QAction::triggered, w, &MainWindow::onLoadConfig);
-    const QAction* aSave = moreMenu->addAction(QStringLiteral("保存配置…"));
-    QObject::connect(aSave, &QAction::triggered, w, &MainWindow::onSaveConfig);
-    const QAction* aAnnoClear = moreMenu->addAction(QStringLiteral("清除全部标注"));
-    QObject::connect(aAnnoClear, &QAction::triggered, w, [w] { w->annotation_->onAnnoClearAll(); });
+    // 「更多」菜单项：建项即设当前值 + 登记按新语言重放 actionText 的闭包。
+    auto addI18nAction = [moreMenu, w](const i18n::TextRef& ref) {
+        auto* a = moreMenu->addAction(i18n::qs(ref));
+        i18n::bindAction(w->retranslator_, a, ref);
+        return a;
+    };
+    const QAction* aLoad = addI18nAction(IDC_GT(label, kTbLoadConfigEllipsis));
+    QObject::connect(aLoad, &QAction::triggered, w, [w] { w->config_->onLoadConfig(); });
+    const QAction* aSave = addI18nAction(IDC_GT(label, kTbSaveConfigEllipsis));
+    QObject::connect(aSave, &QAction::triggered, w, [w] { w->config_->onSaveConfig(); });
+    // 选区吸附（运行时开关）：与桌面「视图→选区吸附」同一 CanvasPrefs 应用级态；勾选态切换即时联动重设选区图元。
+    QAction* aSnap = addI18nAction(IDC_GT(menu, kSnapToggle));
+    aSnap->setCheckable(true);
+    aSnap->setChecked(CanvasPrefs::instance().snapEnabled());
+    QObject::connect(aSnap, &QAction::toggled, w, [](const bool on) { CanvasPrefs::instance().setSnapEnabled(on); });
+    // 外观/交互：与桌面「视图 → 外观/交互…」同一模态弹窗（Palette + CanvasPrefs 单例共享，
+    // 呈现/交互偏好走 QSettings 应用级；移动端同样可用，弹窗控件已在 AppearanceDialog 内取触控下限）。
+    // 键盘属桌面能力：传入 shortcutsEnabled=false，移动端不建「快捷键」Tab（其余两页照常）。
+    QAction* aAppearance = addI18nAction(IDC_GT(menu, kAppearance));
+    i18n::bindToolTip(w->retranslator_, aAppearance, IDC_GT(tooltip, kAppearance));
+    QObject::connect(aAppearance, &QAction::triggered, w, [w] {
+        AppearanceDialog dlg(w, /*shortcutsEnabled=*/false);
+        // 同桌面：对话框内选语言即时换文，主窗重放经 languageApplied 回接（不关面板、不销毁窗口）。
+        QObject::connect(&dlg, &AppearanceDialog::languageApplied, w, [w] { w->retranslateUi(); });
+        // 选主题即时应用：theme::apply 已全量 re-polish chrome（Android 本就跟随系统，resolveDark(System) 直接受益），本回接仅作兜底。
+        QObject::connect(&dlg, &AppearanceDialog::themeApplied, w, [w] { w->update(); });
+        dlg.exec();
+        // 关闭后兜底：若尚存未应用的语言差异再原地重放一次（同桌面触发）。
+        if (i18n::resolveForPreference(UiPrefs::instance().language())
+                != core::i18n::language())
+            w->retranslateUi();
+    });
+    // 重排前二次确认（与桌面「导出设置→重排前二次确认」同一 UiPrefs 应用级态）：行为同构。
+    QAction* aConfirmRearrange = addI18nAction(IDC_GT(menu, kConfirmRearrange));
+    aConfirmRearrange->setCheckable(true);
+    aConfirmRearrange->setChecked(UiPrefs::instance().confirmRearrangeRisk());
+    QObject::connect(aConfirmRearrange, &QAction::toggled, w, [](const bool on) { UiPrefs::instance().setConfirmRearrangeRisk(on); });
+    const QAction* aDestroyAll = addI18nAction(IDC_GT(label, kTbResetAll));
+    QObject::connect(aDestroyAll, &QAction::triggered, w, [w] { w->session_->onDestroyAll(); });
+    moreMenu->addSeparator();
+    // 使用说明（触控版流程，与桌面帮助菜单正文同构但把手势替代快捷键）+ 关于（同桌面正文）。
+    const QAction* aUsage = addI18nAction(IDC_GT(menu, kUsageGuide));
+    QObject::connect(aUsage, &QAction::triggered, w, [w] {
+        QMessageBox::information(w, IDC_GTR(menu, kUsageGuide),
+            IDC_GTR(msg, kMobileHelpBody));
+    });
+    const QAction* aAbout = addI18nAction(IDC_GT(menu, kAbout));
+    QObject::connect(aAbout, &QAction::triggered, w, [w] {
+        QMessageBox::about(w, IDC_GTR(menu, kAbout),
+            IDC_GTR(msg, kAboutBody)
+                .arg(QStringLiteral(IDC_GUI_VERSION), QStringLiteral(IDC_CORE_VERSION)));
+    });
+    moreMenu->addSeparator();
+    const QAction* aExit = addI18nAction(IDC_GT(label, kTbExit));
+    QObject::connect(aExit, &QAction::triggered, w, &QWidget::close);
     moreButton->setMenu(moreMenu);
     lay->addWidget(moreButton, 0, stripIndex++);
 
-    // 「面板」：开合抽屉（尺寸按当前方向：竖屏底部占高 3/5 / 横屏右侧占宽 2/5，画布仍为主）。
-    addLambda(QStringLiteral("面板"), [w] {
+    // 「面板」：开合抽屉（尺寸按当前方向：竖屏取高、横屏取宽，比例见
+    // nums::mobile::kDrawerPortraitHeightNum / kDrawerLandscapeWidthNum / kDrawerRatioDen；画布仍为主）。
+    addLambda(IDC_GT(label, kPanelToggle), [w] {
         auto* drawer = w->findChild<QDockWidget*>(QLatin1String(kDrawerName));
         if (!drawer) return;
         const bool show = !drawer->isVisible();
         drawer->setVisible(show);
         if (show) {
             if (w->width() > w->height())   // 横屏：抽屉停靠右侧，按宽度取值。
-                w->resizeDocks({drawer}, {w->width() * 2 / 5}, Qt::Horizontal);
+                w->resizeDocks({drawer},
+                               {w->width() * nums::mobile::kDrawerLandscapeWidthNum / nums::mobile::kDrawerRatioDen},
+                               Qt::Horizontal);
             else                            // 竖屏：底部抽屉，按高度取值。
-                w->resizeDocks({drawer}, {w->height() * 3 / 5}, Qt::Vertical);
+                w->resizeDocks({drawer},
+                               {w->height() * nums::mobile::kDrawerPortraitHeightNum / nums::mobile::kDrawerRatioDen},
+                               Qt::Vertical);
         }
     });
 }

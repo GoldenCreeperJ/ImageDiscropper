@@ -13,6 +13,7 @@
 #include <QColor>
 
 #include "model/annotation_bridge.h"
+#include "i18n/retranslate.h"
 
 class QPushButton;
 class QSpinBox;
@@ -35,6 +36,10 @@ public:
     void setModel(AnnotationBridge* model);
     // 从模型反向同步：颜色 / 粗细 / 填充取 displayXxx，文字 / 字号取 currentXxx（blockSignals 防回环）。
     void syncFromModel();
+
+    // 语言热切换重放：重跑本面板登记的静态文案（行标签/按钮/复选框/分组标题/tooltip）。
+    // 动态回显（色块文本/控件值）由调用方随后的 syncPanels→syncFromModel 重派生。
+    void retranslate() { retranslator_.run(); }
 
     // 手柄拖拽进行中：把当前预览的**绝对**缩放系数(1.0=100%、负即翻转)/旋转角(度)实时回显到变换区数值
     // （blockSignals 防回环，不触发 transformApplyRequested）。数值超出 spin 范围时由 QSpinBox 自动钳制。
@@ -59,6 +64,8 @@ signals:
     void stackBackRequested();
     // 一键清除全部标注（与标注菜单“清除全部标注”同一入口，由协调器弹确认）。
     void clearAllRequested();
+    // 删除选中标注（与标注菜单/Delete 键同一入口；仅在有选中标注时按钮可用）。
+    void deleteSelectedRequested();
 
 private slots:
     void onPickColor();       // 打开边框色取色器
@@ -90,11 +97,14 @@ private:
     QPushButton* lowerBtn_{nullptr};      // 下移一层
     QPushButton* toFrontBtn_{nullptr};    // 置于顶层
     QPushButton* toBackBtn_{nullptr};     // 置于底层
+    QPushButton* deleteSelBtn_{nullptr};  // 删除选中标注（无选中置灰）
     QPushButton* clearAllBtn_{nullptr};   // 清除全部标注（一键）
     // 上次 syncFromModel 时选中形状的绝对变换基准（供 spin 改动把目标绝对值换算为单轴增量）。
     double curObbSx_{1.0};
     double curObbSy_{1.0};
     double curObbRot_{0.0};
+
+    i18n::Retranslator retranslator_;   // 本面板文案重放登记表
 };
 
 } // namespace idc::gui

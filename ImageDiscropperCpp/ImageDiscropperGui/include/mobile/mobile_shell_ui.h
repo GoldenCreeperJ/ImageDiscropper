@@ -25,8 +25,11 @@ class MainWindow;
 //   - 工具条/浮动按钮 ≥44×44pt（SPEC §8.3 可点控件下限）；
 //   - #mobileDrawer 子树：抽屉内复用的桌面面板统一放大字号/控件最小高/列表行高，
 //     选择器限定在抽屉 objectName 下，不波及画布与工具条（防误触只在面板区生效）。
+// 注：工具条按钮只设 min-height，不设 min-width——QSS 的 min-width 会被 QStyleSheetStyle
+// 当作按钮宽度上报（而非「宽度下限」），使 sizeHint 不再随文字增宽，长标签（英文 Zoom In/Out）
+// 遂被裁；44pt 触控宽度下限改由代码 setMinimumWidth 兜（真正的下限，允许 sizeHint 变宽）。
 inline constexpr auto kTouchChromeStyle =
-    "QToolBar QToolButton { min-width: 44px; min-height: 44px; }"
+    "QToolBar QToolButton { min-height: 44px; }"
     "QToolBar { spacing: 4px; padding: 2px; }"
     "#mobileDrawer { font-size: 14px; }"
     "#mobileDrawer QPushButton, #mobileDrawer QCheckBox { min-height: 36px; }"
@@ -49,7 +52,7 @@ public:
     static void buildCentral(MainWindow* w);      // scene_/view_ + 7 面板（原样复用，尚未入容器）
     static void buildDrawer(MainWindow* w);       // rightTabs_（六页）入底部 QDockWidget（隐藏）
     static void buildStatus(MainWindow* w);       // StatusBar 紧凑模式（模式/块数/缩放，§8.3）
-    static void buildBottomBar(MainWindow* w);    // 底部工具条 + 模式动作 + 无键盘补偿按钮
+    static void buildBottomBar(MainWindow* w);    // 底部工具条 + 无键盘补偿按钮 + 「更多」低频菜单
     /// initCore 之后调用：开启预处理忙碌全屏遮罩（SPEC §8.2 移动端形态；friend 访问 preprocess_）。
     static void enableTouchErgonomics(const MainWindow* w);
 };

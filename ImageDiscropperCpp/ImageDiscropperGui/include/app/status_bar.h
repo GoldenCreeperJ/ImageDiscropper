@@ -12,6 +12,7 @@
 #include <QStatusBar>
 
 #include "engine/engine.h"
+#include "i18n/retranslate.h"
 
 class QLabel;
 
@@ -28,23 +29,24 @@ public:
     void setCoord(int x, int y) const;          // 「坐标: (x, y)」
     void setColor(int r, int g, int b) const;   // 「RGB(r,g,b)」
     void clearColor() const;                    // 「RGB(-,-,-)」（光标移出图像）
-    void setModeTier(engine::Tier tier) const;  // 「模式: L1 标准提取」等（吸收原 MainWindow::modeName）
-    void setCount(int kept) const;              // 「保留块: N」
     void setZoomPercent(int percent) const;     // 「缩放: N%」
     void setHint(const QString& text) const;    // 提示标签
-    // 紧凑模式（移动端，SPEC §8.3 布局）：只保留模式/保留块数/缩放三项，
-    // 坐标、RGB 与提示标签隐藏（详情入抽屉）；桌面默认关闭，行为零变化。
+    // 紧凑模式（移动端，SPEC §8.3 布局）：隐藏坐标、RGB 与提示标签，只留缩放
+    // （模式/保留块数已并入提示线，见 CanvasCoordinator 交互模式 hint）；桌面默认关闭，行为零变化。
     void setCompactMode(bool compact) const;
     // 非模态提示：提示标签 + 状态栏限时消息（错误 8s、普通 4s），不打断用户。
     void notify(const QString& msg, bool isError);
 
+    // 语言热切换重放：重跑本栏登记的初值标签重放闭包（动态 coord/color/zoom 由后续事件覆盖）。
+    void retranslate() { retranslator_.run(); }
+
 private:
     QLabel* coordLabel_{nullptr};
     QLabel* colorLabel_{nullptr};
-    QLabel* modeLabel_{nullptr};
-    QLabel* countLabel_{nullptr};
     QLabel* zoomLabel_{nullptr};
     QLabel* hintLabel_{nullptr};  // addWidget(..., 1)：占据剩余空间
+
+    i18n::Retranslator retranslator_;   // 初值文案的重放登记表。
 };
 
 } // namespace idc::gui

@@ -17,19 +17,16 @@
 
 #include "canvas/canvas_scene.h"
 #include "canvas/canvas_view.h"
+#include "util/gui_nums.h"
+#include "i18n/gui_texts.h"
+#include "i18n/gui_i18n.h"
 
 namespace idc::gui {
-namespace {
-
-// 滚轮缩放步长（桌面专属设备语义）：一格 = ×1.15 / 反向 ÷1.15（原 wheelEvent 常量）。
-constexpr double kWheelZoomFactor = 1.15;
-
-} // namespace
 
 // 按下：中键 / 空格+左键 → 平移；其余左键按当前画布四态模式显式路由（互斥分离）：
 //   · 标注创建 → 起笔绘制；
 //   · 图片拾取 → 仅交付场景（重叠落位框由场景循环选层，非 z 序优先抓取），不起框选、不交标注；
-//   · 标注选取 → 仅交付场景（标注图元 / 选区框手柄抓取），不起框选；
+//   · 标注选取 → 仅交付场景（标注图元 / 选区框手柄抓取），不起框选；空白按下（无图元接管）→ 反选清标注选中；
 //   · 框选（默认）→ 先交付场景（选区框手柄优先；此态标注不可交互），无抓取者才起框选带。
 // 其余键原样交付场景基类。
 void DesktopInputAdapter::onPress(CanvasView& view, QMouseEvent* event) {
@@ -52,6 +49,12 @@ void DesktopInputAdapter::onPress(CanvasView& view, QMouseEvent* event) {
                 break;
             case CanvasMode::AnnoSelect:
                 view.dispatchScenePress(event); // 仅标注 / 选区框交互；禁框选。
+                // 空白反选：图元命中时会在 press 内 accept 并成为抓取者（AnnotationItem /
+                // SelectionRectItem 手柄）；无抓取者即落在空白 → 请求取消标注选中
+                //（框选态由 marqueeStarted 承担此职责，本态禁框选故需专用通道）。
+                if (view.scene() && view.scene()->mouseGrabberItem() == nullptr) {
+                    view.gestureAnnoBlankPress();
+                }
                 break;
             case CanvasMode::Marquee:
             default:
@@ -125,9 +128,11 @@ void DesktopInputAdapter::onRelease(CanvasView& view, QMouseEvent* event) {
     view.dispatchSceneRelease(event);
 }
 
-// 滚轮：一格 ×1.15 / ÷1.15 的步进缩放（锚定光标下由视图变换锚点保证）。
+// 滚轮：一格 ×1.15 / ÷1.15 的步进缩放（以滚轮事件处的光标为原点，显式锚定、不依赖视图内部鼠标位）。
 void DesktopInputAdapter::onWheel(CanvasView& view, QWheelEvent* event) {
-    view.gestureStepZoom(event->angleDelta().y() > 0 ? kWheelZoomFactor : 1.0 / kWheelZoomFactor);
+    const qreal factor = event->angleDelta().y() > 0
+        ? nums::canvas::kWheelZoomFactor : 1.0 / nums::canvas::kWheelZoomFactor;
+    view.gestureStepZoomAt(event->position().toPoint(), factor);
     event->accept();
 }
 
@@ -140,12 +145,12 @@ void DesktopInputAdapter::onContextMenu(CanvasView& view, QContextMenuEvent* eve
         return;
     }
     QMenu menu(view.viewport());
-    const QAction* aClear = menu.addAction(QStringLiteral("清除切割线"));
-    const QAction* aReset = menu.addAction(QStringLiteral("重置视图"));
+    const QAction* aClear = menu.addAction(IDC_GTR(menu, kCtxClearCutLine));
+    const QAction* aReset = menu.addAction(IDC_GTR(menu, kCtxResetView));
     const auto* scene = dynamic_cast<CanvasScene*>(view.scene());
     const bool masksOn = scene && scene->masksVisible();
-    const QAction* aToggle = menu.addAction(masksOn ? QStringLiteral("隐藏预览遮罩")
-                                              : QStringLiteral("显示预览遮罩"));
+    const QAction* aToggle = menu.addAction(masksOn ? IDC_GTR(menu, kCtxHideMask)
+                                              : IDC_GTR(menu, kCtxShowMask));
     if (const QAction* chosen = menu.exec(event->globalPos()); chosen == aClear) view.requestClearCut();
     else if (chosen == aReset) view.requestResetView();
     else if (chosen == aToggle) view.requestToggleMasks();

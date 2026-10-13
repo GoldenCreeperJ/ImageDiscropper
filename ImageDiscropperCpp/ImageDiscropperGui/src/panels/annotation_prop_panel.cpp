@@ -10,6 +10,7 @@
 #include <QColorDialog>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLineEdit>
@@ -18,6 +19,9 @@
 #include <QVBoxLayout>
 
 #include "util/path_qt_adapter.h"
+#include "util/gui_nums.h"
+#include "i18n/gui_texts.h"
+#include "i18n/gui_i18n.h"
 
 namespace idc::gui {
 
@@ -29,14 +33,18 @@ void applySwatch(QPushButton* btn, const QColor& c) {
     const QString fg = c.lightness() < 128 ? QStringLiteral("#fff") : QStringLiteral("#000");
     const QString bg = QStringLiteral("rgba(%1,%2,%3,%4)")
                            .arg(c.red()).arg(c.green()).arg(c.blue()).arg(c.alpha());
-    btn->setStyleSheet(QStringLiteral("QPushButton{background:%1;color:%2;border:1px solid #999;"
+    btn->setStyleSheet(QStringLiteral("QPushButton{background:%1;color:%2;border:1px solid palette(mid);"
                                             "border-radius:4px;padding:4px;}"
                                             // :disabled 分支必需：色块背景由样式表接管，Qt 默认置灰不会生效，
                                             // 不补禁用态外观则「填充色被禁用」几乎看不出（与灰色默认按钮无差异）。
-                                            "QPushButton:disabled{background:#dcdcdc;color:#9a9a9a;"
-                                            "border:1px solid #bdbdbd;}")
+                                            // 禁用态一律用 palette 令牌而非字面色：本串在 syncFromModel 每次重设，
+                                            // 字面 #dcdcdc 等在深色下会成一片亮灰斑，且 re-polish 只能重解析令牌、救不了字面量。
+                                            // 禁用底取 window（非 mid）：placeholderText 是专为 window/base 底配的淡字，
+                                            // 配 mid 底（浅色模式为块中浅灰）会与字色同明度而糊成一片、看不清；改回 window 底恢复对比。
+                                            "QPushButton:disabled{background:palette(window);color:palette(placeholderText);"
+                                            "border:1px solid palette(dark);}")
                                  .arg(bg, fg));
-    btn->setText(QStringLiteral("颜色(%1,%2,%3,%4)")
+    btn->setText(IDC_GTR(status, kSwatchColorText)
                      .arg(c.red()).arg(c.green()).arg(c.blue()).arg(c.alpha()));
 }
 
@@ -69,122 +77,141 @@ bool pickColorWithAlpha(QWidget* dlgParent, QColor& inout, const QString& title)
 // 构建属性页表单。
 AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(8, 8, 8, 8);
-    root->setSpacing(6);
+    root->setContentsMargins(nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx,
+                             nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx);
+    root->setSpacing(nums::panels::kPanelSpacingPx);
 
     auto* form = new QFormLayout();
-    form->setSpacing(6);
+    form->setSpacing(nums::panels::kPanelSpacingPx);
 
     // 边框 / 描边颜色：色块按钮，点击打开取色器（填充色为下方独立控件）。
-    colorBtn_ = new QPushButton(QStringLiteral("选择颜色…"), this);
-    colorBtn_->setToolTip(QStringLiteral("标注的边框 / 描边颜色（按钮文字依次为红、绿、蓝、透明度）"));
-    form->addRow(QStringLiteral("边框颜色"), colorBtn_);
+    colorBtn_ = new QPushButton(IDC_GTR(label, kPickColorButton), this);   // 初值即被色块 updateSwatch 覆盖，不绑（动态）
+    i18n::bindToolTip(retranslator_, colorBtn_, IDC_GT(tooltip, kStrokeColorBtn));
+    i18n::bindFormRow(retranslator_, form, colorBtn_, IDC_GT(label, kStrokeColorFieldLabel));
 
     // 描边粗细。
     strokeSpin_ = new QSpinBox(this);
-    strokeSpin_->setRange(1, 200);
-    strokeSpin_->setValue(2);
+    strokeSpin_->setRange(nums::model::kStrokeWidthMinPx, nums::model::kStrokeWidthMaxPx);
+    strokeSpin_->setValue(nums::model::kDefaultStrokeWidthPx);
     strokeSpin_->setSuffix(QStringLiteral(" px"));
-    strokeSpin_->setToolTip(QStringLiteral("描边线宽（原图像素），烧录时按此粗细合成"));
-    form->addRow(QStringLiteral("粗细"), strokeSpin_);
+    i18n::bindToolTip(retranslator_, strokeSpin_, IDC_GT(tooltip, kStrokeWidthSpin));
+    i18n::bindFormRow(retranslator_, form, strokeSpin_, IDC_GT(label, kStrokeWidthFieldLabel));
 
     // 填充开关。
-    fillCheck_ = new QCheckBox(QStringLiteral("填充内部"), this);
-    fillCheck_->setToolTip(QStringLiteral("形状是否填充内部（折线 / 画笔按首尾隐式闭合填充；直线 / 文字不可填充，此时本复选框置灰）；填充色见下行独立控件"));
-    form->addRow(QStringLiteral("填充"), fillCheck_);
+    fillCheck_ = new QCheckBox(this);
+    i18n::bindButton(retranslator_, fillCheck_, IDC_GT(label, kFillCheckLabel));
+    i18n::bindToolTip(retranslator_, fillCheck_, IDC_GT(tooltip, kFillCheckTip));
+    i18n::bindFormRow(retranslator_, form, fillCheck_, IDC_GT(label, kFillFieldLabel));
 
     // 填充颜色：独立于边框色的取色按钮（仅填充开启时可见效果）。
-    fillColorBtn_ = new QPushButton(QStringLiteral("选择颜色…"), this);
-    fillColorBtn_->setToolTip(QStringLiteral("标注的填充颜色（与边框色独立；仅当形状可填充且已勾选填充时可用；按钮文字依次为红、绿、蓝、透明度）"));
-    form->addRow(QStringLiteral("填充颜色"), fillColorBtn_);
+    fillColorBtn_ = new QPushButton(IDC_GTR(label, kPickColorButton), this);   // 色块动态，不绑
+    i18n::bindToolTip(retranslator_, fillColorBtn_, IDC_GT(tooltip, kFillColorBtn));
+    i18n::bindFormRow(retranslator_, form, fillColorBtn_, IDC_GT(label, kFillColorFieldLabel));
 
     // 文字内容。
     textEdit_ = new QLineEdit(this);
-    textEdit_->setText(QStringLiteral("A"));
-    textEdit_->setToolTip(QStringLiteral("文字标注的内容（选择文字工具后单击落点使用）"));
-    form->addRow(QStringLiteral("文字"), textEdit_);
+    textEdit_->setText(IDC_GTR(label, kDefaultAnnotationText));   // 模型驱动，不绑（动态）
+    i18n::bindToolTip(retranslator_, textEdit_, IDC_GT(tooltip, kTextEditField));
+    i18n::bindFormRow(retranslator_, form, textEdit_, IDC_GT(label, kTextFieldLabel));
 
     // 字号。
     fontSpin_ = new QSpinBox(this);
-    fontSpin_->setRange(1, 2000);
-    fontSpin_->setValue(200);
-    fontSpin_->setToolTip(QStringLiteral("文字标注的字号（像素）"));
-    form->addRow(QStringLiteral("字号"), fontSpin_);
+    fontSpin_->setRange(nums::model::kFontSizeMinPx, nums::model::kFontSizeMaxPx);
+    fontSpin_->setValue(static_cast<int>(nums::model::kDefaultFontSizePx));
+    i18n::bindToolTip(retranslator_, fontSpin_, IDC_GT(tooltip, kFontSizeSpin));
+    i18n::bindFormRow(retranslator_, form, fontSpin_, IDC_GT(label, kFontSizeFieldLabel));
 
     // 转角圆角半径（多边形 / 折线顶点倒角；直线 / 圆 / 文字无转角，设置无效）。
     cornerSpin_ = new QDoubleSpinBox(this);
-    cornerSpin_->setRange(0.0, 500.0);
+    cornerSpin_->setRange(nums::model::kCornerRadiusMinPx, nums::model::kCornerRadiusMaxPx);
     cornerSpin_->setDecimals(1);
-    cornerSpin_->setSingleStep(1.0);
-    cornerSpin_->setValue(0.0);
+    cornerSpin_->setSingleStep(nums::model::kCornerRadiusStepPx);
+    cornerSpin_->setValue(nums::model::kDefaultCornerRadiusPx);
     cornerSpin_->setSuffix(QStringLiteral(" px"));
     cornerSpin_->setKeyboardTracking(false);
-    cornerSpin_->setToolTip(QStringLiteral("转角圆角半径（0＝直角）；仅作用于多边形 / 折线顶点，直线 / 圆 / 椭圆 / 文字无转角（控件会自动置灰）。EDIT 模式改选中项，否则为下次绘制默认"));
-    form->addRow(QStringLiteral("圆角"), cornerSpin_);
+    i18n::bindToolTip(retranslator_, cornerSpin_, IDC_GT(tooltip, kCornerRadiusSpin));
+    i18n::bindFormRow(retranslator_, form, cornerSpin_, IDC_GT(label, kCornerRadiusFieldLabel));
 
     root->addLayout(form);
 
     // ---- 变换区（仅对选中标注生效）：显示选中形状的**绝对累积变换**（缩放%/旋转°，负缩放=翻转）----
     // 无「应用」按钮：改动任一 spin 即直接下发（见下方 valueChanged 连接）；keyboardTracking 关闭，
     // 键入时不逐字符触发（回车/失焦或点箭头才更新），避免中间态反复变换。
-    transformGroup_ = new QGroupBox(QStringLiteral("变换（选中标注）"), this);
+    transformGroup_ = new QGroupBox(this);
+    i18n::bindTitle(retranslator_, transformGroup_, IDC_GT(label, kTransformGroupBox));
     auto* tf = new QFormLayout(transformGroup_);
-    tf->setSpacing(6);
+    tf->setSpacing(nums::panels::kPanelSpacingPx);
     scaleXSpin_ = new QSpinBox(transformGroup_);
-    scaleXSpin_->setRange(-100000, 100000);   // 含负：忠实反映翻转与大幅缩放
+    scaleXSpin_->setRange(-nums::model::kAnnoScalePercentLimit, nums::model::kAnnoScalePercentLimit);   // 含负：忠实反映翻转与大幅缩放
     scaleXSpin_->setValue(100);
     scaleXSpin_->setSuffix(QStringLiteral(" %"));
     scaleXSpin_->setKeyboardTracking(false);
-    scaleXSpin_->setToolTip(QStringLiteral("水平缩放（100%＝原尺寸，负值＝水平翻转）；改动即生效，与画布手柄拖拽实时联动"));
-    tf->addRow(QStringLiteral("水平缩放"), scaleXSpin_);
+    i18n::bindToolTip(retranslator_, scaleXSpin_, IDC_GT(tooltip, kScaleXSpin));
+    i18n::bindFormRow(retranslator_, tf, scaleXSpin_, IDC_GT(label, kScaleXFieldLabel));
     scaleYSpin_ = new QSpinBox(transformGroup_);
-    scaleYSpin_->setRange(-100000, 100000);
+    scaleYSpin_->setRange(-nums::model::kAnnoScalePercentLimit, nums::model::kAnnoScalePercentLimit);
     scaleYSpin_->setValue(100);
     scaleYSpin_->setSuffix(QStringLiteral(" %"));
     scaleYSpin_->setKeyboardTracking(false);
-    scaleYSpin_->setToolTip(QStringLiteral("垂直缩放（100%＝原尺寸，负值＝垂直翻转）；改动即生效，与画布手柄拖拽实时联动"));
-    tf->addRow(QStringLiteral("垂直缩放"), scaleYSpin_);
+    i18n::bindToolTip(retranslator_, scaleYSpin_, IDC_GT(tooltip, kScaleYSpin));
+    i18n::bindFormRow(retranslator_, tf, scaleYSpin_, IDC_GT(label, kScaleYFieldLabel));
     rotateSpin_ = new QSpinBox(transformGroup_);
-    rotateSpin_->setRange(-36000, 36000);   // 宽区间：容纳多次旋转的累积角度
+    rotateSpin_->setRange(-nums::model::kAnnoRotateDegLimit, nums::model::kAnnoRotateDegLimit);   // 宽区间：容纳多次旋转的累积角度
     rotateSpin_->setValue(0);
     rotateSpin_->setSuffix(QStringLiteral(" °"));
     rotateSpin_->setKeyboardTracking(false);
-    rotateSpin_->setToolTip(QStringLiteral("旋转角度（相对原方向的累积值）；改动即生效，与画布手柄拖拽实时联动"));
-    tf->addRow(QStringLiteral("旋转"), rotateSpin_);
+    i18n::bindToolTip(retranslator_, rotateSpin_, IDC_GT(tooltip, kRotateSpin));
+    i18n::bindFormRow(retranslator_, tf, rotateSpin_, IDC_GT(label, kRotateFieldLabel));
     transformGroup_->setEnabled(false);   // 初始无选中→置灰（syncFromModel 依选中态刷新）
     root->addWidget(transformGroup_);
 
     // ---- 叠放次序区（仅对选中标注生效）：上移一层 / 下移一层 / 置于顶层 / 置于底层 ----
     // 从标注菜单迁入本面板（用户诉求：层序属“选中项属性”，归位到属性页而非菜单）；无选中时整区置灰。
     // 列表下标即 z 序（大＝顶，见 Core hitTest/burnIn），本区仅发意图、真正重排在 AnnotationBridge→Core moveAnnotation。
-    stackGroup_ = new QGroupBox(QStringLiteral("叠放次序（选中标注）"), this);
-    auto* stackRow = new QHBoxLayout(stackGroup_);
-    stackRow->setSpacing(6);
-    raiseBtn_ = new QPushButton(QStringLiteral("上移一层"), stackGroup_);
-    raiseBtn_->setToolTip(QStringLiteral("将选中标注向上移动一层（更靠近顶层）。"));
-    lowerBtn_ = new QPushButton(QStringLiteral("下移一层"), stackGroup_);
-    lowerBtn_->setToolTip(QStringLiteral("将选中标注向下移动一层（更靠近底层）。"));
-    toFrontBtn_ = new QPushButton(QStringLiteral("置于顶层"), stackGroup_);
-    toFrontBtn_->setToolTip(QStringLiteral("将选中标注移到最顶层。"));
-    toBackBtn_ = new QPushButton(QStringLiteral("置于底层"), stackGroup_);
-    toBackBtn_->setToolTip(QStringLiteral("将选中标注移到最底层。"));
-    stackRow->addWidget(raiseBtn_);
-    stackRow->addWidget(lowerBtn_);
-    stackRow->addWidget(toFrontBtn_);
-    stackRow->addWidget(toBackBtn_);
+    stackGroup_ = new QGroupBox(this);
+    i18n::bindTitle(retranslator_, stackGroup_, IDC_GT(label, kStackOrderGroupBox));
+    // 2×2 网格（上移/下移 第一行，置顶/置底 第二行），按钮文字较短时单行四钮会挤，改两行更清晰。
+    auto* stackGrid = new QGridLayout(stackGroup_);
+    stackGrid->setSpacing(nums::panels::kPanelSpacingPx);
+    raiseBtn_ = new QPushButton(stackGroup_);
+    i18n::bindButton(retranslator_, raiseBtn_, IDC_GT(label, kRaiseOneButton));
+    i18n::bindToolTip(retranslator_, raiseBtn_, IDC_GT(tooltip, kStackRaiseBtn));
+    lowerBtn_ = new QPushButton(stackGroup_);
+    i18n::bindButton(retranslator_, lowerBtn_, IDC_GT(label, kLowerOneButton));
+    i18n::bindToolTip(retranslator_, lowerBtn_, IDC_GT(tooltip, kStackLowerBtn));
+    toFrontBtn_ = new QPushButton(stackGroup_);
+    i18n::bindButton(retranslator_, toFrontBtn_, IDC_GT(label, kToFrontButton));
+    i18n::bindToolTip(retranslator_, toFrontBtn_, IDC_GT(tooltip, kStackToFrontBtn));
+    toBackBtn_ = new QPushButton(stackGroup_);
+    i18n::bindButton(retranslator_, toBackBtn_, IDC_GT(label, kToBackButton));
+    i18n::bindToolTip(retranslator_, toBackBtn_, IDC_GT(tooltip, kStackToBackBtn));
+    stackGrid->addWidget(raiseBtn_, 0, 0);
+    stackGrid->addWidget(lowerBtn_, 0, 1);
+    stackGrid->addWidget(toFrontBtn_, 1, 0);
+    stackGrid->addWidget(toBackBtn_, 1, 1);
     stackGroup_->setEnabled(false);   // 初始无选中→置灰
     root->addWidget(stackGroup_);
 
-    // ---- 一键清除全部标注（作用于全体，不依赖选中；协调器弹确认后清空并保留可撤销）----
-    clearAllBtn_ = new QPushButton(QStringLiteral("清除全部标注"), this);
-    clearAllBtn_->setToolTip(QStringLiteral("清除画布上全部标注矢量（不影响底图/图层/预处理；可经「撤销标注」回退）。"));
-    root->addWidget(clearAllBtn_);
+    // ---- 删除选中 / 一键清除全部标注（删除作于选中项、无选中置灰；清除作用于全体，
+    //      不依赖选中，协调器弹确认后清空并保留可撤销）---- 两者并排 1×2。
+    deleteSelBtn_ = new QPushButton(this);
+    i18n::bindButton(retranslator_, deleteSelBtn_, IDC_GT(label, kDeleteSelectedAnnoButton));
+    i18n::bindToolTip(retranslator_, deleteSelBtn_, IDC_GT(tooltip, kDeleteSelectedAnnoBtn));
+    clearAllBtn_ = new QPushButton(this);
+    i18n::bindButton(retranslator_, clearAllBtn_, IDC_GT(label, kClearAllAnnoButton));
+    i18n::bindToolTip(retranslator_, clearAllBtn_, IDC_GT(tooltip, kClearAllAnnoBtn));
+    auto* delClearRow = new QHBoxLayout();
+    delClearRow->setSpacing(nums::panels::kPanelSpacingPx);
+    delClearRow->addWidget(deleteSelBtn_);
+    delClearRow->addWidget(clearAllBtn_);
+    root->addLayout(delClearRow);
 
     root->addStretch(1);
 
     // 控件变更 → 面板意图信号。
     connect(colorBtn_, &QPushButton::clicked, this, &AnnotationPropPanel::onPickColor);
     connect(fillColorBtn_, &QPushButton::clicked, this, &AnnotationPropPanel::onPickFillColor);
+    connect(deleteSelBtn_, &QPushButton::clicked, this, &AnnotationPropPanel::deleteSelectedRequested);
     connect(clearAllBtn_, &QPushButton::clicked, this, &AnnotationPropPanel::clearAllRequested);
     connect(strokeSpin_, &QSpinBox::valueChanged, this, &AnnotationPropPanel::strokeChanged);
     connect(fillCheck_, &QCheckBox::toggled, this, &AnnotationPropPanel::fillChanged);
@@ -265,6 +292,7 @@ void AnnotationPropPanel::syncFromModel() {
     const bool hasSel = model_->selectedIndex().has_value();
     transformGroup_->setEnabled(hasSel);
     stackGroup_->setEnabled(hasSel);   // 叠放次序区同“变换区”：仅在有选中标注时可用
+    deleteSelBtn_->setEnabled(hasSel); // 删除选中同规则：无选中无作用对象
     curObbSx_ = hasSel ? model_->displayObbScaleX() : 1.0;
     curObbSy_ = hasSel ? model_->displayObbScaleY() : 1.0;
     curObbRot_ = hasSel ? model_->displayObbRotationDeg() : 0.0;
@@ -295,14 +323,14 @@ void AnnotationPropPanel::setTransformPreview(const double sx, const double sy, 
 
 // 打开边框色取色器；确认后刷新色块并发 colorPicked。
 void AnnotationPropPanel::onPickColor() {
-    if (!pickColorWithAlpha(window(), color_, QStringLiteral("选择边框颜色"))) return;
+    if (!pickColorWithAlpha(window(), color_, IDC_GTR(label, kDlgTitlePickStrokeColor))) return;
     updateSwatch();
     emit colorPicked(color_);
 }
 
 // 打开填充色取色器；确认后刷新色块并发 fillColorPicked。
 void AnnotationPropPanel::onPickFillColor() {
-    if (!pickColorWithAlpha(window(), fillColor_, QStringLiteral("选择填充颜色"))) return;
+    if (!pickColorWithAlpha(window(), fillColor_, IDC_GTR(label, kDlgTitlePickFillColor))) return;
     updateFillSwatch();
     emit fillColorPicked(fillColor_);
 }
