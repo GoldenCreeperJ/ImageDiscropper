@@ -156,7 +156,7 @@ void CanvasCoordinator::onRubberSelect(const QRectF& sceneRect) const {
 }
 
 // 拖动/缩放既有选区：同框选处理（选区框已做钳制与吸附）。
-void CanvasCoordinator::onSelectionEdited(const QRectF& sceneRect) {
+void CanvasCoordinator::onSelectionEdited(const QRectF& sceneRect) const {
     onRubberSelect(sceneRect);
 }
 

@@ -107,11 +107,11 @@ std::optional<core::Color> AnnotationItem::colorAtScene(const QPointF& scenePos)
     if (!ann_.shape) return std::nullopt;
     const QPointF local = mapFromScene(scenePos);
     if (ann_.shape->type() == geometry::ShapeType::TEXT)
-        return (!path_.isEmpty() && path_.boundingRect().contains(local))
-                   ? std::optional<core::Color>(ann_.style.color) : std::nullopt;
+        return !path_.isEmpty() && path_.boundingRect().contains(local)
+                   ? std::optional(ann_.style.color) : std::nullopt;
     if (path_.isEmpty()) return std::nullopt;
     QPainterPathStroker stroker;
-    stroker.setWidth(static_cast<qreal>(ann_.style.strokeWidth));
+    stroker.setWidth(ann_.style.strokeWidth);
     stroker.setJoinStyle(Qt::RoundJoin);
     stroker.setCapStyle(Qt::RoundCap);
     if (stroker.createStroke(path_).contains(local)) return ann_.style.color;   // 描边

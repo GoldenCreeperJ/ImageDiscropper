@@ -66,7 +66,7 @@ void CanvasPrefs::setSnapEnabled(const bool on) {
 
 void CanvasPrefs::setHandleScreenPx(const int px) {
     // 0（跟随平台默认）或 kHandlePxMin–kHandlePxMax 显式覆盖。
-    handleScreenPx_ = (px <= 0) ? 0 : std::clamp(px, nums::app::kHandlePxMin, nums::app::kHandlePxMax);
+    handleScreenPx_ = px <= 0 ? 0 : std::clamp(px, nums::app::kHandlePxMin, nums::app::kHandlePxMax);
     touched();
 }
 

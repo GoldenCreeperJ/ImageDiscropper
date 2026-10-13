@@ -12,8 +12,8 @@
 且其口径漂移会影响向后兼容，就上收到本层单一真相源；只服务单模块的一律留在模块目录内
 （先例：`engine/engine_config_json_internal.h` 只在 engine 内用，故留在 `engine/`）。
 
-| 文件              | 内容                                                                                                                                   |
-|-------------------|----------------------------------------------------------------------------------------------------------------------------------------|
-| `json_common.h`   | engine 与 annotation 共用的 nlohmann/json 宽容读取助手（`at`/`jInt`/`jStr`/`jBool`/`jDouble`/`colorToHex`/`colorFromHex`）与「SPEC §7 annotations 段 ↔ JSON 片段」的跨模块交换接口声明；**私有内部头，不入库 `include/`** |
+| 文件              | 内容                                                                                                                                                                                  |
+|-----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `json_common.h` | engine 与 annotation 共用的 nlohmann/json 宽容读取助手（`at`/`jInt`/`jStr`/`jBool`/`jDouble`/`colorToHex`/`colorFromHex`）与「SPEC §7 annotations 段 ↔ JSON 片段」的跨模块交换接口声明；**私有内部头，不入库 `include/`** |
 
 > 模块总览与构建方式见 Core 根 [README.md](../README.md)；对外声明层在 `include/`（各模块同名子目录）。

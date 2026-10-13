@@ -26,9 +26,9 @@ std::uint64_t baseFingerprintOf(const core::Image& img) {
     const std::size_t total = img.sizeInBytes();
     const std::size_t head = std::min<std::size_t>(bpp, 4);
     std::uint64_t fp = 0;
-    for (std::size_t i = 0; i < head; ++i) fp = (fp << 8) | d[i];
+    for (std::size_t i = 0; i < head; ++i) fp = fp << 8 | d[i];
     const std::size_t tailStart = total > bpp ? total - bpp : 0;
-    for (std::size_t i = 0; i < head && tailStart + i < total; ++i) fp = (fp << 8) | d[tailStart + i];
+    for (std::size_t i = 0; i < head && tailStart + i < total; ++i) fp = fp << 8 | d[tailStart + i];
     return fp;
 }
 

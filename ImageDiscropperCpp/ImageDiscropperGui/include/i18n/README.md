@@ -40,5 +40,5 @@
 3. **契约组不越界**：`ident` 组永不进语言表。
 4. **新添常驻类接重放**：给窗口 / 面板新增可译文案时，改用 `retranslate.h` 的 `bind*` 助手而非裸 `setText`，
    否则该处文案在热切换后停留旧语言。
-5. **译文表对账**：`test_i18n_catalog` 逐文件比对两半常量层与 [`src/i18n/README.md`](../src/i18n/README.md) 的
+5. **译文表对账**：`test_i18n_catalog` 逐文件比对两半常量层与 [`src/i18n/README.md`](../../src/i18n/README.md) 的
    两张英文表（孤儿键 / 重复键 / 跨层撞键 / 契约组越界均 fail，覆盖率只打印）。

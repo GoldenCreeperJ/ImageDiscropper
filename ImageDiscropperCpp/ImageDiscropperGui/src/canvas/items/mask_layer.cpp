@@ -28,7 +28,7 @@ void MaskLayerItem::setGeometry(const int width, const int height, std::vector<Q
     keeps_ = std::move(keeps);
     // 包围盒需并上全部保留块：L3 的 PAD 余量策略下 Core 保留块区域可越出图像边界（导出时补白），
     //   仅按原图尺寸算 boundingRect 会把那部分排除在重绘区域之外。
-    bounds_ = QRectF(0.0, 0.0, static_cast<qreal>(width), static_cast<qreal>(height));
+    bounds_ = QRectF(0.0, 0.0, width, height);
     for (const QRectF& r : keeps_) bounds_ = bounds_.united(r);
     update();
 }

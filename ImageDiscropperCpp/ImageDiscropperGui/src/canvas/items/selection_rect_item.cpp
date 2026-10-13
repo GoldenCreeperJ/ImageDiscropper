@@ -149,7 +149,7 @@ void SelectionRectItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*
     // 统一橙色画笔（本目录 README「画布视觉规范」：默认橙色实线 2px；cosmetic 使线宽不随缩放变化）。
     // 色相可由「视图→外观/配色…」自定义（Palette 单例，绘制期取色）。
     // 高亮态（多矩形选中项）颜色略深、线宽略粗以示区分。
-    auto& pal = Palette::instance();
+    const auto& pal = Palette::instance();
     QPen pen(highlighted_ ? pal.selectionHighlight() : pal.selectionColor());
     pen.setWidth(highlighted_ ? 3 : 2);
     pen.setCosmetic(true);

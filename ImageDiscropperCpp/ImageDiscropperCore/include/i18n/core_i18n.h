@@ -47,10 +47,10 @@
 namespace idc::core {
 
 // 源语言码：常量层的中文即该语言的文本，故不为它建表，只在可用语言清单里占首位。
-inline constexpr const char* kSourceLanguage = "zh-CN";
+inline constexpr auto kSourceLanguage = "zh-CN";
 // 一期唯一目标语言码：各层表文件的登记码与 GUI 语言下拉 / CLI --lang 的取值共用此名，
 // 免得三处各写一份 "en" 而漂移（加一门语言 = 新增一张表 + 一个码常量 + 注册一次，见 README）。
-inline constexpr const char* kLangCodeEn = "en";
+inline constexpr auto kLangCodeEn = "en";
 
 // ---------------------------------------------------------------------------
 // I18nEntry：一条译文——键 → 该语言文本。
@@ -108,7 +108,7 @@ std::string translate(std::string_view key, std::string_view fallbackUtf8);
 // 复数：本机制**不做**单复数变形（只按编号填槽）。故 "Delete all %1 annotations?" 在 count=1 时显示
 //       "1 annotations"、英文形态不完美——属已知边界：此类确认框的数量几乎恒 >1，v1 可接受。将来要处理时
 //       在 formatPattern 之上加 plural 变体（按数值选不同模板），勿改本函数的填槽语义。
-std::string formatPattern(std::string text, std::initializer_list<std::string> args);
+std::string formatPattern(const std::string &text, std::initializer_list<std::string> args);
 
 // 当前生效语言码（已归一、已回退后的结果，供 UI 回显与日志）。
 std::string language();

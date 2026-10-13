@@ -94,7 +94,7 @@ QWidget* ParamPanel::buildL2Page() {
     // 追加矩形的主入口是画布框选（MainWindow.onRubberSelect）；此处提供列表可视化 +
     // 选中项坐标微调（复用上方 x1/y1/x2/y2）+ 删除/清空。面板只搬运，不做并集计算（CONTRIBUTING.md「分层纪律」）。
     l2MultiBox_ = new QGroupBox(page);
-    i18n::bindTitle(retranslator_, static_cast<QGroupBox*>(l2MultiBox_), IDC_GT(label, kMultiRectBox));
+    i18n::bindTitle(retranslator_, dynamic_cast<QGroupBox*>(l2MultiBox_), IDC_GT(label, kMultiRectBox));
     auto* mv = new QVBoxLayout(l2MultiBox_);
     l2RectList_ = new QListWidget(l2MultiBox_);
     i18n::bindToolTip(retranslator_, l2RectList_, IDC_GT(tooltip, kParamRectList));

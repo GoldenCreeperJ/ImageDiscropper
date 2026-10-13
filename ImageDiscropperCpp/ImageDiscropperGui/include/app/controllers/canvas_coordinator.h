@@ -59,7 +59,7 @@ public:
 public slots:
     // ---- 画布交互写回（原 MainWindow 槽）----
     void onRubberSelect(const QRectF& sceneRect) const;    // 框选新建选区（L3 并入单元选择集）。
-    void onSelectionEdited(const QRectF& sceneRect); // 拖动/缩放/拖边既有选区。
+    void onSelectionEdited(const QRectF& sceneRect) const; // 拖动/缩放/拖边既有选区。
     void onMultiRectEdited(int index, const QRectF& sceneRect) const; // L2 多矩形：拖动/缩放第 index 个选区框。
     void onRectSelected(int index) const;            // L2 多矩形：面板列表选中行→高亮画布对应选区框。
     void onCellToggled(int index) const;                   // L3 单击切换某单元。

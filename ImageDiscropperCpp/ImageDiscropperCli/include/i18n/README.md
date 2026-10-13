@@ -34,4 +34,4 @@
 2. **两组同改**：选项改名时 `texts::opt` 与 `texts::help::kUse*` 必须同改（同值不同角色，故不合并）。
 3. **契约组不越界**：`opt` / `cmd` / `env` 与 `help::kUse*` 永不进语言表。
 4. **译文表对账**：`test_i18n_catalog` 逐文件比对 `cli_texts_base.h` / `cli_texts_help.h` 与
-   [`src/i18n/README.md`](../src/i18n/README.md) 的两张英文表（孤儿键 / 重复键 / 跨层撞键 / 契约组越界均 fail）。
+   [`src/i18n/README.md`](../../src/i18n/README.md) 的两张英文表（孤儿键 / 重复键 / 跨层撞键 / 契约组越界均 fail）。

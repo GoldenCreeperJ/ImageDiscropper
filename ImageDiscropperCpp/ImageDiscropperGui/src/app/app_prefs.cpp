@@ -28,7 +28,7 @@ const QString kKeyLanguage = QString::fromUtf8(texts::ident::kUiLanguage);
 const QString kKeyThemeMode = QString::fromUtf8(texts::ident::kUiThemeMode);
 const QString kKeyDefaultExport = QString::fromUtf8(texts::ident::kUiDefaultExportDir);
 const QString kDefaultLanguage = QString::fromUtf8(texts::ident::kLangAuto);   // 缺省跟随系统 locale
-const QString kDefaultThemeMode = QStringLiteral("system");   // 缺省跟随系统深浅（与 theme::Mode::System 同字）
+const auto kDefaultThemeMode = QStringLiteral("system");   // 缺省跟随系统深浅（与 theme::Mode::System 同字）
 constexpr bool kDefaultConfirmRearrange = true;
 
 } // namespace

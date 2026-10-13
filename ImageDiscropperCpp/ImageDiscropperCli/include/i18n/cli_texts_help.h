@@ -11,7 +11,7 @@
 // ============================================================================
 #pragma once
 
-namespace idc::cli::texts {
+
 // ===========================================================================
 // help：--help 输出散文（可译）：落点见 src/help.cpp。
 //   三组同在一个命名空间里，但形态不同：
@@ -21,7 +21,7 @@ namespace idc::cli::texts {
 //     · kText* —— 原 raw string 散文块，**逐字搬移**（含换行、缩进与空行），本轮不改任何措辞。
 //   同值且语义相同的只留一条，行尾标 ×N（×N 指帮助里的出现次数）。
 // ===========================================================================
-namespace help {
+namespace idc::cli::texts::help {
 
 // 用法列（选项名 + 占位符）。
 // 注：下面标「同 opt::」的四条无占位符，帮助里显示的就是解析器正在匹配的那个串；
@@ -430,5 +430,5 @@ inline constexpr char kTextNewTail[] = R"IDCH(
   退出码 4：输出写入失败
 )IDCH";
 
-} // namespace help
-} // namespace idc::cli::texts
+} // namespace idc::cli::texts::help
+

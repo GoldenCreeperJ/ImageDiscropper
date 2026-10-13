@@ -182,8 +182,7 @@ std::optional<CommandId> KeyBindings::matchRoute(const int key, const Qt::Keyboa
         const QKeySequence seq = effective(def.id);
         for (int i = 0; i < seq.count(); ++i) {
             // QKeySequence[i] 在 Qt6 返回 QKeyCombination：拆成 key/modifiers 逐位比对，不走弃用的 int 合成。
-            const QKeyCombination kc = seq[i];
-            if (static_cast<int>(kc.key()) == key && kc.keyboardModifiers() == mods) return def.id;
+            if (const QKeyCombination kc = seq[i]; static_cast<int>(kc.key()) == key && kc.keyboardModifiers() == mods) return def.id;
         }
     }
     return std::nullopt;

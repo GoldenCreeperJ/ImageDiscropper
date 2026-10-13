@@ -440,10 +440,10 @@ void AppearanceDialog::buildShortcutsTab() {
     for (int r = 0; r < static_cast<int>(reg.size()); ++r) {
         const CommandId id = reg[r].id;
         // 列 0：命令名（取 registry 的 display，可译）；初值与语言重放均经 i18n::qs。
-        shortcutTable_->setItem(r, 0, new QTableWidgetItem(i18n::qs(kb.displayOf(id))));
+        shortcutTable_->setItem(r, 0, new QTableWidgetItem(i18n::qs(KeyBindings::displayOf(id))));
         retranslator_.add([this, r, id] {
             if (auto* it = shortcutTable_->item(r, 0))
-                it->setText(i18n::qs(KeyBindings::instance().displayOf(id)));
+                it->setText(i18n::qs(KeyBindings::displayOf(id)));
         });
         // 列 1：QKeySequenceEdit，回显当前生效键；改动交 handleShortcutEdit 校验提交。
         auto* edit = new QKeySequenceEdit(shortcutTable_);
@@ -511,18 +511,18 @@ void AppearanceDialog::handleShortcutEdit(const CommandId id, const QKeySequence
     if (!primary.isEmpty()) {
         // QKeySequence[0] 在 Qt6 是 QKeyCombination：拆 key/modifiers 判定，不走弃用的 →int。
         const QKeyCombination kc = primary[0];
-        const int plainKey = static_cast<int>(kc.key());
+        const int plainKey = kc.key();
         const Qt::KeyboardModifiers mods = kc.keyboardModifiers();
         if (plainKey == 0) return;   // 纯修饰（按住 Ctrl 未敲键）：不完整，保留上一次绑定。
         // Action 类校验：非空绑定必须含 Ctrl 或 Alt（空=解绑不受此限）。
-        if (kb.kindOf(id) == KeyKind::Action && !(mods & (Qt::ControlModifier | Qt::AltModifier))) {
+        if (KeyBindings::kindOf(id) == KeyKind::Action && !(mods & (Qt::ControlModifier | Qt::AltModifier))) {
             QMessageBox::warning(this, IDC_GTR(label, kDlgTitleAppearance), IDC_GTR(msg, kShortcutNeedModifier));
             syncShortcutRow(id);   // 回退到本行已提交值。
             return;
         }
         // 冲突：primary 已被 exclude=id 之外命令占用 → 询问是否抢占。
         if (const auto other = kb.conflictOf(primary, id)) {
-            const QString otherName = i18n::qs(kb.displayOf(*other));
+            const QString otherName = i18n::qs(KeyBindings::displayOf(*other));
             const auto ans = QMessageBox::question(
                 this, IDC_GTR(msg, kShortcutConflictTitle),
                 IDC_GTR(msg, kShortcutConflictBody).arg(otherName),
@@ -567,7 +567,7 @@ void AppearanceDialog::scheduleConflictReport() {
 // 逐对（按 id 序去重）汇总冲突并一次性弹窗，交由用户回到对应行自行处置——本层不自动抢占（抢占只用于主动改绑）。
 void AppearanceDialog::reportShortcutConflicts() {
     if (reportingConflicts_) return;   // 重入守卫：下面的 QMessageBox::warning 跑嵌套事件循环，期间若 clicked 被再投递则直接忽略，避免同一提示连弹两次。
-    auto& kb = KeyBindings::instance();
+    const auto& kb = KeyBindings::instance();
     QStringList pairs;
     for (const CommandDef& def : KeyBindings::registry()) {
         const QKeySequence seq = kb.effective(def.id);
@@ -575,7 +575,7 @@ void AppearanceDialog::reportShortcutConflicts() {
         // conflictOf 返回首个占用者；只在 id < 对方时记录，避免一对冲突正反各记一次。
         if (const auto other = kb.conflictOf(seq, def.id); other && def.id < *other) {
             pairs << QStringLiteral("%1 \u2194 %2")
-                         .arg(i18n::qs(kb.displayOf(def.id)), i18n::qs(kb.displayOf(*other)));
+                         .arg(i18n::qs(KeyBindings::displayOf(def.id)), i18n::qs(KeyBindings::displayOf(*other)));
         }
     }
     if (pairs.isEmpty()) return;

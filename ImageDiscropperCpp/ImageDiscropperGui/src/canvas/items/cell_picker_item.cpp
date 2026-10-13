@@ -75,7 +75,7 @@ void CellPickerItem::setGrid(const engine::Grid& grid, const int width, const in
     // 包围盒 = 原图 ∪ 全部单元区域：PAD 余量策略下残缺单元会伸出图像边界（layoutAxis 保留越界值，
     //   虚拟起点还可能落在负坐标），不并进来则那部分不算本图元的重绘区域、exposedRect 也取不到，
     //   边界块选中后画布外的覆盖要等到缩放触发全量重绘才显示。
-    bounds_ = QRectF(0.0, 0.0, static_cast<qreal>(width), static_cast<qreal>(height));
+    bounds_ = QRectF(0.0, 0.0, width, height);
     for (const engine::Cell& c : cells_) bounds_ = bounds_.united(cellRect(c));
     hoverIndex_ = -1;
     rebuildSelectionLookup();

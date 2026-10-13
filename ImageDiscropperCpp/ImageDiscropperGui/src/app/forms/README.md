@@ -8,9 +8,9 @@
 `refreshPreview` 收尾改为发 `paramsChanged()` 交上游触发——组件不得反向依赖预览编排与 Document。
 数值字面量一律取 `util::gui_nums.h`，可译文字一律走 `IDC_GTR`（文案纪律见 GUI 根 README）。
 
-| 文件                  | 内容                                                                     |
-|-----------------------|--------------------------------------------------------------------------|
-| `pattern_form.cpp`    | `PatternFormWidget`：控件构建、`params()` 汇编、图案相关显隐与文案、取色框 |
-| `placement_row.cpp`   | `PlacementRow`：9 向锚点/枢轴条目与 X/Y 偏移行（两组重复装配合一）        |
+| 文件                  | 内容                                                   |
+|---------------------|------------------------------------------------------|
+| `pattern_form.cpp`  | `PatternFormWidget`：控件构建、`params()` 汇编、图案相关显隐与文案、取色框 |
+| `placement_row.cpp` | `PlacementRow`：9 向锚点/枢轴条目与 X/Y 偏移行（两组重复装配合一）         |
 
 > 上游宿主 `NewCanvasDialog`（同层，未迁出）见 [src/app/README.md](../README.md)。

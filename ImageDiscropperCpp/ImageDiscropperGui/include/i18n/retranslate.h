@@ -46,7 +46,7 @@ namespace idc::gui::i18n {
 class Retranslator {
 public:
     void add(std::function<void()> apply) { items_.push_back(std::move(apply)); }
-    void run() { for (auto& f : items_) f(); }
+    void run() const { for (auto& f : items_) f(); }
 
 private:
     std::vector<std::function<void()>> items_;
@@ -111,8 +111,8 @@ inline void bindSpecialValue(Retranslator& r, QAbstractSpinBox* s, const TextRef
 }
 
 // 下拉：初次逐项 addItem（按当前语言），闭包按索引 setItemText 原地改文字（不动 currentIndex/userData）。
-inline void addItemsI18n(Retranslator& r, QComboBox* c, std::initializer_list<TextRef> refs) {
-    std::vector<TextRef> items(refs.begin(), refs.end());
+inline void addItemsI18n(Retranslator& r, QComboBox* c, const std::initializer_list<TextRef> refs) {
+    std::vector items(refs.begin(), refs.end());
     for (const TextRef& ref : items) c->addItem(qs(ref));
     r.add([c, items] {
         for (std::size_t i = 0; i < items.size() && static_cast<int>(i) < c->count(); ++i)
@@ -122,7 +122,7 @@ inline void addItemsI18n(Retranslator& r, QComboBox* c, std::initializer_list<Te
 
 // 已逐项 addItem（可携 userData）的下拉：仅登记按 index 重放 itemText 的闭包（不动 userData/currentIndex）。
 // 适用于 addItem(text, data) 形式（如旋转角度/翻转方向）——addItemsI18n 无法携 data。
-inline void bindItemTexts(Retranslator& r, QComboBox* c, std::initializer_list<TextRef> refs) {
+inline void bindItemTexts(Retranslator& r, QComboBox* c, const std::initializer_list<TextRef> refs) {
     std::vector items(refs.begin(), refs.end());
     r.add([c, items] {
         for (std::size_t i = 0; i < items.size() && static_cast<int>(i) < c->count(); ++i)

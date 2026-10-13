@@ -31,10 +31,10 @@ using Catalog = std::map<std::string_view, std::string_view, std::less<>>;
 
 // 进程级语言状态（全工程唯一一份：三层都链接本静态库）。
 struct State {
-    std::vector<std::string> langs{std::string(core::kSourceLanguage)};   // 可用清单，源语言恒在首
+    std::vector<std::string> langs{std::string(kSourceLanguage)};   // 可用清单，源语言恒在首
     std::unordered_map<std::string, Catalog> catalogs;                   // 语言码 → 目录（可累加装配）
     const Catalog* active = nullptr;                                     // 当前语言的目录；源语言下为空
-    std::string lang{core::kSourceLanguage};                             // 当前语言码
+    std::string lang{kSourceLanguage};                             // 当前语言码
 };
 
 // Meyers 单例：C++11 起函数局部静态量初始化线程安全，且规避静态初始化顺序问题
@@ -45,7 +45,7 @@ State& state() {
 }
 
 // 转小写以做大小写不敏感的语言码比对（"EN" ≡ "en"，"zh_CN" 的基标签 ≡ "zh"）。
-std::string toLower(std::string_view text) {
+std::string toLower(const std::string_view text) {
     std::string out(text);
     std::transform(out.begin(), out.end(), out.begin(),
                    [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -58,7 +58,7 @@ void installLanguage(const std::string_view lang, const I18nTable table) {
     if (lang.empty()) return;
     State& s = state();
     const std::string code(lang);
-    if (code == core::kSourceLanguage) return;   // 源语言不建表：它的译文就是常量层本身
+    if (code == kSourceLanguage) return;   // 源语言不建表：它的译文就是常量层本身
 
     // 同语言多次 install（一层的表拆成多文件 / 多层各自装配同一语言）→ 落到同一目录累加。
     const auto [it, inserted] = s.catalogs.try_emplace(code);
@@ -74,14 +74,14 @@ void installLanguage(const std::string_view lang, const I18nTable table) {
 std::string resolveLanguage(const std::string_view requested) {
     if (requested.empty()) return {};
     const std::string exact(requested);
-    if (exact == core::kSourceLanguage) return exact;
+    if (exact == kSourceLanguage) return exact;
 
     State& s = state();
     if (s.catalogs.find(exact) != s.catalogs.end()) return exact;
 
     // 大小写不敏感的整码匹配（"EN" ≡ "en"，"ZH-cn" ≡ 源语言）：语言码不区分大小写是 BCP-47 惯例。
     const std::string lower = toLower(exact);
-    if (lower == toLower(core::kSourceLanguage)) return core::kSourceLanguage;
+    if (lower == toLower(kSourceLanguage)) return kSourceLanguage;
     for (const std::string& lang : s.langs) {
         if (toLower(lang) == lower) return lang;
     }
@@ -93,10 +93,9 @@ std::string resolveLanguage(const std::string_view requested) {
     const std::string base = lower.substr(0, sep);
     if (base.empty()) return {};
     // 中文系（zh / zh-Hans / zh_CN）一律归到源语言，不要求为它建表。
-    if (base == "zh") return core::kSourceLanguage;
+    if (base == "zh") return kSourceLanguage;
     for (const std::string& lang : s.langs) {
-        const std::string candidate = toLower(lang);
-        if (candidate == base || candidate.rfind(base + "-", 0) == 0) return lang;   // 登记表写作 "en-GB" 时也能命中
+        if (const std::string candidate = toLower(lang); candidate == base || candidate.rfind(base + "-", 0) == 0) return lang;   // 登记表写作 "en-GB" 时也能命中
     }
     return {};
 }
@@ -104,16 +103,16 @@ std::string resolveLanguage(const std::string_view requested) {
 void setLanguage(const std::string_view lang) {
     State& s = state();
     const std::string resolved = resolveLanguage(lang);
-    if (resolved.empty() || resolved == core::kSourceLanguage) {
+    if (resolved.empty() || resolved == kSourceLanguage) {
         // 未登记 / 未知 / 源语言：目录置空，一切文案走调用点的中文源值。
         s.active = nullptr;
-        s.lang = core::kSourceLanguage;
+        s.lang = kSourceLanguage;
         return;
     }
     const auto it = s.catalogs.find(resolved);
     if (it == s.catalogs.end()) {   // 理论不可达（resolveLanguage 只返回已登记码），留兜底
         s.active = nullptr;
-        s.lang = core::kSourceLanguage;
+        s.lang = kSourceLanguage;
         return;
     }
     s.active = &it->second;
@@ -127,7 +126,7 @@ std::string translate(const std::string_view key, const std::string_view fallbac
     return std::string(fallbackUtf8);
 }
 
-std::string formatPattern(std::string text, const std::initializer_list<std::string> args) {
+std::string formatPattern(const std::string &text, const std::initializer_list<std::string> args) {
     // 逐字符扫：命中「% + 1..9」则按编号取 args，否则原样搬运。整句只扫一遍，无需正则与堆分配（除结果串本身）。
     std::string out;
     out.reserve(text.size() + 16);

@@ -68,7 +68,7 @@ const std::vector<LayerSpec>& layers() {
 // 去掉行尾注释与首尾空白；只用于判定行首形态，不追求 C++ 词法完备。
 std::string stripLine(const std::string& line) {
     const std::size_t comment = line.find("//");
-    std::string code = comment == std::string::npos ? line : line.substr(0, comment);
+    const std::string code = comment == std::string::npos ? line : line.substr(0, comment);
     const auto isSpace = [](const char c) { return std::isspace(static_cast<unsigned char>(c)) != 0; };
     std::size_t b = 0;
     std::size_t e = code.size();
@@ -108,8 +108,7 @@ std::optional<std::string> declaredConstant(const std::string& code) {
         if (c == 'k') {
             std::size_t j = i;
             while (j < code.size()) {
-                const char d = code[j];
-                if (!(d == '_' || std::isalnum(static_cast<unsigned char>(d)) != 0)) break;
+                if (const char d = code[j]; !(d == '_' || std::isalnum(static_cast<unsigned char>(d)) != 0)) break;
                 ++j;
             }
             std::size_t k = j;
@@ -132,7 +131,7 @@ std::optional<std::string> declaredConstant(const std::string& code) {
 }
 
 std::string readWholeFile(const std::filesystem::path& path, bool& ok) {
-    std::ifstream in(path, std::ios::binary);
+    const std::ifstream in(path, std::ios::binary);
     if (!in) { ok = false; return {}; }
     std::ostringstream buf;
     buf << in.rdbuf();
@@ -270,9 +269,8 @@ void testI18nCatalog() {
         // —— 契约组越界：不可译组（ident/opt/cmd/env/jsonkey/defaults/token）永不进表。——
         std::vector<std::string> forbidden;
         for (const std::string& key : keys) {
-            const std::string group = key.substr(0, key.find("::"));
-            if (std::find(translatableGroups.begin(), translatableGroups.end(), group)
-                == translatableGroups.end()) forbidden.push_back(key);
+            if (const std::string group = key.substr(0, key.find("::")); std::find(translatableGroups.begin(), translatableGroups.end(), group)
+                                                                         == translatableGroups.end()) forbidden.push_back(key);
         }
         CHECK_MSG(forbidden.empty(),
                   std::string(name) + " 表内含不可译组键: " + joinKeys(forbidden, 8));
