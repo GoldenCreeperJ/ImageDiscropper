@@ -11,12 +11,17 @@
 // 说明（退出码判定）：
 //   - --load 缺失 / 无值 → 1；文件不存在 / 不可访问 → 3；文件存在但 JSON 解析失败 → 1
 //     （配置内容即“参数”，其格式错误归参数错误；文件层面的缺失 / 不可读归输入文件错误）。
+//     · 标注段非法（含字段缺失 / 类型不符）时，Core 已逐条拼好报因串，本命令原样透传为详情，
+//       不再压成一条通用「无法按配置 JSON schema 解析」；提示相应改为标注语法（kHintAnnoSyntax）。
 //   - 执行时缺 --input 或缺对应输出（分离 --output-dir / 合并 --output）→ 1。
 //   - 读图失败 → 3；引擎业务失败（E-6/E-7 等）或显式坍缩不可行 → 2；导出失败 → 4（均由 job 映射）。
 //   - --save-config 写盘失败 → 4。
 //   - explicitCollapse：当且仅当 emit 为 MERGED+COLLAPSE 时置真——这正是 IT-18（坍缩不可行 → 2）
 //     经手写配置稳定触发的路径（Core 内部会自动降级为 REARRANGE 并返回 ok=true/collapsible=false，
 //     job 据 explicitCollapse 显式报错退出码 2）。
+// 常量层：选项名取 texts::opt（不可译）、报错文案经门面 IDC_CTR(msg, ...) 取 texts::msg；
+//       标注段非法时的详情串来自 Core（IDC_KTR），本层不自行拼接逐条原因；
+//       alpha 上限 255 与 clamp 的 0 属换算 / 边界常量，按判据保持就地。
 // ============================================================================
 #include "commands.h"
 
@@ -40,8 +45,13 @@
 #include "exit_code.h"
 #include "generate_args.h"
 #include "job.h"
+#include "i18n/cli_texts.h"
+#include "i18n/cli_i18n.h"
 
 namespace idc::cli {
+
+// 选项名简写（不可译契约；报错文案走 IDC_CTR）。
+namespace opts = texts::opt;
 
 // 配置文件命令：config --load <file> [执行所需 --input / 输出]，或 --save-config <file>（转换 dry-run）。
 int cmdConfig(const std::vector<std::string>& tokens, const GlobalOptions& go) {
@@ -49,32 +59,36 @@ int cmdConfig(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     args.parse(tokens);
 
     // --- 第 3 步：--load 必填且须带路径（config 命令唯一的参数来源）。---
-    if (!args.has("--load"))
-        return argError("缺少 --load", "请用 --load <file> 指定配置 JSON 文件");
-    const std::string loadPath = args.get("--load");
+    if (!args.has(opts::kLoad))
+        return argError(IDC_CTR(msg, kErrMissingLoad), IDC_CTR(msg, kHintLoadFile));
+    const std::string loadPath = args.get(opts::kLoad);
     if (loadPath.empty())
-        return argError("--load 缺少文件路径", "请用 --load <file> 指定配置文件路径");
+        return argError(IDC_CTR(msg, kErrLoadNoPath), IDC_CTR(msg, kHintLoadPath));
 
     // --- 第 6 步（文件层面）：配置文件须存在且可访问，否则输入文件错误（3）。loadPath 按 UTF-8 解析为宽字符路径。---
     if (std::error_code ec; !std::filesystem::exists(std::filesystem::u8path(loadPath), ec))
-        return fail(ExitCode::InputError, "配置文件不存在或不可访问", "路径：" + loadPath,
-                    "请检查 --load 的路径是否正确、文件是否存在且可读");
+        return fail(ExitCode::InputError, IDC_CTR(msg, kErrConfigMissing), IDC_CTR(msg, kDetPath) + loadPath,
+                    IDC_CTR(msg, kHintLoadReadable));
 
     // --- 复用 Core 解析 SPEC §7 schema；文件存在但内容非法（语法错误 / 根非对象）→ 参数错误（1）。---
     // 可选 annotations 段一并载入临时集合：执行时由 job 烧进工作图，dry-run 时随配置透写不丢。
+    // annoErr：Core 对标注段的逐条报因（头注契约：专供 CLI 报因），非空时优先作为详情上抛，
+    //   以免退化为一条通用 schema 提示而丢失「第 N 个元素：……」这类定位信息。
     engine::EngineConfig config;
     annotation::AnnotationSet annoSet;
-    if (!engine::loadEngineConfig(loadPath, config, &annoSet))
-        return fail(ExitCode::ArgError, "配置文件解析失败",
-                    "无法按配置 JSON schema 解析：" + loadPath,
-                    "请确认 JSON 语法正确且根为对象，字段含 source / preprocess / cut / select / order / emit");
+    std::string annoLoadErr;
+    if (!engine::loadEngineConfig(loadPath, config, &annoSet, &annoLoadErr)) {
+        const bool annoRejected = !annoLoadErr.empty();
+        return fail(ExitCode::ArgError, IDC_CTR(msg, kErrConfigParse),
+                    annoRejected ? annoLoadErr : IDC_CTR(msg, kDetParseFailedLead) + loadPath,
+                    annoRejected ? IDC_CTR(msg, kHintAnnoSyntax) : IDC_CTR(msg, kHintConfigSchema));
+    }
 
     // --- 命令行标注（--annotation / --annotations）：并入已载入的临时集合（追加在配置自带段之后），---
     //     使 --save-config dry-run 与执行都带上「配置自带 + 命令行」标注（坐标基准＝预处理产出）。
     std::vector<annotation::Annotation> cliAnnos;
     if (std::string annoErr; !collectAnnotations(args, cliAnnos, annoErr))
-        return fail(ExitCode::ArgError, "命令行标注解析失败", annoErr,
-                    "标注须为 SPEC §7 annotations 元素语法的 JSON 对象（--annotation）或根为标注数组的文件（--annotations）");
+        return fail(ExitCode::ArgError, IDC_CTR(msg, kErrAnnoCliParse), annoErr, IDC_CTR(msg, kHintAnnoSyntax));
     if (!cliAnnos.empty()) {
         std::vector<annotation::Annotation> merged = annoSet.annotations(); // 拷贝配置自带条目（Annotation 深拷贝 shape）
         for (auto& a : cliAnnos) merged.push_back(std::move(a));
@@ -99,31 +113,27 @@ int cmdConfig(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     //     命令层先解底图，再把 layers 以 base 为底 composeCanvas 展平。---
     const bool configHasBase = config.base.has_value();
     const bool configHasLayers = config.layers.has_value();
-    if (!args.has("--input") && !hasGenerateOptions(args) && !configHasBase && !configHasLayers)
-        return argError("执行配置需要输入图像",
-                        "配置文件不含图像路径，请用 --input <file> 指定要切割的图像，或用 --size WxH（可配 --pattern）生成画布；亦可在配置中提供 generate / layers 段由其生成");
-    if (args.has("--input") && hasGenerateOptions(args))
-        return argError("--input 与 --size 不可同时使用", "读取文件用 --input；程序生成画布用 --size（二者择一）");
+    if (!args.has(opts::kInput) && !hasGenerateOptions(args) && !configHasBase && !configHasLayers)
+        return argError(IDC_CTR(msg, kErrConfigNeedsInput), IDC_CTR(msg, kHintConfigInput));
+    if (args.has(opts::kInput) && hasGenerateOptions(args))
+        return argError(IDC_CTR(msg, kErrInputAndSizeMix), IDC_CTR(msg, kHintPickInputSource));
 
     // --- 重排前置校验（与 grid --compose 的 --canvas 强制一致）：仅 L3 可重排，且必须显式给定 cols/rows。---
     //     手写/转换来的配置若违反，直接判参数错误（退出码 1），不交 Core 用默认值兜底。
     if (config.emitParams.mode == engine::EmitMode::MERGED &&
         config.emitParams.layout == engine::MergeLayout::REARRANGE) {
         if (config.cut.tier != engine::Tier::L3)
-            return argError("合并重排仅 L3 支持",
-                            "配置 emit.merge.layout=rearrange 要求 cut.tier=L3；其他层请改用 collapse 或分离导出");
+            return argError(IDC_CTR(msg, kErrRearrangeNeedsL3), IDC_CTR(msg, kHintRearrangeTier));
         if (!config.emitParams.cols.has_value() || !config.emitParams.rows.has_value())
-            return argError("合并重排需要 cols 与 rows",
-                            "请在配置 emit.merge 中同时给出正的 cols 和 rows（重排画布列/行数）");
+            return argError(IDC_CTR(msg, kErrRearrangeNeedsDims), IDC_CTR(msg, kHintRearrangeColsRows));
     }
 
     // 输出目标由 emit.mode 决定：分离 → --output-dir（文件夹）；合并 → --output（单图）。
     const bool separate = config.emitParams.mode == engine::EmitMode::SEPARATE;
-    const std::string outKey = separate ? "--output-dir" : "--output";
+    const std::string outKey = separate ? opts::kOutputDir : opts::kOutput;
     if (!args.has(outKey))
-        return argError("执行配置需要 " + outKey,
-                        separate ? "配置为分离导出，请用 --output-dir <dir> 指定输出文件夹"
-                                 : "配置为合并导出，请用 --output <file> 指定输出路径");
+        return argError(IDC_CTR(msg, kErrConfigNeedsOutKey) + outKey,
+                        separate ? IDC_CTR(msg, kHintConfigSeparate) : IDC_CTR(msg, kHintConfigMerged));
 
     // 显式坍缩：仅 MERGED+COLLAPSE 时为真——不可坍缩则 job 返回退出码 2（IT-18 触发路径）。
     const bool explicitCollapse = config.emitParams.mode == engine::EmitMode::MERGED &&
@@ -134,7 +144,7 @@ int cmdConfig(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     //     再取工作图：若有 layers 段，以 base 为底逐层解码 File 叠加层（相对配置目录）注入后 composeCanvas 展平；
     //     若无 layers 段，工作图＝base。---
     core::Image base;
-    if (args.has("--input") || hasGenerateOptions(args)) {
+    if (args.has(opts::kInput) || hasGenerateOptions(args)) {
         if (const ExitCode lec = resolveInputImage(args, base, opt); lec != ExitCode::Ok)
             return toInt(lec);
         // 配置带底图内层落位（路径不入配置）：把已解析的外部输入图按落位摆入 source 尺寸画布。

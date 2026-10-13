@@ -5,6 +5,9 @@
 //       由命令层组装为退出码 1（第 5 步：参数格式校验在调用 Core 之前完成）。
 // 说明：整数解析用 strtol 全量消费校验（拒绝 "12abc" / 空串 / 溢出）；颜色十六进制解析
 //       与 Core 配置约定（#RRGGBB / #AARRGGBB）一致。
+// 常量层：报因文案经门面 IDC_CTR(msg, ...) 取 texts::msg、质量范围取 nums::parser；
+//       各枚举的 token 值（png / row-major / discard / collapse / none …）与枚举成对出现在映射表里，
+//       属「数据即定义」，**不提**。
 // ============================================================================
 #include "value_parser.h"
 
@@ -13,7 +16,12 @@
 #include <cerrno>
 #include <cstdlib>
 
+#include "cli_nums.h"
+#include "i18n/cli_texts.h"
+#include "i18n/cli_i18n.h"
+
 namespace idc::cli {
+
 namespace {
 
 // 转小写（ASCII 足够，用于枚举 / 扩展名比较）。
@@ -68,10 +76,10 @@ bool hexByte(const std::string& s, const std::size_t pos, std::uint8_t& out) {
 
 bool parseRect(const std::string& s, engine::RectRegion& out, std::string& err) {
     const std::vector<std::string> p = split(s, ',');
-    if (p.size() != 4) { err = "矩形须为 x1,y1,x2,y2 四个整数"; return false; }
+    if (p.size() != 4) { err = IDC_CTR(msg, kErrRectFourInts); return false; }
     int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
     if (!toInt(p[0], x1) || !toInt(p[1], y1) || !toInt(p[2], x2) || !toInt(p[3], y2)) {
-        err = "矩形坐标含非整数值：'" + s + "'";
+        err = IDC_CTR(msg, kErrRectNotInt) + s + "'";
         return false;
     }
     out = engine::RectRegion(x1, y1, x2, y2);
@@ -80,28 +88,28 @@ bool parseRect(const std::string& s, engine::RectRegion& out, std::string& err) 
 
 bool parseBand(const std::string& s, int& a, int& b, std::string& err) {
     const std::vector<std::string> p = split(s, ',');
-    if (p.size() != 2) { err = "带须为 a,b 两个整数（起始, 结束）"; return false; }
-    if (!toInt(p[0], a) || !toInt(p[1], b)) { err = "带坐标含非整数值：'" + s + "'"; return false; }
+    if (p.size() != 2) { err = IDC_CTR(msg, kErrBandTwoInts); return false; }
+    if (!toInt(p[0], a) || !toInt(p[1], b)) { err = IDC_CTR(msg, kErrBandNotInt) + s + "'"; return false; }
     return true;
 }
 
 bool parseGridGeo(const std::string& s, int& x0, int& y0, int& cw, int& ch, std::string& err) {
     const std::vector<std::string> p = split(s, ',');
-    if (p.size() != 4) { err = "网格须为 x0,y0,cw,ch 四个整数（基准点 + 单元尺寸）"; return false; }
+    if (p.size() != 4) { err = IDC_CTR(msg, kErrGridFourInts); return false; }
     if (!toInt(p[0], x0) || !toInt(p[1], y0) || !toInt(p[2], cw) || !toInt(p[3], ch)) {
-        err = "网格参数含非整数值：'" + s + "'";
+        err = IDC_CTR(msg, kErrGridNotInt) + s + "'";
         return false;
     }
     // 单元尺寸必须为正——否则无法产生贯穿全图的周期切割线（SPEC §3.4.3）。
-    if (cw <= 0 || ch <= 0) { err = "单元尺寸 cw,ch 必须为正整数"; return false; }
+    if (cw <= 0 || ch <= 0) { err = IDC_CTR(msg, kErrCellSizePositive); return false; }
     return true;
 }
 
 bool parseCell(const std::string& s, int& r, int& c, std::string& err) {
     const std::vector<std::string> p = split(s, ',');
-    if (p.size() != 2) { err = "单元须为 r,c 两个整数（行, 列，从 0 起）"; return false; }
-    if (!toInt(p[0], r) || !toInt(p[1], c)) { err = "单元坐标含非整数值：'" + s + "'"; return false; }
-    if (r < 0 || c < 0) { err = "单元行列号不可为负：'" + s + "'"; return false; }
+    if (p.size() != 2) { err = IDC_CTR(msg, kErrCellTwoInts); return false; }
+    if (!toInt(p[0], r) || !toInt(p[1], c)) { err = IDC_CTR(msg, kErrCellNotInt) + s + "'"; return false; }
+    if (r < 0 || c < 0) { err = IDC_CTR(msg, kErrCellNegative) + s + "'"; return false; }
     return true;
 }
 
@@ -109,12 +117,12 @@ bool parseCanvas(const std::string& s, int& cols, int& rows, std::string& err) {
     // 画布 "ColxRow"：以 'x'/'X' 分隔列数与行数（重排画布的单元列 × 行，非像素尺寸）。
     const std::string low = toLower(s);
     const std::size_t x = low.find('x');
-    if (x == std::string::npos) { err = "画布须为 ColxRow 形式（如 8x6）"; return false; }
+    if (x == std::string::npos) { err = IDC_CTR(msg, kErrCanvasForm); return false; }
     if (!toInt(s.substr(0, x), cols) || !toInt(s.substr(x + 1), rows)) {
-        err = "画布 ColxRow 含非整数值：'" + s + "'";
+        err = IDC_CTR(msg, kErrCanvasNotInt) + s + "'";
         return false;
     }
-    if (cols <= 0 || rows <= 0) { err = "画布列数 / 行数必须为正"; return false; }
+    if (cols <= 0 || rows <= 0) { err = IDC_CTR(msg, kErrCanvasPositive); return false; }
     return true;
 }
 
@@ -127,7 +135,7 @@ bool parseOrderCells(const std::string& s, std::vector<std::pair<int, int>>& out
         if (!parseCell(item, r, c, err)) return false;
         out.emplace_back(r, c);
     }
-    if (out.empty()) { err = "自定义序列 --order 为空（须形如 r,c;r,c）"; return false; }
+    if (out.empty()) { err = IDC_CTR(msg, kErrOrderEmpty); return false; }
     return true;
 }
 
@@ -137,7 +145,7 @@ bool parseColor(const std::string& s, core::Color& out, std::string& err) {
     // #RGB：每位十六进制扩展为一个字节（0xF → 0xFF）。
     if (h.size() == 3) {
         const int r = hexNibble(h[0]), g = hexNibble(h[1]), b = hexNibble(h[2]);
-        if (r < 0 || g < 0 || b < 0) { err = "颜色含非法十六进制字符：'" + s + "'"; return false; }
+        if (r < 0 || g < 0 || b < 0) { err = IDC_CTR(msg, kErrColorBadHex) + s + "'"; return false; }
         out = core::Color(static_cast<std::uint8_t>(r * 17),
                                static_cast<std::uint8_t>(g * 17),
                                static_cast<std::uint8_t>(b * 17), 255);
@@ -146,7 +154,7 @@ bool parseColor(const std::string& s, core::Color& out, std::string& err) {
     if (h.size() == 6) { // #RRGGBB（不透明）。
         std::uint8_t r = 0, g = 0, b = 0;
         if (!hexByte(h, 0, r) || !hexByte(h, 2, g) || !hexByte(h, 4, b)) {
-            err = "颜色含非法十六进制字符：'" + s + "'"; return false;
+            err = IDC_CTR(msg, kErrColorBadHex) + s + "'"; return false;
         }
         out = core::Color(r, g, b, 255);
         return true;
@@ -154,12 +162,12 @@ bool parseColor(const std::string& s, core::Color& out, std::string& err) {
     if (h.size() == 8) { // #AARRGGBB（与 Core 配置约定一致）。
         std::uint8_t a = 0, r = 0, g = 0, b = 0;
         if (!hexByte(h, 0, a) || !hexByte(h, 2, r) || !hexByte(h, 4, g) || !hexByte(h, 6, b)) {
-            err = "颜色含非法十六进制字符：'" + s + "'"; return false;
+            err = IDC_CTR(msg, kErrColorBadHex) + s + "'"; return false;
         }
         out = core::Color(r, g, b, a);
         return true;
     }
-    err = "颜色须为 #RGB / #RRGGBB / #AARRGGBB：'" + s + "'";
+    err = IDC_CTR(msg, kErrColorForm) + s + "'";
     return false;
 }
 
@@ -169,14 +177,17 @@ bool parseFormat(const std::string& s, engine::ExportFormat& out, std::string& e
     if (f == "jpeg" || f == "jpg") { out = engine::ExportFormat::JPEG; return true; }
     if (f == "webp") { out = engine::ExportFormat::WEBP; return true; }
     if (f == "bmp") { out = engine::ExportFormat::BMP; return true; }
-    err = "不支持的格式：'" + s + "'（可选 png/jpeg/webp/bmp）";
+    err = IDC_CTR(msg, kErrUnknownFormat) + s + IDC_CTR(msg, kErrUnknownFormatTail);
     return false;
 }
 
 bool parseQuality(const std::string& s, int& out, std::string& err) {
     int v = 0;
-    if (!toInt(s, v)) { err = "质量参数须为 0~100 的整数：'" + s + "'"; return false; }
-    if (v < 0 || v > 100) { err = "质量参数超出范围（0~100）：'" + s + "'"; return false; }
+    if (!toInt(s, v)) { err = IDC_CTR(msg, kErrQualityNotInt) + s + "'"; return false; }
+    if (v < nums::parser::kQualityMin || v > nums::parser::kQualityMax) {
+        err = IDC_CTR(msg, kErrQualityRange) + s + "'";
+        return false;
+    }
     out = v;
     return true;
 }
@@ -186,7 +197,7 @@ bool parseSort(const std::string& s, engine::SortStrategy& out, std::string& err
     if (v == "row-major") { out = engine::SortStrategy::ROW_MAJOR; return true; }
     if (v == "column-major") { out = engine::SortStrategy::COLUMN_MAJOR; return true; }
     if (v == "custom") { out = engine::SortStrategy::CUSTOM; return true; }
-    err = "不支持的排序策略：'" + s + "'（可选 row-major/column-major/custom）";
+    err = IDC_CTR(msg, kErrUnknownSort) + s + IDC_CTR(msg, kErrUnknownSortTail);
     return false;
 }
 
@@ -195,7 +206,7 @@ bool parseMargin(const std::string& s, engine::RemainderPolicy& out, std::string
     if (v == "discard") { out = engine::RemainderPolicy::DISCARD; return true; }
     if (v == "keep-partial") { out = engine::RemainderPolicy::KEEP_PARTIAL; return true; }
     if (v == "pad") { out = engine::RemainderPolicy::PAD; return true; }
-    err = "不支持的余量策略：'" + s + "'（可选 discard/keep-partial/pad）";
+    err = IDC_CTR(msg, kErrUnknownMargin) + s + IDC_CTR(msg, kErrUnknownMarginTail);
     return false;
 }
 
@@ -203,7 +214,7 @@ bool parseMerge(const std::string& s, engine::MergeLayout& out, std::string& err
     const std::string v = toLower(s);
     if (v == "collapse") { out = engine::MergeLayout::COLLAPSE; return true; }
     if (v == "rearrange") { out = engine::MergeLayout::REARRANGE; return true; }
-    err = "不支持的合并方式：'" + s + "'（可选 collapse/rearrange）";
+    err = IDC_CTR(msg, kErrUnknownMerge) + s + IDC_CTR(msg, kErrUnknownMergeTail);
     return false;
 }
 
@@ -214,15 +225,15 @@ bool parseDecorate(const std::string& s, bool& reverse, bool& snake, std::string
     if (v == "snake") { reverse = false; snake = true; return true; }
     // Core 先施加 snake 再整体 reverse（固定次序），故两种写法结果相同（见头文件说明）。
     if (v == "reverse-snake" || v == "snake-reverse") { reverse = true; snake = true; return true; }
-    err = "不支持的排序修饰：'" + s + "'（可选 none/reverse/snake/reverse-snake/snake-reverse）";
+    err = IDC_CTR(msg, kErrUnknownDecorate) + s + IDC_CTR(msg, kErrUnknownDecorateTail);
     return false;
 }
 
 bool checkNaming(const std::string& s, std::string& err) {
-    if (s.empty()) { err = "命名模板不可为空"; return false; }
+    if (s.empty()) { err = IDC_CTR(msg, kErrNamingEmpty); return false; }
     // 拒绝路径分隔符——命名模板只用于生成文件名，不应引入子目录（防止越界写盘）。
     if (s.find('/') != std::string::npos || s.find('\\') != std::string::npos) {
-        err = "命名模板不可包含路径分隔符 '/' 或 '\\'：'" + s + "'";
+        err = IDC_CTR(msg, kErrNamingSeparator) + s + "'";
         return false;
     }
     return true;

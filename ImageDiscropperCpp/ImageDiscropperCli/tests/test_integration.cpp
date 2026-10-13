@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：tests/test_integration.cpp
-// 作用：集成测试 IT-1~IT-41——进程内直接调用 cliMain，端到端验证
+// 作用：集成测试 IT-1~IT-53——进程内直接调用 cliMain，端到端验证
 //       三层命令 + config + 全局选项的「退出码 / 输出尺寸 / 像素落位 / 错误文本」。
 //       不启动子进程（链接 idc_cli_lib），用 rdbuf 重定向捕获 stdout/stderr。
 // 分块依据：一测试关注点一文件（严禁上帝文件）；复用共享 CHECK 宏（cli_test_harness.h）。
@@ -92,7 +92,7 @@ bool readDims(const std::string& path, int& w, int& h) {
 
 } // namespace
 
-// 集成测试段：IT-1~IT-41。
+// 集成测试段：IT-1~IT-53。
 void testIntegration() {
     using idc::engine::EngineConfig;
 
@@ -391,7 +391,7 @@ void testIntegration() {
                                    "--merge", "rearrange", "--output", out});
         CHECK(r.code == 1);
         CHECK(r.err.find("rearrange") != std::string::npos);
-        CHECK(r.err.find("L3") != std::string::npos);
+        CHECK(r.err.find("grid") != std::string::npos);
     }
 
     // ---- IT-22：extract --annotation 内联对象 → 标注烧进工作图（左上红区被绿色填充矩形覆盖）。----
@@ -588,7 +588,7 @@ void testIntegration() {
             ofs << R"({
   "source": {"width": 200, "height": 150},
   "generate": {"kind": "solid", "background": "#FFFF0000", "foreground": "#FF000000"},
-  "cut": {"tier": "L1", "generator": "rect", "polarity": "keep", "params": {"x1": 50, "y1": 40, "x2": 150, "y2": 120}},
+  "cut": {"tier": "extract", "generator": "rect", "polarity": "keep", "params": {"x1": 50, "y1": 40, "x2": 150, "y2": 120}},
   "emit": {"mode": "merged", "merge": {"layout": "collapse"}}
 })";
         }
@@ -684,6 +684,7 @@ void testIntegration() {
     {
         EngineConfig cfg;
         cfg.source = idc::engine::SourceInfo{40, 40};
+        std::vector<idc::canvas::ImageLayer> st;
         idc::canvas::ImageLayer l;
         l.sourceKind = idc::canvas::LayerSourceKind::Recipe;
         idc::generate::PatternParams pp;
@@ -979,6 +980,65 @@ void testIntegration() {
         CHECK(px.r < 50 && px.g > 200 && px.b > 200);   // invert 生效：红→青（色相变）
         // 两边界各乘一次：255→(·180)→180→(·200)→(180·200+127)/255=141（单一应用点、非任一边界双淡）。
         CHECK(px.a == 141);
+    }
+
+    // ---- IT-52：--lang 全局选项——已登记码放行、未知码退出码 1 并报因；
+    //      其值不被误当子命令名（splitCommand 须跳过取值选项的值）。----
+    {
+        const Captured bad = runCli({"--lang", "fr", "--help"});
+        CHECK(bad.code == 1);
+        CHECK(bad.out.empty());                                   // 未进入帮助输出
+        CHECK(bad.err.find("无法识别的语言代码") != std::string::npos);   // 报因用切换前的源语言（此时尚未切）
+        CHECK(bad.err.find("fr") != std::string::npos);
+
+        const Captured ok = runCli({"--lang=en", "--help"});
+        CHECK(ok.code == 0);
+        CHECK(ok.out.find("--lang <code>") != std::string::npos);   // 用法行恒在（选项名与占位符不译）
+        // 注：CLI 英文表仅收录示范条目（语言码相关报因 + 全局选项描述），其余帮助散文
+        //   缺译→逐字节回退常量层中文，故不断言英文串（覆盖率由 test_i18n_catalog 报表跟踪）。
+
+        const Captured cmd = runCli({"--lang", "en", "bogus"});
+        CHECK(cmd.code == 1);
+        CHECK(cmd.err.find("bogus") != std::string::npos);
+        CHECK(cmd.err.find("en'") == std::string::npos);           // 不是把 "en" 当成了命令名
+
+        // 复位：显式源语言把进程态改回中文（本用例会改全局语言态，勿给后续留英文态）。
+        CHECK(runCli({"--lang", "zh-CN", "bogus"}).code == 1);
+    }
+
+    // ---- IT-53：config --load 标注段非法——详情逐条透传 Core 报因（不再压成通用 schema 提示），----
+    //      且与“JSON 本身语法错误”分支区分开（后者仍给通用 schema 详情与提示）。
+    {
+        const std::string cfg = (root / "it53.json").string();
+        {
+            std::ofstream ofs(cfg);
+            ofs << R"({
+  "source": {"width": 200, "height": 150},
+  "cut": {"tier": "extract", "generator": "rect", "polarity": "keep", "params": {"x1": 10, "y1": 10, "x2": 90, "y2": 60}},
+  "emit": {"mode": "merged", "merge": {"layout": "collapse"}},
+  "annotations": [{"x": 10, "y": 10, "text": "no type"}]
+})";
+        }
+        const Captured r = runCli({"config", "--load", cfg, "--output", (root / "it53.png").string()});
+        CHECK(r.code == 1);
+        CHECK(r.err.find("配置文件解析失败") != std::string::npos);        // brief 不变
+        CHECK(r.err.find("annotations 段存在非法条目") != std::string::npos); // detail 首行来自 Core
+        CHECK(r.err.find("第 1 个标注元素") != std::string::npos);          // 逐条定位信息未丢
+        CHECK(r.err.find("缺少 type 字段") != std::string::npos);
+        CHECK(r.err.find("无法按配置 JSON schema 解析") == std::string::npos); // 未退化为通用详情
+        CHECK(r.err.find("标注须为 SPEC §7") != std::string::npos);       // 提示随之改为标注语法
+
+        // 对照：纯语法错误（json::parse 直接抛，根本没走到标注段校验）→ annoErr 为空，
+        //   仍走通用 schema 详情与提示。
+        const std::string bad = (root / "it53_bad.json").string();
+        {
+            std::ofstream ofs(bad);
+            ofs << "{ not valid json";
+        }
+        const Captured g = runCli({"config", "--load", bad, "--output", (root / "it53b.png").string()});
+        CHECK(g.code == 1);
+        CHECK(g.err.find("无法按配置 JSON schema 解析") != std::string::npos);
+        CHECK(g.err.find("annotations 段存在非法条目") == std::string::npos);
     }
 
     // ---- 清理临时目录（不污染仓库 / 系统临时区）。----

@@ -3,19 +3,28 @@
 // 作用：实现 arg_parser.h——ArgParser::parse（token 归类）与 parseGlobalOptions（全局选项扫描）。
 // 分块依据：只处理「语法层」token 归类，不理解值语义（值转换见 value_parser.cpp）；
 //       纯标准库实现，无第三方依赖（CONTRIBUTING.md「分层纪律」）。
+// 常量层：选项名一律取 texts::opt（include/i18n/cli_texts.h），不写字面量——flag 表、全局扫描与
+//       命令层取值共用同一串，改名时不会漏改某一处。
 // ============================================================================
 #include "arg_parser.h"
 
 #include <cctype>
 
+#include "i18n/cli_texts.h"
+
 namespace idc::cli {
+
+// 选项名简写：本 TU 内统一走 texts::opt（别名只落在 .cpp，不进公共头）。
+namespace opt = texts::opt;
+
 namespace {
 
 // 已知的「无值 flag」集合：这些选项后不消费 value，仅记录其出现过。
 // 其余以 '-' 开头的选项一律按「取值选项」处理（消费紧随其后、不以 '-' 开头的 token）。
 bool isFlagOption(const std::string& name) {
-    return name == "--compose" || name == "--verbose" || name == "--quiet" ||
-           name == "--help" || name == "-h" || name == "--version" || name == "-v";
+    return name == opt::kCompose || name == opt::kVerbose || name == opt::kQuiet ||
+           name == opt::kHelp || name == opt::kShortHelp || name == opt::kVersion ||
+           name == opt::kShortVersion;
 }
 
 // 判断 token 是否以 '-' 开头（即选项 / flag，而非值 / 位置参数）。
@@ -86,7 +95,7 @@ std::vector<std::string> ArgParser::getAll(const std::string& name) const {
     return it == opts_.end() ? std::vector<std::string>{} : it->second;
 }
 
-// 扫描完整 argv 提取全局选项。--config / --save-config 取其后的值（或 "=value" 形式）。
+// 扫描完整 argv 提取全局选项。--config / --save-config / --lang 取其后的值（或 "=value" 形式）。
 GlobalOptions parseGlobalOptions(const std::vector<std::string>& args) {
     GlobalOptions go;
     for (std::size_t i = 0; i < args.size(); ++i) {
@@ -98,20 +107,26 @@ GlobalOptions parseGlobalOptions(const std::vector<std::string>& args) {
         const bool hasInline = eq != std::string::npos;
         const std::string inlineVal = hasInline ? t.substr(eq + 1) : std::string();
 
-        if (name == "--help" || name == "-h") { go.help = true; continue; }
-        if (name == "--version" || name == "-v") { go.version = true; continue; }
-        if (name == "--verbose") { go.verbose = true; continue; }
-        if (name == "--quiet") { go.quiet = true; continue; }
-        if (name == "--bundle-assets") { go.bundleAssets = true; continue; }
+        if (name == opt::kHelp || name == opt::kShortHelp) { go.help = true; continue; }
+        if (name == opt::kVersion || name == opt::kShortVersion) { go.version = true; continue; }
+        if (name == opt::kVerbose) { go.verbose = true; continue; }
+        if (name == opt::kQuiet) { go.quiet = true; continue; }
+        if (name == opt::kBundleAssets) { go.bundleAssets = true; continue; }
 
-        if (name == "--config") {
+        if (name == opt::kConfig) {
             if (hasInline) go.config = inlineVal;
             else if (i + 1 < args.size()) go.config = args[++i];
             continue;
         }
-        if (name == "--save-config") {
+        if (name == opt::kSaveConfig) {
             if (hasInline) go.saveConfig = inlineVal;
             else if (i + 1 < args.size()) go.saveConfig = args[++i];
+            continue;
+        }
+        // --lang <code>：取原值不校验（语言码是否可用属语义层，见 cli_i18n.cpp::applyLanguage）。
+        if (name == opt::kLang) {
+            if (hasInline) go.lang = inlineVal;
+            else if (i + 1 < args.size()) go.lang = args[++i];
         }
     }
     return go;

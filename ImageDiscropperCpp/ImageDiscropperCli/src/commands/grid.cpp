@@ -20,6 +20,7 @@
 //     （第 6 步，退出码 3）之后检查——这是固定校验顺序在“几何依赖图像尺寸”时的固有例外。
 //   - --pad-color：写入 emit.padColor；Core 的 compose 已把 padColor 透传进 Composition，
 //     exportMerged 以之填充合并画布空位 / 余量（并对 JPEG/BMP 作压平背景），故对合并导出生效。
+// 常量层：选项名取 texts::opt（不可译）、报错文案经门面 IDC_CTR(msg, ...) 取 texts::msg。
 // ============================================================================
 #include "commands.h"
 
@@ -39,8 +40,13 @@
 #include "generate_args.h"
 #include "job.h"
 #include "value_parser.h"
+#include "i18n/cli_texts.h"
+#include "i18n/cli_i18n.h"
 
 namespace idc::cli {
+
+// 选项名简写（不可译契约；报错文案走 IDC_CTR）。
+namespace opts = texts::opt;
 
 // L3 网格分割：--input + --grid + (--keep|--remove|--order) + 排序/余量/合成等。
 int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
@@ -48,12 +54,12 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     args.parse(tokens);
 
     // --- 第 3 步：必填。（输入来源二选一：--input 读文件 或 --size 生成画布。）---
-    if (!args.has("--input") && !hasGenerateOptions(args))
-        return argError("缺少输入图像", "请用 --input <file> 指定输入图像，或用 --size WxH（可配 --pattern）生成画布作为输入");
-    if (args.has("--input") && hasGenerateOptions(args))
-        return argError("--input 与 --size 不可同时使用", "读取文件用 --input；程序生成画布用 --size（二者择一）");
-    if (!args.has("--grid"))
-        return argError("缺少 --grid", "请用 --grid x0,y0,cw,ch 指定基准点与单元尺寸");
+    if (!args.has(opts::kInput) && !hasGenerateOptions(args))
+        return argError(IDC_CTR(msg, kErrMissingInput), IDC_CTR(msg, kHintInputOrSize));
+    if (args.has(opts::kInput) && hasGenerateOptions(args))
+        return argError(IDC_CTR(msg, kErrInputAndSizeMix), IDC_CTR(msg, kHintPickInputSource));
+    if (!args.has(opts::kGrid))
+        return argError(IDC_CTR(msg, kErrMissingGrid), IDC_CTR(msg, kHintGridGeo));
 
     // --- 装配固定部分：L3 恒为参数化网格生成器。---
     engine::EngineConfig config;
@@ -64,68 +70,64 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
 
     // --- 第 5 步（提前解析 --sort：第 4 步的选择来源互斥判定依赖它）。---
     auto strategy = engine::SortStrategy::ROW_MAJOR;
-    if (args.has("--sort") && !parseSort(args.get("--sort"), strategy, err)) return argError(err);
+    if (args.has(opts::kSort) && !parseSort(args.get(opts::kSort), strategy, err)) return argError(err);
     config.order.strategy = strategy;
     const bool custom = strategy == engine::SortStrategy::CUSTOM;
 
     // --- 第 4 步：选择来源互斥（--keep / --remove / --order 三者的合法组合）。---
-    const bool hasKeep = args.has("--keep");
-    const bool hasRemove = args.has("--remove");
+    const bool hasKeep = args.has(opts::kKeep);
+    const bool hasRemove = args.has(opts::kRemove);
     if (hasKeep && hasRemove)
-        return argError("--keep 与 --remove 不得同时出现",
-                        "请只用其一：保留单元用 --keep，剔除单元用 --remove");
+        return argError(IDC_CTR(msg, kErrKeepRemoveMix), IDC_CTR(msg, kHintKeepOrRemove));
     if (custom) {
         // 自定义序：--order 必填，且不可再用 --keep/--remove/--decorate（点选顺序即保留集与输出序）。
-        if (!args.has("--order"))
-            return argError("--sort custom 需要 --order", "请用 --order r,c;r,c 指定自定义序列");
+        if (!args.has(opts::kOrder))
+            return argError(IDC_CTR(msg, kErrCustomNeedsOrder), IDC_CTR(msg, kHintOrderSyntax));
         if (hasKeep || hasRemove)
-            return argError("--sort custom 下不可再用 --keep / --remove",
-                            "自定义序列 --order 本身即保留集与输出顺序");
-        if (args.has("--decorate"))
-            return argError("--sort custom 下不可用 --decorate", "自定义序已显式给定，无需排序修饰");
+            return argError(IDC_CTR(msg, kErrCustomNoKeepRemove), IDC_CTR(msg, kHintOrderIsSelection));
+        if (args.has(opts::kDecorate))
+            return argError(IDC_CTR(msg, kErrCustomNoDecorate), IDC_CTR(msg, kHintCustomNoDecorate));
         config.cut.polarity = engine::Polarity::KEEP;
     } else {
         // 非自定义：必须恰好给出 --keep 或 --remove；--order 仅在 custom 下有效。
-        if (args.has("--order"))
-            return argError("--order 仅在 --sort custom 下有效",
-                            "请改用 --sort custom，或用 --keep / --remove 选择单元");
+        if (args.has(opts::kOrder))
+            return argError(IDC_CTR(msg, kErrOrderNeedsCustom), IDC_CTR(msg, kHintOrderNeedsCustom));
         if (!hasKeep && !hasRemove)
-            return argError("缺少单元选择", "请用 --keep r,c 或 --remove r,c 指定单元格（均可重复）");
+            return argError(IDC_CTR(msg, kErrNoCellChoice), IDC_CTR(msg, kHintKeepRemoveCells));
         config.cut.polarity = hasRemove ? engine::Polarity::REMOVE : engine::Polarity::KEEP;
     }
 
     // --- 第 5 步：网格几何（基准点 + 单元尺寸）与余量策略。---
     engine::GridParams gp;
     int x0 = 0, y0 = 0, cw = 0, ch = 0;
-    if (!parseGridGeo(args.get("--grid"), x0, y0, cw, ch, err)) return argError(err);
+    if (!parseGridGeo(args.get(opts::kGrid), x0, y0, cw, ch, err)) return argError(err);
     gp.originX = x0;
     gp.originY = y0;
     gp.cellWidth = cw;
     gp.cellHeight = ch;
-    if (args.has("--margin") && !parseMargin(args.get("--margin"), gp.remainder, err))
+    if (args.has(opts::kMargin) && !parseMargin(args.get(opts::kMargin), gp.remainder, err))
         return argError(err);
     config.cut.grid = gp;
 
     // --- 第 5 步：排序修饰（reverse / snake，仅非 custom）。---
-    if (!custom && args.has("--decorate")) {
+    if (!custom && args.has(opts::kDecorate)) {
         bool reverse = false, snake = false;
-        if (!parseDecorate(args.get("--decorate"), reverse, snake, err)) return argError(err);
+        if (!parseDecorate(args.get(opts::kDecorate), reverse, snake, err)) return argError(err);
         config.order.reverse = reverse;
         config.order.snake = snake;
     }
 
     // --- 第 4/5 步：输出模式（--compose 重排合并 / 缺省分离）与画布 ColxRow。---
-    const bool separate = !args.has("--compose");
+    const bool separate = !args.has(opts::kCompose);
     if (!separate) { // --compose：合并为单图，恒 REARRANGE（网格保留集一般不可坍缩）。
-        if (args.has("--output-dir"))
-            return argError("--compose 与 --output-dir 不得同时出现",
-                            "合并请用 --output <file>；分离请去掉 --compose 并用 --output-dir <dir>");
-        if (!args.has("--canvas"))
-            return argError("--compose 需要 --canvas", "请用 --canvas ColxRow 指定重排画布（如 8x6）");
-        if (!args.has("--output"))
-            return argError("--compose 需要 --output", "请用 --output <file> 指定合并输出路径");
+        if (args.has(opts::kOutputDir))
+            return argError(IDC_CTR(msg, kErrComposeWithOutputDir), IDC_CTR(msg, kHintComposeOutput));
+        if (!args.has(opts::kCanvas))
+            return argError(IDC_CTR(msg, kErrComposeNeedsCanvas), IDC_CTR(msg, kHintCanvasColxRow));
+        if (!args.has(opts::kOutput))
+            return argError(IDC_CTR(msg, kErrComposeNeedsOutput), IDC_CTR(msg, kHintMergeOutputPath));
         int cols = 0, rows = 0;
-        if (!parseCanvas(args.get("--canvas"), cols, rows, err)) return argError(err);
+        if (!parseCanvas(args.get(opts::kCanvas), cols, rows, err)) return argError(err);
         config.emitParams.mode = engine::EmitMode::MERGED;
         config.emitParams.layout = engine::MergeLayout::REARRANGE;
         config.emitParams.cols = cols; // 画布列数（单元数，非像素）
@@ -133,30 +135,28 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
         // 重排填充顺序（与选择排序 --sort 正交）：--merge-sort 行/列优先，--merge-decorate 蛇形/倒序。
         // --sort 决定「块的先后列表」，--merge-sort/--merge-decorate 决定「该列表如何铺进输出画布」。
         auto msort = engine::SortStrategy::ROW_MAJOR;
-        if (args.has("--merge-sort")) {
-            if (!parseSort(args.get("--merge-sort"), msort, err)) return argError(err);
+        if (args.has(opts::kMergeSort)) {
+            if (!parseSort(args.get(opts::kMergeSort), msort, err)) return argError(err);
             if (msort == engine::SortStrategy::CUSTOM)
-                return argError("--merge-sort 不支持 custom",
-                                "重排填充顺序仅 row-major / column-major（自定义块序请用 --sort custom）");
+                return argError(IDC_CTR(msg, kErrMergeSortNoCustom), IDC_CTR(msg, kHintMergeSortNoCustom));
         }
         config.emitParams.mergeOrder.strategy = msort;
-        if (args.has("--merge-decorate")) {
+        if (args.has(opts::kMergeDecorate)) {
             bool mrev = false, msnk = false;
-            if (!parseDecorate(args.get("--merge-decorate"), mrev, msnk, err)) return argError(err);
+            if (!parseDecorate(args.get(opts::kMergeDecorate), mrev, msnk, err)) return argError(err);
             config.emitParams.mergeOrder.reverse = mrev;
             config.emitParams.mergeOrder.snake = msnk;
         }
     } else { // 缺省：分离导出到文件夹（不存在会自动创建）。
-        if (!args.has("--output-dir"))
-            return argError("分离导出缺少 --output-dir",
-                            "请用 --output-dir <dir> 指定输出文件夹，或加 --compose + --canvas + --output 合并为单图");
+        if (!args.has(opts::kOutputDir))
+            return argError(IDC_CTR(msg, kErrMissingOutputDir), IDC_CTR(msg, kHintOutputDirOrCompose));
         config.emitParams.mode = engine::EmitMode::SEPARATE;
     }
 
     // --- 第 5 步：填充色与公共导出选项 --format / --quality / --naming。---
-    if (args.has("--pad-color")) {
+    if (args.has(opts::kPadColor)) {
         core::Color pad;
-        if (!parseColor(args.get("--pad-color"), pad, err)) return argError(err);
+        if (!parseColor(args.get(opts::kPadColor), pad, err)) return argError(err);
         config.emitParams.padColor = pad; // Core 已透传至合并画布填充色（见文件头说明）。
     }
     if (!applyExportOptions(args, config.emitParams, err)) return argError(err);
@@ -164,16 +164,16 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     // --- 第 5 步：选择单元 (r,c) 的格式解析（映射为序号需网格，故读图后再映射）。---
     std::vector<std::pair<int, int>> chosen; // 保持出现顺序（custom 下即输出序）。
     if (custom) {
-        if (!parseOrderCells(args.get("--order"), chosen, err)) return argError(err);
+        if (!parseOrderCells(args.get(opts::kOrder), chosen, err)) return argError(err);
         // 自定义序列中单元应唯一：重复会使同一单元在重排画布上落位两次（防御性校验）。
         for (std::size_t i = 0; i < chosen.size(); ++i)
             for (std::size_t j = i + 1; j < chosen.size(); ++j)
                 if (chosen[i] == chosen[j])
-                    return argError("--order 含重复单元 (" + std::to_string(chosen[i].first) + "," +
+                    return argError(IDC_CTR(msg, kErrOrderDupCell) + std::to_string(chosen[i].first) + "," +
                                         std::to_string(chosen[i].second) + ")",
-                                    "自定义序列中每个单元应唯一");
+                                    IDC_CTR(msg, kHintOrderUnique));
     } else {
-        for (const std::string& s : args.getAll(hasKeep ? "--keep" : "--remove")) {
+        for (const std::string& s : args.getAll(hasKeep ? opts::kKeep : opts::kRemove)) {
             int r = 0, c = 0;
             if (!parseCell(s, r, c, err)) return argError(err);
             chosen.emplace_back(r, c);
@@ -190,15 +190,13 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     engine::Grid grid;
     grid.build(gp, image.width(), image.height());
     if (grid.cellCount() == 0)
-        return argError("网格未产生任何单元",
-                        "请减小 --grid 的单元尺寸，或用 --margin keep-partial/pad 保留跨界的残缺单元");
+        return argError(IDC_CTR(msg, kErrGridNoCells), IDC_CTR(msg, kHintGridNoCells));
     for (const auto&[fst, snd] : chosen) {
         const engine::Cell* cell = grid.cellAt(fst, snd);
         if (cell == nullptr)
-            return argError("单元格 (" + std::to_string(fst) + "," + std::to_string(snd) +
-                                ") 越界",
-                            "当前网格为 " + std::to_string(grid.rowCount()) + " 行 × " +
-                                std::to_string(grid.colCount()) + " 列（行列号从 0 起）");
+            return argError(IDC_CTR(msg, kErrCellOutOfRange) + std::to_string(fst) + "," + std::to_string(snd) +
+                                IDC_CTR(msg, kErrCellOutOfRangeTail),
+                            IDC_CTRF(msg, kHintGridShape, std::to_string(grid.rowCount()), std::to_string(grid.colCount())));
         config.selectedCells.push_back(cell->index);
     }
     config.source.width = image.width();
@@ -213,7 +211,7 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     if (!annos.empty()) { annoSet.restore(std::move(annos)); annoPtr = &annoSet; }
 
     // --- 第 7 步：执行 / dry-run（--save-config）。分离取 --output-dir，合并取 --output。---
-    const JobOutput out{separate ? args.get("--output-dir") : args.get("--output"), separate};
+    const JobOutput out{separate ? args.get(opts::kOutputDir) : args.get(opts::kOutput), separate};
     return toInt(finishJob(config, image, out, go.saveConfig, opt, annoPtr));
 }
 

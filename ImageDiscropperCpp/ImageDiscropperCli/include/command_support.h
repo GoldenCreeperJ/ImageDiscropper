@@ -11,6 +11,8 @@
 //     故不新增 .cpp，也就不必改动 CMake 源清单（降低构建接入风险）。
 //   - 复用既有模块：cli_error（错误格式）、exit_code（退出码）、arg_parser（选项读取）、
 //     value_parser（值解析）、job（JobOptions）与 Core 的 CompositionParams（导出参数）。
+// 常量层：本文件是公共头，因此写全限定名 texts::opt::…（不用命名空间别名，以免污染使用者），
+//       选项名单一真相源见 include/i18n/cli_texts.h。
 // ============================================================================
 #pragma once
 
@@ -20,6 +22,7 @@
 
 #include "arg_parser.h"
 #include "cli_error.h"
+#include "i18n/cli_texts.h"
 #include "exit_code.h"
 #include "job.h"
 #include "value_parser.h"
@@ -57,10 +60,10 @@ inline JobOptions makeJobOptions(const GlobalOptions& go, const bool explicitCol
 // 均可省略（省略时沿用 emit 既有默认值）。成功返回 true。
 inline bool applyExportOptions(const ArgParser& args, engine::CompositionParams& emit,
                               std::string& err) {
-    if (args.has("--format") && !parseFormat(args.get("--format"), emit.format, err)) return false;
-    if (args.has("--quality") && !parseQuality(args.get("--quality"), emit.quality, err)) return false;
-    if (args.has("--naming")) {
-        const std::string tpl = args.get("--naming");
+    if (args.has(texts::opt::kFormat) && !parseFormat(args.get(texts::opt::kFormat), emit.format, err)) return false;
+    if (args.has(texts::opt::kQuality) && !parseQuality(args.get(texts::opt::kQuality), emit.quality, err)) return false;
+    if (args.has(texts::opt::kNaming)) {
+        const std::string tpl = args.get(texts::opt::kNaming);
         if (!checkNaming(tpl, err)) return false;
         emit.naming = tpl;
     }

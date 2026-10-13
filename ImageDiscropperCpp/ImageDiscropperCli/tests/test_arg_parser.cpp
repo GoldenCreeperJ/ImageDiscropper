@@ -107,13 +107,20 @@ void testArgParser() {
         CHECK(parseGlobalOptions({"--save-config=so.json"}).saveConfig == "so.json");
     }
 
+    // ---- parseGlobalOptions：--lang 取原值不校验（语言码可用性属 cli_i18n，不在语法层）。----
+    {
+        CHECK(parseGlobalOptions({"--lang", "en"}).lang == "en");
+        CHECK(parseGlobalOptions({"--lang=fr_FR"}).lang == "fr_FR");
+        CHECK(parseGlobalOptions({"grid", "--input", "a.png", "--lang"}).lang.empty());   // 缺值 → 当作未指定
+    }
+
     // ---- 全局选项可出现在子命令之后的任意位置；空 argv 时全为默认。----
     {
         const GlobalOptions a = parseGlobalOptions({"extract", "--input", "a.png", "--verbose"});
         CHECK(a.verbose && a.config.empty());
-        const auto [help, version, verbose, quiet, config, saveConfig, bundleAssets] = parseGlobalOptions({});
+        const auto [help, version, verbose, quiet, config, saveConfig, bundleAssets, lang] = parseGlobalOptions({});
         CHECK(!help && !version && !verbose && !quiet && !bundleAssets);
-        CHECK(config.empty() && saveConfig.empty());
+        CHECK(config.empty() && saveConfig.empty() && lang.empty());
     }
 
     std::cout << "[cli-arg-parser] OK\n";

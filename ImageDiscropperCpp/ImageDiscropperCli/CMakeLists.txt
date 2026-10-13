@@ -10,8 +10,8 @@
 #   - CLI 头文件暴露 Core 概念类型（RectRegion / GridParams / ExportFormat…），故对
 #     image_discropper_core 采用 PUBLIC 链接，使其 PUBLIC include 目录向下游（idc /
 #     cli_tests）传播；第三方库（stb/webp/json）由 Core 以 PRIVATE 封装，CLI 无需感知。
-#   - 版本号经编译期宏注入：IDC_CLI_VERSION（根工程版本）与 IDC_CORE_VERSION
-#     （Core 经 PARENT_SCOPE 回传），供 --version 打印，保证与构建系统一致。
+#   - 版本号经编译期宏注入：IDC_CLI_VERSION 与 IDC_CORE_VERSION 均由根 CMakeLists
+#     单一来源透传（产品版本，Core 库版本默认同源），供 --version 打印，与构建系统一致。
 # ============================================================================
 cmake_minimum_required(VERSION 3.28)
 project(ImageDiscropperCli LANGUAGES CXX)
@@ -39,13 +39,16 @@ endif()
 # CLI 源文件（按职责分块，严禁上帝文件）。main.cpp 单列，其余进入可复用静态库。
 # ---------------------------------------------------------------------------
 set(IDC_CLI_LIB_SRC
-        src/cli_app.cpp              # 顶层入口 cliMain：全局选项 / help / version / 分派 / 异常兜底
+        src/cli_app.cpp              # 顶层入口 cliMain：译文表登记 / 全局选项 / help / version / 分派 / 异常兜底
+        src/i18n/cli_i18n.cpp        # i18n 门面：--lang 与环境变量链的语言决议（表与状态本体在 Core）
+        src/i18n/lang_en.cpp         # 本层英文译文表（msg 半）+ installCatalogs()（表住本层，不进 Core 静态库；新增语言就本目录加一份 lang_xx.cpp 并同处登记）
+        src/i18n/lang_en_help.cpp    # 本层英文译文表（help 半）+ installHelpCatalog()（同语言累加登记，与 msg 半分两个 TU）
         src/arg_parser.cpp           # 轻量参数解析：token → 选项名到值列表
         src/value_parser.cpp         # 值解析：坐标 / 带 / 网格 / r,c / 画布 / 颜色 / 枚举 / 模板
         src/annotation_args.cpp      # 命令行标注装配：--annotation 内联对象 / --annotations 文件 → Core 段解析 → 标注列表
         src/generate_args.cpp        # 命令行图像生成装配：--size/--pattern/… → Core generate::makePattern → 画布图（含 resolveInputImage 统一输入来源）
         src/cli_error.cpp            # 错误报告：按约定格式写 stderr（见本目录 README）
-        src/help.cpp                 # 帮助与版本文本
+        src/help.cpp                 # 帮助输出全集（单文件）：顶层 / 版本 / 子命令分派 + 五个子命令帮助 + 共享小节 + 编译期列宽
         src/job.cpp                  # 作业执行：读图 → runEngine → 坍缩校验 → exportImage → 退出码
         src/commands/extract.cpp     # L1 标准提取
         src/commands/erase.cpp       # L2 反向剔除（十字 / 横线 / 竖线 / 多矩形并集）

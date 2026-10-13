@@ -11,6 +11,7 @@
 //       底色 alpha<FF 即得透明 / 半透明画布。--pad-color 设定有损格式（JPEG/BMP）压平透明像素所用的
 //       背景色（透传 emit.padColor）；--save-config 触发 dry-run：不落像素，而把本次生成配方（source 尺寸
 //       + generate 段 + emit）序列化进配置 JSON（此路径不要求 --output），供 config --load 据其复现画布。
+// 常量层：选项名取 texts::opt（不可译）、报错文案与日志经门面 IDC_CTR(msg, ...) 取 texts::msg。
 // ============================================================================
 #include "commands.h"
 
@@ -25,8 +26,13 @@
 #include "generate_args.h"
 #include "job.h"
 #include "value_parser.h"
+#include "i18n/cli_texts.h"
+#include "i18n/cli_i18n.h"
 
 namespace idc::cli {
+
+// 选项名简写（不可译契约；报错文案走 IDC_CTR）。
+namespace opts = texts::opt;
 
 // 新建图像：--size WxH [--pattern/--orientation/--bg/--fg/--period/--line-width/--dot-radius/--seed/--noise]
 //           [--format/--quality/--pad-color] [--output <file> | --save-config <file>（dry-run）]。
@@ -35,33 +41,31 @@ int cmdNew(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     args.parse(tokens);
 
     // --- 第 3 步：必填与前置互斥（早于任何 Core 调用，一律退出码 1）。---
-    if (!args.has("--size"))
-        return argError("缺少 --size", "请用 --size WxH 指定生成画布的尺寸（像素，正整数）");
-    if (args.has("--input"))
-        return argError("new 不接受 --input",
-                        "new 用于程序生成新图像；读取并切割已有图像请改用 extract / erase / grid");
+    if (!args.has(opts::kSize))
+        return argError(IDC_CTR(msg, kErrMissingSize), IDC_CTR(msg, kHintSizeForm));
+    if (args.has(opts::kInput))
+        return argError(IDC_CTR(msg, kErrNewNoInput), IDC_CTR(msg, kHintNewPurpose));
     // --save-config 为 dry-run（仅序列化生成配方），此路径不要求 --output；否则必须给 --output。
     const bool dryRun = !go.saveConfig.empty();
-    if (!dryRun && !args.has("--output"))
-        return argError("缺少 --output", "new 输出单图，请用 --output <file> 指定生成图像的落盘路径");
+    if (!dryRun && !args.has(opts::kOutput))
+        return argError(IDC_CTR(msg, kErrMissingOutput), IDC_CTR(msg, kHintNewOutput));
 
     // --- 第 5 步：可选导出选项（--format 缺省由扩展名推断；--quality 仅 JPEG/WebP 生效；
     //         --pad-color 设定有损格式压平透明像素的背景色，透传 emit.padColor）。---
     engine::CompositionParams emit;
     std::string err;
-    if (args.has("--format") && !parseFormat(args.get("--format"), emit.format, err))
+    if (args.has(opts::kFormat) && !parseFormat(args.get(opts::kFormat), emit.format, err))
         return argError(err);
-    if (args.has("--quality") && !parseQuality(args.get("--quality"), emit.quality, err))
+    if (args.has(opts::kQuality) && !parseQuality(args.get(opts::kQuality), emit.quality, err))
         return argError(err);
-    if (args.has("--pad-color") && !parseColor(args.get("--pad-color"), emit.padColor, err))
+    if (args.has(opts::kPadColor) && !parseColor(args.get(opts::kPadColor), emit.padColor, err))
         return argError(err);
 
     // --- 生成参数（委托 generate_args 解析；尺寸/图案/颜色/周期等非法在此转退出码 1，含总像素上限）。---
     int width = 0, height = 0;
     generate::PatternParams params;
     if (!parseGenerateParams(args, width, height, params, err))
-        return fail(ExitCode::ArgError, "图像生成参数错误", err,
-                    "请检查 --size / --pattern / --orientation / --bg / --fg / --period / --seed / --noise 等选项");
+        return fail(ExitCode::ArgError, IDC_CTR(msg, kErrGenArgs), err, IDC_CTR(msg, kHintGenArgs));
 
     const JobOptions opt = makeJobOptions(go, /*explicitCollapse=*/false);
 
@@ -82,18 +86,18 @@ int cmdNew(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     // --- 生成画布（委托 Core makePattern；参数已在上面校验，越界再产空图作防御）。---
     const core::Image image = generate::makePattern(width, height, params);
     if (image.empty())
-        return fail(ExitCode::ArgError, "图案生成失败（尺寸或参数非法）",
-                    "图案工厂返回空图",
-                    "请检查 --size / --pattern / --orientation / --bg / --fg / --period / --seed / --noise 等选项");
+        return fail(ExitCode::ArgError, IDC_CTR(msg, kErrPatternGenFailed),
+                    IDC_CTR(msg, kDetFactoryEmpty),
+                    IDC_CTR(msg, kHintGenArgs));
 
     // --- 落盘（复用 job 的合并单图通道：扩展名推断格式 / 自动建父目录 / JPEG 按 pad-color 压平）。---
-    if (const ExitCode ec = writeGeneratedImage(image, args.get("--output"), emit, opt); ec != ExitCode::Ok)
+    if (const ExitCode ec = writeGeneratedImage(image, args.get(opts::kOutput), emit, opt); ec != ExitCode::Ok)
         return toInt(ec);
 
     // --- 正常结果输出到 stdout（quiet 时抑制）。---
     if (!opt.quiet)
-        std::cout << "已生成图像：" << args.get("--output")
-                  << "（" << image.width() << "x" << image.height() << "）\n";
+        std::cout << IDC_CTR(msg, kLogImageGenerated) << args.get(opts::kOutput)
+                  << IDC_CTR(msg, kLogParenOpen) << image.width() << "x" << image.height() << IDC_CTR(msg, kLogParenClose);
     return toInt(ExitCode::Ok);
 }
 

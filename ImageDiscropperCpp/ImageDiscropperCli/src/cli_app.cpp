@@ -1,14 +1,16 @@
 // ============================================================================
 // 文件：src/cli_app.cpp
 // 作用：实现 cliMain——CLI 唯一的顶层编排点（固定校验顺序的骨架）。
-//       负责：解析全局选项 → 处理 --version / --help → 定位子命令 → 分派到命令实现 →
-//       未捕获异常兜底（退出码 5）。main.cpp 仅把 argv 转发到此。
+//       负责：登记本层译文表并决议语言 → 解析全局选项 → 处理 --version / --help → 定位子命令 →
+//       分派到命令实现 → 未捕获异常兜底（退出码 5）。main.cpp 仅把 argv 转发到此。
 // 分块依据：顶层「分派 + 全局横切」与「单命令参数装配」分离——各命令实现（commands/*.cpp）
 //       只关心自身参数，全局逻辑集中于此，避免散落到每个命令（严禁上帝文件，亦避免重复）。
 // 说明：全局 --config <file> 复用 config 命令的「加载 + 执行」路径（NFR-0：同一执行通道），
 //       不另起炉灶；因 --config 无子命令时 splitCommand 会把首个非选项取值（如 --input 的图像
 //       路径）误判为命令名，故 --config 路由传入「全部 args」并前置于命令名判定，避免 --input/
 //       --output 等选项丢失（详见下方 cliMain 内注释）。
+// 常量层：选项名取 texts::opt、子命令名取 texts::cmd、错误文案取 texts::msg（均见 include/i18n/cli_texts.h）；
+//       别名只落在本 .cpp 内（命令名别名写作 cmds，以免与局部变量 cmd 同名）。
 // ============================================================================
 #include "commands.h"
 
@@ -18,20 +20,29 @@
 
 #include "arg_parser.h"
 #include "cli_error.h"
+#include "i18n/cli_i18n.h"
+#include "i18n/cli_texts.h"
 #include "help.h"
 
 namespace idc::cli {
+
+// 本文件常量简写：opts＝选项名、cmds＝子命令名、msgs＝错误文案。
+namespace opts = texts::opt;
+namespace cmds = texts::cmd;
+
 namespace {
 
 // 从 args 中定位子命令名，并把其后的全部 token 写入 tokens。
-// 规则：第一个「不以 '-' 开头」的 token 即命令；跳过全局取值选项（--config / --save-config）
+// 规则：第一个「不以 '-' 开头」的 token 即命令；跳过全局取值选项（--config / --save-config / --lang）
 // 及其值，避免把它们的值误当作命令名。未找到命令时返回空串。
 std::string splitCommand(const std::vector<std::string>& args, std::vector<std::string>& tokens) {
     for (std::size_t i = 0; i < args.size(); ++i) {
         const std::string& t = args[i];
         if (!t.empty() && t.front() == '-') {
             // 全局取值选项（无 '=' 内联值时）会消费下一个 token，一并跳过。
-            if (const bool takesValue = t == "--config" || t == "--save-config"; takesValue && t.find('=') == std::string::npos) ++i;
+            // --lang 同形：漏进这个集合会让「idc --lang en extract …」把 "en" 误当命令名。
+            if (const bool takesValue = t == opts::kConfig || t == opts::kSaveConfig || t == opts::kLang;
+                takesValue && t.find('=') == std::string::npos) ++i;
             continue;
         }
         tokens.assign(args.begin() + static_cast<std::ptrdiff_t>(i + 1), args.end());
@@ -45,14 +56,31 @@ std::string splitCommand(const std::vector<std::string>& args, std::vector<std::
 // CLI 顶层入口。返回退出码整数（已含退出码映射）。
 int cliMain(const std::vector<std::string>& args) {
     try {
-        // 无任何参数：显示顶层帮助（友好退出 0）。
-        if (args.empty()) { printTopHelp(); return toInt(ExitCode::Ok); }
+        // 0) i18n 装配：先登记本层译文表（纯静态表登记，零成本），再决议语言。
+        //    面向人的输出（顶层帮助 / 错误三段式）全在其后，故必须先装表与定语言。
+        i18n::installCatalogs();
+
+        // 无任何参数：显示顶层帮助（友好退出 0）——无命令行输入可解析，语言只取环境变量链。
+        if (args.empty()) {
+            i18n::applyLanguage();
+            printTopHelp();
+            return toInt(ExitCode::Ok);
+        }
 
         // 1) 全局选项（第 2 步）。
         const GlobalOptions go = parseGlobalOptions(args);
 
-        // --version 优先于一切。
+        // --version 优先于一切（版本行形态由 IT-13 钉住，不含可译文，故无需先定语言）。
         if (go.version) { printVersion(); return toInt(ExitCode::Ok); }
+
+        // --lang 校验与切换：显式写了却认不出 → 参数错误（1）且不静默回退（否则拼错看起来像生效了）。
+        // 报因本身用当前语言（此时尚未切换），故恒为源语言中文——与其余参数错误同形。
+        if (!i18n::applyLanguage(go.lang)) {
+            reportError(makeError(ExitCode::ArgError,
+                                  IDC_CTR(msg, kErrBadLang) + go.lang + "'", "",
+                                  IDC_CTR(msg, kHintLangCodes) + i18n::availableLanguageCodes()));
+            return toInt(ExitCode::ArgError);
+        }
 
         // 定位子命令（第 1 步）。
         std::vector<std::string> tokens;
@@ -61,7 +89,7 @@ int cliMain(const std::vector<std::string>& args) {
         // --help：有命令 → 该命令帮助；仅 --config（无命令）→ config 帮助；否则顶层帮助。
         if (go.help) {
             if (!cmd.empty()) printCommandHelp(cmd);
-            else if (!go.config.empty()) printCommandHelp("config");
+            else if (!go.config.empty()) printCommandHelp(cmds::kConfig);
             else printTopHelp();
             return toInt(ExitCode::Ok);
         }
@@ -73,7 +101,7 @@ int cliMain(const std::vector<std::string>& args) {
         // 以 JSON 配置为准）。此路由须前置于 cmd.empty() 判定，否则「idc --config x.json --input
         // ...」（无子命令）会先落入顶层帮助分支而不执行。
         if (!go.config.empty()) {
-            std::vector<std::string> cfgTokens{"--load", go.config};
+            std::vector<std::string> cfgTokens{opts::kLoad, go.config};
             cfgTokens.insert(cfgTokens.end(), args.begin(), args.end());
             return cmdConfig(cfgTokens, go);
         }
@@ -82,23 +110,23 @@ int cliMain(const std::vector<std::string>& args) {
         if (cmd.empty()) { printTopHelp(); return toInt(ExitCode::Ok); }
 
         // 2) 分派到子命令；各命令内部按 第 3~5 步校验必填 / 互斥 / 格式。
-        if (cmd == "extract") return cmdExtract(tokens, go);
-        if (cmd == "erase") return cmdErase(tokens, go);
-        if (cmd == "grid") return cmdGrid(tokens, go);
-        if (cmd == "config") return cmdConfig(tokens, go);
-        if (cmd == "new") return cmdNew(tokens, go);
+        if (cmd == cmds::kExtract) return cmdExtract(tokens, go);
+        if (cmd == cmds::kErase) return cmdErase(tokens, go);
+        if (cmd == cmds::kGrid) return cmdGrid(tokens, go);
+        if (cmd == cmds::kConfig) return cmdConfig(tokens, go);
+        if (cmd == cmds::kNew) return cmdNew(tokens, go);
 
-        reportError(makeError(ExitCode::ArgError, "未知命令：'" + cmd + "'", "",
-                              "可用命令：extract / erase / grid / config / new；用 idc --help 查看用法"));
+        reportError(makeError(ExitCode::ArgError, IDC_CTR(msg, kErrUnknownCmd) + cmd + "'", "",
+                              IDC_CTR(msg, kHintKnownCmds)));
         return toInt(ExitCode::ArgError);
     } catch (const std::exception& e) {
         // 未预期异常统一兜底为内部错误（5），避免向用户抛出裸异常栈。
-        reportError(makeError(ExitCode::InternalError, "内部错误（未预期异常）", e.what(),
-                              "请上报 bug（附完整命令行）"));
+        reportError(makeError(ExitCode::InternalError, IDC_CTR(msg, kErrInternalUnexpected), e.what(),
+                              IDC_CTR(msg, kHintReportBug)));
         return toInt(ExitCode::InternalError);
     } catch (...) {
-        reportError(makeError(ExitCode::InternalError, "内部错误（未知异常）", "",
-                              "请上报 bug（附完整命令行）"));
+        reportError(makeError(ExitCode::InternalError, IDC_CTR(msg, kErrInternalUnknown), "",
+                              IDC_CTR(msg, kHintReportBug)));
         return toInt(ExitCode::InternalError);
     }
 }

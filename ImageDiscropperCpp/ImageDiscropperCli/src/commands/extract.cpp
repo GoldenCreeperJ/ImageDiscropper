@@ -6,6 +6,8 @@
 //       不含任何切割 / 几何 / 极性判断逻辑，全部委托 Core 的统一引擎（NFR-0：模式即参数预设）。
 // 分块依据：一个子命令一个文件（严禁上帝文件）；执行与退出码映射复用 job（同一执行通道），
 //       值解析复用 value_parser，报错样板复用 command_support，均不在此重实现（CONTRIBUTING.md「分层纪律」）。
+// 常量层：选项名取 texts::opt（不可译）、报错文案经门面 IDC_CTR(msg, ...) 取 texts::msg；
+//       跨命令重复的同值文案（缺输入 / 矩形退化 / 带退化 …）已在 msg 里归一，不再就地写。
 // 说明：L1 的保留区恒为「单个中心矩形」或「整条带」，其补集必为若干整行/整列，故必可坍缩为
 //       单图；explicitCollapse 恒为 false，本命令不会触发坍缩不可行（退出码 2 仅 L2/config 才可能）。
 // ============================================================================
@@ -25,8 +27,13 @@
 #include "generate_args.h"
 #include "job.h"
 #include "value_parser.h"
+#include "i18n/cli_texts.h"
+#include "i18n/cli_i18n.h"
 
 namespace idc::cli {
+
+// 选项名简写（不可译契约；报错文案走 IDC_CTR）。
+namespace opts = texts::opt;
 
 // L1 标准提取：--input + (--rect|--hband|--vband 三选一) + --output（极性 keep，合并单图）。
 int cmdExtract(const std::vector<std::string>& tokens, const GlobalOptions& go) {
@@ -35,21 +42,21 @@ int cmdExtract(const std::vector<std::string>& tokens, const GlobalOptions& go) 
 
     // --- 第 3 步：必填参数（缺失即退出码 1，早于任何 Core 调用）。---
     // 输入来源二选一：--input 读文件，或 --size(+--pattern…) 生成画布。
-    if (!args.has("--input") && !hasGenerateOptions(args))
-        return argError("缺少输入图像", "请用 --input <file> 指定输入图像，或用 --size WxH（可配 --pattern）生成画布作为输入");
-    if (args.has("--input") && hasGenerateOptions(args))
-        return argError("--input 与 --size 不可同时使用", "读取文件用 --input；程序生成画布用 --size（二者择一）");
-    if (!args.has("--output"))
-        return argError("缺少 --output", "extract 输出单图，请用 --output <file> 指定输出路径");
+    if (!args.has(opts::kInput) && !hasGenerateOptions(args))
+        return argError(IDC_CTR(msg, kErrMissingInput), IDC_CTR(msg, kHintInputOrSize));
+    if (args.has(opts::kInput) && hasGenerateOptions(args))
+        return argError(IDC_CTR(msg, kErrInputAndSizeMix), IDC_CTR(msg, kHintPickInputSource));
+    if (!args.has(opts::kOutput))
+        return argError(IDC_CTR(msg, kErrMissingOutput), IDC_CTR(msg, kHintExtractOutput));
 
     // --- 第 4 步：互斥——几何参数三选一（恰好一个）。---
-    const int geoKinds = static_cast<int>(args.has("--rect")) +
-                         static_cast<int>(args.has("--hband")) +
-                         static_cast<int>(args.has("--vband"));
+    const int geoKinds = static_cast<int>(args.has(opts::kRect)) +
+                         static_cast<int>(args.has(opts::kHband)) +
+                         static_cast<int>(args.has(opts::kVband));
     if (geoKinds != 1)
-        return argError("--rect / --hband / --vband 必须三选一",
-                        geoKinds == 0 ? "请给出恰好一个几何参数"
-                                      : "不可同时给出多个几何参数");
+        return argError(IDC_CTR(msg, kErrGeoThreeOne),
+                        geoKinds == 0 ? IDC_CTR(msg, kHintGeoExactlyOne)
+                                      : IDC_CTR(msg, kHintGeoNoMultiple));
 
     // --- 装配 EngineConfig 的固定部分：L1 极性恒 keep、输出恒为合并单图（collapse）。---
     engine::EngineConfig config;
@@ -62,22 +69,22 @@ int cmdExtract(const std::vector<std::string>& tokens, const GlobalOptions& go) 
     // 带的两个坐标先暂存，待读取图像尺寸后再构造「贯穿全图」的带矩形（横带宽=W、竖带高=H）。
     std::string err;
     int bandA = 0, bandB = 0;
-    if (args.has("--rect")) {
+    if (args.has(opts::kRect)) {
         engine::RectRegion r;
-        if (!parseRect(args.get("--rect"), r, err)) return argError(err);
+        if (!parseRect(args.get(opts::kRect), r, err)) return argError(err);
         if (r.width() <= 0 || r.height() <= 0)
-            return argError("矩形退化：需满足 x1<x2 且 y1<y2", "请检查 --rect 的坐标顺序；只需一条切割线时请改用 --hband / --vband");
+            return argError(IDC_CTR(msg, kErrRectDegenerate), IDC_CTR(msg, kHintRectOrder));
         config.cut.generator = engine::CutGenerator::RECT;
         config.cut.rect = r;
-    } else if (args.has("--hband")) {
-        if (!parseBand(args.get("--hband"), bandA, bandB, err)) return argError(err);
+    } else if (args.has(opts::kHband)) {
+        if (!parseBand(args.get(opts::kHband), bandA, bandB, err)) return argError(err);
         if (bandA >= bandB)
-            return argError("水平带退化：需满足 y1<y2", "请检查 --hband 的坐标顺序");
+            return argError(IDC_CTR(msg, kErrHbandDegenerate), IDC_CTR(msg, kHintHbandOrder));
         config.cut.generator = engine::CutGenerator::HORIZONTAL_LINE;
     } else { // --vband
-        if (!parseBand(args.get("--vband"), bandA, bandB, err)) return argError(err);
+        if (!parseBand(args.get(opts::kVband), bandA, bandB, err)) return argError(err);
         if (bandA >= bandB)
-            return argError("垂直带退化：需满足 x1<x2", "请检查 --vband 的坐标顺序");
+            return argError(IDC_CTR(msg, kErrVbandDegenerate), IDC_CTR(msg, kHintVbandOrder));
         config.cut.generator = engine::CutGenerator::VERTICAL_LINE;
     }
     // 公共导出选项：--format（合并时作为扩展名回退）/ --quality（JPEG/WebP）/ --naming（L1 合并单图用不到，但保持一致）。
@@ -106,7 +113,7 @@ int cmdExtract(const std::vector<std::string>& tokens, const GlobalOptions& go) 
     if (!annos.empty()) { annoSet.restore(std::move(annos)); annoPtr = &annoSet; }
 
     // --- 第 7 步：执行作业；若给出 --save-config 则改为序列化配置的 dry-run（不切割）。---
-    const JobOutput out{args.get("--output"), /*separate=*/false};
+    const JobOutput out{args.get(opts::kOutput), /*separate=*/false};
     return toInt(finishJob(config, image, out, go.saveConfig, opt, annoPtr));
 }
 

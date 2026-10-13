@@ -21,6 +21,9 @@ namespace idc::cli {
 
 // ---------------------------------------------------------------------------
 // GlobalOptions：全局选项（布局见本目录 README「全局选项」）。可出现在子命令前后任意位置。
+// 注：成员**顺序与个数被 cli_tests 的结构化绑定断言依赖**（tests/test_arg_parser.cpp），
+//     增删成员或调序必须同步该用例——这一耦合是故意的：漏同步会当场编译失败，
+//     而不是让新选项静默逃过默认值断言。
 // ---------------------------------------------------------------------------
 struct GlobalOptions {
     bool help{false};        // --help / -h：显示帮助。
@@ -30,6 +33,7 @@ struct GlobalOptions {
     std::string config;      // --config <file>：从 JSON 配置读取全部参数（SPEC §7）。
     std::string saveConfig;  // --save-config <file>：把当前参数序列化为 JSON（dry-run）。
     bool bundleAssets{false}; // --bundle-assets：与 --save-config 同用时，把 File 图层源图按相对名复制进 <配置名>.assets/
+    std::string lang;        // --lang <code>：帮助 / 报错文本的语言；空串 = 未显式指定（转走环境变量链，见 cli_i18n.h）。
 };
 
 // ---------------------------------------------------------------------------
@@ -67,8 +71,8 @@ private:
     std::vector<std::string> positional_;
 };
 
-// 从完整 argv（不含程序名）扫描出全局选项。识别 --help/-h、--version/-v、
-// --verbose、--quiet、--config <file>、--save-config <file>、--bundle-assets。
+// 从完整 argv（不含程序名）扫出全局选项。识别 --help/-h、--version/-v、
+// --verbose、--quiet、--config <file>、--save-config <file>、--bundle-assets、--lang <code>。
 GlobalOptions parseGlobalOptions(const std::vector<std::string>& args);
 
 } // namespace idc::cli

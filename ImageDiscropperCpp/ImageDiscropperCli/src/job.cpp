@@ -8,6 +8,12 @@
 // 说明：Core 的 runEngine 仅在 L3 遇到「MERGED+COLLAPSE 但不可坍缩」时自动改用 REARRANGE
 //       并返回 ok=true、collapsible=false（L1/L2 直接报错，见 SPEC §4.3）；CLI 据
 //       opt.explicitCollapse 判定是否应显式报错（用户显式要 collapse → 退出码 2 并提示 rearrange）。
+// 常量层：错误 brief / detail / hint 与进度日志一律经门面 IDC_CTR(msg, ...) 取 texts::msg
+//       （include/i18n/cli_texts.h），本文件不再直接写常量名也不写字面量——键由预处理器拼出，
+//       常量改名即未声明标识符，编译期按落点直接报回（zh-CN 下表为空，输出与改写前逐字相同）。
+//       未提取项：后缀 L".assets"（宽字面量，与 char[] 类型不符；GUI 侧同契约读的是
+//       gui_texts.h ident::kAssetsDirSuffix，两处必须同字）、比较用的 ".."、以及语言中性的
+//       "x" / " → " 格式碎片（随语句局部阅读更直观）；尺寸括注的全角「（）」已入 msg 组供译。
 // ============================================================================
 #include "job.h"
 
@@ -24,6 +30,8 @@
 #include "canvas/layer.h"              // composeCanvas / ImageLayer（多层画布展平，SPEC §7 layers）
 
 #include "cli_error.h"
+#include "i18n/cli_texts.h"
+#include "i18n/cli_i18n.h"
 
 namespace idc::cli {
 
@@ -67,20 +75,20 @@ std::filesystem::path configDirectory(const std::string& configPath) {
 // 读取输入图像；失败按输入文件错误（3）报告。
 ExitCode loadInputImage(const std::string& path, core::Image& out, const JobOptions& opt) {
     if (path.empty()) {
-        reportError(makeError(ExitCode::ArgError, "缺少输入图像路径",
-                              "", "请用 --input <file> 指定输入图像"));
+        reportError(makeError(ExitCode::ArgError, IDC_CTR(msg, kErrNoInputPath),
+                              "", IDC_CTR(msg, kHintUseInputFile)));
         return ExitCode::ArgError;
     }
     // Core 解码：支持 PNG/JPEG/BMP/WebP 等；文件不存在 / 非图像 / 不可读均返回 false。
     if (!engine::readImageFile(path, out)) {
-        reportError(makeError(ExitCode::InputError, "无法读取输入图像",
-                              "路径：" + path,
-                              "请确认文件存在、可读，且为受支持的图像格式（PNG/JPEG/BMP/WebP 等）"));
+        reportError(makeError(ExitCode::InputError, IDC_CTR(msg, kErrReadInput),
+                              IDC_CTR(msg, kDetPath) + path,
+                              IDC_CTR(msg, kHintInputReadable)));
         return ExitCode::InputError;
     }
     if (opt.verbose)
-        std::cerr << "idc: 已读取输入图像 " << path
-                  << "（" << out.width() << "x" << out.height() << "）\n";
+        std::cerr << IDC_CTR(msg, kLogPrefix) << IDC_CTR(msg, kLogInputRead) << path
+                  << IDC_CTR(msg, kLogParenOpen) << out.width() << "x" << out.height() << IDC_CTR(msg, kLogParenClose);
     return ExitCode::Ok;
 }
 
@@ -88,8 +96,8 @@ ExitCode loadInputImage(const std::string& path, core::Image& out, const JobOpti
 ExitCode writeGeneratedImage(const core::Image& image, const std::string& outPath,
                              const engine::CompositionParams& emit, const JobOptions& opt) {
     if (image.empty()) {
-        reportError(makeError(ExitCode::OutputError, "无法落盘：图像为空", "目标：" + outPath,
-                              "生成参数可能非法，请检查 --size / --pattern 等"));
+        reportError(makeError(ExitCode::OutputError, IDC_CTR(msg, kErrEmptyImage), IDC_CTR(msg, kDetTarget) + outPath,
+                              IDC_CTR(msg, kHintCheckGenArgs)));
         return ExitCode::OutputError;
     }
     // 单片段：源区域与目标区域均为整幅画布 [0,W)×[0,H)；canvas 即图像尺寸（合并单图）。
@@ -108,10 +116,11 @@ ExitCode writeGeneratedImage(const core::Image& image, const std::string& outPat
     comp.placements.push_back(whole);
 
     if (opt.verbose)
-        std::cerr << "idc: 生成图像落盘 " << outPath << "（" << image.width() << "x" << image.height() << "）\n";
+        std::cerr << IDC_CTR(msg, kLogPrefix) << IDC_CTR(msg, kLogWriteGenerated) << outPath << IDC_CTR(msg, kLogParenOpen)
+                  << image.width() << "x" << image.height() << IDC_CTR(msg, kLogParenClose);
     if (!engine::exportImage(comp, image, outPath)) {
-        reportError(makeError(ExitCode::OutputError, "导出失败", "目标：" + outPath,
-                              "请确认输出路径的父目录存在、文件未被占用、磁盘未满"));
+        reportError(makeError(ExitCode::OutputError, IDC_CTR(msg, kErrExportFailed), IDC_CTR(msg, kDetTarget) + outPath,
+                              IDC_CTR(msg, kHintOutputWritable)));
         return ExitCode::OutputError;
     }
     return ExitCode::Ok;
@@ -121,8 +130,8 @@ ExitCode writeGeneratedImage(const core::Image& image, const std::string& outPat
 ExitCode buildLayerCanvas(const engine::EngineConfig& config, const std::string& configPath,
                           const core::Image& base, core::Image& out, const JobOptions& opt) {
     if (!config.layers.has_value()) {
-        reportError(makeError(ExitCode::RuntimeError, "多层画布合成失败", "config 无 layers 段",
-                              "内部错误：buildLayerCanvas 仅在带 layers 的配置上调用"));
+        reportError(makeError(ExitCode::RuntimeError, IDC_CTR(msg, kErrLayerCompose), IDC_CTR(msg, kDetNoLayers),
+                              IDC_CTR(msg, kHintInternalLayersOnly)));
         return ExitCode::RuntimeError;
     }
     // config 为 const（不能改写回），但需把解码出的 File 层像素注入后再合成——取可变副本作工作数组。
@@ -137,22 +146,22 @@ ExitCode buildLayerCanvas(const engine::EngineConfig& config, const std::string&
         if (layer.sourceKind != canvas::LayerSourceKind::File || layer.fileName.empty())
             continue; // 配方 / 占位层无需解码；空名视为占位（降级）。
         if (!isSafeRelativeAsset(layer.fileName)) {
-            reportError(makeError(ExitCode::InputError, "图层资源路径越界",
-                                  "文件层 fileName：" + layer.fileName,
-                                  "图层资源须为配置目录 / <配置名>.assets 下的相对路径（不得含绝对路径或 .. ）"));
+            reportError(makeError(ExitCode::InputError, IDC_CTR(msg, kErrAssetPathEscape),
+                                  IDC_CTR(msg, kDetLayerFileName) + layer.fileName,
+                                  IDC_CTR(msg, kHintAssetRelative)));
             return ExitCode::InputError;
         }
         const std::filesystem::path resolved = resolveAssetPath(baseDir, assetsDir, layer.fileName);
         if (resolved.empty()) {
             if (opt.verbose)
-                std::cerr << "idc: 图层资源缺失，降级为占位：" << layer.fileName << "\n";
+                std::cerr << IDC_CTR(msg, kLogPrefix) << IDC_CTR(msg, kLogAssetMissing) << layer.fileName << "\n";
             continue; // 缺文件 → decodedPixels 保持空，composeCanvas 按占位（空图）处理。
         }
         core::Image px;
         if (!engine::readImageFile(resolved.u8string(), px)) {
-            reportError(makeError(ExitCode::InputError, "无法解码图层资源图像",
-                                  "路径：" + resolved.u8string(),
-                                  "请确认文件存在、可读，且为受支持的图像格式（PNG/JPEG/BMP/WebP 等）"));
+            reportError(makeError(ExitCode::InputError, IDC_CTR(msg, kErrAssetDecode),
+                                  IDC_CTR(msg, kDetPath) + resolved.u8string(),
+                                  IDC_CTR(msg, kHintInputReadable)));
             return ExitCode::InputError;
         }
         layer.decodedPixels = std::move(px);
@@ -160,44 +169,42 @@ ExitCode buildLayerCanvas(const engine::EngineConfig& config, const std::string&
 
     out = canvas::composeCanvas(layers, config.source.width, config.source.height, base);
     if (out.empty()) {
-        reportError(makeError(ExitCode::RuntimeError, "多层画布合成产出空图",
-                              "source 尺寸（" + std::to_string(config.source.width) + "x" +
-                                  std::to_string(config.source.height) + "）非法或超出总像素上限",
-                              "请检查配置 source.width/height（单边 ≤ 65535，宽×高 ≤ 64000000）"));
+        reportError(makeError(ExitCode::RuntimeError, IDC_CTR(msg, kErrLayerCanvasEmpty),
+                              IDC_CTRF(msg, kDetSourceSize, std::to_string(config.source.width) + "x" + std::to_string(config.source.height)),
+                              IDC_CTR(msg, kHintSourceBounds)));
         return ExitCode::RuntimeError;
     }
     if (opt.verbose)
-        std::cerr << "idc: 已合成多层画布 " << out.width() << "x" << out.height()
-                  << "（" << layers.size() << " 层）\n";
+        std::cerr << IDC_CTR(msg, kLogPrefix)
+                  << IDC_CTRF(msg, kLogLayerComposed, std::to_string(out.width()), std::to_string(out.height()), std::to_string(layers.size()));
     return ExitCode::Ok;
 }
 
 // 底图展平（SPEC §7 generate 段，同构 canvas::ImageLayer）：Recipe 底按 source 尺寸现算 / 落位底图需外部 --input。
 ExitCode buildBaseCanvas(const engine::EngineConfig& config, core::Image& out, const JobOptions& opt) {
     if (!config.base.has_value()) {
-        reportError(makeError(ExitCode::RuntimeError, "底图合成失败", "config 无 generate/base 段",
-                              "内部错误：buildBaseCanvas 仅在带底图声明的配置上调用"));
+        reportError(makeError(ExitCode::RuntimeError, IDC_CTR(msg, kErrBaseCompose), IDC_CTR(msg, kDetNoGenerate),
+                              IDC_CTR(msg, kHintInternalBaseOnly)));
         return ExitCode::RuntimeError;
     }
     const canvas::ImageLayer& base = *config.base;
     // 底图不外传文件：带内层落位的配置只存落位参数、不存图片路径，其源图须由 --input 运行时供给。
     //   无 --input 走到此处（纯配置展平）无法落位任何位图 → 明确报因。
     if (base.hasImagePlacement) {
-        reportError(makeError(ExitCode::InputError, "底图为落位声明，需外部输入图",
-                              "配置 generate 段含 fit/box*/imageAnchor 等落位键，但未提供 --input 源图",
-                              "请用 --input <file> 提供要落位的底图（图片路径不入配置，保批处理可复用）"));
+        reportError(makeError(ExitCode::InputError, IDC_CTR(msg, kErrBaseNeedsInput),
+                              IDC_CTR(msg, kDetBaseNeedsInput),
+                              IDC_CTR(msg, kHintProvideBaseInput)));
         return ExitCode::InputError;
     }
     out = canvas::composeBase(base, config.source.width, config.source.height);
     if (out.empty()) {
-        reportError(makeError(ExitCode::RuntimeError, "底图生成产出空图",
-                              "source 尺寸（" + std::to_string(config.source.width) + "x" +
-                                  std::to_string(config.source.height) + "）非法或超出总像素上限",
-                              "请检查配置 source.width/height（单边 ≤ 65535，宽×高 ≤ 64000000）"));
+        reportError(makeError(ExitCode::RuntimeError, IDC_CTR(msg, kErrBaseGenEmpty),
+                              IDC_CTRF(msg, kDetSourceSize, std::to_string(config.source.width) + "x" + std::to_string(config.source.height)),
+                              IDC_CTR(msg, kHintSourceBounds)));
         return ExitCode::RuntimeError;
     }
     if (opt.verbose)
-        std::cerr << "idc: 已按配置底图段生成画布 " << out.width() << "x" << out.height() << "\n";
+        std::cerr << IDC_CTR(msg, kLogPrefix) << IDC_CTR(msg, kLogBaseGenerated) << out.width() << "x" << out.height() << "\n";
     return ExitCode::Ok;
 }
 
@@ -210,15 +217,14 @@ ExitCode placeInputIntoBase(const engine::EngineConfig& config, core::Image& io,
     layer.decodedPixels = io;
     const core::Image composed = canvas::composeBase(layer, config.source.width, config.source.height);
     if (composed.empty()) {
-        reportError(makeError(ExitCode::RuntimeError, "底图落位合成产出空图",
-                              "source 尺寸（" + std::to_string(config.source.width) + "x" +
-                                  std::to_string(config.source.height) + "）非法或超出总像素上限",
-                              "请检查配置 source.width/height 与 generate 段落位参数（fit/box*/imageAnchor）"));
+        reportError(makeError(ExitCode::RuntimeError, IDC_CTR(msg, kErrBasePlaceEmpty),
+                              IDC_CTRF(msg, kDetSourceSize, std::to_string(config.source.width) + "x" + std::to_string(config.source.height)),
+                              IDC_CTR(msg, kHintBasePlacement)));
         return ExitCode::RuntimeError;
     }
     io = composed;
     if (opt.verbose)
-        std::cerr << "idc: 已按配置底图落位摆入外部输入图 " << io.width() << "x" << io.height() << "\n";
+        std::cerr << IDC_CTR(msg, kLogPrefix) << IDC_CTR(msg, kLogBasePlaced) << io.width() << "x" << io.height() << "\n";
     return ExitCode::Ok;
 }
 
@@ -242,31 +248,31 @@ ExitCode bundleLayerAssets(const engine::EngineConfig& config, const std::string
         if (layer.sourceKind != canvas::LayerSourceKind::File || layer.fileName.empty())
             continue;
         if (!isSafeRelativeAsset(layer.fileName)) {
-            reportError(makeError(ExitCode::ArgError, "图层资源路径越界，拒绝打包",
-                                  "文件层 fileName：" + layer.fileName,
-                                  "--bundle-assets 仅接受相对、不含 .. 的文件名"));
+            reportError(makeError(ExitCode::ArgError, IDC_CTR(msg, kErrAssetEscapeReject),
+                                  IDC_CTR(msg, kDetLayerFileName) + layer.fileName,
+                                  IDC_CTR(msg, kHintBundleRelative)));
             return ExitCode::ArgError;
         }
         const std::filesystem::path src = resolveAssetPath(baseDir, srcAssetsDir, layer.fileName);
         if (src.empty()) {
-            reportError(makeError(ExitCode::InputError, "图层资源缺失，无法打包",
-                                  "未找到：" + layer.fileName,
-                                  "--bundle-assets 需 File 层源图存在于配置目录或其 .assets 目录"));
+            reportError(makeError(ExitCode::InputError, IDC_CTR(msg, kErrAssetMissingBundle),
+                                  IDC_CTR(msg, kDetMissing) + layer.fileName,
+                                  IDC_CTR(msg, kHintBundleNeedsSource)));
             return ExitCode::InputError;
         }
         const std::filesystem::path dst = outAssetsDir / std::filesystem::u8path(layer.fileName);
         if (dst.parent_path() != outAssetsDir && !std::filesystem::create_directories(dst.parent_path(), ec)) {
-            reportError(makeError(ExitCode::OutputError, "创建资源子目录失败",
-                                  "路径：" + dst.parent_path().u8string(), ec.message()));
+            reportError(makeError(ExitCode::OutputError, IDC_CTR(msg, kErrMkdirAsset),
+                                  IDC_CTR(msg, kDetPath) + dst.parent_path().u8string(), ec.message()));
             return ExitCode::OutputError;
         }
         std::filesystem::copy_file(src, dst, std::filesystem::copy_options::overwrite_existing, ec);
         if (ec) {
-            reportError(makeError(ExitCode::OutputError, "复制图层资源失败",
+            reportError(makeError(ExitCode::OutputError, IDC_CTR(msg, kErrCopyAsset),
                                   src.u8string() + " → " + dst.u8string(), ec.message()));
             return ExitCode::OutputError;
         }
-        if (opt.verbose) std::cerr << "idc: 已打包图层资源 " << layer.fileName << "\n";
+        if (opt.verbose) std::cerr << IDC_CTR(msg, kLogPrefix) << IDC_CTR(msg, kLogAssetBundled) << layer.fileName << "\n";
     }
     return ExitCode::Ok;
 }
@@ -289,8 +295,8 @@ ExitCode executeJob(engine::EngineConfig& config, const core::Image& image,
     if (!config.preprocess.empty()) {
         buffer = config.preprocess.apply(image);
         if (buffer->empty()) {
-            reportError(makeError(ExitCode::RuntimeError, "预处理失败",
-                                  "预处理流水线产出空图像", "请检查配置 preprocess 的步骤与参数"));
+            reportError(makeError(ExitCode::RuntimeError, IDC_CTR(msg, kErrPreprocessFailed),
+                                  IDC_CTR(msg, kDetPreprocessEmpty), IDC_CTR(msg, kHintCheckPreprocess)));
             return ExitCode::RuntimeError;
         }
         config.preprocess = preprocess::PreprocessPipeline{}; // 已物化进 buffer，清空防二次应用。
@@ -300,51 +306,50 @@ ExitCode executeJob(engine::EngineConfig& config, const core::Image& image,
         core::Image burned = annotations->burnIn(*work); // Core 逐形状光栅化（含 OBB 变换），CLI 不自实现像素合成。
         buffer = std::move(burned);
         work = &*buffer;
-        if (opt.verbose) std::cerr << "idc: 已把 " << annotations->annotations().size() << " 条标注烧录进工作图\n";
+        if (opt.verbose) std::cerr << IDC_CTR(msg, kLogPrefix) << IDC_CTRF(msg, kLogBurnIn, std::to_string(annotations->annotations().size())) << "\n";
     }
 
     // 以工作图实际尺寸校正 source（预处理可能改变尺寸）。
     config.source.width = work->width();
     config.source.height = work->height();
 
-    if (opt.verbose) std::cerr << "idc: 运行 Grid-Selection-Emit 引擎...\n";
+    if (opt.verbose) std::cerr << IDC_CTR(msg, kLogPrefix) << IDC_CTR(msg, kLogRunEngine) << "\n";
     const engine::EngineResult result = engine::runEngine(*work, config);
     if (!result.ok) {
         // Core 业务错误（E-1/E-5/E-6/E-7 等）统一归为运行时错误（2）。
-        reportError(makeError(ExitCode::RuntimeError, "引擎执行失败", result.error,
-                              "请检查切割 / 选择参数是否产生了有效的保留区域"));
+        reportError(makeError(ExitCode::RuntimeError, IDC_CTR(msg, kErrEngineFailed), result.error,
+                              IDC_CTR(msg, kHintCheckSelection)));
         return ExitCode::RuntimeError;
     }
 
     // 显式要求坍缩但不可坍缩 → 退出码 2（固定错误文本）。
     if (opt.explicitCollapse && !result.collapsible) {
-        reportError(makeError(ExitCode::RuntimeError, "当前选择集不满足坍缩条件",
-                              "引擎返回：保留集不构成整行或整列的补集",
-                              "请改用 --merge rearrange，或调整切割线使删除区域覆盖整行/整列"));
+        reportError(makeError(ExitCode::RuntimeError, IDC_CTR(msg, kErrNotCollapsible),
+                              IDC_CTR(msg, kDetNotCollapsible),
+                              IDC_CTR(msg, kHintUseRearrange)));
         return ExitCode::RuntimeError;
     }
 
     if (opt.verbose)
-        std::cerr << "idc: 导出到 " << out.path
-                  << (out.separate ? "（分离多图）" : "（合并单图）") << "\n";
+        std::cerr << IDC_CTR(msg, kLogPrefix) << IDC_CTR(msg, kLogExportTo) << out.path
+                  << (out.separate ? IDC_CTR(msg, kLogSeparateTag) : IDC_CTR(msg, kLogMergedTag)) << "\n";
 
     // 落盘：分离 → 目标文件夹（Core 自动创建）；合并 → 单图文件路径。裁剪源恒为已预处理 work。
     if (!engine::exportImage(result.composition, *work, out.path)) {
-        reportError(makeError(ExitCode::OutputError, "导出失败", "目标：" + out.path,
-                              out.separate ? "请确认输出目录可创建且可写（未被同名文件占用、权限足够）"
-                                           : "请确认输出路径的父目录存在、文件未被占用、磁盘未满"));
+        reportError(makeError(ExitCode::OutputError, IDC_CTR(msg, kErrExportFailed), IDC_CTR(msg, kDetTarget) + out.path,
+                              out.separate ? IDC_CTR(msg, kHintOutputDirWritable)
+                                           : IDC_CTR(msg, kHintOutputWritable)));
         return ExitCode::OutputError;
     }
 
     // 正常结果输出到 stdout（quiet 时抑制；CONTRIBUTING.md「分层纪律」）。
     if (!opt.quiet) {
         if (out.separate) {
-            std::cout << "已导出 " << result.composition.placements.size()
-                      << " 张图像到文件夹：" << out.path << "\n";
+            std::cout << IDC_CTRF(msg, kLogExportedCount, std::to_string(result.composition.placements.size()), out.path) << "\n";
         } else {
-            std::cout << "已导出合并图像：" << out.path << "（"
+            std::cout << IDC_CTR(msg, kLogExportedMerged) << out.path << IDC_CTR(msg, kLogParenOpen)
                       << result.composition.canvasWidth << "x"
-                      << result.composition.canvasHeight << "）\n";
+                      << result.composition.canvasHeight << IDC_CTR(msg, kLogParenClose);
         }
     }
     return ExitCode::Ok;
@@ -355,11 +360,11 @@ ExitCode saveConfigToFile(const engine::EngineConfig& config, const std::string&
                           const JobOptions& opt,
                           const annotation::AnnotationSet* annotations) {
     if (!engine::saveEngineConfig(path, config, annotations)) {
-        reportError(makeError(ExitCode::OutputError, "无法保存配置文件", "路径：" + path,
-                              "请确认路径的父目录存在且可写"));
+        reportError(makeError(ExitCode::OutputError, IDC_CTR(msg, kErrSaveConfig), IDC_CTR(msg, kDetPath) + path,
+                              IDC_CTR(msg, kHintSaveConfigPath)));
         return ExitCode::OutputError;
     }
-    if (!opt.quiet) std::cout << "已保存配置到：" << path << "\n";
+    if (!opt.quiet) std::cout << IDC_CTR(msg, kLogConfigSaved) << path << "\n";
     return ExitCode::Ok;
 }
 

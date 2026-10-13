@@ -12,9 +12,9 @@
 | `test_main.cpp`         | 入口 `main`：依次调度 `testArgParser → testValueParser → testIntegration` |
 | `test_arg_parser.cpp`   | 单元：`ArgParser` 语法归类（含负数值消费）+ `parseGlobalOptions` 全局选项             |
 | `test_value_parser.cpp` | 单元：`value_parser` 全部「字符串 → 类型」解析与格式校验（成功 + 失败两路）                   |
-| `test_integration.cpp`  | 集成：IT-1~IT-48，进程内调用 `cliMain`，校验退出码 / 输出尺寸 / 像素落位 / 错误文本           |
+| `test_integration.cpp`  | 集成：IT-1~IT-53，进程内调用 `cliMain`，校验退出码 / 输出尺寸 / 像素落位 / 错误文本           |
 
-## 集成测试做法（IT-1~IT-48）
+## 集成测试做法（IT-1~IT-53）
 
 - **进程内调用**：`cli_tests` 链接 `idc_cli_lib`，直接调 `cliMain`（不启动子进程）；用 `rdbuf` 重定向
   `std::cout`/`std::cerr` 到 `ostringstream` 捕获输出，调用后恢复。
@@ -67,3 +67,7 @@
 | IT-47    | 图层大于画布→不撑大、合成自然裁剪                                                              | 输出尺寸恒等于 `source`（不撑大）                                                                                                                       |
 | IT-48    | 预处理 `opacity`（set）· PNG 保留 alpha                                               | 退出码 0；回读像素 alpha 等于设定值（PNG 保 alpha）                                                                                                         |
 | IT-49    | 底图同构 `base`（`generate` 段携 `file`+内层落位+`backdrop`）端到端                           | 退出码 0；`config --load` 据 source 尺寸 `composeBase` 复现蓝源左上 20×20、绿底铺其余；`--save-config` 回写 `generate` 段带 `file`/`imageAnchor`/`backdrop` 键       |
+| IT-50    | 底图整体不透明度：`generate` 段 `opacity=64`                                             | 退出码 0；现算底图不在 `composeBase` 烘焙、只在边界 `applyAlpha` 施加一次 → 回读 alpha==64、颜色不变（非双淡）                                                               |
+| IT-51    | 三元目标端到端：Recipe 底 + 底图色彩预处理（invert）+ 底图 `opacity=180` + 画布 `opacity=200`        | 退出码 0；红→青（色彩步生效）、两边界各乘一次得 alpha==141；配置回写含 `invert` 与两处 `opacity` 键                                                                         |
+| IT-52    | `--lang` 全局选项                                                                  | 未知码→退出码 1（报因含可用语言码）；`--lang=en --help`→退出码 0 且用法行 `--lang <code>` 恒在；取值不被误当子命令名；末尾复位回 zh-CN                                                 |
+| IT-53    | `config --load` 命中非法 `annotations` 段 / 对照纯 JSON 语法错误                           | 两者均退出码 1；前者**详情逐条透传 Core 报因**（含「第 1 个标注元素：缺少 type 字段」）且提示改为标注语法，不退化为通用 schema 详情；后者仍给通用 schema 详情                                           |

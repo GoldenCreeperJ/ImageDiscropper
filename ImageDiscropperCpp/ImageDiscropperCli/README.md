@@ -19,6 +19,8 @@
 > 二者**互斥、择一**。`config` 还支持 `layers` 段（§7 多层画布）作为**叠加图层**来源：`layers` 仅承载叠加层、不含底图，底图 base 由 `--input` / `--size` / `generate` 段（三者可组合）提供；`layers` 存在时由 CLI 逐层解码 `file` 层源图（相对配置目录 / `<配置名>.assets/`）注入像素、`canvas::composeCanvas(layers, w, h, base)` 先铺全透明底、依底图 base→叠加层（按 zOrder）展平为 `config.source` 尺寸的画布（画布无级背景；引擎仍只收一张展平画布图，runEngine 零改动）；无底图时叠加层直接铺于全透明底之上（不视为错误）。
 > `new` 则是「创建而非切割」，只接收生成选项（非 dry-run 时需 `--output`），拒绝 `--input`。
 
+> **配置持久化边界**：CLI 只读写 **SPEC §7 作业参数**（`--save-config` 序列化 / `config --load` 反序列化执行，均委托 Core `saveEngineConfig`/`loadEngineConfig`）；**GUI 的画布配色 / 交互偏好（QSettings `palette/`、`canvas/` 组）不属 §7，CLI 不感知也不读写**——CLI 零 Qt 依赖，两类持久化正交、互不触碰（权威边界条文见 [SPEC §7](../../SPEC.md)）。
+
 ## 目录结构
 
 ```
@@ -79,6 +81,12 @@ idc extract --input photo.jpg --rect 100,100,300,250 --annotations annos.json \
 
 完整选项见 `idc <command> --help`。
 
+> **输出语言**：帮助与报错文本可选中英文（`idc --help` 的 `--lang <code>` 行即当前支持的语言码）。
+> 优先级 `--lang <code>` > `IDC_LANG` > `LC_ALL` > `LANG` > `zh-CN`（源语言）；`--lang` 写了但不认识→退出码 1 并报因。
+> **只影响给人看的文案**：选项名 / 子命令名 / §7 JSON 键名与枚举值属契约，恒为字面量不随语言变；
+> 退出码、`stderr` 的三段式结构与日志前缀也不因语言而变。zh-CN 下输出与未接 i18n 时逐字节一致（源语言不建表、全部回退常量层）。
+> 译文表住 [`src/i18n/lang_en.cpp`](src/i18n/lang_en.cpp)（msg）与 [`src/i18n/lang_en_help.cpp`](src/i18n/lang_en_help.cpp)（help），查表与语言状态本体在 Core（见 [`../README.md`](../README.md)「三层共用的 i18n」）。
+
 ## 新建与图像生成（`new` / 生成源）
 
 与 GUI「新建」对话框一一对应，图案生成本体委托 Core 的 `generate::makePattern`（CLI 不实现任何像素 / 图案逻辑）。
@@ -93,8 +101,8 @@ idc extract --input photo.jpg --rect 100,100,300,250 --annotations annos.json \
 | `--period <n>`      | 周期 / 格子边长 / 环间距 / 条纹（含斜纹）带间距 / 色相波长（px）                                                                                                                                                                                                           | 32                |
 | `--line-width <n>`  | 网格线 / 同心环（圆环·方环）线宽（px）                                                                                                                                                                                                                            | 1                 |
 | `--dot-radius <n>`  | 点阵点半径（px）                                                                                                                                                                                                                                         | 2                 |
-| `--seed <n>`        | 噪声种子（非负整数；同种子 + 同尺寸恒同图，供确定性复现 / C++↔Rust 对拍）                                                                                                                                                                                                      | 0                 |
-| `--noise <mode>`    | 噪声配色：`full-color`（全彩）/ `grayscale`（灰度）/ `two-color`（双色 bg↔fg）                                                                                                                                                                                     | `full-color`      |
+| `--seed <n>`        | 噪声种子（非负整数；同种子 + 同尺寸恒同图，供确定性复现 / C++ Rust 对拍）                                                                                                                                                                                                      | 0                 |
+| `--noise <mode>`    | 噪声配色：`full-color`（全彩）/ `grayscale`（灰度）/ `two-color`（双色 bg fg）                                                                                                                                                                                     | `full-color`      |
 
 > 上表选项仅对应图案生效（如 `solid` 只看 `--bg`、`--orientation` 只对 `linear-gradient`/`stripes`(含斜纹 4 向)/`concentric`(vertical＝方环)/`hue-gradient` 有效、`--line-width` 只对 `grid-lines`/`concentric` 有效、`--dot-radius` 只对 `dot-grid` 有效、`--seed`/`--noise` 只对 `noise` 有效）；完整「图案×参数适用矩阵」见 `idc new --help`。图片已从图案中拆出：CLI 侧仅保留**底图直挂**路径（`--input` 读文件 / `--size` 生成纯色等图案），带图的叠加层只能经配置 `layers` 段（§7）传入，不新增命令行挂图参数（旧 `--pattern-image`/`--image-anchor`/`--image-scale` 已移除）。
 > `new` 另支持 `--output`（非 dry-run 时必填）/ `--format`（缺省由扩展名推断）/ `--quality <0~100>`（有损质量，默认 90，仅 JPEG/WebP 生效）/ `--pad-color <hex>`（有损格式压平透明像素所用背景色，透写 `emit.padColor`，默认透明→黑底）；生成图作为切割命令的输入时，走同一 `--input` 读图之后的标准流程。
@@ -121,7 +129,7 @@ idc extract --input photo.jpg --rect 100,100,300,250 --annotations annos.json \
   `source`（`recipe` 配方，与 `generate` 同源不留文件名 | `file` 相对文件名 | 无源→空占位）、
   `transform`（画布锚点 + 图片枢轴 + 自由 `x,y` + 目标宽高 + **不透明度 `opacity`**——合成期 alpha 乘子 `a'=(a·opacity+127)/255`，缺省 255＝不透明、灰度层亦生效）、`zOrder`（叠放序）、逐层 `preprocess`（**不含 `opacity`**——不透明度已上移为 `transform.opacity`，旧图层 preprocess 内的 `opacity` 步载入时自动迁移到该字段）。
 - **执行链**（`buildLayerCanvas`）：逐层解码 `file` 源图（先「配置目录 / 相对名」后「`<配置名>.assets / 相对名」）注入像素
-  → `canvas::composeCanvas(layers, w, h, base)` 依底图 base→叠加层展平（画布无级背景、恒铺全透明底；base 由 `--input`/`--size`/`generate` 得来、非空则先铺 (0,0)），叠加层按 z 序逐层物化→缩放→按 `transform.opacity` 逐像素乘 alpha→source-over 落位、越界自然裁剪 → 得展平画布图 → 交 `runEngine`（引擎零改动）；
+  → `canvas::composeCanvas(layers, w, h, base)` 依底图 base→叠加层展平（画布无级背景、恒铺全透明底；base 由 `--input`/`--size`/`generate` 得来、非空则先铺 (0,0)），叠加层按 z 序逐层物化（已含缩放与逐层预处理）→按 `transform.opacity` 逐像素乘 alpha→source-over 落位、越界自然裁剪 → 得展平画布图 → 交 `runEngine`（引擎零改动）；
   **缺文件降级为空占位**（合成时跳过），不报错。
 - **`--bundle-assets`**（全局选项，需与 `--save-config` 同用）：把各 `file` 层源图按**相对名**（不哈希、非默认）
   复制进 `<配置名>.assets/`，使配置可携资源整体分发。相对名含 `..` / 绝对路径 / 盘符 / root_name 一律**越界拒绝**
@@ -161,7 +169,7 @@ idc config --load canvas-config.json --save-config bundle.json --bundle-assets
 
 - **样式**（逐条携带，均可省略取默认）：`color`（描边）/ `fillColor`（填充，仅 `fill:true` 时生效）——颜色**同时支持 `#RRGGBB`（不透明）与 `#AARRGGBB`**（前两位为 alpha，`00` 全透~`FF` 全不透）；`strokeWidth`（线宽像素，默认 2）、`fill`（布尔，默认 false）；`zOrder`（整数，叠放次序，`0`＝最底、越大越靠上；省略时回退为该元素在数组中的下标，还原端按其稳定排序后规范化为下标；小数/字符串等非整数判非法、整段报错，负数合法——视为向底层靠拢的排序意图，归一化后导出恒为非负下标）。
 - **坐标基准**＝预处理队列产出后的工作图（非原图）；几何字段始终为**局部坐标**，`transform`（整体快照）恒等时省略、一般无需手填。
-- **强制校验、逐条报因**（任一条非法即整段退出码 1）：缺/未知 `type`；锚点退化（矩形/菱形需 |Δx|、|Δy| 均 >0，正方形/等腰直角需 max >0，圆需半径 >0、椭圆需两半轴 >0 等）；`line` 点数≠2；`text` 的 `fontSize`≤0；`path` 无有效段；非法 `#RRGGBB`/`#AARRGGBB` 颜色；非整数 `strokeWidth` / `zOrder`（`zOrder` 为小数/字符串即判非法；负数合法，归一化为非负下标）。stderr 逐条列出「第 N 个元素：原因」，不静默丢弃。
+- **强制校验、逐条报因**（任一条非法即整段退出码 1）：缺/未知 `type`；锚点退化（矩形/菱形需 |Δx|、|Δy| 均 >0，正方形/等腰直角需 max >0，圆需半径 >0、椭圆需两半轴 >0 等）；`line` 点数≠2；`text` 的 `fontSize`≤0；`path` 无有效段；非法 `#RRGGBB`/`#AARRGGBB` 颜色；非整数 `strokeWidth` / `zOrder`（`zOrder` 为小数/字符串即判非法；负数合法，归一化为非负下标）。stderr 逐条列出「第 N 个元素：原因」，不静默丢弃。`config --load` 的**配置自带 `annotations` 段**非法时同口径：Core 已拼好的逐条原因（「第 N 个标注元素：……」）直接作为错误输出的 `详情` 行原样上抛，不退化为一条通用「无法按配置 JSON schema 解析」（IT-53）。
 
 ```bash
 # 内联单条：红色描边矩形（双锚点：对角两角）+ 半透明填充
@@ -198,7 +206,7 @@ idc config --load base.json --annotation '{"type":"text","x":10,"y":10,"text":"h
 - 引擎编排：`engine::runEngine` / `EngineConfig` / `EngineResult`
 - 网格几何：`engine::Grid::build` / `cellAt` / `cellCount`（把 `r,c` 映射为线性 `index`）
 - 区域：`engine::RectRegion` / `horizontalBand` / `verticalBand`
-- 配置存取：`engine::loadEngineConfig` / `saveEngineConfig`（可选 `AnnotationSet*` 参：加载还原 / 保存附带 SPEC §7 `annotations` 段；`EngineConfig` 含可选 `generate` 段（`new --save-config` 写入、`config --load` 据其生成源画布）与可选 `layers` 段）
+- 配置存取：`engine::loadEngineConfig` / `saveEngineConfig`（可选 `AnnotationSet*` 参：加载还原 / 保存附带 SPEC §7 `annotations` 段；第 4 出参 `std::string* annoErr` 逐条回传标注段非法原因，`config --load` 直接透传为错误详情（GUI 不消费此参、可传 `nullptr`）；`EngineConfig` 含可选 `generate` 段（`new --save-config` 写入、`config --load` 据其生成源画布）与可选 `layers` 段）
 - 多层画布合成：`canvas::composeCanvas(layers, w, h, base)`（`config --load` 带 `layers` 时由 `job::buildLayerCanvas` 以已解析底图 base 为基、逐层解码叠加 `file` 源图注入后展平为工作图）；资源打包由 `job::bundleLayerAssets` 完成（`--bundle-assets`）
 - 标注文本解析：`engine::parseAnnotationsFromJsonText`（内联对象 / 根数组 → `vector<Annotation>`，供 `--annotation` / `--annotations` 复用；CLI 不引 nlohmann/json）
 - 标注烧录：`annotation::AnnotationSet::burnIn(base)` / `restore` / `annotations()`（把命令行 / 配置标注烧进工作图）
