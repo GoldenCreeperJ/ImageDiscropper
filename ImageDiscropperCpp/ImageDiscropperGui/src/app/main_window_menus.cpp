@@ -107,7 +107,7 @@ void MainWindowUi::buildFileMenu(MainWindow* w, QMenuBar* bar) {
         }
         mRecent->addSeparator();
         const QAction* clear = mRecent->addAction(IDC_GTR(menu, kFileRecentClear));
-        QObject::connect(clear, &QAction::triggered, w, [w] { UiPrefs::instance().clearRecentFiles(); });
+        QObject::connect(clear, &QAction::triggered, w, [] { UiPrefs::instance().clearRecentFiles(); });
     });
     QAction* aExport = bindAddAction(w->retranslator_, mFile, IDC_GT(menu, kFileExport));
     KeyBindings::instance().registerAction(CommandId::Export, aExport);
