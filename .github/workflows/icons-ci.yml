@@ -55,11 +55,13 @@ jobs:
           chmod +x inkscape.AppImage
           ./inkscape.AppImage --appimage-extract >/dev/null
           rm inkscape.AppImage
-          # ffmpeg 8.0.1 静态构建（johnvansickle）；curl -f：404 立即红而非拿到错误页。
+          # ffmpeg 静态构建：BtbN/FFmpeg-Builds 的**日期 tag 钉死**发布（GitHub 托管稳定；
+          # 旧源 johnvansickle.com 个人站不稳定且旧版本会从 old-releases 下架导致 404）。
+          # curl -f：404 立即红而非拿到错误页。
           curl -fsSL --http1.1 --retry 3 --retry-all-errors --retry-delay 2 -o ffmpeg.tar.xz \
-            "https://johnvansickle.com/ffmpeg/old-releases/ffmpeg-8.0.1-amd64-static.tar.xz"
+            "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-13-13-05/ffmpeg-N-127507-g24e860f6d3-linux64-gpl.tar.xz"
           tar -xJf ffmpeg.tar.xz
-          mv ffmpeg-8.0.1-amd64-static ffmpeg
+          mv ffmpeg-N-127507-g24e860f6d3-linux64-gpl ffmpeg
           rm ffmpeg.tar.xz
 
       # 原地重跑全流程（脚本按自身位置推导仓库根，输出即写回 checkout）。
@@ -67,7 +69,7 @@ jobs:
         if: steps.iconcache.outputs.cache-hit != 'true'
         run: |
           INKSCAPE=/tmp/icontools/squashfs-root/AppRun \
-            FFMPEG=/tmp/icontools/ffmpeg/ffmpeg PYTHON=python3 \
+            FFMPEG=/tmp/icontools/ffmpeg/bin/ffmpeg PYTHON=python3 \
             bash assets/icons/regenerate.sh
 
       # 图标产物：供构建腿下载落地（cpp-build.yml 的 Download generated
