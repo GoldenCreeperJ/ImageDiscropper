@@ -15,6 +15,7 @@
 
 #include "preprocess/preprocess_config.h"
 #include "annotation/annotation_set.h"
+#include "core/path_utf8.h" // pathFromUtf8（取代 C++23 已移除的 u8path）
 
 #include "../json_common.h" // idc::jsonutil 助手 + 标注段交换函数声明（实现在 annotation 模块）
 #include "engine_config_json_internal.h" // 枚举串/颜色/各段 toJson/fromJson 助手区（detail 命名空间）
@@ -428,7 +429,7 @@ bool saveEngineConfig(const std::string& path, const EngineConfig& config,
                       const annotation::AnnotationSet* annotations) {
     if (path.empty()) return false;
     const std::string text = engineConfigToJson(config, annotations).dump(2); // 缩进 2 空格美化。
-    std::ofstream ofs(std::filesystem::u8path(path), std::ios::trunc);   // path 按 UTF-8 → 宽字符开，中文 / 非 ASCII 路径可写。
+    std::ofstream ofs(core::pathFromUtf8(path), std::ios::trunc);   // path 按 UTF-8 → 宽字符开，中文 / 非 ASCII 路径可写。
     if (!ofs) return false; // E-8：无法创建/写入（目录不存在或被占用）。
     ofs << text;
     ofs.close();
@@ -440,7 +441,7 @@ bool saveEngineConfig(const std::string& path, const EngineConfig& config,
 bool loadEngineConfig(const std::string& path, EngineConfig& out,
                       annotation::AnnotationSet* annotations, std::string* annoErr) {
     if (path.empty()) return false;
-    std::ifstream ifs(std::filesystem::u8path(path), std::ios::binary);   // path 按 UTF-8 → 宽字符开，中文 / 非 ASCII 路径可读。
+    std::ifstream ifs(core::pathFromUtf8(path), std::ios::binary);   // path 按 UTF-8 → 宽字符开，中文 / 非 ASCII 路径可读。
     if (!ifs) return false; // E-8：文件不存在或不可读。
     try {
         const json value = json::parse(ifs); // 直接从流解析；语法错误抛 parse_error。

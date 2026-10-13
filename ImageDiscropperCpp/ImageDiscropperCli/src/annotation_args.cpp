@@ -14,6 +14,7 @@
 
 #include "annotation/annotation_set.h" // annotation::Annotation（仅记录类型，供 vector 实例化）
 #include "annotation/annotation_json.h" // annotation::parseAnnotationsFromJsonText（标注 JSON 段级解析，归属 annotation 模块）
+#include "core/path_utf8.h" // pathFromUtf8（取代 C++23 已移除的 u8path）
 
 #include "i18n/cli_texts.h"
 #include "i18n/cli_i18n.h"
@@ -27,7 +28,7 @@ namespace {
 
 // 读取整个文本文件到 outText；文件不存在或不可读返回 false。path 按 UTF-8 → 宽字符开（中文 / 非 ASCII 路径可读）。
 bool readFileText(const std::string& path, std::string& outText) {
-    const std::ifstream ifs(std::filesystem::u8path(path), std::ios::binary);
+    const std::ifstream ifs(core::pathFromUtf8(path), std::ios::binary);
     if (!ifs) return false;
     std::ostringstream ss;
     ss << ifs.rdbuf();

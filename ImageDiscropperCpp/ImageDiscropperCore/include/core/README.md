@@ -16,6 +16,7 @@
 | `history_manager.h`  | 泛型撤销 / 重做栈 `HistoryManager<T>`：`push` / `popToRedo` / `popFromRedo` 等（纯模板头实现，原 `history` 模块并入）                                                                                                                                   |
 | `pipeline_manager.h` | 泛型有序步骤队列 `Pipeline<T>`：`add` / `insert` / `remove` / `replaceAt` / `moveUp` / `moveDown` / `clear` + `size` / `empty` / `items` / `operator==`（纯模板头实现，与元素类型无关的「按序增删移改 + 越界钳制/忽略」容器骨架；现由 `preprocess::PreprocessPipeline` 公开继承复用） |
 | `core_nums.h`        | **常量层 · 数字**：Core 各模块「会被人工调」的阈值 / 范围上下限 / 出厂默认值，按来源模块分组（`nums::engine` / `preprocess` / `annotation` / `canvas` / `generate` / `geometry`），header-only                                                                           |
+| `path_utf8.h`        | **路径契约助手**：`pathFromUtf8` / `pathToUtf8`——UTF-8 `std::string` ↔ `std::filesystem::path` 互转（取代 C++23 已移除的 `u8path` 与返回类型变 char8_t 的 `path::u8string()`），三层共用，header-only                                                          |
 | `i18n/`（子目录）         | **常量层 · 字符串** `core_texts.h`（`jsonkey`/`defaults` 不可译 + `msg` 可译）与**三层共用 i18n 内核** `core_i18n.h`（`IDC_KTR`/`IDC_KTRF` + `formatPattern` + 语言决议，零 Qt）已迁入 [`include/i18n/`](../i18n/README.md)，逐文件职责见该目录说明                         |
 
 > 语义：`push` 追加新条目并清空重做栈（新操作切断「未来」）；`popToRedo` 撤销、

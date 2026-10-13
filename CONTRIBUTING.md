@@ -8,7 +8,7 @@
 ## 快速上手
 
 ```bash
-# 依赖：CMake ≥ 3.28 + C++17 编译器 + vcpkg（设置环境变量 VCPKG_ROOT；包由 vcpkg.json 清单自动安装）
+# 依赖：CMake ≥ 3.28 + C++23 编译器 + vcpkg（设置环境变量 VCPKG_ROOT；包由 vcpkg.json 清单自动安装）
 bash assets/icons/regenerate.sh    # 图标派生物不入库：首次克隆/改 icon.svg 后必跑，否则 GUI/移动端构建报错（见 assets/icons/README.md）
 cd ImageDiscropperCpp
 cmake --preset windows-debug
@@ -24,7 +24,7 @@ Linux / macOS 用 `linux-debug` / `macos-debug` 预设。
 
 全仓库统一执行的约定：
 
-- **语言标准**：C++17；命名空间统一（Core 为 `idc`，GUI 为 `idc::gui`）。
+- **语言标准**：C++23；命名空间统一（Core 为 `idc`，GUI 为 `idc::gui`）。
 - **注释语言**：中文。每个文件头说明文件作用与分块依据；每个函数首说明用途；复杂逻辑分块处注明分块依据。
 - **严禁上帝文件**：按功能/任务严格分文件，一个关注点一个文件（或一命令一文件）。
 - **文案纪律**：面向人的文案不得内联在使用点，必须进本层常量层（`core_texts.h` / `cli_texts.h` / `gui_texts.h`）并

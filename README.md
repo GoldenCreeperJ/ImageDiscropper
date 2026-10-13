@@ -64,7 +64,7 @@ CLI ──────┘
 
 ### 前置依赖
 
-- CMake ≥ 3.28 + 支持 C++17 的编译器（MSVC / MinGW / Clang）
+- CMake ≥ 3.28 + 支持 C++23 的编译器（MSVC / MinGW / Clang）
 - [vcpkg](https://vcpkg.io)（清单模式自动安装，无需手动 `vcpkg install`）：把环境变量 `VCPKG_ROOT` 指向 vcpkg 根目录即可
 - 依赖清单见 [`ImageDiscropperCpp/vcpkg.json`](ImageDiscropperCpp/vcpkg.json)（`stb` / `libwebp` / `nlohmann-json` / `qtbase`）
 - **应用图标派生物（GUI / 移动端构建必需）**：首次构建前运行一次 `bash assets/icons/regenerate.sh`（依赖 Inkscape 1.4.3 / ffmpeg / python3）。图标 png/ico **不入库**，`app_icon.rc`、`resources.qrc`、Android 模板在构建期引用它们——**不生成会构建报错**；改 `assets/icon.svg` 后需重跑。详见 [`assets/icons/README.md`](assets/icons/README.md)
@@ -140,8 +140,8 @@ idc extract --input photo.jpg --rect 100,100,300,250 --output out.png   # L1：�
 | ④ 功能规格     | [`SPEC.md`](SPEC.md)                                             | **唯一行为基线**：模式 / 导出 / 边界（E-1~E-8）/ NFR / 配置 schema；贡献规范见 `CONTRIBUTING.md` |
 | ⑤ 模块说明     | `ImageDiscropper{Core,Cli,Gui}/README.md`                        | 各模块职责、与规格的 API 映射、构建方式；Gui README 另含用户操作速览与设计说明                           |
 | ⑥ 目录说明     | 各 `include/`、`src/` 等子目录内的 `README.md`                           | 该目录的职责边界、分块依据、文件清单（全仓库目录说明约定）                                             |
-| ⑦ 占位实现     | [`ImageDiscropperRust/README.md`](ImageDiscropperRust/README.md) | Rust 引擎实现的规划状态说明                                                            |
-| ⑧ Web 前端实现 | [`ImageDiscropperWeb/README.md`](ImageDiscropperWeb/README.md)   | Web monorepo 的规划结构、设计公理与各壳分工（Tauri/Electron/Wails；RN 暂缓）               |
+| ⑦ 占位实现     | [`ImageDiscropperRust/README.md`](ImageDiscropperRust/README.md) | Rust 引擎实现的规划状态说明                                                          |
+| ⑧ Web 前端实现 | [`ImageDiscropperWeb/README.md`](ImageDiscropperWeb/README.md)   | Web monorepo 的规划结构、设计公理与各壳分工（Tauri/Electron/Wails；RN 暂缓）                  |
 
 ## 📊 项目状态
 

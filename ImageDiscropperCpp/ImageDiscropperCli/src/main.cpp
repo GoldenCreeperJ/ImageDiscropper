@@ -9,7 +9,7 @@
 //       字节，导致帮助 / 版本 / 错误文本显示为乱码。故在入口处把控制台输入 / 输出代码页切到
 //       UTF-8（65001），使控制台按 UTF-8 渲染。参数不再沿用窄字符 argv（系统 ANSI 码页）：改由
 //       GetCommandLineW 经 CommandLineToArgvW 取宽参再 WideCharToMultiByte(CP_UTF8) 转 UTF-8，
-//       与 Core「std::string 路径按 UTF-8 解析（std::filesystem::u8path）」的契约一致——中文 /
+//       与 Core「std::string 路径按 UTF-8 解析（core::pathFromUtf8/pathToUtf8）」的契约一致——中文 /
 //       非 ASCII 路径方可正确开合（注：__wargv 仅在 wmain 入口下由 UCRT 填充，main 入口下为 NULL）；
 //       输出被重定向到文件 / 管道时无控制台，SetConsole*CP 静默失败，UTF-8 字节原样写入（符合预期，
 //       亦不影响集成测试用 rdbuf 捕获）。
@@ -32,7 +32,7 @@ static void enableUtf8Console() {
     SetConsoleCP(CP_UTF8);       // 输入：交互式读取时的中文（本工具虽不读 stdin，一并设置更稳妥）
 }
 
-// 宽字符参数 → UTF-8 std::string（Core 路径契约按 UTF-8 解析，须与 std::filesystem::u8path 对齐）。
+// 宽字符参数 → UTF-8 std::string（Core 路径契约按 UTF-8 解析，须与 core::pathFromUtf8 对齐）。
 static std::string toUtf8(const wchar_t* w) {
     const int need = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
     if (need <= 0) return {};

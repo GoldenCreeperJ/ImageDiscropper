@@ -34,6 +34,7 @@
 #include <vector>
 
 #include "engine/engine.h"             // EngineConfig / EmitMode / MergeLayout
+#include "core/path_utf8.h"            // pathFromUtf8（取代 C++23 已移除的 u8path）
 #include "canvas/layer.h"              // canvas::applyAlpha（底图整体不透明度淡出，与 GUI 合成边界同口径）
 #include "engine/engine_config_json.h" // loadEngineConfig（复用 Core JSON 模块，CONTRIBUTING.md「分层纪律」）
 #include "generate/pattern.h"          // makePattern（配置 generate 段 → 程序生成源画布）
@@ -66,7 +67,7 @@ int cmdConfig(const std::vector<std::string>& tokens, const GlobalOptions& go) {
         return argError(IDC_CTR(msg, kErrLoadNoPath), IDC_CTR(msg, kHintLoadPath));
 
     // --- 第 6 步（文件层面）：配置文件须存在且可访问，否则输入文件错误（3）。loadPath 按 UTF-8 解析为宽字符路径。---
-    if (std::error_code ec; !std::filesystem::exists(std::filesystem::u8path(loadPath), ec))
+    if (std::error_code ec; !std::filesystem::exists(core::pathFromUtf8(loadPath), ec))
         return fail(ExitCode::InputError, IDC_CTR(msg, kErrConfigMissing), IDC_CTR(msg, kDetPath) + loadPath,
                     IDC_CTR(msg, kHintLoadReadable));
 

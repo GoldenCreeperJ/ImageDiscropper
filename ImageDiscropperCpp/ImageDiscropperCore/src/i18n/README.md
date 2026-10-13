@@ -12,7 +12,7 @@
 | `core_i18n.cpp` | `core_i18n.h` 的实现：匿名命名空间内一个 Meyers 单例 `State`（可用语言清单 + 各语言 `std::map<string_view,string_view,less<>>` 目录 + 当前语言指针）。`installLanguage` 同语言**累加**（一层的表可拆多 TU、多层各自装配同一语言落到同一目录）、`resolveLanguage` 语言码归一（大小写不敏感 + 基础子标签匹配，`zh*` 归源语言）、`translate` 永不空永不崩的回退、`formatPattern` 的 `%N` 按编号替换、`availableLanguages` 动态汇出 |
 | `lang_en.cpp`   | **Core 英文译文表**：`texts::msg` 的引擎失败报因、标注校验报因与图案显示名（`kEntriesCoreEn`），并定义 `installCoreCatalogs()` 把它登记给内核；源语言 zh-CN **不建表**，全部回退常量层原文                                                                                                                                                                            |
 
-> **为何用 `std::map<...,std::less<>>` 而非 `unordered_map`**：C++17 的 `unordered_map` 无透明查找
+> **为何用 `std::map<...,std::less<>>` 而非 `unordered_map`**：C++23 的 `unordered_map` 仍无透明查找
 > （`find(string_view)` 会先构造临时 `std::string`），千余条目下「每次查表一次堆分配」比 O(log n) 的短串
 > 比较贵得多；`std::less<>` 透明比较器让 `find` 直接吃 `string_view`，零分配。键与值都是静态字面量的 view，
 > 不持所有权。

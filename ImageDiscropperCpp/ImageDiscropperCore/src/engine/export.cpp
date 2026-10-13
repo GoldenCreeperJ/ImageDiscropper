@@ -13,6 +13,7 @@
 #include "engine/export.h"
 
 #include "i18n/core_texts.h" // 命名模板缺省串与 {name} 回退占位名（常量层）
+#include "core/path_utf8.h" // pathFromUtf8/pathToUtf8（取代 C++23 已移除的 u8path）
 #include "engine/image_io.h"
 
 #include <algorithm>
@@ -32,8 +33,8 @@ constexpr int kIndexWidth = 3;
 
 // 转小写（用于扩展名比较，ASCII 足够）。
 std::string toLower(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(),
-                   [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::ranges::transform(s, s.begin(),
+                           [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return s;
 }
 
@@ -111,11 +112,11 @@ bool ensureDirectory(const fs::path& dir) {
 // outputDir 不存在则自动创建（含多级父目录）；创建失败返回 false（E-8）。
 bool exportSeparate(const Composition& composition, const core::Image& source,
                     const std::string& outputDir) {
-    const fs::path dir = fs::u8path(outputDir);   // outputDir 按 UTF-8 解析为宽字符路径（中文 / 非 ASCII 目录可建）。
+    const fs::path dir = core::pathFromUtf8(outputDir);   // outputDir 按 UTF-8 解析为宽字符路径（中文 / 非 ASCII 目录可建）。
     if (!ensureDirectory(dir)) return false; // E-8：文件夹不存在且无法创建。
 
-    // 命名模板 {name} 取文件夹名（无法取得时回退 "region"）；取 u8string 保证非 ASCII 文件夹名作命名代币时仍为 UTF-8。
-    std::string name = dir.filename().u8string();
+    // 命名模板 {name} 取文件夹名（无法取得时回退 "region"）；pathToUtf8 保证非 ASCII 文件夹名作命名代币时仍为 UTF-8。
+    std::string name = core::pathToUtf8(dir.filename());
     if (name.empty() || name == "." || name == "..") name = core::texts::defaults::kRegionFallbackName;
 
     const ExportFormat fmt = composition.format;
@@ -127,7 +128,7 @@ bool exportSeparate(const Composition& composition, const core::Image& source,
         const core::Image sub =
             source.crop(p.source.left, p.source.top, p.source.right, p.source.bottom);
         const int idx = p.index >= 0 ? p.index : i; // 优先用单元序号命名。
-        if (const fs::path file = dir / fs::u8path(applyNaming(composition.naming, name, idx, p.row, p.col) + ext); !writeImageFile(file.u8string(), sub, fmt, composition.quality, core::kTransparent))
+        if (const fs::path file = dir / core::pathFromUtf8(applyNaming(composition.naming, name, idx, p.row, p.col) + ext); !writeImageFile(core::pathToUtf8(file), sub, fmt, composition.quality, core::kTransparent))
             allOk = false;
         ++i;
     }
@@ -138,7 +139,7 @@ bool exportSeparate(const Composition& composition, const core::Image& source,
 // 父目录不存在时自动创建（与分离导出行为一致）。
 bool exportMerged(const Composition& composition, const core::Image& source,
                   const std::string& outputPath) {
-    const fs::path outPath = fs::u8path(outputPath);   // outputPath 按 UTF-8 解析为宽字符路径（中文 / 非 ASCII 父目录可建）。
+    const fs::path outPath = core::pathFromUtf8(outputPath);   // outputPath 按 UTF-8 解析为宽字符路径（中文 / 非 ASCII 父目录可建）。
     if (const fs::path parent = outPath.parent_path(); !parent.empty() && !ensureDirectory(parent)) return false; // E-8：父目录不可创建。
 
     bool known = false;

@@ -42,7 +42,7 @@ CLI 由**仓库根** `CMakeLists.txt` 统一编排（Core 先于 CLI 引入，CL
 
 > **Windows 路径 / 参数编码**：入口 `main` 在 Windows 下改用宽字符 `__wargv` 并经 `WideCharToMultiByte(CP_UTF8, …)`
 > 转为 **UTF-8** 传下去（非 Windows 保留窄 `argv`）；Core 的文件打开（`readImageFile`/`writeImageFile`、配置读写、导出）
-> 统一用 `std::filesystem::u8path` 按 UTF-8 解释路径——全链路 UTF-8 契约一致，中文 / 非 ASCII 的输入输出路径均可正常读写。
+> 统一用 `core::pathFromUtf8` 按 UTF-8 解释路径——全链路 UTF-8 契约一致，中文 / 非 ASCII 的输入输出路径均可正常读写。
 
 ## 用法速览
 
@@ -210,7 +210,7 @@ idc config --load base.json --annotation '{"type":"text","x":10,"y":10,"text":"h
 - 多层画布合成：`canvas::composeCanvas(layers, w, h, base)`（`config --load` 带 `layers` 时由 `job::buildLayerCanvas` 以已解析底图 base 为基、逐层解码叠加 `file` 源图注入后展平为工作图）；资源打包由 `job::bundleLayerAssets` 完成（`--bundle-assets`）
 - 标注文本解析：`engine::parseAnnotationsFromJsonText`（内联对象 / 根数组 → `vector<Annotation>`，供 `--annotation` / `--annotations` 复用；CLI 不引 nlohmann/json）
 - 标注烧录：`annotation::AnnotationSet::burnIn(base)` / `restore` / `annotations()`（把命令行 / 配置标注烧进工作图）
-- 图像 I/O：`engine::readImageFile`（解码）/ `writeImageFile`（示例 / 测试造图）——路径按 **UTF-8** 解析（`u8path`），支持中文 / 非 ASCII 路径
+- 图像 I/O：`engine::readImageFile`（解码）/ `writeImageFile`（示例 / 测试造图）——路径按 **UTF-8** 解析（`pathFromUtf8`），支持中文 / 非 ASCII 路径
 - 导出落盘：`engine::exportImage`（`new` 经 `job::writeGeneratedImage` 构造全画布单片段 Composition 复用同一落盘通道：扩展名推断格式 / 自动建父目录 / JPEG 压平）
 - 图案生成：`generate::makePattern(w, h, PatternParams)`（`new` 与生成源均委托；尺寸 / 图案名 / 颜色等参数装配见 `src/generate_args.cpp`，CLI 不实现像素逻辑）
 - 基础类型：`core::Image` / `core::Color` / `kTransparent`

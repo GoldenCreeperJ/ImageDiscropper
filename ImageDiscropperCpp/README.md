@@ -43,7 +43,7 @@ CLI ──────┘
 | [`ImageDiscropperCli/`](ImageDiscropperCli)   | CLI  | 可执行 `idc` + 静态库 `idc_cli_lib` | 命令行薄壳：解析参数 → 调用 Core → 格式化输出 → 返回退出码           | ✅ 已落地          |
 | [`ImageDiscropperGui/`](ImageDiscropperGui)   | GUI  | 可执行 `idc_gui`                 | Qt6 桌面前端：交互式画布、拖拽切割线 / 选区、实时预览、参数面板            | ✅ 已落地          |
 
-顶层 [`CMakeLists.txt`](CMakeLists.txt) 只做「模块编排 + 全局约定」：统一 C++17、
+顶层 [`CMakeLists.txt`](CMakeLists.txt) 只做「模块编排 + 全局约定」：统一 C++23、
 按依赖顺序先引入 Core 再引入 CLI 与 GUI、开放 `ctest`。第三方库（stb / libwebp / nlohmann_json）
 由 Core 以 PRIVATE 封装，CLI / GUI 经 Core 公共头间接使用，无需感知；GUI 另需 vcpkg 的 qtbase。
 

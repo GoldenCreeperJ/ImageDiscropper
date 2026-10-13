@@ -20,7 +20,7 @@ project(ImageDiscropper LANGUAGES CXX VERSION 1.0.1)
 # ---------------------------------------------------------------------------
 # 全局 C++ 约定（子工程亦各自显式设置，双保险）。
 # ---------------------------------------------------------------------------
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 

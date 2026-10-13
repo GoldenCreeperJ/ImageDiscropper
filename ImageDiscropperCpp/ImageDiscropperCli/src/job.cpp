@@ -26,6 +26,7 @@
 #include "engine/export.h"             // exportImage（new 命令复用同一落盘通道）
 #include "engine/composition.h"        // Composition / Placement / CompositionParams
 #include "engine/region.h"             // RectRegion（全画布源/目标区域）
+#include "core/path_utf8.h"            // pathFromUtf8/pathToUtf8（取代 C++23 已移除的 u8path）
 #include "annotation/annotation_set.h" // AnnotationSet::burnIn(base)（配置标注烧录）
 #include "canvas/layer.h"              // composeCanvas / ImageLayer（多层画布展平，SPEC §7 layers）
 
@@ -55,17 +56,17 @@ std::filesystem::path resolveAssetPath(const std::filesystem::path& baseDir,
                                        const std::filesystem::path& assetsDir,
                                        const std::string& assetName) {
     std::error_code ec;
-    // assetName 为 UTF-8 相对名（来自配置 JSON）：经 u8path → 宽字符拼接，非 ASCII 资源名可正确定位。
-    if (const std::filesystem::path direct = baseDir / std::filesystem::u8path(assetName); std::filesystem::exists(direct, ec))
+    // assetName 为 UTF-8 相对名（来自配置 JSON）：经 pathFromUtf8 → 宽字符拼接，非 ASCII 资源名可正确定位。
+    if (const std::filesystem::path direct = baseDir / core::pathFromUtf8(assetName); std::filesystem::exists(direct, ec))
         return direct;
-    if (const std::filesystem::path bundled = assetsDir / std::filesystem::u8path(assetName); std::filesystem::exists(bundled, ec))
+    if (const std::filesystem::path bundled = assetsDir / core::pathFromUtf8(assetName); std::filesystem::exists(bundled, ec))
         return bundled;
     return {};
 }
 
 // 由配置路径推导其所在目录（父目录；无父目录时退化为当前目录）。configPath 按 UTF-8 解析。
 std::filesystem::path configDirectory(const std::string& configPath) {
-    const std::filesystem::path p = std::filesystem::u8path(configPath);
+    const std::filesystem::path p = core::pathFromUtf8(configPath);
     std::filesystem::path parent = p.parent_path();
     return parent.empty() ? std::filesystem::path(".") : parent;
 }
@@ -136,7 +137,7 @@ ExitCode buildLayerCanvas(const engine::EngineConfig& config, const std::string&
     }
     // config 为 const（不能改写回），但需把解码出的 File 层像素注入后再合成——取可变副本作工作数组。
     std::vector<canvas::ImageLayer> layers = *config.layers;
-    const std::filesystem::path cfgPath = std::filesystem::u8path(configPath);
+    const std::filesystem::path cfgPath = core::pathFromUtf8(configPath);
     const std::filesystem::path baseDir = configDirectory(configPath);
     std::filesystem::path assetsName = cfgPath.stem();
     assetsName += std::filesystem::path(L".assets");   // <配置名>.assets（保持宽字符，避免窄串码页失配）
@@ -158,9 +159,9 @@ ExitCode buildLayerCanvas(const engine::EngineConfig& config, const std::string&
             continue; // 缺文件 → decodedPixels 保持空，composeCanvas 按占位（空图）处理。
         }
         core::Image px;
-        if (!engine::readImageFile(resolved.u8string(), px)) {
+        if (!engine::readImageFile(core::pathToUtf8(resolved), px)) {
             reportError(makeError(ExitCode::InputError, IDC_CTR(msg, kErrAssetDecode),
-                                  IDC_CTR(msg, kDetPath) + resolved.u8string(),
+                                  IDC_CTR(msg, kDetPath) + core::pathToUtf8(resolved),
                                   IDC_CTR(msg, kHintInputReadable)));
             return ExitCode::InputError;
         }
@@ -232,12 +233,12 @@ ExitCode placeInputIntoBase(const engine::EngineConfig& config, core::Image& io,
 ExitCode bundleLayerAssets(const engine::EngineConfig& config, const std::string& configPath,
                            const std::string& saveConfigPath, const JobOptions& opt) {
     if (!config.layers.has_value()) return ExitCode::Ok; // 无图层可打包，空操作。
-    const std::filesystem::path cfgPath = std::filesystem::u8path(configPath);
+    const std::filesystem::path cfgPath = core::pathFromUtf8(configPath);
     const std::filesystem::path baseDir = configDirectory(configPath);
     std::filesystem::path srcAssetsName = cfgPath.stem();
     srcAssetsName += std::filesystem::path(L".assets");
     const std::filesystem::path srcAssetsDir = baseDir / srcAssetsName;
-    const std::filesystem::path savePath = std::filesystem::u8path(saveConfigPath);
+    const std::filesystem::path savePath = core::pathFromUtf8(saveConfigPath);
     std::filesystem::path outAssetsName = savePath.stem();
     outAssetsName += std::filesystem::path(L".assets");
     const std::filesystem::path outAssetsDir =
@@ -260,16 +261,16 @@ ExitCode bundleLayerAssets(const engine::EngineConfig& config, const std::string
                                   IDC_CTR(msg, kHintBundleNeedsSource)));
             return ExitCode::InputError;
         }
-        const std::filesystem::path dst = outAssetsDir / std::filesystem::u8path(layer.fileName);
+        const std::filesystem::path dst = outAssetsDir / core::pathFromUtf8(layer.fileName);
         if (dst.parent_path() != outAssetsDir && !std::filesystem::create_directories(dst.parent_path(), ec)) {
             reportError(makeError(ExitCode::OutputError, IDC_CTR(msg, kErrMkdirAsset),
-                                  IDC_CTR(msg, kDetPath) + dst.parent_path().u8string(), ec.message()));
+                                  IDC_CTR(msg, kDetPath) + core::pathToUtf8(dst.parent_path()), ec.message()));
             return ExitCode::OutputError;
         }
         std::filesystem::copy_file(src, dst, std::filesystem::copy_options::overwrite_existing, ec);
         if (ec) {
             reportError(makeError(ExitCode::OutputError, IDC_CTR(msg, kErrCopyAsset),
-                                  src.u8string() + " → " + dst.u8string(), ec.message()));
+                                  core::pathToUtf8(src) + " → " + core::pathToUtf8(dst), ec.message()));
             return ExitCode::OutputError;
         }
         if (opt.verbose) std::cerr << IDC_CTR(msg, kLogPrefix) << IDC_CTR(msg, kLogAssetBundled) << layer.fileName << "\n";

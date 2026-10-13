@@ -65,7 +65,7 @@ CLI ──────┘
 
 ### Prerequisites
 
-- CMake ≥ 3.28 + a C++17 compiler (MSVC / MinGW / Clang)
+- CMake ≥ 3.28 + a C++23 compiler (MSVC / MinGW / Clang)
 - [vcpkg](https://vcpkg.io) (manifest mode installs everything automatically — no manual `vcpkg install`): point the `VCPKG_ROOT` environment variable at your vcpkg directory
 - The dependency manifest lives in [`ImageDiscropperCpp/vcpkg.json`](ImageDiscropperCpp/vcpkg.json) (`stb` / `libwebp` / `nlohmann-json` / `qtbase`)
 - **App icon derivatives (required for GUI / mobile builds)**: run `bash assets/icons/regenerate.sh` once before the first build (requires Inkscape 1.4.3 / ffmpeg / python3). Icon pngs/ico are **not committed** — `app_icon.rc`, `resources.qrc` and the Android template reference them at build time, so **builds fail without generating them**; re-run after changing `assets/icon.svg`. See [`assets/icons/README.md`](assets/icons/README.md).
@@ -142,7 +142,7 @@ Documentation is organized by level; **each level has a clearly delimited scope 
 | ④ Functional spec             | [`SPEC.md`](SPEC.md)                                             | **The single behavioral baseline**: modes / export / boundary cases (E-1~E-8) / NFRs / config schema; contributing conventions live in `CONTRIBUTING.md` |
 | ⑤ Module docs                 | `ImageDiscropper{Core,Cli,Gui}/README.md`                        | Each module's responsibility, API mapping to the spec, build instructions; the GUI README also covers user operations and design notes                   |
 | ⑥ Directory docs              | `README.md` inside every `include/`, `src/`, … subdirectory      | That directory's responsibility boundary, file-splitting rationale, file list (repo-wide directory doc convention)                                       |
-| ⑦ Placeholder implementation  | [`ImageDiscropperRust/README.md`](ImageDiscropperRust/README.md) | Planning status of the Rust engine implementation                                                                                                               |
+| ⑦ Placeholder implementation  | [`ImageDiscropperRust/README.md`](ImageDiscropperRust/README.md) | Planning status of the Rust engine implementation                                                                                                        |
 | ⑧ Web frontend implementation | [`ImageDiscropperWeb/README.md`](ImageDiscropperWeb/README.md)   | Planned structure, design axioms and shell division of the Web monorepo (Tauri/Electron/Wails; RN deferred)                                              |
 
 ## 📊 Project status
