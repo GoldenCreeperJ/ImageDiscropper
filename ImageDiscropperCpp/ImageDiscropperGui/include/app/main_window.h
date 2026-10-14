@@ -30,6 +30,7 @@
 #include "i18n/retranslate.h"
 
 class QAction;
+class QDockWidget;
 class QKeyEvent;
 class QMenu;
 class QScrollArea;
@@ -172,6 +173,12 @@ private:
     // “自动宽”（用户未手动拖宽），从而允许内容变窄时回收（如退出标注绘制态后缩回）。
     int lastLeftAutoMinW_{-1};
     int lastRightAutoMinW_{-1};
+    // 移动端抽屉「页滚动区」重测目标（MobileShellUi::buildDrawer 回填，桌面恒空）：applyPanelMinWidths
+    // 按与桌面**同一落点**——把 max(设计下限, 页内容自然宽) 抬到每页 QScrollArea 的最小宽上（桌面抬在
+    // leftScroll_ 并用 splitter setSizes 让栏宽真的变），使抽屉页区实际加宽、进标注绘制态时形状子行不致被
+    // 横向 AlwaysOff 裁掉；随语言重放与进出绘制态重测（防英文长标签截断）。
+    std::vector<QScrollArea*> drawerPageScrolls_;
+    QDockWidget* drawer_{nullptr};   // 移动端抽屉本体（applyPanelMinWidths 用 resizeDocks 强制重分配，同桌面 split_->setSizes）。
 
     // 工具栏模式动作（与左侧面板同步）。
     QAction* modeActionL1_{nullptr};

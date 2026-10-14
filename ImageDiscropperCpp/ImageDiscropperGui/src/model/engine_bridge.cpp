@@ -6,6 +6,12 @@
 // ============================================================================
 #include "model/engine_bridge.h"
 
+#include <QByteArray>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QStandardPaths>
+
 #include "engine/image_io.h" // readImageFile（loadImage 委托 Core 解码）。
 #include "annotation/annotation_set.h" // AnnotationSet（save/load 可选标注集合透传，配置为真相源）。
 #include "engine/engine_config_json.h" // saveEngineConfig/loadEngineConfig（配置文件存取）。
@@ -17,14 +23,60 @@
 
 namespace idc::gui {
 
+namespace {
+// 把内容 URI 的字节读入内存（QFile 在 Android 能开 content://）；失败返回空 QByteArray。
+QByteArray readContentBytes(const QString& uri) {
+    QFile src(uri);
+    if (!src.open(QIODevice::ReadOnly)) return {};
+    const QByteArray data = src.readAll();
+    src.close();
+    return data;
+}
+
+// 把字节写入 dir 下唯一命名的文件（自动建目录）；成功返回真实路径，失败返回空串。
+QString writeTempFile(const QString& dir, const QString& prefix, const QByteArray& data) {
+    QDir().mkpath(dir);
+    const QString path = dir + u'/' + prefix + QString::number(QDateTime::currentMSecsSinceEpoch());
+    QFile out(path);
+    if (!out.open(QIODevice::WriteOnly) || out.write(data) != data.size()) return {};
+    out.close();
+    return path;
+}
+} // namespace
+
+// content:// 物化：SAF 内容 URI 拷到缓存目录真实临时文件；非 content:// 原样返回；失败返回空串。
+QString EngineBridge::materializeForRead(const QString& path) {
+    if (!path.startsWith(QString::fromUtf8(texts::ident::kContentUriScheme))) return path;
+    const QByteArray data = readContentBytes(path);
+    if (data.isEmpty()) return {};
+    return writeTempFile(QStandardPaths::writableLocation(QStandardPaths::CacheLocation),
+                         QStringLiteral("read-image-"), data);
+}
+
+// 源图持久化：content:// 拷到 AppDataLocation 子目录的稳定文件；非 content:// 原样返回；失败返回空串。
+QString EngineBridge::persistForProvenance(const QString& path) {
+    if (!path.startsWith(QString::fromUtf8(texts::ident::kContentUriScheme))) return path;
+    const QByteArray data = readContentBytes(path);
+    if (data.isEmpty()) return {};
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+                        + u'/' + QString::fromUtf8(texts::ident::kPickedImageSubDir);
+    return writeTempFile(dir, QStringLiteral("source-"), data);
+}
+
 // 从文件解码图像（委托 Core readImageFile）。
 bool EngineBridge::loadImage(const QString& path, core::Image& out, QString& err) {
     if (path.isEmpty()) {
         err = IDC_GTR(msg, kBridgeEmptyImagePath);
         return false;
     }
+    // Android SAF：content:// 先物化为可解码的真实路径（Core readImageFile 用 std::ifstream 开不了内容 URI）。
+    const QString resolved = materializeForRead(path);
+    if (resolved.isEmpty()) {
+        err = IDC_GTR(msg, kBridgeReadImageFailed).arg(path);   // 透传原始路径供上层展示（不泄露临时名）。
+        return false;
+    }
     // Core 统一把常见格式解码为 RGBA；失败（不存在/不可读/格式不支持）返回 false。
-    if (!engine::readImageFile(path.toStdString(), out)) {
+    if (!engine::readImageFile(resolved.toStdString(), out)) {
         err = IDC_GTR(msg, kBridgeReadImageFailed).arg(path);
         return false;
     }

@@ -19,14 +19,14 @@
 #include <algorithm>
 
 #include <QAction>
+#include <QButtonGroup>
 #include <QDockWidget>
 #include <QGridLayout>
 #include <QMainWindow>
 #include <QMenu>
-#include <QMessageBox>
 #include <QScrollArea>
 #include <QSpinBox>
-#include <QTabWidget>
+#include <QStackedWidget>
 #include <QToolBar>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -54,6 +54,7 @@
 #include "panels/param_panel.h"
 #include "panels/tool_panel.h"
 #include "util/gui_nums.h"
+#include "util/scrollable_dialog.h"   // showScrollableMessage：使用说明 / 关于长文本改可滚动信息框（item 4）
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 #include "i18n/retranslate.h"
@@ -91,20 +92,32 @@ void MobileShellUi::buildCentral(MainWindow* w) {
     w->setCentralWidget(w->view_);   // 桌面是 QSplitter 三分；移动端画布独占中央区。
 }
 
-// 抽屉：桌面八分区折叠为六页选项卡（标注工具并入「模式」、图片/图层编辑并入「图层」，
-//       与桌面左栏 + 右栏折叠节的分区归属一一对齐），停靠底部、初始隐藏，由工具条「面板」按钮开合。
-// rightTabs_ 回填同一成员 → PreviewController 的「错误定位到某页」逻辑自动沿用
-//（页面经滚动包裹后的兼容比较已做在 preview_controller 的 showingExportPage）。
+// 抽屉：桌面八分区折叠为六页——页区用 QStackedWidget、页签换成横向可滑按钮条（窄屏放不满 6 个页头时
+//       左右滑动触达其余页，item 1）。标注工具并入「模式」、图片/图层编辑并入「图层」，与桌面左栏 + 右栏
+//       折叠节的分区归属一一对齐；停靠底部、初始隐藏，由工具条「面板」按钮开合。
+// rightTabs_ 回填 QStackedWidget → PreviewController 的 currentWidget()/祖先比较与 currentChanged 接线
+//       对 QStackedWidget 同样成立（页面即滚动包裹后的面板祖先），「错误定位到某页」逻辑自动沿用。
 void MobileShellUi::buildDrawer(MainWindow* w) {
-    auto* tabs = new QTabWidget(w);   // 移动端保持选择式（rightTabs_ 成员为双型共用 QWidget*）。
-    // 抽屉最小尺寸＝设计下限（nums::mobile::kDrawerMinWidthPx × kDrawerMinHeightPx，
+    // 页区最小尺寸＝设计下限（nums::mobile::kDrawerMinWidthPx × kDrawerMinHeightPx，
     // 真机横/竖屏均放得下；无界回压的实测修复与取值依据见 src/mobile/README.md「触控精度与方向」）。
-    tabs->setMinimumSize(nums::mobile::kDrawerMinWidthPx, nums::mobile::kDrawerMinHeightPx);
+    auto* stacked = new QStackedWidget(w);
+    stacked->setMinimumSize(nums::mobile::kDrawerMinWidthPx, nums::mobile::kDrawerMinHeightPx);
 
-    // 页签标题：建页即设当前值 + 登记按新语言重放 tabText 的闭包（就地改字、不重建）。
-    auto addI18nTab = [tabs, w](QWidget* content, const i18n::TextRef& ref) {
-        const int idx = tabs->addTab(content, i18n::qs(ref));
-        i18n::bindTabText(w->retranslator_, tabs, idx, ref);
+    // 每页套纵向 QScrollArea：高度不够时页内上下滚动（参数/导出页天然比抽屉高）；
+    // 横向 AlwaysOff——内容随抽屉宽自适应（minimumSizeHint 无界回压的实测修复
+    // 详见 src/mobile/README.md「触控精度与方向」）。
+    auto scrollPage = [w](QWidget* content) {
+        auto* sa = new QScrollArea(w);
+        sa->setWidgetResizable(true);
+        sa->setFrameShape(QFrame::NoFrame);
+        sa->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        sa->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        sa->setWidget(content);
+        installTouchScroll(sa);
+        // item 6：登记本页滚动区，由 applyPanelMinWidths 按与桌面同一落点抬最小宽（max(设计下限, 内容自然宽)，
+        // 构造末 + 语言重放 + 进出绘制态重测），使页区随内容加宽、长标签 / 形状子行不被裁掉。
+        w->drawerPageScrolls_.push_back(sa);
+        return sa;
     };
 
     // 页 1「模式/图层」：桌面左侧一组（模式极性 + 标注工具 + 图层）竖排可滚动。
@@ -121,36 +134,88 @@ void MobileShellUi::buildDrawer(MainWindow* w) {
     groupScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     groupScroll->setWidget(groupContainer);
     installTouchScroll(groupScroll);
-    addI18nTab(groupScroll, IDC_GT(label, kModeSection));
+    // item 6：模式/图层页（含 toolPanel_ 形状子行）同受 applyPanelMinWidths 抬滚动区最小宽——进标注绘制态时
+    // 形状子行（3 列网格）变宽会带动本页加宽、不被裁（与其余抽屉页同一落点）。
+    w->drawerPageScrolls_.push_back(groupScroll);
 
-    // 每页套纵向 QScrollArea：高度不够时页内上下滚动（参数/导出页天然比抽屉高）；
-    // 横向 AlwaysOff——内容随抽屉宽自适应（minimumSizeHint 无界回压的实测修复
-    // 详见 src/mobile/README.md「触控精度与方向」）。
-    auto scrollPage = [w](QWidget* content) {
-        auto* sa = new QScrollArea(w);
-        sa->setWidgetResizable(true);
-        sa->setFrameShape(QFrame::NoFrame);
-        sa->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-        sa->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-        sa->setWidget(content);
-        installTouchScroll(sa);
-        return sa;
+    // —— 横向可滑按钮条（照搬底部工具条基建：QScrollArea + installTouchScroll + WheelToHScrollFilter）——
+    // 不出横滚条、只靠拖拽/滚轮横滑；高取与工具条同触控下限（nums::mobile::kStripHeightPx），六按钮超宽时可左右滑。
+    auto* tabStrip = new QScrollArea(w);
+    tabStrip->setFrameShape(QFrame::NoFrame);
+    tabStrip->setWidgetResizable(true);
+    tabStrip->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    tabStrip->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    tabStrip->setFixedHeight(nums::mobile::kStripHeightPx);
+    tabStrip->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto* tabHost = new QWidget(tabStrip);
+    auto* tabLay = new QGridLayout(tabHost);
+    tabLay->setContentsMargins(nums::mobile::kStripMarginPx, nums::mobile::kStripMarginPx,
+                               nums::mobile::kStripMarginPx, nums::mobile::kStripMarginPx);
+    tabLay->setSpacing(nums::mobile::kStripSpacingPx);
+    tabLay->setAlignment(Qt::AlignLeft);   // 内容窄于视口时按钮不拉伸。
+    tabStrip->setWidget(tabHost);
+    installTouchScroll(tabStrip);
+    tabStrip->viewport()->installEventFilter(
+        new WheelToHScrollFilter(tabStrip->horizontalScrollBar(), tabStrip));
+    auto* tabGroup = new QButtonGroup(w);
+    tabGroup->setExclusive(true);
+    int tabSlot = 0;                 // 条带槽位序（添加顺序即重排顺序）。
+
+    // 加一页：入 stacked 取索引 + 建互斥文本按钮入条带；按钮点击切页、程序化切页回灌高亮；
+    // 文案与按文字实测宽均随语言热切换重放（与 buildBottomBar addButton 同源口径）。
+    const auto addPage = [w, stacked, tabHost, tabLay, tabGroup, &tabSlot](QWidget* page, const i18n::TextRef& ref) {
+        const int idx = stacked->addWidget(page);
+        auto* btn = new QToolButton(tabHost);
+        btn->setCheckable(true);
+        btn->setAutoRaise(true);
+        btn->setSizePolicy(QSizePolicy::Fixed, btn->sizePolicy().verticalPolicy());
+        const auto fit = [btn](const QString& text) {
+            const int need = btn->fontMetrics().horizontalAdvance(text) + nums::mobile::kStripButtonHPadPx;
+            btn->setMinimumWidth(std::max(nums::mobile::kMinButtonSizePt, need));
+        };
+        fit(i18n::qs(ref));
+        i18n::bindButton(w->retranslator_, btn, ref);
+        w->retranslator_.add([btn, ref, fit] { fit(i18n::qs(ref)); });   // 语言切换后按新文字重算宽。
+        tabLay->addWidget(btn, 0, tabSlot++);
+        tabGroup->addButton(btn, idx);
+        QObject::connect(btn, &QToolButton::clicked, w, [stacked, idx] { stacked->setCurrentIndex(idx); });
     };
 
-    addI18nTab(scrollPage(w->layerEditPanel_), IDC_GT(label, kSecImage));
-    addI18nTab(scrollPage(w->imagePanel_), IDC_GT(label, kSecPreprocess));
-    addI18nTab(scrollPage(w->annoPropPanel_), IDC_GT(label, kSecAnnotation));
-    addI18nTab(scrollPage(w->param_), IDC_GT(label, kSecParam));
-    addI18nTab(scrollPage(w->exportPanel_), IDC_GT(label, kExportBoxTitle));
-    w->rightTabs_ = tabs;
+    addPage(groupScroll, IDC_GT(label, kModeSection));
+    addPage(scrollPage(w->layerEditPanel_), IDC_GT(label, kSecImage));
+    addPage(scrollPage(w->imagePanel_), IDC_GT(label, kSecPreprocess));
+    addPage(scrollPage(w->annoPropPanel_), IDC_GT(label, kSecAnnotation));
+    addPage(scrollPage(w->param_), IDC_GT(label, kSecParam));
+    addPage(scrollPage(w->exportPanel_), IDC_GT(label, kExportBoxTitle));
+
+    // 初始高亮首页；程序化切页（如未来 resetPage）时同步按钮选中态。
+    if (auto* first = tabGroup->button(stacked->currentIndex())) first->setChecked(true);
+    QObject::connect(stacked, &QStackedWidget::currentChanged, w, [tabGroup](const int idx) {
+        if (auto* btn = tabGroup->button(idx)) btn->setChecked(true);
+    });
+
+    w->rightTabs_ = stacked;
+
+    // 抽屉内容：按钮条在上、页区在下（纵向堆叠，不留边距以省小屏空间）。
+    auto* drawerContent = new QWidget(w);
+    auto* drawerLay = new QVBoxLayout(drawerContent);
+    drawerLay->setContentsMargins(0, 0, 0, 0);
+    drawerLay->setSpacing(0);
+    drawerLay->addWidget(tabStrip);
+    drawerLay->addWidget(stacked, 1);
 
     auto* drawer = new QDockWidget(IDC_GTR(label, kPanelToggle), w);
     drawer->setObjectName(QLatin1String(kDrawerName));
     drawer->setFeatures(QDockWidget::NoDockWidgetFeatures);   // 不可拖出/关闭（形态固定）。
     drawer->setTitleBarWidget(new QWidget(drawer));           // 空标题栏 = 隐藏标题。
-    drawer->setWidget(tabs);
+    drawer->setWidget(drawerContent);
     w->addDockWidget(Qt::BottomDockWidgetArea, drawer);
     drawer->hide();   // 画布为主：默认收起，按需展开。
+    w->drawer_ = drawer;   // 回填抽屉本体，供 applyPanelMinWidths resizeDocks 强制重分配。
+
+    // 构造期按当前语言实测一次各页内容自然宽并抬最小宽（与桌面 buildCentral 同一入口 applyPanelMinWidths）；
+    // 后续语言热切换（retranslateUi 末）与进出标注绘制态（toolPanel_ modeChanged）自动重测。
+    w->applyPanelMinWidths();
 }
 
 // 状态栏精简（SPEC §8.3）：紧凑模式隐藏坐标/RGB/提示标签，只留缩放；模式/保留块数
@@ -249,6 +314,25 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
     addLambda(IDC_GT(menu, kZoomIn), [w] { w->view_->zoomIn(); });
     addLambda(IDC_GT(label, kTbFit), [w] { w->view_->fitToWindow(); });   // 与双击适应同源。
 
+    // 「面板」：开合抽屉（item 5：置于「步进」「更多」之前，高频开合更靠手侧）。尺寸按当前方向：
+    // 竖屏取高、横屏取宽，比例见 nums::mobile::kDrawerPortraitHeightNum / kDrawerLandscapeWidthNum / kDrawerRatioDen；画布仍为主。
+    addLambda(IDC_GT(label, kPanelToggle), [w] {
+        auto* drawer = w->findChild<QDockWidget*>(QLatin1String(kDrawerName));
+        if (!drawer) return;
+        const bool show = !drawer->isVisible();
+        drawer->setVisible(show);
+        if (show) {
+            if (w->width() > w->height())   // 横屏：抽屉停靠右侧，按宽度取值。
+                w->resizeDocks({drawer},
+                               {w->width() * nums::mobile::kDrawerLandscapeWidthNum / nums::mobile::kDrawerRatioDen},
+                               Qt::Horizontal);
+            else                            // 竖屏：底部抽屉，按高度取值。
+                w->resizeDocks({drawer},
+                               {w->height() * nums::mobile::kDrawerPortraitHeightNum / nums::mobile::kDrawerRatioDen},
+                               Qt::Vertical);
+        }
+    });
+
     // 模式切换与极性不设工具条按钮（移动端「一个功能一个地方」纪律，见 src/mobile/README）：
     // 常驻抽屉「模式」页（LeftPanel 模式/极性开关，与桌面左栏同面板同链路、勾选回显同源）。
 
@@ -326,39 +410,21 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
     // 使用说明（触控版流程，与桌面帮助菜单正文同构但把手势替代快捷键）+ 关于（同桌面正文）。
     const QAction* aUsage = addI18nAction(IDC_GT(menu, kUsageGuide));
     QObject::connect(aUsage, &QAction::triggered, w, [w] {
-        QMessageBox::information(w, IDC_GTR(menu, kUsageGuide),
-            IDC_GTR(msg, kMobileHelpBody));
+        showScrollableMessage(w, IDC_GTR(menu, kUsageGuide),
+            IDC_GTR(msg, kMobileHelpBody), IDC_GTR(label, kDialogOkButton));
     });
     const QAction* aAbout = addI18nAction(IDC_GT(menu, kAbout));
     QObject::connect(aAbout, &QAction::triggered, w, [w] {
-        QMessageBox::about(w, IDC_GTR(menu, kAbout),
+        showScrollableMessage(w, IDC_GTR(menu, kAbout),
             IDC_GTR(msg, kAboutBody)
-                .arg(QStringLiteral(IDC_GUI_VERSION), QStringLiteral(IDC_CORE_VERSION)));
+                .arg(QStringLiteral(IDC_GUI_VERSION), QStringLiteral(IDC_CORE_VERSION)),
+            IDC_GTR(label, kDialogOkButton));
     });
     moreMenu->addSeparator();
     const QAction* aExit = addI18nAction(IDC_GT(label, kTbExit));
     QObject::connect(aExit, &QAction::triggered, w, &QWidget::close);
     moreButton->setMenu(moreMenu);
     lay->addWidget(moreButton, 0, stripIndex++);
-
-    // 「面板」：开合抽屉（尺寸按当前方向：竖屏取高、横屏取宽，比例见
-    // nums::mobile::kDrawerPortraitHeightNum / kDrawerLandscapeWidthNum / kDrawerRatioDen；画布仍为主）。
-    addLambda(IDC_GT(label, kPanelToggle), [w] {
-        auto* drawer = w->findChild<QDockWidget*>(QLatin1String(kDrawerName));
-        if (!drawer) return;
-        const bool show = !drawer->isVisible();
-        drawer->setVisible(show);
-        if (show) {
-            if (w->width() > w->height())   // 横屏：抽屉停靠右侧，按宽度取值。
-                w->resizeDocks({drawer},
-                               {w->width() * nums::mobile::kDrawerLandscapeWidthNum / nums::mobile::kDrawerRatioDen},
-                               Qt::Horizontal);
-            else                            // 竖屏：底部抽屉，按高度取值。
-                w->resizeDocks({drawer},
-                               {w->height() * nums::mobile::kDrawerPortraitHeightNum / nums::mobile::kDrawerRatioDen},
-                               Qt::Vertical);
-        }
-    });
 }
 
 // 忙碌全屏遮罩：预处理耗时操作的桌面居中小对话框→移动端铺满屏幕（SPEC §8.2）；

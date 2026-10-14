@@ -99,6 +99,9 @@ set(IDC_GUI_I18N_SRC
 )
 
 # util：core::Image 与 Qt 图像类型的适配、降采样预览、标注矢量绘制与导出输出预览渲染（视图关注点，非引擎逻辑）。
+#       touch_scroll（滚动换装基建）与 scrollable_dialog（对话框滚动/护栏）均属跨层通用件，常驻 common：
+#       idc_gui（纯桌面）也链入——installTouchScroll 桌面回落 QScroller、护栏大屏等效无约束，行为不变；
+#       mobile 壳与 app 对话框（NewCanvasDialog/AppearanceDialog）共用同一份定义，免重复编译与链接缺口。
 set(IDC_GUI_UTIL_SRC
         include/util/annotation_qt_painter.h
         include/util/theme.h
@@ -106,12 +109,16 @@ set(IDC_GUI_UTIL_SRC
         include/util/output_preview_renderer.h
         include/util/path_qt_adapter.h
         include/util/preview_scaler.h
+        include/util/scrollable_dialog.h
+        include/mobile/touch_scroll.h
         src/util/annotation_qt_painter.cpp
         src/util/theme.cpp
         src/util/image_qt_adapter.cpp
         src/util/output_preview_renderer.cpp
         src/util/path_qt_adapter.cpp
         src/util/preview_scaler.cpp
+        src/util/scrollable_dialog.cpp
+        src/mobile/touch_scroll.cpp
 )
 
 # model：会话状态单一真相源 Document 与唯一触碰 Core 的 EngineBridge。
@@ -246,13 +253,11 @@ set(IDC_GUI_MOBILE_SRC
         include/mobile/mobile_shell.h
         include/mobile/mobile_shell_ui.h
         include/mobile/mobile_step_pad.h
-        include/mobile/touch_scroll.h
         src/mobile/android_export_publish.cpp
         src/mobile/android_media_store.cpp
         src/mobile/mobile_shell.cpp
         src/mobile/mobile_shell_ui.cpp
         src/mobile/mobile_step_pad.cpp
-        src/mobile/touch_scroll.cpp
 )
 
 # ---------------------------------------------------------------------------

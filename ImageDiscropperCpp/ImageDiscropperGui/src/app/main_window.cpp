@@ -14,6 +14,7 @@
 
 #include <QAction>
 #include <QApplication> // applyPanelMinWidths 冲刷延迟布局失效（sendPostedEvents）。
+#include <QDockWidget>  // applyPanelMinWidths 调 drawer_->width() + resizeDocks 需完整类型。
 #include <QEvent>       // applyPanelMinWidths 冲刷 QEvent::LayoutRequest。
 #include <QLayout>      // applyPanelMinWidths 遍历子面板 itemAt()/QLayoutItem。
 #include <QKeyEvent>
@@ -272,7 +273,6 @@ void MainWindow::retranslateUi() {
 // 栏宽随内容变：低于新下限一律抬升防截断；仅当栏当前宽仍等于上次实际自动值（用户没手动拖宽）
 // 时才跟随内容回收（退出绘制态可缩回）。
 void MainWindow::applyPanelMinWidths() {
-    if (!leftScroll_ || !rightScroll_ || !split_ || !leftContainer_ || !accordion_) return;
     // 承重：shapeArea_（形状子行，仅「标注绘制」态可见）显隐的几何失效沿祖先链**逐层** post
     // LayoutRequest（shapeArea_→box→ToolPanel→leftContainer_→viewport），每层处理时又向父层再 post
     // 新事件——单轮事件循环只推进一层，同步读到的 sizeHint（容器与子面板皆有）会停在“进态撑大”
@@ -291,6 +291,24 @@ void MainWindow::applyPanelMinWidths() {
         }
         return w;
     };
+
+    // 移动端抽屉：与桌面**同一落点**——把 max(设计下限, 页内容自然宽) 抬到每页 QScrollArea 的最小宽上
+    //（桌面也是抬在 leftScroll_/rightScroll_ 而非内容上），使抽屉页区实际加宽、进标注绘制态时形状子行（3 列
+    // 网格）不被横向 AlwaysOff 裁掉；随语言重放与进出绘制态重测，防英文长标签截断。桌面形态下本列表恒空，跳过。
+    int maxPageMinW = 0;
+    for (QScrollArea* pageScroll : drawerPageScrolls_)
+        if (pageScroll && pageScroll->widget()) {
+            const int minW = contentWidth(pageScroll->widget(), nums::panels::kLeftPanelMinWidthPx);
+            pageScroll->setMinimumWidth(minW);
+            maxPageMinW = std::max(maxPageMinW, minW);
+        }
+    // 直接在 dock 本体上设最小宽——等价桌面把 min 设在 splitter 的直接子项 leftScroll_ 上。
+    // 深层传播（sa→stacked→drawerContent→dock）不可靠，直接约束 dock 保证窗口缩小时内容不被裁。
+    if (drawer_ && maxPageMinW > 0)
+        drawer_->setMinimumWidth(maxPageMinW);
+
+    // 以下桌面三栏；移动形态无 leftScroll_/split_ 等成员，直接返回。
+    if (!leftScroll_ || !rightScroll_ || !split_ || !leftContainer_ || !accordion_) return;
     const int rightMinW = contentWidth(accordion_, nums::app::kRightPanelWidthPx);
     const int leftMinW = contentWidth(leftContainer_, nums::app::kLeftPanelWidthPx);
     rightScroll_->setMinimumWidth(rightMinW);

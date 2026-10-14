@@ -74,6 +74,9 @@ inline constexpr char kJsonGlob[]             = "*.json";                  // �
 inline constexpr char kAssetsDirSuffix[]      = ".assets";   // GUI 两处落点：app/controllers/config_controller.cpp（图层循环与底图分支）。
                                                               // CLI 侧因宽字面量（std::filesystem::path(L".assets")）与 char[] 类型不符
                                                               // 而就地保留，见 ImageDiscropperCli/src/job.cpp 文件头「未提取项」注。
+// Android SAF content:// 源图的持久化子目录（model/engine_bridge.cpp persistForProvenance，拼在 AppDataLocation 后）：
+// 缓存物化会被系统回收，故「添加图层」的源图另存此稳定目录，作 File 层可跨会话引用的真实文件名。
+inline constexpr char kPickedImageSubDir[]    = "picked-images";
 // 分离导出命名模板（**数据而非文案**：占位符 token 由 Core 解析，改动即改输出文件名形态）。
 // 两处默认值必须同字（panels/export_panel.cpp 输入框初值、model/document.h 字段初值）。
 // 与 core texts::defaults::kNamingTemplate 跨层同字（char[] 之间不能转引），改那边要跟着改这边。

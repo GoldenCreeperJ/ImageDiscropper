@@ -35,7 +35,19 @@ class EngineBridge {
 public:
     // 从文件解码图像（委托 Core readImageFile，统一加载为 RGBA）。
     // 成功返回 true 并填充 out；失败返回 false 并给出中文错误 err。
+    // Android SAF：入参为 content:// 内容 URI 时，内部先经 materializeForRead 物化为可解码的真实路径
+    //（Core readImageFile 用 std::ifstream 开不了内容 URI），使所有解码点透明可用。
     static bool loadImage(const QString& path, core::Image& out, QString& err);
+
+    // content:// 物化：把 SAF 内容 URI 的字节拷到缓存目录(CacheLocation)的真实临时文件，返回该真实路径
+    //（Core stb 按内容嗅探格式，临时名无需扩展名）。非 content:// 原样返回；读取/写盘失败返回空串。
+    // 供 loadImage 内部前置，亦供上层（openImageFromPath）复用，消除各处重复的内联物化逻辑。
+    static QString materializeForRead(const QString& path);
+
+    // 源图持久化（供 File 层 provenance）：content:// 内容 URI 的字节拷到应用私有可写目录(AppDataLocation)
+    // 的稳定真实文件并返回其路径（缓存物化会被系统回收，故持久路径另立、可跨会话引用）；非 content:// 原样返回。
+    // 使「添加图层」的 File 层不再以不可重开的 content:// 作源名，改用真实文件名 provenance。
+    static QString persistForProvenance(const QString& path);
 
     // 仅尺寸预览（委托 Core runEngineGeometry）：给定已预处理输出尺寸直接跑几何流水线，
     // 不接收图像、不应用 cfg.preprocess——供预览脱离全分辨率工作图（配合声明式队列）。

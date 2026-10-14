@@ -5,13 +5,10 @@
 // ============================================================================
 #include "app/controllers/session_controller.h"
 
-#include <QDateTime>
 #include <QDir>
-#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMessageBox>
-#include <QStandardPaths>
 
 #include "app/controllers/doc_history.h"
 #include "app/new_canvas_dialog.h"
@@ -182,41 +179,23 @@ void SessionController::onDestroyAll() const {
 void SessionController::openImageFromPath(const QString& path) const {
     if (path.isEmpty()) return;
 
-    // Android SAF：文件选择器返回 content:// URI（内容提供者地址，非文件路径），
-    // 而 Core 的 stb 按 C 接口读文件路径——先把内容复制到缓存目录转为真实路径
-    //（stb 按内容嗅探格式，临时文件名无需扩展名）。桌面平台文件对话框返回本地
-    // 路径，此分支不触发；doc_ 与提示仍保留用户选择的原始路径。
-    QString resolvedPath = path;
-    if (path.startsWith(QString::fromUtf8(texts::ident::kContentUriScheme))) {
-        if (QFile src(path); src.open(QIODevice::ReadOnly)) {
-            const QByteArray data = src.readAll();
-            src.close();
-            const QString tmp = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
-                                + QStringLiteral("/opened-image-%1")
-                                      .arg(QDateTime::currentMSecsSinceEpoch());
-            if (QFile out(tmp); out.open(QIODevice::WriteOnly)) {
-                out.write(data);
-                out.close();
-                resolvedPath = tmp;
-            }
-        }
-        if (resolvedPath == path) {
-            status_->notify(IDC_GTR(status, kSessionOpenContentFailed), true);
-            return;
-        }
-    }
-
+    // Android SAF：文件选择器返回 content:// URI（内容提供者地址、非文件路径），Core 的 stb 按 C 接口
+    // 读文件路径开不了——EngineBridge::loadImage 内部先经 materializeForRead 物化为真实临时路径再解码，
+    // 故此处直接委托、无需再内联拷贝（桌面平台返回本地路径，物化分支不触发）。doc_ 与提示仍保留原始路径。
+    const bool isContent = path.startsWith(QString::fromUtf8(texts::ident::kContentUriScheme));
     core::Image img;
-    if (QString err; !EngineBridge::loadImage(resolvedPath, img, err)) {
-        status_->notify(IDC_GTR(status, kSessionOpenFailed).arg(err), true); // 非模态。
+    if (QString err; !EngineBridge::loadImage(path, img, err)) {
+        // content:// 物化/解码失败给专用提示；其余透传解码错误（均非模态）。
+        status_->notify(isContent ? IDC_GTR(status, kSessionOpenContentFailed)
+                                  : IDC_GTR(status, kSessionOpenFailed).arg(err), true);
         return;
     }
     doc_->setImage(std::move(img), path); // 触发 imageChanged。
     anno_->setBaseImage(doc_->working()); // 新图＝新标注会话（Core setImage 清空旧标注）。
     history_->reset();          // 换图开新撤销会话：清空跨图历史（快照不含图像，跨图撤销无意义）。
     // 会话记忆（UiPrefs，QSettings 应用级、非 §7、不入撤销栈）：本地可再开路径记 MRU + 回写上次打开目录；
-    // content://（SAF 临时内容 URI）不可复用直开，跳过 MRU（resolvedPath 为缓存临时名亦无重开价值）。
-    if (!path.startsWith(QString::fromUtf8(texts::ident::kContentUriScheme))) {
+    // content://（SAF 临时内容 URI）不可复用直开，跳过 MRU。
+    if (!isContent) {
         UiPrefs::instance().addRecentFile(path);
         UiPrefs::instance().setLastOpenDir(QFileInfo(path).absolutePath());
     }

@@ -3,14 +3,14 @@
 **目录作用**：`MobileShell` 装配实现与补偿控件（与 `src/app/` 并列）。
 声明边界见 [include/mobile/](../../include/mobile/README.md)。
 
-| 文件                               | 职责                                                                                                                                                                                                                                                                                                       |
-|----------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `mobile_shell.cpp`               | `MobileShell` 壳本体：装配顺序（`buildCentral→buildDrawer→buildStatus→buildBottomBar` → `initCore()`（与桌面逐行共用的唯一接线序列）→ `enableTouchErgonomics`）与 `MobileShell::resizeEvent`（按宽高比翻转重排抽屉与工具条，竖屏底部 / 横屏右侧，只重排不重建 → 状态无损）                                                                                              |
-| `mobile_shell_ui.cpp`            | 建造者 `MobileShellUi` 实现（`MainWindow` 的 friend，与 `MainWindowUi` 同模式、同拆分纪律）：`buildCentral`（画布独占中央区）→ `buildDrawer`（桌面 8 分区折叠为六页抽屉：模式/图层/预处理/标注/参数/导出，工具并入模式页、图片/图层编辑并入图层页）→ `buildStatus`（紧凑状态栏）→ `buildBottomBar`（工具条 + 无键盘补偿）→ `enableTouchErgonomics`（忙碌全屏遮罩，SPEC §8.2）；滚动接管三件已拆至 `touch_scroll.{h,cpp}` |
-| `touch_scroll.{h,cpp}`           | 移动端滚动接管（自 mobile_shell_ui.cpp 拆出的独立通用件）：`WheelToHScrollFilter`（公开类：滚轮→横滚重定向，底部工具条直接 new 用）+ `installTouchScroll`（Android/iOS 换装触控滚动过滤器 TouchScrollFilter（文件内件，QScroller 替代——Android QPA 属性通道不完整），桌面保持 QScroller 鼠标协调器）                                                                                   |
-| `mobile_step_pad.cpp`            | 8 向步进盘实现：QToolButton autoRepeat 长按连发；`nudgeRequested` → 上层接 `CanvasView::requestNudge`（与方向键同信号链路）                                                                                                                                                                                                        |
-| `android_export_publish.{h,cpp}` | Android 导出发布编排（仅 Q_OS_ANDROID 编译）：`exportFormatExt`（扩展名→编码器）/`fallbackToDocuments`（发布失败复制兜底，copy 非 rename——cache 与 /sdcard 跨挂载点）/`publishExport`（逐文件 MediaStore 无 pending 直插 + fd 写入 → 相册公共目录；由 `ExportController` 的 Android 分支调用）                                                                       |
-| `android_media_store.cpp`        | 发布层 JNI 实现（QJniObject，仅 Q_OS_ANDROID）：`insertToGallery`（IS_PENDING 三段式，拒绝该列的设备降级无 pending；`_display_name`/`relative_path` 列）、`writeToContentUri`（openFileDescriptor + fd 直写，fd 由 Java 侧关闭防 fdsan abort）、`finalizePending`、`deleteContentUri`、`mimeTypeForFileName`；桌面构建无 JNI 头、无调用者，不编 JNI 部分            |
+| 文件                               | 职责                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+|----------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `mobile_shell.cpp`               | `MobileShell` 壳本体：装配顺序（`buildCentral→buildDrawer→buildStatus→buildBottomBar` → `initCore()`（与桌面逐行共用的唯一接线序列）→ `enableTouchErgonomics`）与 `MobileShell::resizeEvent`（按宽高比翻转重排抽屉与工具条，竖屏底部 / 横屏右侧，只重排不重建 → 状态无损）                                                                                                                                                                                                                                                                                               |
+| `mobile_shell_ui.cpp`            | 建造者 `MobileShellUi` 实现（`MainWindow` 的 friend，与 `MainWindowUi` 同模式、同拆分纪律）：`buildCentral`（画布独占中央区）→ `buildDrawer`（桌面 8 分区折叠为六页抽屉：模式/图层/预处理/标注/参数/导出，工具并入模式页、图片/图层编辑并入图层页；页区用 `QStackedWidget`、页签换成**横向可滑按钮条**——照搬底部工具条基建 `QScrollArea + installTouchScroll + WheelToHScrollFilter`，窄屏放不满 6 个页头时左右滑动触达其余页，按钮点击/高亮驱动切页；`rightTabs_` 回填 `QStackedWidget`）→ `buildStatus`（紧凑状态栏）→ `buildBottomBar`（工具条 + 无键盘补偿，「面板」开合钮置于「步进」「更多」之前）→ `enableTouchErgonomics`（忙碌全屏遮罩，SPEC §8.2）；滚动接管三件已拆至 `touch_scroll.{h,cpp}` |
+| `touch_scroll.{h,cpp}`           | 移动端滚动接管（独立通用件，**CMake 归 common/util 组编译**——`idc_gui` 纯桌面也链入，供 `AppearanceDialog`/`NewCanvasDialog` 复用 `installTouchScroll`，免移动组链接缺口）：`WheelToHScrollFilter`（公开类：滚轮→横滚重定向，底部工具条与抽屉页签条带直接 new 用）+ `installTouchScroll`（Android/iOS 换装触控滚动过滤器 TouchScrollFilter（文件内件，QScroller 替代——Android QPA 属性通道不完整），桌面保持 QScroller 鼠标协调器）                                                                                                                                                                                |
+| `mobile_step_pad.cpp`            | 8 向步进盘实现：QToolButton autoRepeat 长按连发；`nudgeRequested` → 上层接 `CanvasView::requestNudge`（与方向键同信号链路）                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `android_export_publish.{h,cpp}` | Android 导出发布编排（仅 Q_OS_ANDROID 编译）：`exportFormatExt`（扩展名→编码器）/`fallbackToDocuments`（发布失败复制兜底，copy 非 rename——cache 与 /sdcard 跨挂载点）/`publishExport`（逐文件 MediaStore 无 pending 直插 + fd 写入 → 相册公共目录；由 `ExportController` 的 Android 分支调用）                                                                                                                                                                                                                                                                        |
+| `android_media_store.cpp`        | 发布层 JNI 实现（QJniObject，仅 Q_OS_ANDROID）：`insertToGallery`（IS_PENDING 三段式，拒绝该列的设备降级无 pending；`_display_name`/`relative_path` 列）、`writeToContentUri`（openFileDescriptor + fd 直写，fd 由 Java 侧关闭防 fdsan abort）、`finalizePending`、`deleteContentUri`、`mimeTypeForFileName`；桌面构建无 JNI 头、无调用者，不编 JNI 部分                                                                                                                                                                                                             |
 
 ## 底部工具条 → 既有链路映射（无键盘补偿，SPEC §8.3）
 
@@ -53,12 +53,27 @@
   横条带里会错乱成上下滚）；`QToolBar` 原生溢出「>>」问题由此消除。
 - 工具条方向自适应（实测修复）：竖屏＝底部横向单行（高 `nums::mobile::kStripHeightPx`），横屏＝右侧竖向单列（
   `applyOrientationLayout` 迁移停靠区并重排同一批 widget，零重建、状态无损）。
-- 抽屉最小尺寸＝设计下限而非内容自然 hint 回压（实测修复）：`rightTabs_` 显式取
+- 抽屉最小尺寸＝设计下限而非内容自然 hint 回压（实测修复）：页区 `QStackedWidget` 显式取
   `nums::mobile::kDrawerMinWidthPx` / `kDrawerMinHeightPx`（320×240，宽贴合竖屏手机常态可用宽下限），
   窗口下限可控且真机横/竖屏均放得下；
-  参数/导出/图像/标注四页各套纵向 `QScrollArea`（横向 AlwaysOff，内容随宽自适应），
-  高度不够时页内上下滚动；`PreviewController` 的导出页判定同步放宽为
-  「面板位于当前页内」（`showingExportPage`，桌面等价）。
+  六页各套纵向 `QScrollArea`（横向 AlwaysOff，内容随宽自适应），
+  高度不够时页内上下滚动；每页**滚动区**最小宽走**桌面同一入口、同一落点与口径**（`MainWindow::applyPanelMinWidths`：
+  取本页直接子面板 `sizeHint().width()` 的最大值、兜底 `nums::panels::kLeftPanelMinWidthPx` 设计下限，
+  `max` 后抬到该页 `QScrollArea` 上——与桌面把宽度抬在 `leftScroll_` 并用 splitter 让栏宽真的变同理），
+  使抽屉页区随内容**实际加宽**、进标注绘制态时形状子行（3 列网格）与英文长标签都不被横向 AlwaysOff 裁掉——
+  随语言热切换（`retranslateUi` 末）与进出标注绘制态（`toolPanel_ modeChanged`）重测（`drawerPageScrolls_`
+  由 `buildDrawer` 登记，桌面恒空即跳过；item 6）；页签为横向可滑按钮条，
+  六按钮超宽时左右滑动触达（item 1）；
+  `rightTabs_` 由 `QTabWidget` 改回 `QStackedWidget`，`PreviewController` 的导出页判定同步
+  分发到 `QStackedWidget::currentWidget()/currentChanged`（`showingExportPage`，桌面等价）。
+- 对话框可滚动 + 屏幕护栏（items 2/4/7/8/9，详见 include/util/README.md）：`NewCanvasDialog`/`AppearanceDialog`
+  主体经 `util/scrollable_dialog`（`wrapScrollable` 纵向滚动 + `limitDialogToScreen` 按可用几何钳最大宽/高、
+  首显示收尺寸、旋转重钳不重建），按钮行留滚动区外恒可关闭；使用说明/关于由 `QMessageBox` 改
+  `showScrollableMessage`（word wrap + 最小宽 + 内部滚动）。小屏/横屏/长文本不再撑出画面。
+- content:// 取物化（item 3，全在 GUI/EngineBridge 层、不改 Core）：SAF 选择器返回 `content://` 内容 URI，
+  Core `readImageFile`（std::ifstream）开不了——`EngineBridge::loadImage` 内部先 `materializeForRead`（拷到
+  `CacheLocation` 真实临时文件再解码）使所有解码点透明可用；「添加图层」的 File 层源另经 `persistForProvenance`
+  （拷到 `AppDataLocation` 持久子目录）取稳定真实名作 provenance，缓存会被回收故与持久路径分立。桌面非 content:// 原样返回、行为不变。
 - 真机验证：触控手势、滚动与导出已在华为 Android 12 真机验证；实际旋转事件与触控字号观感待验证
   （汇总见下节「移动端实现状态与遗留事项」）。
 - 产物形态（双可执行）：桌面一次构建产出 `idc_gui`（纯桌面，不含任何移动码）与
@@ -83,7 +98,8 @@ Java 侧关 fd 防 fdsan；文件名可自定义、留空自动命名、同名�
 SAF 自定义目录已整体移除，「浏览…」移动端禁用）；min API 29；CI 移动腿与 APK alpha 签名链全绿。
 
 **待办（未验证 / 未实现，不得按已完成理解）**：SPEC §8.3 验收全清单（每项能力纯触屏 + 双方向全流程）；
-配置存取往返与旋转观感真机实测；Android 启动器图标**尚未生效**——接线（`packaging/android`
+配置存取往返与旋转观感真机实测；content:// 取物化 / 对话框滚动与屏幕护栏 / 抽屉横向按钮条页签
+均为本轮新增、本机无 NDK 未编 Android，待推 android 腿真机复验（尤其 content:// 开图、开框后旋转、窄屏触达六页）；Android 启动器图标**尚未生效**——接线（`packaging/android`
 模板 + CMake `QT_ANDROID_PACKAGE_SOURCE_DIR` + CI 产物链，详见 `assets/icons/README.md`）
 已备于工作区但未随提交进入任何构建，当前 APK 仍为 Qt 默认模板图标；提交并走通
 android 腿后仍需真机核对显示观感；

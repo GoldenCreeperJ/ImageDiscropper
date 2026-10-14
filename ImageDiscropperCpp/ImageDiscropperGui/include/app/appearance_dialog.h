@@ -67,7 +67,7 @@ private:
     void onPickColor(const ColorRow& row);   // 弹 QColorDialog，取色即写 Palette。
     void refreshSwatches();                  // 从 Palette 回读全部色块/alpha，刷新外观。
     void refreshInteraction() const;               // 从 CanvasPrefs 回读交互偏好（手柄/余量/缩放/新建），刷新数值框。
-    void retranslate();                      // 语言热切换：逐条重放本对话框全部可译文案（值/色块与语言无关，不重跑）。
+    void retranslate() const;                      // 语言热切换：逐条重放本对话框全部可译文案（值/色块与语言无关，不重跑）。
 
     // —— 快捷键编辑区（仅 shortcutsEnabled_）——
     void buildShortcutsTab();                                                                // 依 KeyBindings 注册表逐行建表（命令名 / QKeySequenceEdit / 行内恢复按钮）。

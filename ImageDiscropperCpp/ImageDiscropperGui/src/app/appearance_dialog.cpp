@@ -46,7 +46,9 @@
 #include "app/keybindings.h"
 #include "i18n/core_i18n.h"   // kSourceLanguage / kLangCodeEn：语言下拉项数据的真相源在 Core
 #include "generate/pattern.h"   // generate::kMaxDimension：新建默认尺寸的上限护栏真相源在 Core
+#include "mobile/touch_scroll.h"   // installTouchScroll：移动端把 QScrollArea 换装触控拖滑（桌面回落鼠标）
 #include "util/gui_nums.h"
+#include "util/scrollable_dialog.h"   // limitDialogToScreen：按可用几何钳对话框最大宽 / 高（小屏 / 横屏护栏）
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 #include "i18n/retranslate.h"
@@ -76,6 +78,7 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
     auto* colorPage = new QScrollArea(tabs_);
     colorPage->setWidgetResizable(true);
     colorPage->setFrameShape(QFrame::NoFrame);
+    installTouchScroll(colorPage);   // Android：拖指滑页；桌面：回落 QScroller 鼠标协调器（行为不变）。
     auto* colorContent = new QWidget(colorPage);
     auto* colorVbox = new QVBoxLayout(colorContent);
 
@@ -163,6 +166,7 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
     auto* otherPage = new QScrollArea(tabs_);
     otherPage->setWidgetResizable(true);
     otherPage->setFrameShape(QFrame::NoFrame);
+    installTouchScroll(otherPage);   // Android：拖指滑页；桌面：回落 QScroller 鼠标协调器（行为不变）。
     auto* content = new QWidget(otherPage);
     auto* vbox = new QVBoxLayout(content);
 
@@ -357,11 +361,15 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
 
     refreshSwatches();
     refreshInteraction();
+
+    // 屏幕尺寸护栏：小屏 / 横屏时按可用几何钳最大宽 / 高，内容超出由各页内部滚动区消化、
+    // 底部提示与按钮行常驻 Tab 之外→恒可关闭；旋转后重钳、部件零重建（item 2/8）。
+    limitDialogToScreen(this);
 }
 
 // 语言热切换重放：逐条运行登记的闭包，按当前全局语言改写本对话框全部面对人的文案。
 // 数值/色块回显走各自单例，与语言无关，故不在此重跑（retranslate 只换文字）。
-void AppearanceDialog::retranslate() {
+void AppearanceDialog::retranslate() const {
     retranslator_.run();
 }
 

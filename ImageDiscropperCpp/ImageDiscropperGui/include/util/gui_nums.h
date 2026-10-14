@@ -137,6 +137,17 @@ inline constexpr int kMinButtonSizePt = 44;     // 可点控件最小边长（An
                                                 // 外观对话框的触控下限注释亦以此为准绳。
 inline constexpr int kStripButtonHPadPx = 20;   // 条带文本按钮按文字实测宽时追加的水平余量（左右合计），
                                                 // 避免 Fixed 策略下 sizeHint 低估致长标签（英文 Zoom In/Out）被裁。
+// 对话框屏幕护栏（util/scrollable_dialog.cpp limitDialogToScreen）：小屏/横屏/长文本时把对话框
+// 最大宽/高钳到可用几何的比例，内容超出即由内部滚动区消化、按钮行常驻——根治「显示不全 / 无法关闭」。
+// 比例入本层（而非散写），旋转后重钳同取此值；桌面大屏下钳值远超内容，等效无约束。
+inline constexpr double kDialogMaxWidthRatio = 0.95;    // 对话框最大宽 = 可用屏宽 × 本值。
+inline constexpr double kDialogMaxHeightRatio = 0.9;    // 对话框最大高 = 可用屏高 × 本值。
+inline constexpr int kInfoDialogMinWidthPx = 320;       // 可滚动信息框（使用说明/关于）正文标签最小宽：
+                                                        // 窄屏下靠它 + word wrap 控宽，避免长行顶成竖窄条（item 4）。
+inline constexpr int kInfoDialogMinHeightPx = 240;      // 可滚动信息框滚动区最小高（保证正文有可读区、按钮不被挤没）。
+// 错误提示里长路径（content:// 内容 URI 尤甚）的显示截断宽度（app/new_canvas_dialog.cpp 源图读取失败行）：
+// 超出即按本宽用 QFontMetrics 省略号截断，防长串撑宽表单主体（item 3b）。
+inline constexpr int kErrorPathMaxWidthPx = 200;
 } // namespace mobile
 
 // app：主窗口三栏尺寸、节流时长与画布交互偏好的出厂默认与钳制区间（src/app/**）。

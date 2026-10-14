@@ -21,12 +21,14 @@
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFontMetrics>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPixmap>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QVBoxLayout>
@@ -38,6 +40,7 @@
 #include "app/forms/pattern_form.h"
 #include "app/forms/placement_row.h"
 #include "util/gui_nums.h"
+#include "util/scrollable_dialog.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 #include "util/image_qt_adapter.h"
@@ -54,9 +57,13 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     setModal(true);
 
     auto* root = new QVBoxLayout(this);
-    auto* grid = new QGridLayout();
+    // 主体（表单）装进纵向可滑外壳：小屏 / 横屏超高时内部滚动，配合底部固定按钮行 + 屏幕尺寸护栏，
+    // 根治「显示不全 / 无法关闭」；勾选附加图片增删的行也落在滚动内容里，外层窗口不再被撑大（item 7/9）。
+    // 预览与按钮行留在滚动区外、恒可见可达。
+    auto* body = new QWidget(this);
+    auto* grid = new QGridLayout(body);
     grid->setContentsMargins(0, 0, 0, 0);
-    root->addLayout(grid);
+    root->addWidget(wrapScrollable(body), 0);
 
     int row = 0;
     // ---- 尺寸 ----
@@ -157,6 +164,15 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     patternForm_->updateAvailability();
     updateControlAvailability();
     refreshPreview();
+
+    // 屏幕尺寸护栏：按可用几何钳最大宽 / 高（比例见 nums::mobile::kDialogMax*），首次显示收到
+    // 「表单自然尺寸 + 预览最小高 + 按钮行」与可用几何的较小者；小屏 / 横屏超出即内部滚动、按钮常驻，
+    // 勾选附加图片增删的行落在滚动内容里、外层窗口不再被撑大（item 7/9）；桌面大屏下钳值远超内容、等效无约束。
+    const QSize formHint = body->sizeHint();
+    limitDialogToScreen(this, QSize(
+        qMax(formHint.width(), nums::dialog::kNewCanvasPreviewMinWidthPx),
+        formHint.height() + nums::dialog::kNewCanvasPreviewMinHeightPx
+            + 2 * nums::dialog::kTouchFieldMinHeightPx + nums::panels::kPanelSpacingPx));
 }
 
 // 依附加图片开关/语境/适应方式显隐落位组并锁定尺寸（图案相关行显隐与文案在 PatternFormWidget 内）。
@@ -187,12 +203,22 @@ void NewCanvasDialog::onPickImage() {
     if (path.isEmpty()) return;
     core::Image img;
     if (QString err; !EngineBridge::loadImage(path, img, err)) {
-        imagePathLabel_->setText(IDC_GTR(label, kReadSourceFailedFmt).arg(err));
+        // 长错误串（含 content:// 内容 URI）按宽省略号截断，避免撑宽表单主体（item 3b）；完整文转入 tooltip。
+        const QString msg = IDC_GTR(label, kReadSourceFailedFmt).arg(err);
+        imagePathLabel_->setText(QFontMetrics(imagePathLabel_->font())
+                                    .elidedText(msg, Qt::ElideMiddle, nums::mobile::kErrorPathMaxWidthPx));
+        imagePathLabel_->setToolTip(msg);
         return;
     }
     imageSource_ = std::move(img);
-    imageSourcePath_ = path;   // 记住源图路径，供「添加图层」复用取相对名作 File 层 provenance。
-    imagePathLabel_->setText(QFileInfo(path).fileName());
+    // content:// 不可重开、且 QFileInfo(content://).fileName() 只是数字 doc id：持久化到应用私有
+    // 目录取稳定真实路径作 provenance（缓存物化会被回收，故另走 persistForProvenance）。
+    // 非 content://（桌面）原样返回，行为不变；持久失败则回退原始路径作显示。
+    if (const QString persisted = EngineBridge::persistForProvenance(path); !persisted.isEmpty())
+        imageSourcePath_ = persisted;
+    else
+        imageSourcePath_ = path;
+    imagePathLabel_->setText(QFileInfo(imageSourcePath_).fileName());
     syncCanvasSizeToSource();   // 原生时把顶部宽/高（图层尺寸）回填为源图尺寸（非原生不操作）。
     onParamsChanged();
 }

@@ -14,7 +14,6 @@
 #include <QKeySequence>
 #include <QMenu>
 #include <QMenuBar>
-#include <QMessageBox>
 #include <QWidget>
 
 #include "app/controllers/annotation_coordinator.h"
@@ -35,6 +34,7 @@
 #include "panels/export_panel.h"
 #include "panels/layer_panel.h"
 #include "panels/tool_panel.h"
+#include "util/scrollable_dialog.h"   // showScrollableMessage：使用说明 / 关于长文本改可滚动信息框（item 4）
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 #include "i18n/retranslate.h"
@@ -324,12 +324,12 @@ void MainWindowUi::buildModeMenu(MainWindow* w, QMenuBar* bar) {
         { engine::RemainderPolicy::PAD, IDC_GT(menu, kRemainderPad) },
     };
     w->remainderActions_.resize(3, nullptr);
-    for (const auto& r : kRems) {
-        QAction* a = bindAddAction(w->retranslator_, remGroup, r.label);
+    for (const auto&[policy, label] : kRems) {
+        QAction* a = bindAddAction(w->retranslator_, remGroup, label);
         a->setCheckable(true);
         mRemainder->addAction(a);
-        w->remainderActions_[static_cast<int>(r.policy)] = a;
-        QObject::connect(a, &QAction::triggered, w, [w, policy = r.policy] { w->doc_.setRemainder(policy); });
+        w->remainderActions_[static_cast<int>(policy)] = a;
+        QObject::connect(a, &QAction::triggered, w, [w, policy = policy] { w->doc_.setRemainder(policy); });
     }
 
 }
@@ -456,12 +456,12 @@ void MainWindowUi::buildLayerMenu(MainWindow* w, QMenuBar* bar) {
     w->mLayerPivot_ = mPivot;
     auto* pivotGroup = new QActionGroup(w);
     pivotGroup->setExclusive(true);
-    for (const auto& a : kAnchors) {
-        QAction* ac = bindAddAction(w->retranslator_, anchorGroup, a.label);
+    for (const auto&[anchor, label] : kAnchors) {
+        QAction* ac = bindAddAction(w->retranslator_, anchorGroup, label);
         ac->setCheckable(true);
         mAnchor->addAction(ac);
-        w->layerAnchorActions_[static_cast<int>(a.anchor)] = ac;
-        QObject::connect(ac, &QAction::triggered, w, [w, anchor = a.anchor] {
+        w->layerAnchorActions_[static_cast<int>(anchor)] = ac;
+        QObject::connect(ac, &QAction::triggered, w, [w, anchor = anchor] {
             if (w->doc_.selectedLayerId()) {
                 if (const canvas::ImageLayer* layer = w->doc_.layerById(*w->doc_.selectedLayerId())) {
                     canvas::ImageLayer updated = *layer;
@@ -470,11 +470,11 @@ void MainWindowUi::buildLayerMenu(MainWindow* w, QMenuBar* bar) {
                 }
             }
         });
-        QAction* pv = bindAddAction(w->retranslator_, pivotGroup, a.label);
+        QAction* pv = bindAddAction(w->retranslator_, pivotGroup, label);
         pv->setCheckable(true);
         mPivot->addAction(pv);
-        w->layerPivotActions_[static_cast<int>(a.anchor)] = pv;
-        QObject::connect(pv, &QAction::triggered, w, [w, anchor = a.anchor] {
+        w->layerPivotActions_[static_cast<int>(anchor)] = pv;
+        QObject::connect(pv, &QAction::triggered, w, [w, anchor = anchor] {
             if (w->doc_.selectedLayerId()) {
                 if (const canvas::ImageLayer* layer = w->doc_.layerById(*w->doc_.selectedLayerId())) {
                     canvas::ImageLayer updated = *layer;
@@ -541,12 +541,12 @@ void MainWindowUi::buildAnnoMenu(MainWindow* w, QMenuBar* bar) {
     w->toolActions_.resize(14, nullptr);   // 按 AnnoTool 枚举序索引（SELECT=0 无菜单项）。
     auto* toolGroup = new QActionGroup(w);
     toolGroup->setExclusive(true);
-    for (const MenuToolEntry& t : kMenuTools) {
-        QAction* a = bindAddAction(w->retranslator_, mTools, t.label);
+    for (const auto&[tool, label] : kMenuTools) {
+        QAction* a = bindAddAction(w->retranslator_, mTools, label);
         a->setCheckable(true);
         toolGroup->addAction(a);
-        w->toolActions_[static_cast<int>(t.tool)] = a;
-        QObject::connect(a, &QAction::triggered, w, [w, tool = t.tool] {
+        w->toolActions_[static_cast<int>(tool)] = a;
+        QObject::connect(a, &QAction::triggered, w, [w, tool = tool] {
             if (w->view_ && w->view_->canvasMode() != CanvasMode::AnnoCreate)
                 w->toolPanel_->setMode(CanvasMode::AnnoCreate);
             w->annotation_->onToolSelected(tool);
@@ -622,14 +622,15 @@ void MainWindowUi::buildHelpMenu(MainWindow* w, QMenuBar* bar) {
     QMenu* mHelp = bindAddMenu(w->retranslator_, bar, IDC_GT(menu, kMenuHelp));
     const QAction* aUsage = bindAddAction(w->retranslator_, mHelp, IDC_GT(menu, kUsageGuide));
     QObject::connect(aUsage, &QAction::triggered, w, [w] {
-        QMessageBox::information(w, IDC_GTR(menu, kUsageGuide),
-            IDC_GTR(msg, kHelpUsageBody));
+        showScrollableMessage(w, IDC_GTR(menu, kUsageGuide),
+            IDC_GTR(msg, kHelpUsageBody), IDC_GTR(label, kDialogOkButton));
     });
     const QAction* aAbout = bindAddAction(w->retranslator_, mHelp, IDC_GT(menu, kAbout));
     QObject::connect(aAbout, &QAction::triggered, w, [w] {
-        QMessageBox::about(w, IDC_GTR(menu, kAbout),
+        showScrollableMessage(w, IDC_GTR(menu, kAbout),
             IDC_GTR(msg, kAboutBody)
-                .arg(QStringLiteral(IDC_GUI_VERSION), QStringLiteral(IDC_CORE_VERSION)));
+                .arg(QStringLiteral(IDC_GUI_VERSION), QStringLiteral(IDC_CORE_VERSION)),
+            IDC_GTR(label, kDialogOkButton));
     });
 }
 

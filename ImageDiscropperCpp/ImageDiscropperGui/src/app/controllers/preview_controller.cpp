@@ -10,6 +10,7 @@
 
 #include <algorithm>
 
+#include <QStackedWidget>
 #include <QTabWidget>
 
 #include "panels/accordion_panel.h"
@@ -37,16 +38,18 @@ namespace idc::gui {
 constexpr int kExportSrcMaxDim = 512;
 constexpr int kExportPreviewMaxDim = 192;
 
-// 「导出」页是否正在展示（多页容器双型分发）：
+// 「导出」页是否正在展示（多页容器多型分发）：
 //   · 桌面 AccordionPanel——折叠式多节可同开，「展示」＝该节展开；
-//   · 移动端 QTabWidget——页面外套 QScrollArea，页面 widget 不再是 exportPanel_
-//     本身而是其祖先容器，故相等比较放宽为「位于当前页内」（面板即直接页面时等价）。
+//   · 移动端 QTabWidget / QStackedWidget（抽屉已改为横向按钮条 + QStackedWidget）——页面外套 QScrollArea，
+//     页面 widget 不再是 exportPanel_ 本身而是其祖先容器，故相等比较放宽为「位于当前页内」（面板即直接页面时等价）。
 bool showingExportPage(QWidget* container, const QWidget* exportPanel) {
     if (!container || !exportPanel) return false;
     if (const auto* acc = qobject_cast<AccordionPanel*>(container)) return acc->isSectionExpanded(exportPanel);
-    if (const auto* tabs = qobject_cast<QTabWidget*>(container)) {
-        const QWidget* page = tabs->currentWidget();
-        if (!page) return false;
+    // 多页容器（QTabWidget / QStackedWidget）均有 currentWidget()，祖先上溯比较当前页同口径。
+    const QWidget* page = nullptr;
+    if (const auto* tabs = qobject_cast<QTabWidget*>(container)) page = tabs->currentWidget();
+    else if (const auto* stack = qobject_cast<QStackedWidget*>(container)) page = stack->currentWidget();
+    if (page) {
         for (const QWidget* x = exportPanel; x; x = x->parentWidget())
             if (x == page) return true;
     }
@@ -66,13 +69,15 @@ void PreviewController::setMultiPageContainer(QWidget* tabs) { rightTabs_ = tabs
 void PreviewController::setLayerPanel(LayerPanel* panel) { layerPanel_ = panel; }
 
 // 切到「导出」页时补渲染输出预览（A：不可见时不渲染，切回时若已脏则重算）。
-// 双型分发：桌面 AccordionPanel::sectionToggled / 移动端 QTabWidget::currentChanged 各自接线。
+// 多型分发：桌面 AccordionPanel::sectionToggled / 移动端 QTabWidget 或 QStackedWidget::currentChanged 各自接线。
 // 画布右键「切换预览遮罩」也在此接线（自 MainWindow::connectAll 迁入，同属预览域）。
 void PreviewController::connectSignals() {
     if (const auto* acc = qobject_cast<AccordionPanel*>(rightTabs_))
         connect(acc, &AccordionPanel::sectionToggled, this, &PreviewController::onRightTabChanged);
     else if (const auto* tabs = qobject_cast<QTabWidget*>(rightTabs_))
         connect(tabs, &QTabWidget::currentChanged, this, &PreviewController::onRightTabChanged);
+    else if (const auto* stack = qobject_cast<QStackedWidget*>(rightTabs_))
+        connect(stack, &QStackedWidget::currentChanged, this, &PreviewController::onRightTabChanged);
     if (view_) connect(view_, &CanvasView::toggleMasksRequested, this, &PreviewController::onToggleMasks);
 }
 
