@@ -60,8 +60,8 @@ GUI 侧的**视图关注点**工具：Core 类型↔Qt 类型适配、大图降�
 - `QScrollArea* wrapScrollable(QWidget* body)`：把主体装进 `QScrollArea`（widgetResizable、横滚 AlwaysOff、纵滚 AsNeeded、无边框）
   并 `installTouchScroll`——移动端拖指滑、桌面回落 QScroller 鼠标协调器（行为不变）。对话框把 `QDialogButtonBox` 留在滚动区**外**固定底部 → 按钮恒可见可达。
 - `void limitDialogToScreen(QDialog*, const QSize& preferredContentSize = {})`：装一个 `DialogSizeGuard` 事件过滤器，Show/Resize 时按
-  `screen()->availableGeometry()` × `nums::mobile::kDialogMax{Width,Height}Ratio` 钳最大宽/高；首次显示把尺寸收到「内容首选尺寸（缺省用对话框 sizeHint）
-  与钳值」的较小者；旋转表现为 resize → 只重钳、部件零重建。桌面大屏钳值远超内容，等效无约束。
+  `screen()->availableGeometry()` 的 100% 钳最大宽/高（不再用比例边距，内容超出由滚动区消化）；首次显示把尺寸收到「内容首选尺寸（缺省用对话框 sizeHint）
+  与可用几何」的较小者；旋转表现为 resize → 重钳 + 重新居中（修复偏移）、部件零重建。桌面大屏钳值远超内容，等效无约束。
 - `void showScrollableMessage(parent, title, text, okLabel)`：以可滚动外壳呈现长文本信息框（正文 word wrap + `kInfoDialogMinWidthPx` 最小宽 + 底部确定常驻），
   替代 `QMessageBox` 的一长条窄高呈现（使用说明 / 关于）。入参为已按当前语言解析的字符串（本层零 i18n 依赖）。
 

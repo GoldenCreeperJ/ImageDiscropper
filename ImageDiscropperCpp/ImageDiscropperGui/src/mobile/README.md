@@ -67,8 +67,8 @@
   `rightTabs_` 由 `QTabWidget` 改回 `QStackedWidget`，`PreviewController` 的导出页判定同步
   分发到 `QStackedWidget::currentWidget()/currentChanged`（`showingExportPage`，桌面等价）。
 - 对话框可滚动 + 屏幕护栏（items 2/4/7/8/9，详见 include/util/README.md）：`NewCanvasDialog`/`AppearanceDialog`
-  主体经 `util/scrollable_dialog`（`wrapScrollable` 纵向滚动 + `limitDialogToScreen` 按可用几何钳最大宽/高、
-  首显示收尺寸、旋转重钳不重建），按钮行留滚动区外恒可关闭；使用说明/关于由 `QMessageBox` 改
+  主体经 `util/scrollable_dialog`（`wrapScrollable` 纵向滚动 + `limitDialogToScreen` 按可用几何 100% 钳最大宽/高、
+  首显示收尺寸、旋转重钳 + 居中回正不重建），按钮行留滚动区外恒可关闭；使用说明/关于由 `QMessageBox` 改
   `showScrollableMessage`（word wrap + 最小宽 + 内部滚动）。小屏/横屏/长文本不再撑出画面。
 - content:// 取物化（item 3，全在 GUI/EngineBridge 层、不改 Core）：SAF 选择器返回 `content://` 内容 URI，
   Core `readImageFile`（std::ifstream）开不了——`EngineBridge::loadImage` 内部先 `materializeForRead`（拷到

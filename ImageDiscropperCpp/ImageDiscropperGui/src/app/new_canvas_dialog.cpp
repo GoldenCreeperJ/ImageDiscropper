@@ -57,13 +57,13 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     setModal(true);
 
     auto* root = new QVBoxLayout(this);
-    // 主体（表单）装进纵向可滑外壳：小屏 / 横屏超高时内部滚动，配合底部固定按钮行 + 屏幕尺寸护栏，
+    // 主体（表单 + 预览）装进纵向可滑外壳：小屏 / 横屏超高时内部滚动，配合底部固定按钮行 + 屏幕尺寸护栏，
     // 根治「显示不全 / 无法关闭」；勾选附加图片增删的行也落在滚动内容里，外层窗口不再被撑大（item 7/9）。
-    // 预览与按钮行留在滚动区外、恒可见可达。
+    // 按钮行留滚动区外恒可关闭；预览并入滚动内容（用户滚到底即可看到）。
     auto* body = new QWidget(this);
     auto* grid = new QGridLayout(body);
     grid->setContentsMargins(0, 0, 0, 0);
-    root->addWidget(wrapScrollable(body), 0);
+    root->addWidget(wrapScrollable(body), 1);
 
     int row = 0;
     // ---- 尺寸 ----
@@ -126,14 +126,15 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     grid->addWidget(imagePlaceRow_, row, 0, 1, 4);
     ++row;
 
-    // ---- 预览 ----
+    // ---- 预览（并入滚动内容，放在表单最后一行）----
     previewLabel_ = new QLabel(IDC_GTR(label, kPreviewPlaceholder), this);
     previewLabel_->setAlignment(Qt::AlignCenter);
     previewLabel_->setMinimumSize(nums::dialog::kNewCanvasPreviewMinWidthPx,
                                   nums::dialog::kNewCanvasPreviewMinHeightPx);
     previewLabel_->setFrameShape(QFrame::StyledPanel);
     previewLabel_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    root->addWidget(previewLabel_, 1);
+    grid->addWidget(previewLabel_, row, 0, 1, 4);
+    ++row;
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     buttons->button(QDialogButtonBox::Ok)->setText(IDC_GTR(label, kDialogOkButton));
@@ -166,13 +167,12 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     refreshPreview();
 
     // 屏幕尺寸护栏：按可用几何钳最大宽 / 高（比例见 nums::mobile::kDialogMax*），首次显示收到
-    // 「表单自然尺寸 + 预览最小高 + 按钮行」与可用几何的较小者；小屏 / 横屏超出即内部滚动、按钮常驻，
+    // 「表单+预览自然尺寸 + 按钮行」与可用几何的较小者；小屏 / 横屏超出即内部滚动、按钮常驻，
     // 勾选附加图片增删的行落在滚动内容里、外层窗口不再被撑大（item 7/9）；桌面大屏下钳值远超内容、等效无约束。
-    const QSize formHint = body->sizeHint();
+    const QSize formHint = body->sizeHint();   // 含预览（已在 body 内）
     limitDialogToScreen(this, QSize(
         qMax(formHint.width(), nums::dialog::kNewCanvasPreviewMinWidthPx),
-        formHint.height() + nums::dialog::kNewCanvasPreviewMinHeightPx
-            + 2 * nums::dialog::kTouchFieldMinHeightPx + nums::panels::kPanelSpacingPx));
+        formHint.height() + 2 * nums::dialog::kTouchFieldMinHeightPx + nums::panels::kPanelSpacingPx));
 }
 
 // 依附加图片开关/语境/适应方式显隐落位组并锁定尺寸（图案相关行显隐与文案在 PatternFormWidget 内）。

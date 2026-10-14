@@ -57,16 +57,16 @@ const ToolEntry kTools[] = {
     {AnnoTool::RECT,           IDC_GT(label, kToolRect),          IDC_GT(tooltip, kToolRectBtn)},
     {AnnoTool::SQUARE,         IDC_GT(label, kToolSquare),        IDC_GT(tooltip, kToolSquareBtn)},
     {AnnoTool::RHOMBUS,        IDC_GT(label, kToolRhombus),       IDC_GT(tooltip, kToolRhombusBtn)},
+    {AnnoTool::ISOS_TRI,       IDC_GT(label, kToolIsoTriangle),   IDC_GT(tooltip, kToolIsoTriBtn)},
     {AnnoTool::CIRCLE,         IDC_GT(label, kToolCircle),        IDC_GT(tooltip, kToolCircleBtn)},
     {AnnoTool::ELLIPSE,        IDC_GT(label, kToolEllipse),       IDC_GT(tooltip, kToolEllipseBtn)},
-    {AnnoTool::ISOS_TRI,       IDC_GT(label, kToolIsoTriangle),   IDC_GT(tooltip, kToolIsoTriBtn)},
     {AnnoTool::EQU_TRI,        IDC_GT(label, kToolEquTriangle),   IDC_GT(tooltip, kToolEquTriBtn)},
     {AnnoTool::LINE,           IDC_GT(label, kToolLine),          IDC_GT(tooltip, kToolLineBtn)},
-    {AnnoTool::RECT_TRI,       IDC_GT(label, kToolRightTriangle), IDC_GT(tooltip, kToolRightTriBtn)},
     {AnnoTool::POLYLINE,       IDC_GT(label, kToolPolyline),      IDC_GT(tooltip, kToolPolylineBtn)},
-    {AnnoTool::EQU_RECT_TRI,   IDC_GT(label, kToolIsoRightTri),   IDC_GT(tooltip, kToolIsoRightTriBtn)},
+    {AnnoTool::RECT_TRI,       IDC_GT(label, kToolRightTriangle), IDC_GT(tooltip, kToolRightTriBtn)},
     {AnnoTool::TEXT,           IDC_GT(label, kToolText),          IDC_GT(tooltip, kToolTextBtn)},
     {AnnoTool::BRUSH,          IDC_GT(label, kToolBrush),         IDC_GT(tooltip, kToolBrushBtn)},
+    {AnnoTool::EQU_RECT_TRI,   IDC_GT(label, kToolIsoRightTri),   IDC_GT(tooltip, kToolIsoRightTriBtn)},
 };
 
 } // namespace

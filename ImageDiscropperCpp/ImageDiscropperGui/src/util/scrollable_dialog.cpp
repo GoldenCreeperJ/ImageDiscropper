@@ -35,8 +35,8 @@ QScrollArea* wrapScrollable(QWidget* body) {
 
 namespace {
 
-// 屏幕尺寸护栏事件过滤器：Show / Resize 时按可用几何钳对话框最大宽 / 高；首次显示按内容首选尺寸收初值。
-// 旋转（表现为 resize）即重钳最大 → 窗口自然再适配、部件不重建（SPEC §8.3）。
+// 屏幕尺寸护栏事件过滤器：Show / Resize 时按可用几何钳对话框最大宽 / 高（取 100% 可用空间，滚动区消化溢出）；
+// 首次显示按内容首选尺寸收初值。旋转（表现为 Resize）即重钳最大 + 居中回正位置，部件不重建（SPEC §8.3）。
 class DialogSizeGuard : public QObject {
 public:
     DialogSizeGuard(QDialog* dialog, const QSize& preferredContentSize)
@@ -52,11 +52,12 @@ protected:
                 break;
             case QEvent::Resize:
                 clampMaximum();
+                reCenter();   // 旋转后重新居中，修复位置偏移。
                 break;
             default:
                 break;
         }
-        return false;   // 不改事件流，仅旁路设最大尺寸 / 初值。
+        return false;   // 不改事件流，仅旁路设最大尺寸 / 初值 / 居中。
     }
 
 private:
@@ -68,21 +69,30 @@ private:
     void clampMaximum() const {
         const QRect avail = availableGeometry();
         if (avail.isNull()) return;
-        const int maxW = static_cast<int>(avail.width() * nums::mobile::kDialogMaxWidthRatio);
-        const int maxH = static_cast<int>(avail.height() * nums::mobile::kDialogMaxHeightRatio);
-        dialog_->setMaximumSize(maxW, maxH);
+        // 最大尺寸 = 100% 可用几何（availableGeometry 已排除系统栏，无需再留人为边距）。
+        // 内容超出即由 wrapScrollable 滚动区消化，不必缩小对话框本身。
+        dialog_->setMaximumSize(avail.width(), avail.height());
     }
 
-    // 首次显示：把尺寸收到「内容首选尺寸（未提供则对话框自身 sizeHint）与可用几何钳值」的较小者。
+    // 首次显示：把尺寸收到「内容首选尺寸（未提供则对话框自身 sizeHint）与可用几何」的较小者。
     void sizeToContent() {
         const QRect avail = availableGeometry();
         if (avail.isNull()) return;
         firstSized_ = true;
-        const int maxW = static_cast<int>(avail.width() * nums::mobile::kDialogMaxWidthRatio);
-        const int maxH = static_cast<int>(avail.height() * nums::mobile::kDialogMaxHeightRatio);
         const QSize want = preferred_.isValid() ? preferred_ : dialog_->sizeHint();
         if (!want.isValid()) return;
-        dialog_->resize(qMin(want.width(), maxW), qMin(want.height(), maxH));
+        dialog_->resize(qMin(want.width(), avail.width()), qMin(want.height(), avail.height()));
+    }
+
+    // 重新居中对话框到可用几何中心（旋转后偏移回正）。
+    // 仅当弹窗部分超出新可用几何时才动（旋转后旧位置可能跑屏外；sizeToContent 触发的正常 resize 不动）。
+    void reCenter() const {
+        const QRect avail = availableGeometry();
+        if (avail.isNull()) return;
+        if (avail.contains(dialog_->geometry())) return;   // 已完全在新屏内，不干预位置。
+        const QPoint center = avail.center();
+        const QSize sz = dialog_->size();
+        dialog_->move(center.x() - sz.width() / 2, center.y() - sz.height() / 2);
     }
 
     QDialog* dialog_;
