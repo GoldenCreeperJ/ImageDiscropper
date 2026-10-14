@@ -24,6 +24,11 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# 本项目不使用 C++20 模块：标准升到 23 后 CMake 默认开启模块依赖扫描（SCAN_FOR_MODULES），
+# Android 的 clang 工具链找不到 clang-scan-deps 时全部 .ddi 扫描步骤以 code 127 失败——
+# 显式关闭，既不引入模块也不依赖该工具。
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+
 # vcpkg 静态 triplet 要求所有目标使用静态 CRT (/MT)，否则与预编译的 Qt/WebP 等库
 # 产生 RuntimeLibrary 不匹配链接错误（LNK2019 __imp_*）。
 # Windows 静态三元组按本项目命名约定为 x64-windows-rel（内容 = 社区 x64-windows-static）。
