@@ -1,13 +1,15 @@
 <?xml version="1.0"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="org.qtproject.example.ImageDiscropper"
+    package="org.qtproject.example"
     android:installLocation="auto"
-    android:versionCode="-- %%ANDROID_VERSION_CODE%% --"
-    android:versionName="-- %%ANDROID_VERSION_NAME%% --">
-
-    <!-- 权限与特性：跟随 Qt 官方模板最小集（相机/存储等按需在此扩展）。 -->
-    <uses-sdk android:minSdkVersion="-- %%ANDROID_MIN_SDK_VERSION%% --"
-              android:targetSdkVersion="-- %%ANDROID_TARGET_SDK_VERSION%% --" />
+    android:versionCode="-- %%INSERT_VERSION_CODE%% --"
+    android:versionName="-- %%INSERT_VERSION_NAME%% --">
+    <!-- %%INSERT_PERMISSIONS -->
+    <!-- %%INSERT_FEATURES -->
+    <!-- 注：不再写 <uses-sdk>——Qt 6.11 起 minSdk/targetSdk 经部署设置 JSON（CMake 目标属性
+         QT_ANDROID_MIN_SDK_VERSION 等）流入 gradle.properties，由 AGP 注入；
+         manifest 若残留旧式 %%ANDROID_MIN_SDK_VERSION%% 占位符会触发 androiddeployqt
+         的 minSdk>=28 守卫（未替换占位符 toInt()=0）。 -->
     <supports-screens android:anyDensity="true"
                       android:largeScreens="true"
                       android:normalScreens="true"
@@ -17,12 +19,12 @@
                  android:hardwareAccelerated="true"
                  android:requestLegacyExternalStorage="true"
                  android:allowBackup="true"
-                 android:label="-- %%APP_NAME%% --"
+                 android:label="-- %%INSERT_APP_NAME%% --"
                  android:extractNativeLibs="true"
                  android:icon="@mipmap/ic_launcher">
         <activity android:name="org.qtproject.qt.android.bindings.QtActivity"
                   android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|layoutDirection|locale|fontScale|keyboard|keyboardHidden|navigation|mcc|mnc|density"
-                  android:label="-- %%APP_NAME%% --"
+                  android:label="-- %%INSERT_APP_NAME%% --"
                   android:launchMode="singleTop"
                   android:screenOrientation="unspecified"
                   android:exported="true"
