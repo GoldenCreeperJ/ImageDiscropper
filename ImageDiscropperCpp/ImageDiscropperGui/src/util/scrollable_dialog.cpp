@@ -10,6 +10,7 @@
 #include <QDialogButtonBox>
 #include <QEvent>
 #include <QLabel>
+#include <QPointer>
 #include <QPushButton>
 #include <QRect>
 #include <QScrollArea>
@@ -35,27 +36,46 @@ QScrollArea* wrapScrollable(QWidget* body) {
 
 namespace {
 
-// 屏幕尺寸护栏事件过滤器：Show / Resize 时按可用几何钳对话框最大宽 / 高（取 100% 可用空间，滚动区消化溢出）；
-// 首次显示按内容首选尺寸收初值。旋转（表现为 Resize）即重钳最大 + 居中回正位置，部件不重建（SPEC §8.3）。
+// 屏幕尺寸护栏事件过滤器：
+//   · 装于对话框本体——Show 时钳最大宽/高 + 首次收尺寸；Resize 时重钳（旋转/拖窗后上限变化）。
+//   · 装于父窗口——Resize / Move 时把对话框居中到父窗口全局中心（旋转后位置回正）。
+//   设计意图：桌面端 availableGeometry 为物理屏，不随窗口大小/位置变化；真机旋转则父窗口几何直接变。
+//   故以父窗口几何变化为触发条件，不依赖屏幕级 availableGeometry 变更检测。
 class DialogSizeGuard : public QObject {
 public:
     DialogSizeGuard(QDialog* dialog, const QSize& preferredContentSize)
-        : QObject(dialog), dialog_(dialog), preferred_(preferredContentSize) {}
+        : QObject(dialog), dialog_(dialog), preferred_(preferredContentSize) {
+        // 额外注册父窗口事件监听——捕获 parent resize/move 以居中回正。
+        if (auto* p = dialog->parentWidget()) {
+            parent_ = p;
+            p->installEventFilter(this);
+        }
+    }
+
+    ~DialogSizeGuard() override {
+        if (parent_) parent_->removeEventFilter(this);   // 防悬挂（parent 可能比 dialog 活得久）。
+    }
 
 protected:
     bool eventFilter(QObject* obj, QEvent* ev) override {
-        if (obj != dialog_) return false;
-        switch (ev->type()) {
-            case QEvent::Show:
-                clampMaximum();
-                if (!firstSized_) sizeToContent();   // 未显示前 screen() 可能为空，Show 时已就位。
-                break;
-            case QEvent::Resize:
-                clampMaximum();
-                reCenter();   // 旋转后重新居中，修复位置偏移。
-                break;
-            default:
-                break;
+        if (obj == dialog_) {
+            switch (ev->type()) {
+                case QEvent::Show:
+                    clampMaximum();
+                    if (!firstSized_) sizeToContent();
+                    lastParentGeo_ = parentGlobalGeo();  // 初显时记录 parent 几何基准。
+                    break;
+                case QEvent::Resize:
+                    clampMaximum();
+                    break;
+                default:
+                    break;
+            }
+        } else if (obj == parent_) {
+            // 父窗口尺寸或位置变化（旋转 / 桌面拖窗 / 最大化等）→ 居中回正。
+            if (ev->type() == QEvent::Resize || ev->type() == QEvent::Move) {
+                reCenterIfNeeded();
+            }
         }
         return false;   // 不改事件流，仅旁路设最大尺寸 / 初值 / 居中。
     }
@@ -66,40 +86,50 @@ private:
         return scr ? scr->availableGeometry() : QRect();
     }
 
+    // 父窗口的全局几何（顶层窗口 geometry 已含 mapToGlobal；若 parent 非顶层则 mapToGlobal）。
+    QRect parentGlobalGeo() const {
+        if (!parent_) return QRect();
+        if (parent_->isWindow()) return parent_->frameGeometry();
+        const QPoint tl = parent_->mapToGlobal(QPoint(0, 0));
+        return QRect(tl, parent_->size());
+    }
+
     void clampMaximum() const {
         const QRect avail = availableGeometry();
         if (avail.isNull()) return;
-        // 最大尺寸 = 100% 可用几何（availableGeometry 已排除系统栏，无需再留人为边距）。
-        // 内容超出即由 wrapScrollable 滚动区消化，不必缩小对话框本身。
-        dialog_->setMaximumSize(avail.width(), avail.height());
+        const int maxW = static_cast<int>(avail.width() * nums::mobile::kDialogMaxWidthRatio);
+        const int maxH = static_cast<int>(avail.height() * nums::mobile::kDialogMaxHeightRatio);
+        dialog_->setMaximumSize(maxW, maxH);
     }
 
-    // 首次显示：把尺寸收到「内容首选尺寸（未提供则对话框自身 sizeHint）与可用几何」的较小者。
+    // 首次显示：把尺寸收到「内容首选尺寸（未提供则对话框自身 sizeHint）与可用几何钳值」的较小者。
     void sizeToContent() {
         const QRect avail = availableGeometry();
         if (avail.isNull()) return;
         firstSized_ = true;
+        const int maxW = static_cast<int>(avail.width() * nums::mobile::kDialogMaxWidthRatio);
+        const int maxH = static_cast<int>(avail.height() * nums::mobile::kDialogMaxHeightRatio);
         const QSize want = preferred_.isValid() ? preferred_ : dialog_->sizeHint();
         if (!want.isValid()) return;
-        suppressReCenter_ = true;   // 本次 resize 会触发 Resize 事件，跳过那一次 reCenter（让 Qt 自然居中到 parent）。
-        dialog_->resize(qMin(want.width(), avail.width()), qMin(want.height(), avail.height()));
+        dialog_->resize(qMin(want.width(), maxW), qMin(want.height(), maxH));
     }
 
-    // 重新居中对话框到可用几何中心（旋转后偏移回正）。
-    // 每次 Resize 均居中（旋转后弹窗位置可能相对新屏偏斜）；但跳过 sizeToContent 触发的内部 resize。
-    void reCenter() {
-        if (suppressReCenter_) { suppressReCenter_ = false; return; }
-        const QRect avail = availableGeometry();
-        if (avail.isNull()) return;
-        const QPoint center = avail.center();
+    // 仅当 parent 几何实际变化（与上次记录不同）时才居中回正——避免 dialog 自身事件链无谓触发。
+    void reCenterIfNeeded() {
+        if (!dialog_->isVisible()) return;
+        const QRect pg = parentGlobalGeo();
+        if (pg.isNull() || pg == lastParentGeo_) return;
+        lastParentGeo_ = pg;
+        const QPoint center = pg.center();
         const QSize sz = dialog_->size();
         dialog_->move(center.x() - sz.width() / 2, center.y() - sz.height() / 2);
     }
 
     QDialog* dialog_;
+    QPointer<QWidget> parent_;            // 父窗口（可能先于 dialog 销毁，QPointer 安全）。
     QSize preferred_;
     bool firstSized_ = false;
-    bool suppressReCenter_ = false;   // sizeToContent 内部 resize 时置 true，跳过紧接着的一次 reCenter。
+    QRect lastParentGeo_;                 // 上次 parent 几何，用于去重。
 };
 
 } // namespace
