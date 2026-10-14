@@ -81,15 +81,16 @@ private:
         firstSized_ = true;
         const QSize want = preferred_.isValid() ? preferred_ : dialog_->sizeHint();
         if (!want.isValid()) return;
+        suppressReCenter_ = true;   // 本次 resize 会触发 Resize 事件，跳过那一次 reCenter（让 Qt 自然居中到 parent）。
         dialog_->resize(qMin(want.width(), avail.width()), qMin(want.height(), avail.height()));
     }
 
     // 重新居中对话框到可用几何中心（旋转后偏移回正）。
-    // 仅当弹窗部分超出新可用几何时才动（旋转后旧位置可能跑屏外；sizeToContent 触发的正常 resize 不动）。
-    void reCenter() const {
+    // 每次 Resize 均居中（旋转后弹窗位置可能相对新屏偏斜）；但跳过 sizeToContent 触发的内部 resize。
+    void reCenter() {
+        if (suppressReCenter_) { suppressReCenter_ = false; return; }
         const QRect avail = availableGeometry();
         if (avail.isNull()) return;
-        if (avail.contains(dialog_->geometry())) return;   // 已完全在新屏内，不干预位置。
         const QPoint center = avail.center();
         const QSize sz = dialog_->size();
         dialog_->move(center.x() - sz.width() / 2, center.y() - sz.height() / 2);
@@ -98,6 +99,7 @@ private:
     QDialog* dialog_;
     QSize preferred_;
     bool firstSized_ = false;
+    bool suppressReCenter_ = false;   // sizeToContent 内部 resize 时置 true，跳过紧接着的一次 reCenter。
 };
 
 } // namespace
