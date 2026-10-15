@@ -184,7 +184,9 @@ void ParamPanel::syncFromDocument() {
         const int prevRow = l2RectList_->currentRow();
         l2RectList_->clear();
         const auto& rs = doc_->rects();
-        for (const auto& [i, r] : rs | std::views::enumerate) {
+        // 下标循环即可；std::views::enumerate 对 Apple/NDK libc++<19 不可用。
+        for (std::size_t i = 0; i < rs.size(); ++i) {
+            const auto& r = rs[i];
             l2RectList_->addItem(IDC_GTR(status, kRectListItem)
                                      .arg(i + 1).arg(r.left).arg(r.top)
                                      .arg(r.right).arg(r.bottom));

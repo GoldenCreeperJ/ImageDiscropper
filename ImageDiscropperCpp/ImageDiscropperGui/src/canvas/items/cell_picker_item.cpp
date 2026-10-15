@@ -114,8 +114,9 @@ QRectF CellPickerItem::boundingRect() const {
 void CellPickerItem::rebuildSelectionLookup() {
     selFlag_.assign(cells_.size(), 0);
     selPos_.assign(cells_.size(), 0);
-    for (const auto& [k, sel] : selected_ | std::views::enumerate) {
-        if (sel >= 0 && static_cast<std::size_t>(sel) < selFlag_.size()) {
+    // 下标循环即可；std::views::enumerate 对 Apple/NDK libc++<19 不可用。
+    for (std::size_t k = 0; k < selected_.size(); ++k) {
+        if (const auto sel = selected_[k]; sel >= 0 && static_cast<std::size_t>(sel) < selFlag_.size()) {
             selFlag_[static_cast<std::size_t>(sel)] = 1;
             selPos_[static_cast<std::size_t>(sel)] = static_cast<int>(k) + 1; // 1-based 自定义序位。
         }
