@@ -7,7 +7,6 @@
 // ============================================================================
 #include "annotation/annotation_set.h"
 
-#include <ranges>
 #include <utility>
 
 #include "annotation/rasterizer.h"
@@ -44,7 +43,9 @@ Annotation& Annotation::operator=(const Annotation& o) {
 // 规范化叠放次序：把每条标注的 zOrder 重写为其在列表中的下标（0＝最底、大＝顶），
 // 维持「zOrder 恒等于下标」不变式——供任何改变列表顺序/长度的操作后统一收尾。
 void AnnotationSet::canonicalizeZOrder() {
-    for (auto&&[i, a] : items_ | std::views::enumerate) a.zOrder = static_cast<int>(i);
+    // 下标循环即可；std::views::enumerate 对 NDK/Apple libc++<19 不可用。
+    for (std::size_t i = 0; i < items_.size(); ++i)
+        items_[i].zOrder = static_cast<int>(i);
 }
 
 // 追加一条标注：新标注置于顶层（zOrder ＝ 追加后的下标）；空 shape 拒绝。

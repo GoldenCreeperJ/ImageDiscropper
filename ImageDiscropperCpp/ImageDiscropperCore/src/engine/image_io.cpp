@@ -27,8 +27,6 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
-#include <ranges>
-#include <span>
 
 namespace idc::engine {
 namespace {
@@ -36,10 +34,11 @@ namespace {
 // 把任意格式图像整理为 RGBA 连续缓冲（PNG / WebP 用，保留 alpha 通道）。
 std::vector<std::uint8_t> toRGBABuffer(const core::Image& img) {
     if (img.format() == core::ImageFormat::RGBA) {
-        return std::vector(std::from_range, std::span(img.data(), img.sizeInBytes()));
+        // 指针区间构造即可；std::from_range 区间构造对 GCC<15 / libc++<19 不可用。
+        return std::vector(img.data(), img.data() + img.sizeInBytes());
     }
     const core::Image rgba = img.toRGBA(); // RGB/GRAY → RGBA。
-    return std::vector(std::from_range, std::span(rgba.data(), rgba.sizeInBytes()));
+    return std::vector(rgba.data(), rgba.data() + rgba.sizeInBytes());
 }
 
 // 把图像压平为 RGB 缓冲（JPEG/BMP 无 alpha，半透明像素以 bg 做 src-over 合成）。

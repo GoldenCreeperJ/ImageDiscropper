@@ -32,7 +32,6 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
-#include <ranges>
 #include <string>
 #include <utility>
 #include <vector>
@@ -448,7 +447,9 @@ bool annotationsFromSegmentJson(const nlohmann::json& arrValue, AnnotationSet& s
     std::vector<Annotation> items;
     std::vector<std::string> errs;
     if (arrValue.is_array()) {
-        for (const auto& [idx, item] : arrValue | std::views::enumerate) {
+        // 下标循环即可；std::views::enumerate 对 NDK/Apple libc++<19 不可用。
+        for (std::size_t idx = 0; idx < arrValue.size(); ++idx) {
+            const auto& item = arrValue[idx];
             std::string reason;
             if (!item.is_object()) {
                 reason = IDC_KTR(msg, kErrNotAnObject);
