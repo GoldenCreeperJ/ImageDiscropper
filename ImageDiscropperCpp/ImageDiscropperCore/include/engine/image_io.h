@@ -11,30 +11,32 @@
 #pragma once
 
 #include <cstdint>
+#include <expected>
 #include <string>
 #include <vector>
 
 #include "core/color.h"
+#include "core/core_error.h"  // core::CoreError（I/O 失败侧载荷）
 #include "core/image.h"
 #include "engine/composition.h" // ExportFormat
 
 namespace idc::engine {
 
-// 从文件解码图像为 core::Image（统一加载为 RGBA，4 通道）。
+// 从文件解码图像为 core::Image（统一加载为 RGBA，4 通道），成功填充 out。
 // 底层用 stb_image，支持 PNG/JPEG/BMP/WebP/GIF/TGA 等常见格式。
-// 成功返回 true 并填充 out；path 为空、文件不存在、无法读取或格式不支持时返回 false
-// （对应 CLI “输入文件错误”退出码 3 / E-8）。
-bool readImageFile(const std::string& path, core::Image& out);
+// 失败（path 为空 / 文件不存在 / 无法读取 / 格式不支持）返回 core::CoreError（Code=DecodeFailed，
+// 对应 CLI “输入文件错误”退出码 3 / E-8）。保留 out 参数，调用方可以 operator bool 直接判定。
+std::expected<void, core::CoreError> readImageFile(const std::string& path, core::Image& out);
 
 // 将图像编码并写入文件。format 决定编码器；quality 仅对有损格式（JPEG/WebP）生效；
 // jpegBg 用于不支持透明的格式（JPEG/BMP）把 alpha 压平到该背景色（SPEC §4.5）。
-// 成功返回 true；写盘失败（E-8）返回 false。
-bool writeImageFile(const std::string& path, const core::Image& image,
+// 写盘失败返回 core::CoreError（Code=Io，E-8）。
+std::expected<void, core::CoreError> writeImageFile(const std::string& path, const core::Image& image,
                     ExportFormat format, int quality, const core::Color& jpegBg);
 
-// 将图像编码到内存缓冲。参数含义同 writeImageFile。
-// 成功返回 true 并把编码字节写入 out；失败返回 false。
-bool encodeImageToMemory(const core::Image& image, ExportFormat format,
+// 将图像编码到内存缓冲。参数含义同 writeImageFile，成功把编码字节写入 out。
+// 编码失败返回 core::CoreError（Code=EncodeFailed）。
+std::expected<void, core::CoreError> encodeImageToMemory(const core::Image& image, ExportFormat format,
                          int quality, const core::Color& jpegBg,
                          std::vector<std::uint8_t>& out);
 

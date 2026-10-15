@@ -613,8 +613,7 @@ void testIntegration() {
 
     // ---- IT-39：图案 new 冒烟——stripes/concentric/hue-gradient/noise 各产合法非空图（斜纹/同心方框已合进前两者）。----
     {
-        const std::vector<std::string> kinds = {"stripes", "concentric", "hue-gradient", "noise"};
-        for (const std::string& k : kinds) {
+        for (const std::vector<std::string> kinds = {"stripes", "concentric", "hue-gradient", "noise"}; const std::string& k : kinds) {
             const std::string out = (root / ("it39_" + k + ".png")).string();
             const Captured r = runCli({"new", "--size", "64x48", "--pattern", k,
                                        "--bg", "#FFFFFFFF", "--fg", "#FF000000", "--seed", "7", "--output", out});
@@ -985,11 +984,11 @@ void testIntegration() {
     // ---- IT-52：--lang 全局选项——已登记码放行、未知码退出码 1 并报因；
     //      其值不被误当子命令名（splitCommand 须跳过取值选项的值）。----
     {
-        const Captured bad = runCli({"--lang", "fr", "--help"});
-        CHECK(bad.code == 1);
-        CHECK(bad.out.empty());                                   // 未进入帮助输出
-        CHECK(bad.err.find("无法识别的语言代码") != std::string::npos);   // 报因用切换前的源语言（此时尚未切）
-        CHECK(bad.err.find("fr") != std::string::npos);
+        const auto [code, out, err] = runCli({"--lang", "fr", "--help"});
+        CHECK(code == 1);
+        CHECK(out.empty());                                   // 未进入帮助输出
+        CHECK(err.find("无法识别的语言代码") != std::string::npos);   // 报因用切换前的源语言（此时尚未切）
+        CHECK(err.find("fr") != std::string::npos);
 
         const Captured ok = runCli({"--lang=en", "--help"});
         CHECK(ok.code == 0);

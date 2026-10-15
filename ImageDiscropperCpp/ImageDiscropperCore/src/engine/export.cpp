@@ -154,23 +154,25 @@ bool exportMerged(const Composition& composition, const core::Image& source,
             source.crop(p.source.left, p.source.top, p.source.right, p.source.bottom);
         canvas.blit(sub, p.dest.left, p.dest.top);
     }
-    return writeImageFile(outputPath, canvas, fmt, composition.quality, composition.padColor);
+    return writeImageFile(outputPath, canvas, fmt, composition.quality, composition.padColor).has_value();
 }
 
 } // namespace
 
-// 把合成结果落盘（分离多图 / 合并单图）；成功返回 true。
+// 把合成结果落盘（分离多图 / 合并单图）；成功返回空 expected。
 // 模式判定：compose 对 SEPARATE 置画布 0×0（outputPath 为目标文件夹，不存在则自动创建），
 //           对 MERGED 置真实画布尺寸（outputPath 为单图文件路径）。
-bool exportImage(const Composition& composition, const core::Image& source,
-                 const std::string& outputPath) {
-    if (composition.placements.empty()) return false; // E-7：保留集为空，禁止导出。
-    if (outputPath.empty()) return false;             // E-8：路径为空。
-    if (source.empty()) return false;                 // 无源图像，无法裁剪。
+std::expected<void, core::CoreError> exportImage(const Composition& composition, const core::Image& source,
+                                                 const std::string& outputPath) {
+    if (composition.placements.empty()) return std::unexpected(core::CoreError{core::CoreError::Code::EmptyKeepRegion, {}}); // E-7：保留集为空，禁止导出。
+    if (outputPath.empty()) return std::unexpected(core::CoreError{core::CoreError::Code::PathEmpty, {}});                  // E-8：路径为空。
+    if (source.empty()) return std::unexpected(core::CoreError{core::CoreError::Code::Io, {}});                            // 无源图像，无法裁剪。
 
     const bool separate = composition.canvasWidth <= 0 || composition.canvasHeight <= 0;
-    return separate ? exportSeparate(composition, source, outputPath)
-                    : exportMerged(composition, source, outputPath);
+    const bool ok = separate ? exportSeparate(composition, source, outputPath)
+                             : exportMerged(composition, source, outputPath);
+    if (!ok) return std::unexpected(core::CoreError{core::CoreError::Code::Io, {}}); // 写盘/建目录失败（E-8）。
+    return {};
 }
 
 } // namespace idc::engine

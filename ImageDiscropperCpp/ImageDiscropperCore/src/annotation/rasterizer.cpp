@@ -111,7 +111,7 @@ static void fillPolygon(core::Image& img,
                 xs.push_back(x1 + t * (x2 - x1));
             }
         }
-        std::sort(xs.begin(), xs.end());
+        std::ranges::sort(xs);
         // 成对填充
         for (std::size_t i = 0; i + 1 < xs.size(); i += 2) {
             const int xa = std::max(0, static_cast<int>(std::ceil(xs[i] - 0.5)));

@@ -418,9 +418,11 @@ if(NOT ANDROID
             if(CMAKE_BUILD_TYPE STREQUAL "Debug")
                 set(_idc_platforms_src "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/platforms")
                 set(_idc_styles_src "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/styles")
+                set(_idc_imageformats_src "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/imageformats")
             else()
                 set(_idc_platforms_src "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/platforms")
                 set(_idc_styles_src "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/styles")
+                set(_idc_imageformats_src "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/imageformats")
             endif()
             foreach(_idc_gui_target ${_idc_gui_exes})
                 set(_idc_copy_commands)
@@ -434,9 +436,16 @@ if(NOT ANDROID
                             COMMAND ${CMAKE_COMMAND} -E copy_directory
                             "${_idc_styles_src}" "$<TARGET_FILE_DIR:${_idc_gui_target}>/styles")
                 endif()
+                # imageformats：Qt 6.11 起 Windows 自定义光标（OpenHand/ClosedHand 等）由 PNG 资源
+                # 渲染，运行时必须有 qpng 解码插件，否则光标加载失败（Debug 下触发 Q_ASSERT）。
+                if(EXISTS "${_idc_imageformats_src}")
+                    list(APPEND _idc_copy_commands
+                            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                            "${_idc_imageformats_src}" "$<TARGET_FILE_DIR:${_idc_gui_target}>/imageformats")
+                endif()
                 if(_idc_copy_commands)
                     add_custom_command(TARGET ${_idc_gui_target} POST_BUILD ${_idc_copy_commands}
-                            COMMENT "Copying Qt plugins (platforms/styles) next to ${_idc_gui_target}"
+                            COMMENT "Copying Qt plugins (platforms/styles/imageformats) next to ${_idc_gui_target}"
                             VERBATIM)
                 endif()
             endforeach()
@@ -449,7 +458,10 @@ if(NOT ANDROID
                         COMMAND ${CMAKE_COMMAND} -E copy_directory
                         "$<$<CONFIG:Debug>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/styles>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/styles>"
                         "$<TARGET_FILE_DIR:${_idc_gui_target}>/styles"
-                        COMMENT "Copying Qt plugins (platforms/styles) next to ${_idc_gui_target}"
+                        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                        "$<$<CONFIG:Debug>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/Qt6/plugins/imageformats>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/imageformats>"
+                        "$<TARGET_FILE_DIR:${_idc_gui_target}>/imageformats"
+                        COMMENT "Copying Qt plugins (platforms/styles/imageformats) next to ${_idc_gui_target}"
                         VERBATIM)
             endforeach()
         endif()

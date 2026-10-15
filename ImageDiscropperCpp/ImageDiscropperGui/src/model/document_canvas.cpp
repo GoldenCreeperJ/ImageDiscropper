@@ -231,8 +231,8 @@ int Document::addImageLayer(canvas::ImageLayer layer) {
 
 // 删除某层（连带回收其会话；若正被选中则取消选中）。
 bool Document::removeLayer(const int id) {
-    const auto it = std::find_if(layers_.begin(), layers_.end(),
-                                 [id](const canvas::ImageLayer& l) { return l.id == id; });
+    const auto it = std::ranges::find_if(layers_,
+                                         [id](const canvas::ImageLayer& l) { return l.id == id; });
     if (it == layers_.end()) return false;
     layers_.erase(it);
     layerSessions_.remove(id);   // 连带回收其会话与物化位图
@@ -243,10 +243,10 @@ bool Document::removeLayer(const int id) {
 
 // 上/下移一层：与相邻项交换 zOrder（存序不敏感、合成恒按 zOrder 升序）。up＝向顶层（更大 zOrder）。
 bool Document::moveLayerZOrder(const int id, const bool up) {
-    std::sort(layers_.begin(), layers_.end(),
-              [](const canvas::ImageLayer& a, const canvas::ImageLayer& b) { return a.zOrder < b.zOrder; });
-    const auto it = std::find_if(layers_.begin(), layers_.end(),
-                                 [id](const canvas::ImageLayer& l) { return l.id == id; });
+    std::ranges::sort(layers_,
+                      [](const canvas::ImageLayer& a, const canvas::ImageLayer& b) { return a.zOrder < b.zOrder; });
+    const auto it = std::ranges::find_if(layers_,
+                                         [id](const canvas::ImageLayer& l) { return l.id == id; });
     if (it == layers_.end()) return false;
     const auto i = static_cast<std::size_t>(it - layers_.begin());
     const auto n = layers_.size();
@@ -260,8 +260,8 @@ bool Document::moveLayerZOrder(const int id, const bool up) {
 // 移至顶层 / 底层：把选中层 zOrder 设为当前最大 +1（顶）或最小 −1（底）。合成恒按 zOrder 升序稳定，
 // 故单值推离即整体置顶/置底（无需重排其余层）。已在边缘（zOrder 已等极值）则短路不动。
 bool Document::moveLayerToEdge(const int id, const bool toTop) {
-    const auto it = std::find_if(layers_.begin(), layers_.end(),
-                                 [id](const canvas::ImageLayer& l) { return l.id == id; });
+    const auto it = std::ranges::find_if(layers_,
+                                         [id](const canvas::ImageLayer& l) { return l.id == id; });
     if (it == layers_.end() || layers_.size() < 2) return false;
     int lo = it->zOrder;
     int hi = it->zOrder;
@@ -279,8 +279,8 @@ bool Document::moveLayerToEdge(const int id, const bool toTop) {
 
 // 就地替换某层（transform / z / preprocess 编辑）：强制保持原 id 稳定（id 为会话/拾取键）。
 bool Document::updateLayer(const int id, const canvas::ImageLayer& layer) {
-    const auto it = std::find_if(layers_.begin(), layers_.end(),
-                                 [id](const canvas::ImageLayer& l) { return l.id == id; });
+    const auto it = std::ranges::find_if(layers_,
+                                         [id](const canvas::ImageLayer& l) { return l.id == id; });
     if (it == layers_.end()) return false;
     canvas::ImageLayer nl = layer;
     nl.id = id;

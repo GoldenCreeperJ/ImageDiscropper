@@ -186,7 +186,7 @@ core::Image composeCanvas(const std::vector<ImageLayer>& layers, const int width
     // 按 zOrder 升序稳定合成（同 zOrder 维持原相对顺序）。
     std::vector<std::size_t> order(layers.size());
     std::iota(order.begin(), order.end(), 0);
-    std::stable_sort(order.begin(), order.end(), [&layers](const std::size_t a, const std::size_t b) {
+    std::ranges::stable_sort(order, [&layers](const std::size_t a, const std::size_t b) {
         return layers[a].zOrder < layers[b].zOrder;
     });
 

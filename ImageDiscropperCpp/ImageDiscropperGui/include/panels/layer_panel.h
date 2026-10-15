@@ -56,7 +56,7 @@ public:
     void setAnnotationVisible(bool visible) const;
 
     // 语言热切换重放：重跑本面板登记的分组标题与各开关文字/tooltip 闭包。
-    void retranslate() { retranslator_.run(); }
+    void retranslate() const { retranslator_.run(); }
 
 signals:
     // 底图图层显示/隐藏（MainWindow 切换画布 base 图元可见性）。

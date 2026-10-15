@@ -51,7 +51,8 @@ public:
 
     // 仅尺寸预览（委托 Core runEngineGeometry）：给定已预处理输出尺寸直接跑几何流水线，
     // 不接收图像、不应用 cfg.preprocess——供预览脱离全分辨率工作图（配合声明式队列）。
-    static engine::EngineResult runPreviewGeometry(const engine::SourceInfo& dims,
+    // 原样透传 Core 的 std::expected<EngineResult, CoreError>（成功几何结果 / 失败报因），由上层按预期语义处理。
+    static std::expected<engine::EngineResult, core::CoreError> runPreviewGeometry(const engine::SourceInfo& dims,
                                                    const engine::EngineConfig& cfg);
 
     // 由切割配置生成贯穿全图的切割线集合（委托 Core generateCutLines），供画布渲染。

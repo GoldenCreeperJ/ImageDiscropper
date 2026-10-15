@@ -32,6 +32,7 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <utility>
 #include <vector>
@@ -127,7 +128,7 @@ void anchorFromConstrained(const geometry::PolygonShape& poly,
             mnx = std::min(mnx, p.x); mxx = std::max(mxx, p.x);
             mny = std::min(mny, p.y); mxy = std::max(mxy, p.y);
         }
-        return std::array<double, 4>{mnx, mny, mxx, mxy};
+        return std::array{mnx, mny, mxx, mxy};
     };
     switch (poly.type()) {
         case ShapeType::RECTANGLE:
@@ -201,7 +202,7 @@ const char* segTypeName(const geometry::PathSegmentType t) {
 json transformToJson(const geometry::Shape& s) {
     const geometry::AffineTransform& m = s.transform();
     if (m.isIdentity() && s.obbScaleX() == 1.0 && s.obbScaleY() == 1.0 && s.obbRotationDeg() == 0.0)
-        return json(nullptr);
+        return {nullptr};
     return json{
         {keys::anno::kMatrix, json::array({m.a, m.b, m.c, m.d, m.tx, m.ty})},
         {keys::anno::kScaleX, s.obbScaleX()}, {keys::anno::kScaleY, s.obbScaleY()}, {keys::anno::kRotationDeg, s.obbRotationDeg()},
@@ -447,17 +448,15 @@ bool annotationsFromSegmentJson(const nlohmann::json& arrValue, AnnotationSet& s
     std::vector<Annotation> items;
     std::vector<std::string> errs;
     if (arrValue.is_array()) {
-        std::size_t idx = 0;
-        for (const json& item : arrValue) {
-            ++idx;
+        for (const auto& [idx, item] : arrValue | std::views::enumerate) {
             std::string reason;
             if (!item.is_object()) {
                 reason = IDC_KTR(msg, kErrNotAnObject);
             } else {
-                if (Annotation a = annotationFromJson(item, reason, static_cast<int>(idx - 1)); a.shape)
+                if (Annotation a = annotationFromJson(item, reason, static_cast<int>(idx)); a.shape)
                     items.push_back(std::move(a));
             }
-            if (!reason.empty()) errs.push_back(IDC_KTRF(msg, kErrAnnoItemPrefix, std::to_string(idx), reason));
+            if (!reason.empty()) errs.push_back(IDC_KTRF(msg, kErrAnnoItemPrefix, std::to_string(idx + 1), reason));
         }
     }
     if (!errs.empty()) {
@@ -469,8 +468,8 @@ bool annotationsFromSegmentJson(const nlohmann::json& arrValue, AnnotationSet& s
     }
     // 按 zOrder 稳定排序（等值保持原数组顺序）：正常 GUI 导出 zOrder 与位置一致→恒等；
     // 手改乱序时尊重显式层位意图。随后 restore 会规范化 zOrder ＝ 新下标。
-    std::stable_sort(items.begin(), items.end(),
-                     [](const Annotation& x, const Annotation& y) { return x.zOrder < y.zOrder; });
+    std::ranges::stable_sort(items,
+                             [](const Annotation& x, const Annotation& y) { return x.zOrder < y.zOrder; });
     set.restore(std::move(items));
     return true;
 }
@@ -515,8 +514,8 @@ bool parseAnnotationsFromJsonText(const std::string& text,
         }
         if (built.empty()) { err = IDC_KTR(msg, kErrAnnoNoValidEntry); return false; }
         // 单来源批内按 zOrder 稳定排序（等值保序）；跨批/与已有集合合并的相对顺序由调用方（out 追加序）决定。
-        std::stable_sort(built.begin(), built.end(),
-                         [](const Annotation& x, const Annotation& y) { return x.zOrder < y.zOrder; });
+        std::ranges::stable_sort(built,
+                                 [](const Annotation& x, const Annotation& y) { return x.zOrder < y.zOrder; });
         for (auto& a : built) out.push_back(std::move(a));
         return true;
     } catch (const json::exception& e) {

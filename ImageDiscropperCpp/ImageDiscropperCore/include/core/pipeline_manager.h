@@ -80,8 +80,8 @@ public:
     const std::vector<T>& items() const { return items_; }
 
     // 便捷区间访问（供范围 for 直接迭代本容器）。
-    typename std::vector<T>::const_iterator begin() const { return items_.begin(); }
-    typename std::vector<T>::const_iterator end() const { return items_.end(); }
+    std::vector<T>::const_iterator begin() const { return items_.begin(); }
+    std::vector<T>::const_iterator end() const { return items_.end(); }
 
     // 逐条相等（依赖 T 的 operator==）：供前缀失效比对、历史快照一致性等。
     bool operator==(const Pipeline& other) const { return items_ == other.items_; }

@@ -1,3 +1,4 @@
+
 // ============================================================================
 // 文件：src/preprocess/preprocess_pipeline.cpp
 // 作用：实现 PreprocessPipeline 的步骤管理与执行逻辑。
@@ -9,6 +10,7 @@
 #include "preprocess/preprocess_pipeline.h"
 
 #include <algorithm>
+#include <ranges>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -131,8 +133,8 @@ std::vector<ExecStep> buildExecPlan(const std::vector<PreprocessConfig>& steps, 
 
 // 执行单个计划步：融合核直调；ResizeOp 回 fall applyOne，保证与逐步语义同一口径。
 core::Image applyExecStep(const core::Image& src, const ExecStep& st) {
-    return std::visit([&](const auto& op) -> core::Image {
-        using T = std::decay_t<decltype(op)>;
+    return std::visit([&]<typename T0>(const T0& op) -> core::Image {
+        using T = std::decay_t<T0>;
 
         if constexpr (std::is_same_v<T, ExecChannelMap>) {
             return channelMap(src, op.k, op.j);
@@ -161,8 +163,8 @@ core::Image applyExecStep(const core::Image& src, const ExecStep& st) {
 //          像素核：几何/色彩走 pixel_kernels（私有），灰度与缩放走 core::Image 成员。
 // ---------------------------------------------------------------------------
 core::Image applyOne(const core::Image& src, const PreprocessConfig& cfg) {
-    return std::visit([&](const auto& op) -> core::Image {
-        using T = std::decay_t<decltype(op)>;
+    return std::visit([&]<typename T0>(const T0& op) -> core::Image {
+        using T = std::decay_t<T0>;
 
         if constexpr (std::is_same_v<T, GrayOp>) {
             return src.toGray();
@@ -216,8 +218,8 @@ core::Image PreprocessPipeline::applyExec(const core::Image& src) const {
 PreprocessPipeline::GeometryOut PreprocessPipeline::geometryOutput(const int width, const int height) const {
     int w = width, h = height, rotQuad = 0;
     for (const auto& cfg : items()) {
-        std::visit([&](const auto& op) {
-            using T = std::decay_t<decltype(op)>;
+        std::visit([&]<typename T0>(const T0& op) {
+            using T = std::decay_t<T0>;
             if constexpr (std::is_same_v<T, RotateOp>) {
                 const int norm = (op.angle % 360 + 360) % 360;   // 归一到 [0,360)
                 if (norm == 90 || norm == 270) std::swap(w, h);
@@ -242,8 +244,8 @@ PreprocessPipeline::MappedRect PreprocessPipeline::mapRectGeometry(
     double x0 = x, y0 = y, x1 = x + width, y1 = y + height;
     int curW = inW, curH = inH;
     for (const auto& cfg : items()) {
-        std::visit([&](const auto& op) {
-            using T = std::decay_t<decltype(op)>;
+        std::visit([&]<typename T0>(const T0& op) {
+            using T = std::decay_t<T0>;
             if constexpr (std::is_same_v<T, RotateOp>) {
                 if (const int norm = (op.angle % 360 + 360) % 360; norm == 90) {
                     const double nx0 = curH - y1, ny0 = x0, nx1 = curH - y0, ny1 = x1;
@@ -291,8 +293,8 @@ void PreprocessPipeline::mapDeltaToInput(const double dx, const double dy,
     std::vector<GeomStep> steps;
     int curW = inW, curH = inH;
     for (const auto& cfg : items()) {
-        std::visit([&](const auto& op) {
-            using T = std::decay_t<decltype(op)>;
+        std::visit([&]<typename T0>(const T0& op) {
+            using T = std::decay_t<T0>;
             if constexpr (std::is_same_v<T, RotateOp>) {
                 if (const int norm = (op.angle % 360 + 360) % 360; norm == 90 || norm == 180 || norm == 270) {
                     steps.push_back({GeomStep::Rotate, norm, false, 0, 0, curW, curH});
@@ -309,21 +311,21 @@ void PreprocessPipeline::mapDeltaToInput(const double dx, const double dy,
         }, cfg);
     }
     double vx = dx, vy = dy;
-    for (auto it = steps.rbegin(); it != steps.rend(); ++it) {
-        switch (it->kind) {
+    for (const auto &[kind, angle, horizontal, tw, th, inW, inH] : std::ranges::reverse_view(steps)) {
+        switch (kind) {
             case GeomStep::Resize:
-                if (it->tw > 0 && it->th > 0 && it->inW > 0 && it->inH > 0) {
-                    vx *= static_cast<double>(it->inW) / it->tw;
-                    vy *= static_cast<double>(it->inH) / it->th;
+                if (tw > 0 && th > 0 && inW > 0 && inH > 0) {
+                    vx *= static_cast<double>(inW) / tw;
+                    vy *= static_cast<double>(inH) / th;
                 }
                 break;
             case GeomStep::Rotate:
-                if (it->angle == 90) { const double nx = vy, ny = -vx; vx = nx; vy = ny; }        // 逆 90CW
-                else if (it->angle == 270) { const double nx = -vy, ny = vx; vx = nx; vy = ny; }  // 逆 270CW
+                if (angle == 90) { const double nx = vy, ny = -vx; vx = nx; vy = ny; }        // 逆 90CW
+                else if (angle == 270) { const double nx = -vy, ny = vx; vx = nx; vy = ny; }  // 逆 270CW
                 else { vx = -vx; vy = -vy; }                                                     // 180 自逆
                 break;
             case GeomStep::Flip:
-                if (it->horizontal) vx = -vx; else vy = -vy;
+                if (horizontal) vx = -vx; else vy = -vy;
                 break;
         }
     }

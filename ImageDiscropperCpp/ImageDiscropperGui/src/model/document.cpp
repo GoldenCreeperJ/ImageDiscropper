@@ -221,11 +221,8 @@ void Document::clearCells() {
 // 单击切换某单元：已选则移除、未选则追加到末尾（CUSTOM 下追加顺序即自定义序，FR-L3.5）。
 void Document::toggleCell(const int index) {
     if (index < 0) return;
-    if (const auto it = std::find(selectedCells_.begin(), selectedCells_.end(), index); it != selectedCells_.end()) {
-        selectedCells_.erase(it);
-    } else {
-        selectedCells_.push_back(index);
-    }
+    // 选择集内序号唯一，std::erase 按值删除并返回命中数：0 表示原本未选 → 追加。
+    if (std::erase(selectedCells_, index) == 0) selectedCells_.push_back(index);
     emit changed();
 }
 
@@ -235,7 +232,7 @@ void Document::addCells(const std::vector<int>& indices) {
     bool modified = false;
     for (const int index : indices) {
         if (index < 0) continue;
-        if (std::find(selectedCells_.begin(), selectedCells_.end(), index) == selectedCells_.end()) {
+        if (std::ranges::find(selectedCells_, index) == selectedCells_.end()) {
             selectedCells_.push_back(index);
             modified = true;
         }
@@ -248,12 +245,10 @@ void Document::addCells(const std::vector<int>& indices) {
 // 先记录 to 的位次（须在移除 from 之前，否则位次会漂移），移除 from 后在该位次插入 from。
 void Document::moveCellOrder(const int from, const int to) {
     if (from == to || from < 0 || to < 0) return;
-    int toPos = -1; // to 单元当前位次（0-based）。
-    for (std::size_t i = 0; i < selectedCells_.size(); ++i) {
-        if (selectedCells_[i] == to) { toPos = static_cast<int>(i); break; }
-    }
-    if (toPos < 0) return; // to 不在选择集中，无法定位调序目标。
-    const auto itFrom = std::find(selectedCells_.begin(), selectedCells_.end(), from);
+    const auto itTo = std::ranges::find(selectedCells_, to);   // to 当前位次（0-based）。
+    if (itTo == selectedCells_.end()) return;   // to 不在选择集中，无法定位调序目标。
+    int toPos = static_cast<int>(itTo - selectedCells_.begin());
+    const auto itFrom = std::ranges::find(selectedCells_, from);
     if (itFrom == selectedCells_.end()) return; // from 未选中，无需调序。
     selectedCells_.erase(itFrom);
     // 移除 from 后 to 的位次可能前移一位；钳制到有效范围，使 from 落在 to 原来的位次。

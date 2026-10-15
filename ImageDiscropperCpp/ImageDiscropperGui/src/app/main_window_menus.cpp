@@ -318,7 +318,7 @@ void MainWindowUi::buildModeMenu(MainWindow* w, QMenuBar* bar) {
     w->mRemainder_ = mRemainder;
     auto* remGroup = new QActionGroup(w);
     remGroup->setExclusive(true);
-    const struct { engine::RemainderPolicy policy; i18n::TextRef label; } kRems[] = {
+    const struct { engine::RemainderPolicy policy{}; i18n::TextRef label; } kRems[] = {
         { engine::RemainderPolicy::DISCARD, IDC_GT(menu, kRemainderDiscard) },
         { engine::RemainderPolicy::KEEP_PARTIAL, IDC_GT(menu, kRemainderKeep) },
         { engine::RemainderPolicy::PAD, IDC_GT(menu, kRemainderPad) },
@@ -435,7 +435,7 @@ void MainWindowUi::buildLayerMenu(MainWindow* w, QMenuBar* bar) {
     mLayers->addSeparator();
     // 锚点/枢轴（作用当前拾取层落位，9 向枚举镜像「图层编辑」面板两组下拉框；面板为真相源，
     // syncPanels 随拾取层回同步勾选态、无拾取层置灰）。
-    const struct { generate::ImageAnchor anchor; i18n::TextRef label; } kAnchors[] = {
+    const struct { generate::ImageAnchor anchor{}; i18n::TextRef label; } kAnchors[] = {
         { generate::ImageAnchor::TopLeft, IDC_GT(label, kDirTopLeft) },
         { generate::ImageAnchor::TopCenter, IDC_GT(label, kDirTopCenter) },
         { generate::ImageAnchor::TopRight, IDC_GT(label, kDirTopRight) },
@@ -522,7 +522,7 @@ void MainWindowUi::buildAnnoMenu(MainWindow* w, QMenuBar* bar) {
     // 「选择」工具＝「标注选取」画布模式（在模式菜单）。绘制工具须处于「标注绘制」态，
     // 故非绘制态下先切画布模式（与用户在面板上先切模式再选工具的流程一致）。
     QMenu* mTools = bindAddMenu(w->retranslator_, mAnno, IDC_GT(menu, kAnnoTools));
-    struct MenuToolEntry { AnnoTool tool; i18n::TextRef label; };
+    struct MenuToolEntry { AnnoTool tool{}; i18n::TextRef label; };
     const MenuToolEntry kMenuTools[] = {
         { AnnoTool::RECT, IDC_GT(label, kToolRect) },
         { AnnoTool::SQUARE, IDC_GT(label, kToolSquare) },

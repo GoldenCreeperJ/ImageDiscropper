@@ -38,7 +38,7 @@ public:
     void notify(const QString& msg, bool isError);
 
     // 语言热切换重放：重跑本栏登记的初值标签重放闭包（动态 coord/color/zoom 由后续事件覆盖）。
-    void retranslate() { retranslator_.run(); }
+    void retranslate() const { retranslator_.run(); }
 
 private:
     QLabel* coordLabel_{nullptr};

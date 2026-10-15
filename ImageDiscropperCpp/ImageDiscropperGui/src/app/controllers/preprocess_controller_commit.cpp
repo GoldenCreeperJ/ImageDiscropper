@@ -45,13 +45,13 @@ void PreprocessController::commitPipeline(const preprocess::PreprocessPipeline& 
     if (!doc_->hasImage()) return;
 
     // 编辑前几何签名（对原图尺寸跑「有效管线」的纯元数据推演）。
-    const auto beforeSig = doc_->geomSig();
+    const auto [bWidth, bHeight, bRotQuad] = doc_->geomSig();
     // 编辑后几何签名（结果态有效管线）。完整签名判据：输出尺寸或净旋转象限任一变化即触发门
     //（只看宽高会让 180° 换角这类尺寸不变、内容已转的提交漏清基于旧几何的框选）。
-    const auto afterSig = PreprocessSession::makeEffective(nextResize, nextSteps)
+    const auto [aWidth, aHeight, aRotQuad] = PreprocessSession::makeEffective(nextResize, nextSteps)
                               .geometryOutput(doc_->original().width(), doc_->original().height());
-    const bool geomChanged = afterSig.width != beforeSig.width || afterSig.height != beforeSig.height ||
-                             afterSig.rotQuad != beforeSig.rotQuad;
+    const bool geomChanged = aWidth != bWidth || aHeight != bHeight ||
+                             aRotQuad != bRotQuad;
 
     // base_ 前缀 = [resize?]（单元素或空）；baseDirty：无缓存，或缓存前缀与之逐字段不等。
     const preprocess::PreprocessPipeline prefix =

@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <span>
 
 namespace idc::preprocess {
 
@@ -139,9 +140,9 @@ core::Image remapD4(const core::Image& src, int quad, const bool flipH) {
 core::Image channelMap(const core::Image& src, const std::string& k, const std::string& j) {
     if (src.empty() || src.isGray()) return src.clone();
     core::Image out(src.width(), src.height(), src.format());
-    const std::uint8_t* s = src.data();
-    std::uint8_t* d = out.data();
-    const std::size_t n = src.sizeInBytes();
+    // 源 / 目标字节缓冲以 std::span 视图承载（非拥有 + 自带长度），取代裸指针 + sizeInBytes 对。
+    const std::span s(src.data(), src.sizeInBytes());
+    const std::span d(out.data(), src.sizeInBytes());
 
     const std::string km = k.size() == nums::preprocess::kMaskLength ? k : std::string(masks::kMaskAllOn);
     const std::string jm = j.size() == nums::preprocess::kMaskLength ? j : std::string(masks::kMaskAllOff);
@@ -152,7 +153,7 @@ core::Image channelMap(const core::Image& src, const std::string& k, const std::
     }
 
     const std::size_t bpp = core::bytesPerPixel(out.format());   // RGB=3 / RGBA=4
-    for (std::size_t i = 0; i + bpp <= n; i += bpp) {
+    for (std::size_t i = 0; i + bpp <= s.size(); i += bpp) {
         d[i + 0] = static_cast<std::uint8_t>(s[i + 0] & ka[0] ^ ja[0]);
         d[i + 1] = static_cast<std::uint8_t>(s[i + 1] & ka[1] ^ ja[1]);
         d[i + 2] = static_cast<std::uint8_t>(s[i + 2] & ka[2] ^ ja[2]);

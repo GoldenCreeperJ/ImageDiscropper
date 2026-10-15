@@ -39,7 +39,7 @@ public:
 
     // 语言热切换重放：重跑本面板登记的静态文案（行标签/按钮/复选框/分组标题/tooltip）。
     // 动态回显（色块文本/控件值）由调用方随后的 syncPanels→syncFromModel 重派生。
-    void retranslate() { retranslator_.run(); }
+    void retranslate() const { retranslator_.run(); }
 
     // 手柄拖拽进行中：把当前预览的**绝对**缩放系数(1.0=100%、负即翻转)/旋转角(度)实时回显到变换区数值
     // （blockSignals 防回环，不触发 transformApplyRequested）。数值超出 spin 范围时由 QSpinBox 自动钳制。

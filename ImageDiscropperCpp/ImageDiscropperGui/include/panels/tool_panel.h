@@ -39,7 +39,7 @@ public:
     void setMode(CanvasMode mode) const;
 
     // 语言热切换重放：重跑本面板登记的文案闭包（分组标题/模式与工具按钮及其 tooltip）。
-    void retranslate() { retranslator_.run(); }
+    void retranslate() const { retranslator_.run(); }
 
 signals:
     // 用户切换了画布交互模式（四态互斥）。

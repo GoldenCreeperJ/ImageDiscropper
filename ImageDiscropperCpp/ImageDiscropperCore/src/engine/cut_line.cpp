@@ -19,8 +19,8 @@ void normalizeCutLines(CutLineSet& lines, const int width, const int height) {
         for (int& x : v) x = std::clamp(x, 0, limit);
         v.push_back(0);
         v.push_back(limit);
-        std::sort(v.begin(), v.end());
-        v.erase(std::unique(v.begin(), v.end()), v.end());
+        std::ranges::sort(v);
+        v.erase(std::ranges::unique(v).begin(), v.end());
     };
     cleanAxis(lines.xs, width);
     cleanAxis(lines.ys, height);

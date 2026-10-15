@@ -64,7 +64,7 @@ public:
 
     // 语言热切换重放：重跑本面板登记的静态文案闭包（行标签/下拉项/按钮/提示）。
     // 动态回显（导出前信息/预览占位/重排警告）由调用方随后的 syncPanels/refreshPreview 重派生。
-    void retranslate() { retranslator_.run(); }
+    void retranslate() const { retranslator_.run(); }
 
 signals:
     // 请求导出（MainWindow 负责路径校验与调用 EngineBridge）。

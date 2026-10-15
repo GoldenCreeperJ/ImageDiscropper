@@ -38,9 +38,9 @@ Color complementary(const Color& c) {
 // RGB → HSV：采用经典分段算法，输出 h ∈ [0,1)、s ∈ [0,1]、v ∈ [0,1]。
 void rgbToHsv(const std::uint8_t r, const std::uint8_t g, const std::uint8_t b,
               float& h, float& s, float& v) {
-    const float rf = r / 255.0f;
-    const float gf = g / 255.0f;
-    const float bf = b / 255.0f;
+    const float rf = static_cast<float>(r) / 255.0f;
+    const float gf = static_cast<float>(g) / 255.0f;
+    const float bf = static_cast<float>(b) / 255.0f;
     const float mx = std::max({rf, gf, bf});
     const float mn = std::min({rf, gf, bf});
     const float d = mx - mn;
@@ -73,7 +73,7 @@ void hsvToRgb(const float h, const float s, const float v,
     }
     const float hh = std::fmod(h, 1.0f) * 6.0f;
     const int i = static_cast<int>(std::floor(hh));
-    const float f = hh - i;
+    const float f = hh - static_cast<float>(i);
     const float p = v * (1.0f - s);
     const float q = v * (1.0f - s * f);
     const float t = v * (1.0f - s * (1.0f - f));

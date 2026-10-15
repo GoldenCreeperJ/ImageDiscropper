@@ -317,11 +317,11 @@ json engineConfigToJson(const EngineConfig& config, const annotation::Annotation
     return root;
 }
 
-// 从 JSON 值还原 EngineConfig；根非对象返回 false，字段缺失/类型不符取默认值。
+// 从 JSON 值还原 EngineConfig；根非对象返回 ConfigParseFailed，字段缺失/类型不符取默认值。
 // annoSet 非空时同步还原标注（含缺段→清空：配置文件为标注真相源）；annoErr 非空时逐条回传非法标注原因。
-bool engineConfigFromJson(const json& value, EngineConfig& out, annotation::AnnotationSet* annoSet,
+std::expected<void, core::CoreError> engineConfigFromJson(const json& value, EngineConfig& out, annotation::AnnotationSet* annoSet,
                           std::string* annoErr) {
-    if (!value.is_object()) return false;
+    if (!value.is_object()) return std::unexpected(core::CoreError{core::CoreError::Code::ConfigParseFailed, {}});
     out = EngineConfig{}; // 先复位为默认，再逐字段覆盖。
 
     // source。
@@ -415,39 +415,43 @@ bool engineConfigFromJson(const json& value, EngineConfig& out, annotation::Anno
     // 逐条严格校验、任一非法即整档载入失败（不静默丢弃）——重建逻辑归属 annotation 模块
     // （经 json_common.h 交换 JSON 片段，annoErr 回传逐条原因）。
     if (annoSet != nullptr) {
-        if (!annotation::annotationsFromSegmentJson(at(value, keys::config::kAnnotations), *annoSet, annoErr))
-            return false;
+        std::string localErr;                          // annoErr 为空时兼当报因收集器，以便打包进 CoreError.message。
+        if (std::string* sink = annoErr != nullptr ? annoErr : &localErr; !annotation::annotationsFromSegmentJson(at(value, keys::config::kAnnotations), *annoSet, sink)) {
+            const std::string& reason = annoErr != nullptr ? *annoErr : localErr;
+            return std::unexpected(core::CoreError{core::CoreError::Code::AnnotationInvalid, reason});
+        }
     }
 
-    return true;
+    return {};
 }
 
 } // namespace
 
-// 保存配置到文件（缩进美化）；path 为空或写盘失败（E-8）返回 false。annotations 非空时附带 SPEC §7 标注段。
-bool saveEngineConfig(const std::string& path, const EngineConfig& config,
+// 保存配置到文件（缩进美化）；成功返回空 expected。path 为空或写盘失败（E-8）返回错误。annotations 非空时附带 SPEC §7 标注段。
+std::expected<void, core::CoreError> saveEngineConfig(const std::string& path, const EngineConfig& config,
                       const annotation::AnnotationSet* annotations) {
-    if (path.empty()) return false;
+    if (path.empty()) return std::unexpected(core::CoreError{core::CoreError::Code::PathEmpty, {}});
     const std::string text = engineConfigToJson(config, annotations).dump(2); // 缩进 2 空格美化。
     std::ofstream ofs(core::pathFromUtf8(path), std::ios::trunc);   // path 按 UTF-8 → 宽字符开，中文 / 非 ASCII 路径可写。
-    if (!ofs) return false; // E-8：无法创建/写入（目录不存在或被占用）。
+    if (!ofs) return std::unexpected(core::CoreError{core::CoreError::Code::Io, {}}); // E-8：无法创建/写入（目录不存在或被占用）。
     ofs << text;
     ofs.close();
-    return !ofs.fail();
+    if (ofs.fail()) return std::unexpected(core::CoreError{core::CoreError::Code::Io, {}});
+    return {};
 }
 
-// 从文件加载配置；path 为空、读盘失败或 JSON 解析失败返回 false。annotations 非空时同步还原标注（严格校验）。
+// 从文件加载配置；成功返回空 expected（out 经引用回填）。path 为空、读盘失败或 JSON 解析失败返回错误。annotations 非空时同步还原标注（严格校验）。
 // annoErr 非空时，若因标注段非法而失败，回传逐条原因（供 CLI 报因；GUI 可传 nullptr）。
-bool loadEngineConfig(const std::string& path, EngineConfig& out,
+std::expected<void, core::CoreError> loadEngineConfig(const std::string& path, EngineConfig& out,
                       annotation::AnnotationSet* annotations, std::string* annoErr) {
-    if (path.empty()) return false;
+    if (path.empty()) return std::unexpected(core::CoreError{core::CoreError::Code::PathEmpty, {}});
     std::ifstream ifs(core::pathFromUtf8(path), std::ios::binary);   // path 按 UTF-8 → 宽字符开，中文 / 非 ASCII 路径可读。
-    if (!ifs) return false; // E-8：文件不存在或不可读。
+    if (!ifs) return std::unexpected(core::CoreError{core::CoreError::Code::Io, {}}); // E-8：文件不存在或不可读。
     try {
         const json value = json::parse(ifs); // 直接从流解析；语法错误抛 parse_error。
         return engineConfigFromJson(value, out, annotations, annoErr);
     } catch (const json::exception&) {
-        return false; // JSON 语法错误（对齐原“解析失败返回 false”契约）。
+        return std::unexpected(core::CoreError{core::CoreError::Code::ConfigParseFailed, {}}); // JSON 语法错误。
     }
 }
 

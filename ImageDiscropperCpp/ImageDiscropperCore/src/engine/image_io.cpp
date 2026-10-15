@@ -27,6 +27,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <ranges>
+#include <span>
 
 namespace idc::engine {
 namespace {
@@ -34,10 +36,10 @@ namespace {
 // 把任意格式图像整理为 RGBA 连续缓冲（PNG / WebP 用，保留 alpha 通道）。
 std::vector<std::uint8_t> toRGBABuffer(const core::Image& img) {
     if (img.format() == core::ImageFormat::RGBA) {
-        return std::vector(img.data(), img.data() + img.sizeInBytes());
+        return std::vector(std::from_range, std::span(img.data(), img.sizeInBytes()));
     }
     const core::Image rgba = img.toRGBA(); // RGB/GRAY → RGBA。
-    return std::vector(rgba.data(), rgba.data() + rgba.sizeInBytes());
+    return std::vector(std::from_range, std::span(rgba.data(), rgba.sizeInBytes()));
 }
 
 // 把图像压平为 RGB 缓冲（JPEG/BMP 无 alpha，半透明像素以 bg 做 src-over 合成）。
@@ -48,11 +50,11 @@ std::vector<std::uint8_t> toRGBBuffer(const core::Image& img, const core::Color&
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
             const core::Color c = img.getPixel(x, y);
-            const float a = c.a / 255.0f; // src-over：out = c*a + bg*(1-a)。
+            const float a = static_cast<float>(c.a) / 255.0f; // src-over：out = c*a + bg*(1-a)。
             std::uint8_t* p = buf.data() + (static_cast<std::size_t>(y) * w + x) * 3;
-            p[0] = static_cast<std::uint8_t>(std::clamp(c.r * a + bg.r * (1.0f - a), 0.0f, 255.0f));
-            p[1] = static_cast<std::uint8_t>(std::clamp(c.g * a + bg.g * (1.0f - a), 0.0f, 255.0f));
-            p[2] = static_cast<std::uint8_t>(std::clamp(c.b * a + bg.b * (1.0f - a), 0.0f, 255.0f));
+            p[0] = static_cast<std::uint8_t>(std::clamp(static_cast<float>(c.r) * a + static_cast<float>(bg.r) * (1.0f - a), 0.0f, 255.0f));
+            p[1] = static_cast<std::uint8_t>(std::clamp(static_cast<float>(c.g) * a + static_cast<float>(bg.g) * (1.0f - a), 0.0f, 255.0f));
+            p[2] = static_cast<std::uint8_t>(std::clamp(static_cast<float>(c.b) * a + static_cast<float>(bg.b) * (1.0f - a), 0.0f, 255.0f));
         }
     }
     return buf;
@@ -63,6 +65,17 @@ void stbAppendCallback(void* context, void* data, const int size) {
     auto* out = static_cast<std::vector<std::uint8_t>*>(context);
     const auto* p = static_cast<const std::uint8_t*>(data);
     out->insert(out->end(), p, p + size);
+}
+
+// I/O 失败侧载荷工厂：I/O 类错误的具体展示文案由上层（CLI/GUI）自产，message 留空即可（对齐 core_error.h 约定）。
+std::unexpected<core::CoreError> ioFail(const core::CoreError::Code code, std::string message = {}) {
+    return std::unexpected(core::CoreError{code, std::move(message)});
+}
+
+// 编码成/败折叠为 expected：成功返回空 expected，失败携 EncodeFailed。
+std::expected<void, core::CoreError> fromEncode(const bool ok) {
+    if (ok) return {};
+    return ioFail(core::CoreError::Code::EncodeFailed);
 }
 
 // 用 libwebp 把图像编码为 WebP 字节（有损，quality 夹到 [1,100]）；成功返回 true 并填充 out。
@@ -88,12 +101,12 @@ bool encodeWebP(const core::Image& image, const int quality, std::vector<std::ui
 // 格式不支持时返回 false（对应 CLI 输入文件错误 / E-8）。
 // path 按 UTF-8 解析：经 pathFromUtf8→宽字符路径打开后从内存解码，绕开 stb 内部
 // fopen 的窄字符（Windows 系统 ANSI 码页）限制——中文 / 非 ASCII 文件名亦可正确读取。
-bool readImageFile(const std::string& path, core::Image& out) {
-    if (path.empty()) return false;
+std::expected<void, core::CoreError> readImageFile(const std::string& path, core::Image& out) {
+    if (path.empty()) return ioFail(core::CoreError::Code::PathEmpty);
     std::ifstream in(core::pathFromUtf8(path), std::ios::binary);
-    if (!in) return false;
+    if (!in) return ioFail(core::CoreError::Code::DecodeFailed);
     const std::vector bytes((std::istreambuf_iterator(in)), std::istreambuf_iterator<char>());
-    if (bytes.empty()) return false;
+    if (bytes.empty()) return ioFail(core::CoreError::Code::DecodeFailed);
     int w = 0, h = 0, channels = 0;
     // 强制按 RGBA（4 通道）加载，与 core::Image 的 RGBA 布局一致，便于后续统一处理。
     unsigned char* data = stbi_load_from_memory(
@@ -101,21 +114,21 @@ bool readImageFile(const std::string& path, core::Image& out) {
         &w, &h, &channels, 4);
     if (data == nullptr || w <= 0 || h <= 0) {
         stbi_image_free(data); // data 可能为 nullptr，stbi_image_free 对 nullptr 安全。
-        return false;          // 解码失败：文件不存在 / 非图像 / 不支持的格式。
+        return ioFail(core::CoreError::Code::DecodeFailed); // 解码失败：文件不存在 / 非图像 / 不支持的格式。
     }
     // core::Image 的 RGBA 缓冲为紧凑行主序（w*h*4，无行填充），与 stb 输出布局一致，直接整体拷贝。
     out.reallocate(w, h, core::ImageFormat::RGBA);
     std::memcpy(out.data(), data,
                 static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4);
     stbi_image_free(data);
-    return true;
+    return {};
 }
 
 // 将图像编码到内存缓冲；成功返回 true。支持 PNG/JPEG/BMP（stb）与 WebP（libwebp）。
-bool encodeImageToMemory(const core::Image& image, const ExportFormat format,
+std::expected<void, core::CoreError> encodeImageToMemory(const core::Image& image, const ExportFormat format,
                          const int quality, const core::Color& jpegBg,
                          std::vector<std::uint8_t>& out) {
-    if (image.empty()) return false;
+    if (image.empty()) return ioFail(core::CoreError::Code::EncodeFailed);
     out.clear();
     const int w = image.width();
     const int h = image.height();
@@ -123,37 +136,39 @@ bool encodeImageToMemory(const core::Image& image, const ExportFormat format,
     switch (format) {
         case ExportFormat::PNG: {
             const std::vector<std::uint8_t> rgba = toRGBABuffer(image);
-            return stbi_write_png_to_func(stbAppendCallback, &out, w, h, 4,
-                                          rgba.data(), w * 4) != 0;
+            return fromEncode(stbi_write_png_to_func(stbAppendCallback, &out, w, h, 4,
+                                                     rgba.data(), w * 4) != 0);
         }
         case ExportFormat::BMP: {
             const std::vector<std::uint8_t> rgb = toRGBBuffer(image, jpegBg);
-            return stbi_write_bmp_to_func(stbAppendCallback, &out, w, h, 3, rgb.data()) != 0;
+            return fromEncode(stbi_write_bmp_to_func(stbAppendCallback, &out, w, h, 3, rgb.data()) != 0);
         }
         case ExportFormat::JPEG: {
             const std::vector<std::uint8_t> rgb = toRGBBuffer(image, jpegBg);
             const int q = std::clamp(quality, core::nums::engine::kQualityMin, core::nums::engine::kQualityMax);
-            return stbi_write_jpg_to_func(stbAppendCallback, &out, w, h, 3, rgb.data(), q) != 0;
+            return fromEncode(stbi_write_jpg_to_func(stbAppendCallback, &out, w, h, 3, rgb.data(), q) != 0);
         }
         case ExportFormat::WEBP:
-            return encodeWebP(image, quality, out); // WebP：libwebp 编码到内存。
+            return fromEncode(encodeWebP(image, quality, out)); // WebP：libwebp 编码到内存。
     }
-    return false;
+    return ioFail(core::CoreError::Code::EncodeFailed);
 }
 
 // 将图像编码并写入文件；成功返回 true。支持 PNG/JPEG/BMP（stb）与 WebP（libwebp）；写盘失败（E-8）返回 false。
 // 先统一编码到内存，再经 pathFromUtf8→宽字符路径落盘：绕开 stbi_write_* 内部 fopen 的
 // 窄字符（Windows 系统 ANSI 码页）限制——中文 / 非 ASCII 导出路径亦可正确写入。
-bool writeImageFile(const std::string& path, const core::Image& image,
+std::expected<void, core::CoreError> writeImageFile(const std::string& path, const core::Image& image,
                     const ExportFormat format, const int quality, const core::Color& jpegBg) {
-    if (image.empty() || path.empty()) return false;
+    if (path.empty()) return ioFail(core::CoreError::Code::PathEmpty);
+    if (image.empty()) return ioFail(core::CoreError::Code::EncodeFailed);
     std::vector<std::uint8_t> buf;
-    if (!encodeImageToMemory(image, format, quality, jpegBg, buf)) return false; // 编码失败。
+    if (!encodeImageToMemory(image, format, quality, jpegBg, buf)) return ioFail(core::CoreError::Code::EncodeFailed); // 编码失败（透传其类别即可）。
     std::ofstream ofs(core::pathFromUtf8(path), std::ios::binary | std::ios::trunc);
-    if (!ofs) return false;                                                      // E-8：无法创建/写入。
+    if (!ofs) return ioFail(core::CoreError::Code::Io);                                                      // E-8：无法创建/写入。
     ofs.write(reinterpret_cast<const char*>(buf.data()), static_cast<std::streamsize>(buf.size()));
     ofs.close();
-    return !ofs.fail();
+    if (ofs.fail()) return ioFail(core::CoreError::Code::Io);
+    return {};
 }
 
 } // namespace idc::engine

@@ -22,6 +22,20 @@ namespace fs = std::filesystem;
 
 namespace {
 
+// 测试适配：把 runEngine 的 std::expected<EngineResult, CoreError> 摊平为沿用旧断言写法
+//（r.ok / r.kept / r.composition / r.collapsible）的结构体；失败时值成员取默认。
+struct TestResult {
+    bool ok;
+    idc::engine::RegionSet kept;
+    idc::engine::Composition composition;
+    bool collapsible;
+};
+
+TestResult toTest(std::expected<idc::engine::EngineResult, idc::core::CoreError> e) {
+    if (!e) return {false, {}, {}, false};
+    return {true, std::move(e->kept), std::move(e->composition), e->collapsible};
+}
+
 // 构造带渐变的 RGBA 图。
 idc::core::Image makeImage(const int w, const int h) {
     idc::core::Image img(w, h, idc::core::ImageFormat::RGBA);
@@ -65,7 +79,7 @@ void testEngineExport() {
     cfg.cut.polarity = Polarity::REMOVE;
     cfg.emitParams.mode = EmitMode::SEPARATE; // 分离
     {
-        const EngineResult r = runEngine(img, cfg);
+        const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
         CHECK(r.kept.size() == 4);
         const fs::path outDir = dir / "corners";   // 目标文件夹（尚不存在）
@@ -81,7 +95,7 @@ void testEngineExport() {
 
     // ---- 多级不存在目录也会被自动创建（E-8：仅创建失败才报错）。----
     {
-        const EngineResult r = runEngine(img, cfg); // 仍为 SEPARATE
+        const auto r = toTest(runEngine(img, cfg)); // 仍为 SEPARATE
         const fs::path nested = dir / "a" / "b" / "deep";
         CHECK(!fs::exists(nested));
         CHECK(exportImage(r.composition, img, nested.string()));
@@ -93,7 +107,7 @@ void testEngineExport() {
     cfg.emitParams.mode = EmitMode::MERGED;
     cfg.emitParams.layout = MergeLayout::COLLAPSE;
     {
-        const EngineResult r = runEngine(img, cfg);
+        const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
         CHECK(r.collapsible);
         CHECK(r.composition.canvasWidth == 60 && r.composition.canvasHeight == 40);
@@ -107,7 +121,7 @@ void testEngineExport() {
 
     // ---- BMP / JPEG 写盘成功。----
     {
-        const EngineResult r = runEngine(img, cfg);
+        const auto r = toTest(runEngine(img, cfg));
         const fs::path bmp = dir / "collapsed.bmp";
         CHECK(exportImage(r.composition, img, bmp.string()));
         CHECK(fs::exists(bmp) && fs::file_size(bmp, ec) > 0);
@@ -118,7 +132,7 @@ void testEngineExport() {
 
     // ---- WebP 写盘成功（libwebp 补齐；校验 RIFF....WEBP 容器魔数）。----
     {
-        const EngineResult r = runEngine(img, cfg);
+        const auto r = toTest(runEngine(img, cfg));
         const fs::path webp = dir / "collapsed.webp";
         CHECK(exportImage(r.composition, img, webp.string()));
         CHECK(fs::exists(webp) && fs::file_size(webp, ec) > 0);
@@ -135,12 +149,12 @@ void testEngineExport() {
         g.source = SourceInfo{300, 300};
         g.cut.tier = Tier::L3;
         g.cut.generator = CutGenerator::GRID;
-        g.cut.grid = GridParams{0, 0, 100, 100, RemainderPolicy::DISCARD}; // 300/100 → 3×3 自动推导
+        g.cut.grid = GridParams{.originX = 0, .originY = 0, .cellWidth = 100, .cellHeight = 100, .remainder = RemainderPolicy::DISCARD}; // 300/100 → 3×3 自动推导
         g.cut.polarity = Polarity::KEEP;
         g.selectedCells = {0, 4, 8}; // 对角：非整行整列 → 不可坍缩。
         g.emitParams.mode = EmitMode::MERGED;
         g.emitParams.layout = MergeLayout::COLLAPSE; // 请求坍缩，但应被降级为重排。
-        const EngineResult r = runEngine(big, g);
+        const auto r = toTest(runEngine(big, g));
         CHECK(r.ok);
         CHECK(!r.collapsible); // 判定为不可坍缩。
         // 降级为重排：3 块 100×100 排成一行（cols 缺省 = 保留块数）→ 300×100。

@@ -612,8 +612,8 @@ static void testPreprocess() {
         CHECK(r0.x == 2 && r0.y == 3 && r0.width == 4 && r0.height == 5);
         iden.add(preprocess::GrayOp{});
         iden.add(preprocess::InvertOp{});
-        const auto r0g = iden.mapRectGeometry(2, 3, 4, 5, 10, 6);
-        CHECK(r0g.x == 2 && r0g.y == 3 && r0g.width == 4 && r0g.height == 5);
+        const auto [x, y, width, height] = iden.mapRectGeometry(2, 3, 4, 5, 10, 6);
+        CHECK(x == 2 && y == 3 && width == 4 && height == 5);
         double idx0 = 7.0, idy0 = -2.0;
         iden.mapDeltaToInput(7, -2, 10, 6, idx0, idy0);
         CHECK(idx0 == 7 && idy0 == -2);
@@ -622,8 +622,8 @@ static void testPreprocess() {
         // rotate90CW（输入 10×6）：(px,py)->(curH-py, px)，矩形 (2,1,4,3) 角点后包围盒：
         //   x0=6-4=2, y0=2, x1=6-1=5, y1=6 → (2,2,3,4)。
         preprocess::PreprocessPipeline q; q.add(preprocess::RotateOp{90});
-        const auto r90 = q.mapRectGeometry(2, 1, 4, 3, 10, 6);
-        CHECK(r90.x == 2 && r90.y == 2 && r90.width == 3 && r90.height == 4);
+        const auto [x, y, width, height] = q.mapRectGeometry(2, 1, 4, 3, 10, 6);
+        CHECK(x == 2 && y == 2 && width == 3 && height == 4);
         // 拖动增量逆映射：正向 (dx,dy)->(-dy,dx)，逆为 (dy,-dx)。
         double ox = 0, oy = 0;
         q.mapDeltaToInput(3, 5, 10, 6, ox, oy);
@@ -632,8 +632,8 @@ static void testPreprocess() {
     {
         // rotate180（10×6）：矩形 (2,1,4,3) → x0=10-6=4, y0=6-4=2 → (4,2,4,3)；增量自逆取反。
         preprocess::PreprocessPipeline q; q.add(preprocess::RotateOp{180});
-        const auto r = q.mapRectGeometry(2, 1, 4, 3, 10, 6);
-        CHECK(r.x == 4 && r.y == 2 && r.width == 4 && r.height == 3);
+        const auto [x, y, width, height] = q.mapRectGeometry(2, 1, 4, 3, 10, 6);
+        CHECK(x == 4 && y == 2 && width == 4 && height == 3);
         double ox = 0, oy = 0;
         q.mapDeltaToInput(3, 5, 10, 6, ox, oy);
         CHECK(ox == -3 && oy == -5);
@@ -641,8 +641,8 @@ static void testPreprocess() {
     {
         // rotate270CW（10×6）：(px,py)->(py, curW-px)，包围盒 (1,4,3,4)；正向增量 (dy,-dx) → 逆 (-dy,dx)。
         preprocess::PreprocessPipeline q; q.add(preprocess::RotateOp{270});
-        const auto r = q.mapRectGeometry(2, 1, 4, 3, 10, 6);
-        CHECK(r.x == 1 && r.y == 4 && r.width == 3 && r.height == 4);
+        const auto [x, y, width, height] = q.mapRectGeometry(2, 1, 4, 3, 10, 6);
+        CHECK(x == 1 && y == 4 && width == 3 && height == 4);
         double ox = 0, oy = 0;
         q.mapDeltaToInput(3, 5, 10, 6, ox, oy);
         CHECK(ox == -5 && oy == 3);
@@ -657,8 +657,8 @@ static void testPreprocess() {
         CHECK(ox == -3 && oy == 5);
         // flipV：y0=6-4=2 → (2,2,4,3)；dy 取反。
         preprocess::PreprocessPipeline qv; qv.add(preprocess::FlipOp{false});
-        const auto rv = qv.mapRectGeometry(2, 1, 4, 3, 10, 6);
-        CHECK(rv.x == 2 && rv.y == 2 && rv.width == 4 && rv.height == 3);
+        const auto [x, y, width, height] = qv.mapRectGeometry(2, 1, 4, 3, 10, 6);
+        CHECK(x == 2 && y == 2 && width == 4 && height == 3);
         qv.mapDeltaToInput(3, 5, 10, 6, ox, oy);
         CHECK(ox == 3 && oy == -5);
     }
@@ -672,8 +672,8 @@ static void testPreprocess() {
         CHECK(ox == 3 && oy == 4);
         // 非正尺寸 → 空操作（直通）。
         preprocess::PreprocessPipeline qb; qb.add(preprocess::ResizeOp{0, 0});
-        const auto rb = qb.mapRectGeometry(2, 1, 4, 3, 10, 6);
-        CHECK(rb.x == 2 && rb.y == 1 && rb.width == 4 && rb.height == 3);
+        const auto [x, y, width, height] = qb.mapRectGeometry(2, 1, 4, 3, 10, 6);
+        CHECK(x == 2 && y == 1 && width == 4 && height == 3);
     }
     {
         // 复合链（resize 2× → rot90）逐步与整体一致；矩形映后的中心与逐像素正映射同口径。
@@ -681,8 +681,8 @@ static void testPreprocess() {
         preprocess::PreprocessPipeline q2;
         q2.add(preprocess::ResizeOp{20, 12});
         q2.add(preprocess::RotateOp{90});
-        const auto rc = q2.mapRectGeometry(2, 1, 4, 3, 10, 6);
-        CHECK(rc.x == 4 && rc.y == 4 && rc.width == 6 && rc.height == 8);
+        const auto [x, y, width, height] = q2.mapRectGeometry(2, 1, 4, 3, 10, 6);
+        CHECK(x == 4 && y == 4 && width == 6 && height == 8);
         // 增量：正向 resize×2 再 rot90 (dx,dy)->(-2dy,2dx)；逆：先 rot90⁻¹ (dy,-dx) 再 resize⁻¹ ÷2。
         double ox = 0, oy = 0;
         q2.mapDeltaToInput(4, 8, 10, 6, ox, oy);
@@ -1044,7 +1044,7 @@ static void testPipeline() {
     q.add(20); q.add(11); q.add(15); q.add(30);
     CHECK(p == q);
     q.moveUp(1);
-    CHECK(!(p == q));
+    CHECK(p != q);
 
     // 范围 for 直接迭代（begin/end 转发到底层 vector）。
     int sum = 0;

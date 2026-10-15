@@ -44,7 +44,7 @@ public:
 
     // 语言热切换重放：重跑本面板登记的静态文案（分区标题/行标签/下拉项/按钮/tooltip）。
     // 动态回显（选中层变换/画布尺寸）由调用方随后的 syncPanels→syncFromDocument 重派生。
-    void retranslate() { retranslator_.run(); }
+    void retranslate() const { retranslator_.run(); }
 
 signals:
     void layerMoveRequested(int id, bool up);                   // 上移（向顶，zOrder 更大）/ 下移（作用画布当前拾取层）

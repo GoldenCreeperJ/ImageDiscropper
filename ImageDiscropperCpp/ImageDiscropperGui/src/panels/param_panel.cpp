@@ -7,6 +7,7 @@
 #include "panels/param_panel.h"
 
 #include <algorithm>
+#include <ranges>
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -183,10 +184,10 @@ void ParamPanel::syncFromDocument() {
         const int prevRow = l2RectList_->currentRow();
         l2RectList_->clear();
         const auto& rs = doc_->rects();
-        for (std::size_t i = 0; i < rs.size(); ++i) {
+        for (const auto& [i, r] : rs | std::views::enumerate) {
             l2RectList_->addItem(IDC_GTR(status, kRectListItem)
-                                     .arg(i + 1).arg(rs[i].left).arg(rs[i].top)
-                                     .arg(rs[i].right).arg(rs[i].bottom));
+                                     .arg(i + 1).arg(r.left).arg(r.top)
+                                     .arg(r.right).arg(r.bottom));
         }
         if (!rs.empty()) {
             const int last = static_cast<int>(rs.size()) - 1;

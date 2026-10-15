@@ -60,7 +60,7 @@ void LayerSessionStore::clear() {
 // 剔除已删层：会话与物化位图一并回收，避免陈旧位图驻留内存，并防 id 复用时误命中。
 void LayerSessionStore::prune(const std::unordered_set<int>& alive) {
     for (auto it = sessions_.begin(); it != sessions_.end();) {
-        if (!alive.count(it->first)) {
+        if (!alive.contains(it->first)) {
             materialized_.erase(it->first);
             it = sessions_.erase(it);
         } else {

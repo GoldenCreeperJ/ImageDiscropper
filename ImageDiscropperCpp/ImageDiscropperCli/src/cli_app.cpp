@@ -42,7 +42,7 @@ std::string splitCommand(const std::vector<std::string>& args, std::vector<std::
             // 全局取值选项（无 '=' 内联值时）会消费下一个 token，一并跳过。
             // --lang 同形：漏进这个集合会让「idc --lang en extract …」把 "en" 误当命令名。
             if (const bool takesValue = t == opts::kConfig || t == opts::kSaveConfig || t == opts::kLang;
-                takesValue && t.find('=') == std::string::npos) ++i;
+                takesValue && !t.contains('=')) ++i;
             continue;
         }
         tokens.assign(args.begin() + static_cast<std::ptrdiff_t>(i + 1), args.end());

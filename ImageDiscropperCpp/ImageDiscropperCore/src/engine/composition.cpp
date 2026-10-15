@@ -17,7 +17,7 @@ namespace {
 // 辅助：合并区间——排序后把重叠/相邻区间并为不重叠的有序区间集。
 void mergeIntervals(std::vector<std::pair<int, int>>& iv) {
     if (iv.empty()) return;
-    std::sort(iv.begin(), iv.end());
+    std::ranges::sort(iv);
     std::vector<std::pair<int, int>> merged;
     merged.push_back(iv.front());
     for (std::size_t i = 1; i < iv.size(); ++i) {
@@ -215,7 +215,7 @@ Composition compose(const RegionSet& kept, const Sequence& sequence,
     Sequence fill;
     fill.build(static_cast<std::size_t>(cols) * static_cast<std::size_t>(rows),
                static_cast<std::size_t>(cols), static_cast<std::size_t>(rows),
-               SequenceParams{fillStrategy, params.mergeOrder.reverse, params.mergeOrder.snake});
+               SequenceParams{.strategy = fillStrategy, .reverse = params.mergeOrder.reverse, .snake = params.mergeOrder.snake});
     const std::vector<int>& slots = fill.order();
 
     // 按填充路径落位：第 k 个块 → 第 k 个被访问的输出槽（slots[k] 解出 r/c）。

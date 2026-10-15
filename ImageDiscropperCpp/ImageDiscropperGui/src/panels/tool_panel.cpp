@@ -32,7 +32,7 @@ auto kToolStyle =
 // 表位存 IDC_GT（键 + 中文源值成对），按钮文案在构造循环里 i18n::qs() 现取——
 // 构造期取值 = 一期「改语言重启生效」的语义，与就地 IDC_GTR 等价。
 struct ModeEntry {
-    CanvasMode mode;
+    CanvasMode mode{};
     i18n::TextRef label;
     i18n::TextRef tip;
 };
@@ -49,7 +49,7 @@ constexpr ModeEntry kModes[] = {
 // 表序即网格入位序（3 列）：四个三角形（ISOS/EQU/RECT_TRI/EQU_RECT_TRI）刻意用 LINE/POLYLINE 等
 // 非三角项分隔，使任一行不超过 2 个三角形（旧序 EQU_TRI/RECT_TRI/EQU_RECT_TRI 挤成同一行）。仅改表序，不动枚举值。
 struct ToolEntry {
-    AnnoTool tool;
+    AnnoTool tool{};
     i18n::TextRef label;
     i18n::TextRef tip;
 };

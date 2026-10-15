@@ -26,8 +26,8 @@ namespace {
 
 // 转小写（ASCII 足够，用于枚举 / 扩展名比较）。
 std::string toLower(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(),
-                   [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::ranges::transform(s, s.begin(),
+                           [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return s;
 }
 
@@ -128,8 +128,7 @@ bool parseCanvas(const std::string& s, int& cols, int& rows, std::string& err) {
 
 bool parseOrderCells(const std::string& s, std::vector<std::pair<int, int>>& out, std::string& err) {
     out.clear();
-    const std::vector<std::string> items = split(s, ';');
-    for (const std::string& item : items) {
+    for (const std::vector<std::string> items = split(s, ';'); const std::string& item : items) {
         if (item.empty()) continue; // 容忍尾随分号。
         int r = 0, c = 0;
         if (!parseCell(item, r, c, err)) return false;
@@ -232,7 +231,7 @@ bool parseDecorate(const std::string& s, bool& reverse, bool& snake, std::string
 bool checkNaming(const std::string& s, std::string& err) {
     if (s.empty()) { err = IDC_CTR(msg, kErrNamingEmpty); return false; }
     // 拒绝路径分隔符——命名模板只用于生成文件名，不应引入子目录（防止越界写盘）。
-    if (s.find('/') != std::string::npos || s.find('\\') != std::string::npos) {
+    if (s.contains('/') || s.contains('\\')) {
         err = IDC_CTR(msg, kErrNamingSeparator) + s + "'";
         return false;
     }

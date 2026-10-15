@@ -37,8 +37,8 @@ PreprocessConfig makeDefaultConfig(const PreprocessType t) {
 
 // 通过 std::visit 提取 PreprocessConfig 的类型标签。
 PreprocessType configType(const PreprocessConfig& cfg) {
-    return std::visit([](const auto& v) -> PreprocessType {
-        using T = std::decay_t<decltype(v)>;
+    return std::visit([]<typename T0>(const T0& v) -> PreprocessType {
+        using T = std::decay_t<T0>;
         if constexpr (std::is_same_v<T, GrayOp>) return PreprocessType::GRAY;
         else if constexpr (std::is_same_v<T, SplitOp>) return PreprocessType::SPLIT;
         else if constexpr (std::is_same_v<T, InvertOp>) return PreprocessType::INVERT;

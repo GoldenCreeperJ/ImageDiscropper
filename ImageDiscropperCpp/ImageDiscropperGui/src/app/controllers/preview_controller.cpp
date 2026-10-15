@@ -178,22 +178,25 @@ void PreviewController::refreshPreview() {
         // 把当前选择集与排序策略下发给点选图元（高亮已选单元）。
         scene_->updateCellSelection(doc_->selectedCells(), doc_->order().strategy);
 
-        const engine::EngineResult res = EngineBridge::runPreviewGeometry(cfg.source, cfg);
+        const auto resExp = EngineBridge::runPreviewGeometry(cfg.source, cfg);
+        const bool ok = resExp.has_value();
+        const engine::EngineResult res = resExp.value_or(engine::EngineResult{});   // 失败时取空哨兵（kept 空 → 遮罩/预览自动清空）。
+        const QString errText = ok ? QString() : QString::fromStdString(resExp.error().message);
         scene_->updateMasks(res);
         updateExportPreview(res);
 
-        const int kept = res.ok ? static_cast<int>(res.kept.size()) : 0;
-        status_->setHint(res.ok ? IDC_GTR(status, kStatusReady) : QString::fromStdString(res.error));
+        const int kept = ok ? static_cast<int>(res.kept.size()) : 0;
+        status_->setHint(ok ? IDC_GTR(status, kStatusReady) : errText);
         exportPanel_->setCollapsible(res.collapsible);
         // 回灌重排上下文：保留块数 + 网格单元尺寸（供自动 cols/rows 与画布/单元尺寸警告）。
         exportPanel_->setRearrangeContext(kept, doc_->gridParams().cellWidth, doc_->gridParams().cellHeight);
-        if (res.ok) {
+        if (ok) {
             exportPanel_->setPreviewInfo(IDC_GTR(status, kGridPreviewFmt)
                 .arg(grid.rowCount()).arg(grid.colCount())
                 .arg(res.composition.canvasWidth).arg(res.composition.canvasHeight).arg(kept));
         } else {
             exportPanel_->setPreviewInfo(IDC_GTR(status, kPreviewNoResultFmt)
-                .arg(QString::fromStdString(res.error)));
+                .arg(errText));
         }
         return;
     }
@@ -221,21 +224,24 @@ void PreviewController::refreshPreview() {
         const engine::EngineConfig cfg = doc_->buildEngineConfig();
         const engine::Grid grid = EngineBridge::buildGrid(cfg.cut, cfg.source);
         scene_->updateMultiRectCutLines(grid, true);
-        const engine::EngineResult res = EngineBridge::runPreviewGeometry(cfg.source, cfg);
+        const auto resExp = EngineBridge::runPreviewGeometry(cfg.source, cfg);
+        const bool ok = resExp.has_value();
+        const engine::EngineResult res = resExp.value_or(engine::EngineResult{});   // 失败时取空哨兵。
+        const QString errText = ok ? QString() : QString::fromStdString(resExp.error().message);
         scene_->updateMasks(res);
         updateExportPreview(res);
 
-        const int kept = res.ok ? static_cast<int>(res.kept.size()) : 0;
-        status_->setHint(res.ok ? IDC_GTR(status, kStatusReady) : QString::fromStdString(res.error));
-        param_->setCollapseHint(res.collapsible, res.ok ? QString() : QString::fromStdString(res.error));
+        const int kept = ok ? static_cast<int>(res.kept.size()) : 0;
+        status_->setHint(ok ? IDC_GTR(status, kStatusReady) : errText);
+        param_->setCollapseHint(res.collapsible, ok ? QString() : errText);
         exportPanel_->setCollapsible(res.collapsible);
-        if (res.ok) {
+        if (ok) {
             exportPanel_->setPreviewInfo(IDC_GTR(status, kMultiRectPreviewFmt)
                 .arg(static_cast<int>(doc_->rects().size()))
                 .arg(res.composition.canvasWidth).arg(res.composition.canvasHeight).arg(kept));
         } else {
             exportPanel_->setPreviewInfo(IDC_GTR(status, kPreviewNoResultFmt)
-                .arg(QString::fromStdString(res.error)));
+                .arg(errText));
         }
         return;
     }
@@ -256,7 +262,10 @@ void PreviewController::refreshPreview() {
 
     // 组装配置 → 调 Core 预览（仅区域数学，实时）。
     const engine::EngineConfig cfg = doc_->buildEngineConfig();
-    const engine::EngineResult res = EngineBridge::runPreviewGeometry(cfg.source, cfg);
+    const auto resExp = EngineBridge::runPreviewGeometry(cfg.source, cfg);
+    const bool ok = resExp.has_value();
+    const engine::EngineResult res = resExp.value_or(engine::EngineResult{});   // 失败时取空哨兵（kept 空 → 遮罩/预览自动清空）。
+    const QString errText = ok ? QString() : QString::fromStdString(resExp.error().message);
 
     // 切割线来自 Core generateCutLines（GUI 不自算几何）；场景据此判定选区哪几条边有贯穿切割线，
     // 下发给选区框绘制为橙色贯穿线——切割线即选区边的延伸，拖动选区边＝移动切割线（同一图元）。
@@ -269,12 +278,12 @@ void PreviewController::refreshPreview() {
     if (!scene_->isDraggingSelection()) scene_->syncSelection(doc_->rect(), true);
 
     // 状态栏与面板提示。
-    const int kept = res.ok ? static_cast<int>(res.kept.size()) : 0;
-    status_->setHint(res.ok ? IDC_GTR(status, kStatusReady) : QString::fromStdString(res.error));
+    const int kept = ok ? static_cast<int>(res.kept.size()) : 0;
+    status_->setHint(ok ? IDC_GTR(status, kStatusReady) : errText);
 
-    param_->setCollapseHint(res.collapsible, res.ok ? QString() : QString::fromStdString(res.error));
+    param_->setCollapseHint(res.collapsible, ok ? QString() : errText);
     exportPanel_->setCollapsible(res.collapsible);
-    if (res.ok) {
+    if (ok) {
         exportPanel_->setPreviewInfo(IDC_GTR(status, kOutPreviewFmt)
             .arg(res.composition.canvasWidth)
             .arg(res.composition.canvasHeight)
@@ -283,14 +292,14 @@ void PreviewController::refreshPreview() {
                                  : IDC_GTR(status, kCollapseNo)));
     } else {
         exportPanel_->setPreviewInfo(IDC_GTR(status, kPreviewNoResultFmt)
-            .arg(QString::fromStdString(res.error)));
+            .arg(errText));
     }
 }
 
 // 依引擎结果刷新导出面板的输出预览缩略图（导出前预览）：先缓存 res.ok/composition，再转 refreshExportPreviewFromCache。
 // 缓存让后续「不影响切割几何」的事件（烧录开关/标注变更）只需重渲染缩略图、无需重跑 Core。
 void PreviewController::updateExportPreview(const engine::EngineResult& res) {
-    lastExportResOk_ = res.ok;
+    lastExportResOk_ = !res.composition.placements.empty();   // 成功结果 placements 恒非空；空哨兵 → false → 清空缩略图。
     lastComposition_ = res.composition;   // 拷贝 placements（相对 Core 区域计算是小头），供轻量重渲染复用。
     refreshExportPreviewFromCache();
 }

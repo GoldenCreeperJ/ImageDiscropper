@@ -17,6 +17,20 @@
 
 namespace {
 
+// 测试适配：把 runEngine 的 std::expected<EngineResult, CoreError> 摊平为沿用旧断言写法
+//（r.ok / r.kept / r.composition / r.collapsible）的结构体；失败时值成员取默认（kept 空）。
+struct TestResult {
+    bool ok;
+    idc::engine::RegionSet kept;
+    idc::engine::Composition composition;
+    bool collapsible;
+};
+
+TestResult toTest(std::expected<idc::engine::EngineResult, idc::core::CoreError> e) {
+    if (!e) return {false, {}, {}, false};
+    return {true, std::move(e->kept), std::move(e->composition), e->collapsible};
+}
+
 // 构造带渐变的 RGBA 图。
 idc::core::Image makeImage(const int w, const int h) {
     idc::core::Image img(w, h, idc::core::ImageFormat::RGBA);
@@ -44,7 +58,7 @@ void testEngineBoundary() {
         cfg.cut.generator = CutGenerator::RECT;
         cfg.cut.rect = RectRegion(70, 60, 30, 20); // 宽高均非正
         cfg.cut.polarity = Polarity::REMOVE;
-        const EngineResult r = runEngine(img, cfg);
+        const auto r = toTest(runEngine(img, cfg));
         CHECK(!r.ok);
     }
 
@@ -78,7 +92,7 @@ void testEngineBoundary() {
         cfg.cut.generator = CutGenerator::RECT;
         cfg.cut.rect = RectRegion(0, 20, 50, 60); // x1=0 贴左边
         cfg.cut.polarity = Polarity::REMOVE;
-        const EngineResult r = runEngine(img, cfg);
+        const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
         CHECK(r.kept.size() == 2); // 左侧两块宽度 0，不产生
     }
@@ -116,7 +130,7 @@ void testEngineBoundary() {
         cfg.cut.generator = CutGenerator::HORIZONTAL_LINE;
         cfg.cut.rect = RectRegion(0, 50, 100, 50); // y1==y2 → 无横带
         cfg.cut.polarity = Polarity::REMOVE;
-        const EngineResult r = runEngine(img, cfg);
+        const auto r = toTest(runEngine(img, cfg));
         CHECK(!r.ok);
     }
 
@@ -127,7 +141,7 @@ void testEngineBoundary() {
         cfg.cut.generator = CutGenerator::RECT;
         cfg.cut.rect = RectRegion(0, 0, 100, 80); // 十字覆盖全图
         cfg.cut.polarity = Polarity::REMOVE;
-        const EngineResult r = runEngine(img, cfg);
+        const auto r = toTest(runEngine(img, cfg));
         CHECK(!r.ok);
         CHECK(r.kept.empty());
     }
@@ -144,7 +158,7 @@ void testEngineBoundary() {
         cfg.cut.polarity = Polarity::KEEP;
         cfg.emitParams.mode = EmitMode::MERGED;
         cfg.emitParams.layout = MergeLayout::COLLAPSE;
-        const EngineResult r = runEngine(img, cfg);
+        const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
         CHECK(!exportImage(r.composition, img, ""));                            // 空路径（合并）
         // 父目录不存在 → 自动创建并写出成功（修复后行为），随后清理临时目录。
@@ -158,7 +172,7 @@ void testEngineBoundary() {
         fs::remove(blocker);
         // 分离导出：目标文件夹不存在会自动创建（见 test_engine_export），但空路径仍报错（E-8）。
         cfg.emitParams.mode = EmitMode::SEPARATE;
-        const EngineResult rs = runEngine(img, cfg);
+        const auto rs = toTest(runEngine(img, cfg));
         CHECK(rs.ok);
         CHECK(!exportImage(rs.composition, img, ""));                           // 空路径（分离）
     }
@@ -183,7 +197,7 @@ void testEngineBoundary() {
         cfg.cut.generator = CutGenerator::RECT;
         cfg.cut.rect = RectRegion(30, 20, 70, 60);
         cfg.cut.polarity = Polarity::REMOVE;
-        const EngineResult r = runEngine(img, cfg);
+        const auto r = toTest(runEngine(img, cfg));
         const Grid g = induceGrid(generateCutLines(cfg.cut, cfg.source), cfg.source);
         const RegionSet all = split(img, g);
         CHECK(all.size() == 9);

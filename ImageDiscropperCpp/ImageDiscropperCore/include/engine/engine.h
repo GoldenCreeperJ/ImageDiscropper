@@ -15,10 +15,12 @@
 // ============================================================================
 #pragma once
 
+#include <expected>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "core/core_error.h"  // core::CoreError（runEngine 错误侧载荷；对齐 Rust GuideLine §3.3）
 #include "core/image.h"
 #include "canvas/layer.h"          // canvas::ImageLayer（可选「layers」段：多层画布展平后作为引擎输入）
 #include "generate/pattern.h"      // generate::PatternParams（底图/图层的 recipe、boxBackdrop 图案配方字段）
@@ -118,29 +120,26 @@ Grid induceGrid(const CutLineSet& lines, const SourceInfo& source);
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// EngineResult：一次引擎作业的结果。
-//   ok          —— 是否成功（E-1/E-6/E-7 等异常时为 false）。
-//   error       —— 失败原因（可读中文提示，供上层 UI/CLI 展示）。
+// EngineResult：一次引擎作业的成功结果（失败侧经 std::expected 的 CoreError 承载）。
 //   kept        —— 保留集 R（带单元序号的片段集合）。
 //   composition —— 合成/排布描述（画布尺寸 + 各片段落位）。
 //   collapsible —— 坍缩可行性判定结果（SPEC §4.4）；false 时不可合并坍缩
-//               （L3 由 runEngine 自动改用重排，L1/L2 直接报错）。
+//               （L3 由 runEngine 自动改用重排，L1/L2 归为错误 NotCollapsible）。
+// 说明：成功值类型不再携带 ok / error——成功与否由 std::expected 表达，报因由 CoreError 承载。
 // ---------------------------------------------------------------------------
 struct EngineResult {
-    bool ok{false};
-    std::string error;
     RegionSet kept;
     Composition composition;
     bool collapsible{false};
 };
 
-// 依据配置对图像跑通完整流水线，返回保留集与合成描述（不落盘）。
+// 依据配置对图像跑通完整流水线，返回保留集与合成描述（不落盘）；失败返回 core::CoreError。
 // 落盘由 exportImage 单独完成，以分离“计算”与“I/O”（SPEC §1）。
-EngineResult runEngine(const core::Image& image, const EngineConfig& config);
+std::expected<EngineResult, core::CoreError> runEngine(const core::Image& image, const EngineConfig& config);
 
 // 仅尺寸入口（预览专用）：直接以给定输出尺寸跑几何流水线（切割线→网格→选择→split→合成）。
 // 不接收图像、不应用 config.preprocess（调用方须传“已预处理尺寸”）。产物与
 // runEngine(config.preprocess.apply(原图), 空管线cfg) 一致，供 GUI 实时预览脱离全分辨率像素。
-EngineResult runEngineGeometry(const SourceInfo& dims, const EngineConfig& config);
+std::expected<EngineResult, core::CoreError> runEngineGeometry(const SourceInfo& dims, const EngineConfig& config);
 
 } // namespace idc::engine

@@ -77,7 +77,7 @@ void ArgParser::parse(const std::vector<std::string>& tokens) {
     }
 }
 
-bool ArgParser::has(const std::string& name) const { return opts_.find(name) != opts_.end(); }
+bool ArgParser::has(const std::string& name) const { return opts_.contains(name); }
 
 std::size_t ArgParser::count(const std::string& name) const {
     const auto it = opts_.find(name);

@@ -47,7 +47,7 @@ public:
 
     // 语言热切换重放：重跑三页登记的静态文案闭包（标题/行标签/下拉项/按钮/提示），再重钳当前页高。
     // 动态回显（网格信息/选择计数/矩形列表行/坍缩提示）由调用方随后的 syncPanels 重派生。
-    void retranslate() { retranslator_.run(); reflowStack(); }
+    void retranslate() const { retranslator_.run(); reflowStack(); }
 
     // L2 多矩形：仅刷新列表中第 index 行的坐标文本（若为选中行则同步 spinbox），
     // 不重建整个列表——供画布拖拽期间实时回显矩形尺寸（此时 syncPanels 被跳过）。

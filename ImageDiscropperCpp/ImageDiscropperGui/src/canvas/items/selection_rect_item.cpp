@@ -1,4 +1,3 @@
-
 // ============================================================================
 // 文件：canvas/selection_rect_item.cpp
 // 作用：实现选区框的移动 / 四角缩放 / 单边拖动（＝移动切割线）/ 吸附 / 自绘
@@ -193,7 +192,7 @@ int SelectionRectItem::hitHandle(const QPointF& scenePos) const {
     if (!borderVisible_) return -1;   // 边框隐藏 → 无手柄可抓。
     QPointF tl, tr, bl, br;
     cornerPoints(tl, tr, bl, br);
-    const std::array<QPointF, 4> cs{tl, tr, bl, br};
+    const std::array cs{tl, tr, bl, br};
     const qreal th = handleSize_; // 略大于手柄半径，便于抓取。
     for (int i = 0; i < 4; ++i) {
         if (std::abs(scenePos.x() - cs[i].x()) <= th &&
@@ -263,13 +262,13 @@ void SelectionRectItem::applySnap(const bool preserveSize) {
     if (!hasBounds_) return;
     const QRectF r = rect_.normalized();
     const qreal th = handleSize_;
-    const std::array<qreal, 3> xs{0.0, imgW_ / 2.0, static_cast<qreal>(imgW_)};
-    const std::array<qreal, 3> ys{0.0, imgH_ / 2.0, static_cast<qreal>(imgH_)};
+    const std::array xs{0.0, imgW_ / 2.0, static_cast<qreal>(imgW_)};
+    const std::array ys{0.0, imgH_ / 2.0, static_cast<qreal>(imgH_)};
 
     if (preserveSize) {
         // 水平：左/右边中找一个到某 x 目标位移最小的吸附，整体平移 dx（宽高不变）。
-        const std::array<qreal, 2> xedges{r.left(), r.right()};
-        const std::array<qreal, 2> yedges{r.top(), r.bottom()};
+        const std::array xedges{r.left(), r.right()};
+        const std::array yedges{r.top(), r.bottom()};
         qreal bestDx = th + 1.0;
         for (const qreal e : xedges)
             for (const qreal t : xs) {

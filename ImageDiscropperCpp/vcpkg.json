@@ -24,7 +24,8 @@
       "features": [
         "gui",
         "thread",
-        "widgets"
+        "widgets",
+        "png"
       ],
       "platform": "!(linux)"
     },
@@ -35,6 +36,7 @@
         "gui",
         "thread",
         "widgets",
+        "png",
         "fontconfig",
         "xcb",
         "xcb-sm",

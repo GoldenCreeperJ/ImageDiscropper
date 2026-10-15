@@ -19,7 +19,7 @@
 namespace idc::core {
 
 // UTF-8 字节串 → filesystem 路径（宽路径按 UTF-8 解析，中文 / 非 ASCII 可正确定位）。
-inline std::filesystem::path pathFromUtf8(std::string_view utf8) {
+inline std::filesystem::path pathFromUtf8(const std::string_view utf8) {
     const auto* p = reinterpret_cast<const char8_t*>(utf8.data());
     return {p, p + utf8.size()};
 }

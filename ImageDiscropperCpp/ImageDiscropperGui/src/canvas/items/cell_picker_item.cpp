@@ -13,6 +13,8 @@
 #include <QStyleOptionGraphicsItem>
 #include <QTransform>
 
+#include <ranges>
+
 #include "canvas/items/z_order.h"
 #include "util/gui_nums.h"
 
@@ -112,10 +114,10 @@ QRectF CellPickerItem::boundingRect() const {
 void CellPickerItem::rebuildSelectionLookup() {
     selFlag_.assign(cells_.size(), 0);
     selPos_.assign(cells_.size(), 0);
-    for (std::size_t k = 0; k < selected_.size(); ++k) {
-        if (const int idx = selected_[k]; idx >= 0 && static_cast<std::size_t>(idx) < selFlag_.size()) {
-            selFlag_[static_cast<std::size_t>(idx)] = 1;
-            selPos_[static_cast<std::size_t>(idx)] = static_cast<int>(k) + 1; // 1-based 自定义序位。
+    for (const auto& [k, sel] : selected_ | std::views::enumerate) {
+        if (sel >= 0 && static_cast<std::size_t>(sel) < selFlag_.size()) {
+            selFlag_[static_cast<std::size_t>(sel)] = 1;
+            selPos_[static_cast<std::size_t>(sel)] = static_cast<int>(k) + 1; // 1-based 自定义序位。
         }
     }
 }

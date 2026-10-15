@@ -315,13 +315,14 @@ ExitCode executeJob(engine::EngineConfig& config, const core::Image& image,
     config.source.height = work->height();
 
     if (opt.verbose) std::cerr << IDC_CTR(msg, kLogPrefix) << IDC_CTR(msg, kLogRunEngine) << "\n";
-    const engine::EngineResult result = engine::runEngine(*work, config);
-    if (!result.ok) {
-        // Core 业务错误（E-1/E-5/E-6/E-7 等）统一归为运行时错误（2）。
-        reportError(makeError(ExitCode::RuntimeError, IDC_CTR(msg, kErrEngineFailed), result.error,
+    const auto engineResult = engine::runEngine(*work, config);
+    if (!engineResult) {
+        // Core 业务错误（E-1/E-5/E-6/E-7 等）统一归为运行时错误（2）；报因文本由 CoreError.message 承载（已在产生点本地化）。
+        reportError(makeError(ExitCode::RuntimeError, IDC_CTR(msg, kErrEngineFailed), engineResult.error().message,
                               IDC_CTR(msg, kHintCheckSelection)));
         return ExitCode::RuntimeError;
     }
+    const engine::EngineResult& result = *engineResult;
 
     // 显式要求坍缩但不可坍缩 → 退出码 2（固定错误文本）。
     if (opt.explicitCollapse && !result.collapsible) {

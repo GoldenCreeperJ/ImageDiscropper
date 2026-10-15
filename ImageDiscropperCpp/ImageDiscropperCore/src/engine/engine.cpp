@@ -79,29 +79,32 @@ std::vector<int> deriveSelection(const CutConfig& cut, const Grid& grid) {
     return S;
 }
 
+// 构造一个携带本地化报因的失败 expected 结果（把 code + 已本地化中文文本打包为 CoreError）。
+std::unexpected<core::CoreError> fail(const core::CoreError::Code code, std::string message) {
+    return std::unexpected(core::CoreError{code, std::move(message)});
+}
+
 } // namespace
 
 // 内部几何流水线主体：以给定 source 尺寸铺切割线/网格、以 (clipW,clipH) 裁剪 split。
 // 不含预处理、不接收像素——runEngine（图像入口）与 runEngineGeometry（仅尺寸入口）共用。
-static EngineResult runEngineImpl(const SourceInfo& source, const int clipW, const int clipH,
-                                  const EngineConfig& config) {
+static std::expected<EngineResult, core::CoreError> runEngineImpl(const SourceInfo& source,
+                                                                  const int clipW, const int clipH,
+                                                                  const EngineConfig& config) {
     EngineResult result;
 
     // --- 前置校验：尺寸合法性（非正视为空输入）。---
     if (source.width <= 0 || source.height <= 0) {
-        result.error = IDC_KTR(msg, kEngineSourceEmpty);
-        return result;
+        return fail(core::CoreError::Code::SourceEmpty, IDC_KTR(msg, kEngineSourceEmpty));
     }
 
     // --- E-1：选框/矩形退化校验（贯穿全图的切割线需有效区间）。---
     if (config.cut.generator == CutGenerator::RECT &&
         config.cut.rect.width() <= 0 && config.cut.rect.height() <= 0) {
-        result.error = IDC_KTR(msg, kEngineRectDegenerate);
-        return result;
+        return fail(core::CoreError::Code::DegenerateSelection, IDC_KTR(msg, kEngineRectDegenerate));
     }
     if (config.cut.generator == CutGenerator::MULTI_RECT && config.cut.rects.empty()) {
-        result.error = IDC_KTR(msg, kEngineMultiRectEmpty);
-        return result;
+        return fail(core::CoreError::Code::MultiRectEmpty, IDC_KTR(msg, kEngineMultiRectEmpty));
     }
 
     // --- ① 切割线 + ② 诱导网格。GRID 生成器走 Grid::build（可处理余量策略）。---
@@ -113,8 +116,7 @@ static EngineResult runEngineImpl(const SourceInfo& source, const int clipW, con
         grid = induceGrid(lines, source);
     }
     if (grid.cellCount() == 0) {
-        result.error = IDC_KTR(msg, kEngineNoGrid);
-        return result;
+        return fail(core::CoreError::Code::NoGrid, IDC_KTR(msg, kEngineNoGrid));
     }
     const int cellCount = static_cast<int>(grid.cellCount());
 
@@ -132,8 +134,7 @@ static EngineResult runEngineImpl(const SourceInfo& source, const int clipW, con
 
     // --- E-6：删除区为空（REMOVE 极性却无单元被选中剔除）。---
     if (config.cut.polarity == Polarity::REMOVE && selection.selectedCount() == 0) {
-        result.error = IDC_KTR(msg, kEngineDeleteSetEmpty);
-        return result;
+        return fail(core::CoreError::Code::EmptyDeleteRegion, IDC_KTR(msg, kEngineDeleteSetEmpty));
     }
 
     // --- split + ④ 极性 → 保留集 R（对给定裁剪尺寸切分，不读像素）。---
@@ -142,8 +143,7 @@ static EngineResult runEngineImpl(const SourceInfo& source, const int clipW, con
 
     // --- E-7 / E-6：保留区为空（删除区覆盖全图或选择集为空）。---
     if (kept.empty()) {
-        result.error = IDC_KTR(msg, kEngineKeepSetEmpty);
-        return result;
+        return fail(core::CoreError::Code::EmptyKeepRegion, IDC_KTR(msg, kEngineKeepSetEmpty));
     }
 
     // --- ⑤ 坍缩可行性（SPEC §4.4）+ 序列 + 合成。---
@@ -165,31 +165,26 @@ static EngineResult runEngineImpl(const SourceInfo& source, const int clipW, con
     const bool merged = emitParams.mode == EmitMode::MERGED;
     // 显式选择重排但非 L3 → 直接报错（不静默改布局）。
     if (merged && emitParams.layout == MergeLayout::REARRANGE && !isL3) {
-        result.error = IDC_KTR(msg, kEngineRearrangeNeedsL3);
-        return result;
+        return fail(core::CoreError::Code::RearrangeNeedsL3, IDC_KTR(msg, kEngineRearrangeNeedsL3));
     }
     // MERGED+COLLAPSE 但不可坍缩：L3 降级为重排（SPEC §4.4 推论）；L1/L2 无重排可用 → 报错。
     if (merged && emitParams.layout == MergeLayout::COLLAPSE && !result.collapsible) {
         if (!isL3) {
-            result.error = IDC_KTR(msg, kEngineNotCollapsible);
-            return result;
+            return fail(core::CoreError::Code::NotCollapsible, IDC_KTR(msg, kEngineNotCollapsible));
         }
         emitParams.layout = MergeLayout::REARRANGE;
     }
 
     result.composition = compose(kept, sequence, emitParams);
     result.kept = kept;
-    result.ok = true;
     return result;
 }
 
 // 图像入口：先按 config.preprocess 物化（FR-1），再以产出尺寸跑几何流水线。
-EngineResult runEngine(const core::Image& image, const EngineConfig& config) {
+std::expected<EngineResult, core::CoreError> runEngine(const core::Image& image, const EngineConfig& config) {
     // --- 前置校验：源图像。---
     if (image.empty()) {
-        EngineResult r;
-        r.error = IDC_KTR(msg, kEngineSourceEmpty);
-        return r;
+        return fail(core::CoreError::Code::SourceEmpty, IDC_KTR(msg, kEngineSourceEmpty));
     }
 
     // --- FR-1：切割前先应用预处理流水线（旋转/翻转/灰度/反色/色道分离/尺寸），其产出图像
@@ -199,9 +194,7 @@ EngineResult runEngine(const core::Image& image, const EngineConfig& config) {
         hasPreprocess ? config.preprocess.apply(image) : core::Image{};
     const core::Image& work = hasPreprocess ? preprocessed : image;
     if (work.empty()) {
-        EngineResult r;
-        r.error = IDC_KTR(msg, kEngineSourceEmptyAfterPreprocess);
-        return r;
+        return fail(core::CoreError::Code::SourceEmptyAfterPreprocess, IDC_KTR(msg, kEngineSourceEmptyAfterPreprocess));
     }
 
     // 切割输入尺寸：预处理可能改变尺寸（旋转 90° 宽高互换、resize 设绝对值）时以产出图像为准；
@@ -220,7 +213,7 @@ EngineResult runEngine(const core::Image& image, const EngineConfig& config) {
 }
 
 // 仅尺寸入口（预览专用）：给定输出尺寸直接跑几何流水线，忽略 config.preprocess（无图像可作用）。
-EngineResult runEngineGeometry(const SourceInfo& dims, const EngineConfig& config) {
+std::expected<EngineResult, core::CoreError> runEngineGeometry(const SourceInfo& dims, const EngineConfig& config) {
     return runEngineImpl(dims, dims.width, dims.height, config);
 }
 

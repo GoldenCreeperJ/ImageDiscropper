@@ -8,17 +8,19 @@
 // ============================================================================
 #pragma once
 
+#include <expected>
 #include <string>
 
+#include "core/core_error.h"  // core::CoreError（导出失败侧载荷）
 #include "core/image.h"
 #include "engine/composition.h"
 
 namespace idc::engine {
 
-// 把合成结果落盘（分离多图 / 合并单图）；成功返回 true。
-// SEPARATE：outputPath 为目标文件夹（不存在则自动创建，含多级父目录；创建失败返回 false，E-8）。
+// 把合成结果落盘（分离多图 / 合并单图）；成功返回空 expected。
+// SEPARATE：outputPath 为目标文件夹（不存在则自动创建，含多级父目录；创建失败返回 CoreError，E-8）。
 // MERGED：outputPath 为单图文件路径，格式优先由扩展名推断，无有效扩展名时回退 Composition::format。
-bool exportImage(const Composition& composition, const core::Image& source,
-                 const std::string& outputPath);
+std::expected<void, core::CoreError> exportImage(const Composition& composition, const core::Image& source,
+                                                 const std::string& outputPath);
 
 } // namespace idc::engine

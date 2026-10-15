@@ -48,7 +48,7 @@ public:
 
     // 语言热切换重放：重跑本面板登记的静态文案闭包（分区标题/行标签/下拉项/按钮）。
     // 动态回显（目标标注/当前尺寸/列表行）由调用方随后的 syncPanels→syncFromDocument 重派生。
-    void retranslate() { retranslator_.run(); }
+    void retranslate() const { retranslator_.run(); }
 
 signals:
     // ---- 轻操作队列增删移改（扁平队列下标：色彩项 = 几何项数 + 色彩行）----

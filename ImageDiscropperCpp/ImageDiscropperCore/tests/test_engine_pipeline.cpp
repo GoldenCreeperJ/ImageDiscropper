@@ -16,6 +16,22 @@
 
 namespace {
 
+// 测试适配：把 runEngine / runEngineGeometry 的 std::expected<EngineResult, CoreError>
+// 摊平为沿用旧断言写法（r.ok / r.error / r.kept / r.composition / r.collapsible）的结构体，
+// 失败时值成员取默认（kept 空、composition 空、collapsible false），与原 EngineResult 失败态一致。
+struct TestResult {
+    bool ok;
+    std::string error;
+    idc::engine::RegionSet kept;
+    idc::engine::Composition composition;
+    bool collapsible;
+};
+
+TestResult toTest(std::expected<idc::engine::EngineResult, idc::core::CoreError> e) {
+    if (!e) return {false, std::move(e.error().message), {}, {}, false};
+    return {true, std::string{}, std::move(e->kept), std::move(e->composition), e->collapsible};
+}
+
 // 构造一张带伪随机渐变的 RGBA 图，确保各单元像素互异（便于位置断言）。
 idc::core::Image makeImage(const int w, const int h) {
     idc::core::Image img(w, h, idc::core::ImageFormat::RGBA);
@@ -45,7 +61,7 @@ void testEnginePipeline() {
         cfg.cut.polarity = Polarity::KEEP;
         cfg.emitParams.mode = EmitMode::MERGED;
         cfg.emitParams.layout = MergeLayout::COLLAPSE;
-        const EngineResult r = runEngine(img, cfg);
+        const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
         CHECK(r.collapsible);
         CHECK(r.kept.size() == 1);
@@ -64,7 +80,7 @@ void testEnginePipeline() {
         cfg.cut.polarity = Polarity::KEEP;
         cfg.emitParams.mode = EmitMode::MERGED;
         cfg.emitParams.layout = MergeLayout::COLLAPSE;
-        const EngineResult r = runEngine(img, cfg);
+        const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
         CHECK(r.composition.canvasWidth == 100 && r.composition.canvasHeight == 40);
     }
@@ -79,7 +95,7 @@ void testEnginePipeline() {
         cfg.cut.polarity = Polarity::KEEP;
         cfg.emitParams.mode = EmitMode::MERGED;
         cfg.emitParams.layout = MergeLayout::COLLAPSE;
-        const EngineResult r = runEngine(img, cfg);
+        const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
         CHECK(r.composition.canvasWidth == 40 && r.composition.canvasHeight == 80);
     }
@@ -95,7 +111,7 @@ void testEnginePipeline() {
         cfg.cut.polarity = Polarity::REMOVE;
         cfg.emitParams.mode = EmitMode::MERGED;
         cfg.emitParams.layout = MergeLayout::COLLAPSE;
-        const EngineResult r = runEngine(img, cfg);
+        const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
         CHECK(r.collapsible);
         CHECK(r.kept.size() == 4);
@@ -120,7 +136,7 @@ void testEnginePipeline() {
         cfg.cut.polarity = Polarity::REMOVE;
         cfg.emitParams.mode = EmitMode::MERGED;
         cfg.emitParams.layout = MergeLayout::COLLAPSE;
-        const EngineResult r = runEngine(img, cfg);
+        const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
         CHECK(r.collapsible);
         CHECK(r.composition.canvasWidth == 100 && r.composition.canvasHeight == 40);
@@ -136,7 +152,7 @@ void testEnginePipeline() {
         cfg.cut.polarity = Polarity::REMOVE;
         cfg.emitParams.mode = EmitMode::MERGED;
         cfg.emitParams.layout = MergeLayout::COLLAPSE;
-        const EngineResult r = runEngine(img, cfg);
+        const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
         CHECK(r.collapsible);
         CHECK(r.composition.canvasWidth == 60 && r.composition.canvasHeight == 80);
@@ -152,9 +168,9 @@ void testEnginePipeline() {
         cfg.emitParams.mode = EmitMode::MERGED;
         cfg.emitParams.layout = MergeLayout::COLLAPSE;
         cfg.cut.polarity = Polarity::KEEP;
-        const EngineResult rk = runEngine(img, cfg);
+        const auto rk = toTest(runEngine(img, cfg));
         cfg.cut.polarity = Polarity::REMOVE;
-        const EngineResult rr = runEngine(img, cfg);
+        const auto rr = toTest(runEngine(img, cfg));
         CHECK(rk.ok && rr.ok);
         CHECK(rk.kept.size() == 1); // 中心一块
         CHECK(rr.kept.size() == 4); // 四角四块
@@ -167,7 +183,7 @@ void testEnginePipeline() {
         cfg.source = SourceInfo{300, 300};
         cfg.cut.tier = Tier::L3;
         cfg.cut.generator = CutGenerator::GRID;
-        cfg.cut.grid = GridParams{0, 0, 100, 100, RemainderPolicy::DISCARD}; // 300/100 → 3×3 自动推导
+        cfg.cut.grid = GridParams{.originX = 0, .originY = 0, .cellWidth = 100, .cellHeight = 100, .remainder = RemainderPolicy::DISCARD}; // 300/100 → 3×3 自动推导
         cfg.cut.polarity = Polarity::KEEP;
         cfg.selectedCells = {0, 2, 6, 8}; // 四角单元
         cfg.order.strategy = SortStrategy::ROW_MAJOR;
@@ -175,7 +191,7 @@ void testEnginePipeline() {
         cfg.emitParams.layout = MergeLayout::REARRANGE;
         cfg.emitParams.cols = 2;
         cfg.emitParams.rows = 2;
-        const EngineResult r = runEngine(img, cfg);
+        const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
         CHECK(r.kept.size() == 4);
         // 单元 100×100，2×2 画布 → 200×200。
@@ -192,7 +208,7 @@ void testEnginePipeline() {
             cfg.source = SourceInfo{300, 300};
             cfg.cut.tier = Tier::L3;
             cfg.cut.generator = CutGenerator::GRID;
-            cfg.cut.grid = GridParams{0, 0, 100, 100, RemainderPolicy::DISCARD};
+            cfg.cut.grid = GridParams{.originX = 0, .originY = 0, .cellWidth = 100, .cellHeight = 100, .remainder = RemainderPolicy::DISCARD};
             cfg.cut.polarity = Polarity::KEEP;
             cfg.selectedCells = {0, 1, 2, 3};
             cfg.order.strategy = SortStrategy::ROW_MAJOR;
@@ -203,20 +219,20 @@ void testEnginePipeline() {
             return cfg;
         };
         // 行优先（默认）：槽序 [0,1,2,3] → 块1 落 slot1=(r0,c1)。
-        { const EngineResult r = runEngine(img, base());
+        { const auto r = toTest(runEngine(img, base()));
           CHECK(r.ok && r.composition.placements.size() == 4);
           CHECK(r.composition.placements[1].dest.left == 100 && r.composition.placements[1].dest.top == 0); }
         // 列优先：槽序 [0,2,1,3] → 块1 落 slot2=(r1,c0)。
         { EngineConfig cfg = base(); cfg.emitParams.mergeOrder.strategy = SortStrategy::COLUMN_MAJOR;
-          const EngineResult r = runEngine(img, cfg); CHECK(r.ok);
+          const auto r = toTest(runEngine(img, cfg)); CHECK(r.ok);
           CHECK(r.composition.placements[1].dest.left == 0 && r.composition.placements[1].dest.top == 100); }
         // 蛇形（行优先）：槽序 [0,1,3,2] → 块2 落 slot3=(r1,c1)。
         { EngineConfig cfg = base(); cfg.emitParams.mergeOrder.snake = true;
-          const EngineResult r = runEngine(img, cfg); CHECK(r.ok);
+          const auto r = toTest(runEngine(img, cfg)); CHECK(r.ok);
           CHECK(r.composition.placements[2].dest.left == 100 && r.composition.placements[2].dest.top == 100); }
         // 倒序（行优先）：槽序 [3,2,1,0] → 块0 落 slot3=(r1,c1)。
         { EngineConfig cfg = base(); cfg.emitParams.mergeOrder.reverse = true;
-          const EngineResult r = runEngine(img, cfg); CHECK(r.ok);
+          const auto r = toTest(runEngine(img, cfg)); CHECK(r.ok);
           CHECK(r.composition.placements[0].dest.left == 100 && r.composition.placements[0].dest.top == 100); }
     }
 
@@ -231,7 +247,7 @@ void testEnginePipeline() {
         cfg.cut.polarity = Polarity::REMOVE;
         cfg.emitParams.mode = EmitMode::MERGED;
         cfg.emitParams.layout = MergeLayout::REARRANGE; // 非网格模式重排 → 拒绝
-        const EngineResult r = runEngine(img, cfg);
+        const auto r = toTest(runEngine(img, cfg));
         CHECK(!r.ok);
         CHECK(r.error.find("网格") != std::string::npos);
     }
@@ -239,16 +255,16 @@ void testEnginePipeline() {
     // ---- 排序策略：Sequence::build 生成序号（FR-L3.5）。----
     {
         Sequence s;
-        s.build(9, 3, 3, SequenceParams{SortStrategy::ROW_MAJOR, false, false});
+        s.build(9, 3, 3, SequenceParams{.strategy = SortStrategy::ROW_MAJOR, .reverse = false, .snake = false});
         CHECK((s.order() == std::vector{0, 1, 2, 3, 4, 5, 6, 7, 8}));
 
-        s.build(9, 3, 3, SequenceParams{SortStrategy::COLUMN_MAJOR, false, false});
+        s.build(9, 3, 3, SequenceParams{.strategy = SortStrategy::COLUMN_MAJOR, .reverse = false, .snake = false});
         CHECK((s.order() == std::vector{0, 3, 6, 1, 4, 7, 2, 5, 8}));
 
-        s.build(9, 3, 3, SequenceParams{SortStrategy::ROW_MAJOR, true, false}); // 整体逆序
+        s.build(9, 3, 3, SequenceParams{.strategy = SortStrategy::ROW_MAJOR, .reverse = true, .snake = false}); // 整体逆序
         CHECK((s.order() == std::vector{8, 7, 6, 5, 4, 3, 2, 1, 0}));
 
-        s.build(9, 3, 3, SequenceParams{SortStrategy::ROW_MAJOR, false, true}); // 蛇形
+        s.build(9, 3, 3, SequenceParams{.strategy = SortStrategy::ROW_MAJOR, .reverse = false, .snake = true}); // 蛇形
         CHECK((s.order() == std::vector{0, 1, 2, 5, 4, 3, 6, 7, 8}));
 
         Sequence custom;
@@ -273,8 +289,8 @@ void testEnginePipeline() {
         EngineConfig runCfg = cfg;
         runCfg.preprocess.clear();                 // 仅尺寸入口不吃管线；尺寸已含旋转效果。
         runCfg.source = SourceInfo{g.width, g.height};
-        const EngineResult rImg = runEngine(img, cfg);
-        const EngineResult rGeo = runEngineGeometry(SourceInfo{g.width, g.height}, runCfg);
+        const auto rImg = toTest(runEngine(img, cfg));
+        const auto rGeo = toTest(runEngineGeometry(SourceInfo{g.width, g.height}, runCfg));
         CHECK(rImg.ok && rGeo.ok);
         CHECK(rGeo.kept.size() == rImg.kept.size());
         CHECK(rGeo.composition.canvasWidth == rImg.composition.canvasWidth &&

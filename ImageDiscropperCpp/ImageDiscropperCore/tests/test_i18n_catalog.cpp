@@ -20,6 +20,7 @@
 #include <iostream>
 #include <map>
 #include <optional>
+#include <ranges>
 #include <set>
 #include <sstream>
 #include <string>
@@ -84,9 +85,8 @@ std::optional<std::string> openedNamespace(const std::string& code) {
     const std::size_t brace = rest.find('{');
     if (brace == std::string::npos) return std::nullopt;   // 具名命名空间声明（无 {）不管
     rest = rest.substr(0, brace);
-    rest.erase(std::remove_if(rest.begin(), rest.end(),
-                              [](const char c) { return std::isspace(static_cast<unsigned char>(c)) != 0; }),
-               rest.end());
+    std::erase_if(rest,
+                  [](const char c) { return std::isspace(static_cast<unsigned char>(c)) != 0; });
     if (rest.rfind("inline", 0) == 0) rest = rest.substr(std::string("inline").size());
     const std::size_t sep = rest.rfind("::");
     return sep == std::string::npos ? rest : rest.substr(sep + 2);
@@ -237,25 +237,22 @@ void testI18nCatalog() {
     std::map<std::string, std::string> ownerOf;   // 键 → 首个登记它的一层
     std::vector<std::string> crossLayerDupes;
 
-    for (const auto& spec : layers()) {
-        const std::string& name = spec.name;
-        const auto& translatableGroups = spec.translatableGroups;
-
+    for (const auto&[name, layerHeaders, tableFiles, translatableGroups] : layers()) {
         // 常量层可能拆成多个半文件：逐个解析后合并为一张「组::名 → %N」表。
         std::map<std::string, std::set<std::string>> declared;
-        for (const std::string& headerRel : spec.layerHeaders) {
+        for (const std::string& headerRel : layerHeaders) {
             const std::filesystem::path layerPath = root / headerRel;
             bool layerOk = false;
             const auto part = parseLayerKeys(layerPath, layerOk);
             CHECK_MSG(layerOk && !part.empty(),
                       std::string("常量层读不到或解析为空: ") + layerPath.string());
-            for (const auto& kv : part) declared.emplace(kv.first, kv.second);
+            for (const auto&[fst, snd] : part) declared.emplace(fst, snd);
         }
         CHECK_MSG(!declared.empty(), std::string(name) + " 常量层解析为空");
 
         // 译文表可能拆成多个半 TU：按序解析后拼成条目序列（跨文件的重复键仍会被下方 seen 检出来）。
         std::vector<std::pair<std::string, std::set<std::string>>> entries;
-        for (const std::string& tableRel : spec.tableFiles) {
+        for (const std::string& tableRel : tableFiles) {
             const std::filesystem::path tablePath = root / tableRel;
             bool tableOk = false;
             const auto part = parseTableEntries(tablePath, tableOk);
@@ -264,12 +261,12 @@ void testI18nCatalog() {
         }
         std::vector<std::string> keys;
         keys.reserve(entries.size());
-        for (const auto& e : entries) keys.push_back(e.first);
+        for (const auto &key: entries | std::views::keys) keys.push_back(key);
 
         // —— 契约组越界：不可译组（ident/opt/cmd/env/jsonkey/defaults/token）永不进表。——
         std::vector<std::string> forbidden;
         for (const std::string& key : keys) {
-            if (const std::string group = key.substr(0, key.find("::")); std::find(translatableGroups.begin(), translatableGroups.end(), group)
+            if (const std::string group = key.substr(0, key.find("::")); std::ranges::find(translatableGroups, group)
                                                                          == translatableGroups.end()) forbidden.push_back(key);
         }
         CHECK_MSG(forbidden.empty(),
@@ -278,7 +275,7 @@ void testI18nCatalog() {
         // —— 孤儿键：常量层里查无此 (组,名) → 该键永不命中，界面静默留在中文，必须 fail。——
         std::vector<std::string> orphans;
         for (const std::string& key : keys) {
-            if (declared.find(key) == declared.end()) orphans.push_back(key);
+            if (!declared.contains(key)) orphans.push_back(key);
         }
         CHECK_MSG(orphans.empty(),
                   std::string(name) + " 表内含孤儿键（常量层无此定义）: " + joinKeys(orphans, 8));
@@ -319,10 +316,10 @@ void testI18nCatalog() {
         for (const std::string& group : translatableGroups) {
             std::size_t total = 0;
             std::size_t done = 0;
-            for (const auto& [key, ph] : declared) {
+            for (const auto &key: declared | std::views::keys) {
                 if (key.rfind(group + "::", 0) != 0) continue;
                 ++total;
-                if (seen.count(key) != 0) ++done;
+                if (seen.contains(key)) ++done;
             }
             // 组整体缺失说明解析器或排版脱节（而非译文没写），必须 fail。
             CHECK_MSG(total != 0, std::string(name) + " 常量层解析不到组: " + group);

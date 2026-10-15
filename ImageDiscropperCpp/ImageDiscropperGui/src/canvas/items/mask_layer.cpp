@@ -52,8 +52,9 @@ void MaskLayer::rebuild(QGraphicsScene& scene, const engine::EngineResult& resul
                         const int width, const int height, const bool visible) {
     clear(); // 先移除旧遮罩。
 
-    // 不显示、引擎失败或无保留块 → 不画遮罩。
-    if (!visible || !result.ok || result.kept.empty()) {
+    // 不显示或无保留块（空结果哨兵）→ 不画遮罩。
+    //（成功结果 kept 恒非空——引擎 kept 为空即报 E-7，故无需再判成功位。）
+    if (!visible || result.kept.empty()) {
         return;
     }
 

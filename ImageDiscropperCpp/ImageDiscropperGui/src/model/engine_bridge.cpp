@@ -84,7 +84,8 @@ bool EngineBridge::loadImage(const QString& path, core::Image& out, QString& err
 }
 
 // 仅尺寸预览（委托 Core runEngineGeometry）：以已预处理输出尺寸直接跑几何流水线，不碰像素、不应用 cfg.preprocess。
-engine::EngineResult EngineBridge::runPreviewGeometry(const engine::SourceInfo& dims,
+// 原样透传 Core 的 std::expected<EngineResult, CoreError>。
+std::expected<engine::EngineResult, core::CoreError> EngineBridge::runPreviewGeometry(const engine::SourceInfo& dims,
                                                       const engine::EngineConfig& cfg) {
     return idc::engine::runEngineGeometry(dims, cfg);
 }
@@ -114,14 +115,14 @@ bool EngineBridge::exportResult(const core::Image& work, const engine::EngineCon
         err = IDC_GTR(msg, kBridgeNoOutputPath);
         return false;
     }
-    // 先算（全分辨率），失败则把 Core 的中文原因透传给上层展示。
-    const engine::EngineResult res = idc::engine::runEngine(work, cfg);
-    if (!res.ok) {
-        err = QString::fromStdString(res.error);
+    // 先算（全分辨率），失败则把 Core 的本地化中文报因（CoreError.message）透传给上层展示。
+    const auto res = idc::engine::runEngine(work, cfg);
+    if (!res) {
+        err = QString::fromStdString(res.error().message);
         return false;
     }
     // 再落盘：分离模式 outputPath 为目录，合并模式为单图文件路径（由 Core 内部区分）。
-    if (!idc::engine::exportImage(res.composition, work, outputPath.toStdString())) {
+    if (!idc::engine::exportImage(res->composition, work, outputPath.toStdString())) {
         err = IDC_GTR(msg, kBridgeWriteOutputFailed).arg(outputPath);
         return false;
     }

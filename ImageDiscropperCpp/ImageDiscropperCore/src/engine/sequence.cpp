@@ -47,7 +47,7 @@ void Sequence::build(const std::size_t cellCount, const std::size_t cols,
 
     // reverse：整体逆序，叠加在 row/column-major 与 snake 之上。
     if (params.reverse) {
-        std::reverse(order_.begin(), order_.end());
+        std::ranges::reverse(order_);
     }
 }
 

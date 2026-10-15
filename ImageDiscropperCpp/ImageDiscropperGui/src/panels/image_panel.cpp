@@ -278,8 +278,8 @@ void ImagePanel::onColorSelectionChanged() {
 
 // 把某几何步参数回灌几何控件（类型下拉 + 角度 / 方向）。
 void ImagePanel::loadGeoIntoControls(const preprocess::PreprocessConfig& cfg) {
-    std::visit([this](const auto& op) {
-        using T = std::decay_t<decltype(op)>;
+    std::visit([this]<typename T0>(const T0& op) {
+        using T = std::decay_t<T0>;
         if constexpr (std::is_same_v<T, preprocess::RotateOp>) {
             geoTypeCombo_->setCurrentIndex(kRotate);
             for (int i = 0; i < rotAngle_->count(); ++i)
@@ -293,8 +293,8 @@ void ImagePanel::loadGeoIntoControls(const preprocess::PreprocessConfig& cfg) {
 
 // 把某色彩步参数回灌色彩控件（类型下拉 + 通道勾选）。
 void ImagePanel::loadColorIntoControls(const preprocess::PreprocessConfig& cfg) {
-    std::visit([this](const auto& op) {
-        using T = std::decay_t<decltype(op)>;
+    std::visit([this]<typename T0>(const T0& op) {
+        using T = std::decay_t<T0>;
         if constexpr (std::is_same_v<T, preprocess::GrayOp>) {
             colorTypeCombo_->setCurrentIndex(kGray);
         } else if constexpr (std::is_same_v<T, preprocess::InvertOp>) {
@@ -309,8 +309,8 @@ void ImagePanel::loadColorIntoControls(const preprocess::PreprocessConfig& cfg) 
 
 // 某步的中文描述（列表文本）。
 QString ImagePanel::describeStep(const preprocess::PreprocessConfig& cfg) {
-    return std::visit([](const auto& op) -> QString {
-        using T = std::decay_t<decltype(op)>;
+    return std::visit([]<typename T0>(const T0& op) -> QString {
+        using T = std::decay_t<T0>;
         if constexpr (std::is_same_v<T, preprocess::GrayOp>) {
             return IDC_GTR(label, kColorTypeGray);
         } else if constexpr (std::is_same_v<T, preprocess::InvertOp>) {

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <ranges>
 #include <vector>
 
 #include <QGraphicsSceneMouseEvent>
@@ -45,15 +46,15 @@ void CanvasScene::updateAnnotations(const AnnotationBridge& model) {
         addItem(it);
         connect(it, &AnnotationItem::pressed, this, &CanvasScene::annotationSelectRequested);
         connect(it, &AnnotationItem::moveRequested, this, [this, it](const double dx, const double dy) {
-            if (const int idx = annoItems_.indexOf(it); idx >= 0) emit annotationMoved(idx, dx, dy);
+            if (const int idx = static_cast<int>(annoItems_.indexOf(it)); idx >= 0) emit annotationMoved(idx, dx, dy);
         });
         connect(it, &AnnotationItem::transformRequested,
                 this, [this, it](const double sx, const double sy, const double deg) {
-                    if (const int idx = annoItems_.indexOf(it); idx >= 0) emit annotationTransformed(idx, sx, sy, deg);
+                    if (const int idx = static_cast<int>(annoItems_.indexOf(it)); idx >= 0) emit annotationTransformed(idx, sx, sy, deg);
         });
         connect(it, &AnnotationItem::transformPreview,
                 this, [this, it](const double sx, const double sy, const double deg) {
-                    if (const int idx = annoItems_.indexOf(it); idx >= 0) emit annotationTransformPreview(idx, sx, sy, deg);
+                    if (const int idx = static_cast<int>(annoItems_.indexOf(it)); idx >= 0) emit annotationTransformPreview(idx, sx, sy, deg);
         });
         annoItems_.append(it);
     }
@@ -115,8 +116,7 @@ std::optional<core::Color> CanvasScene::annotationColorAt(const QPointF& scenePo
     if (!annotationsVisible_) return std::nullopt;
     if (pendingAnnoItem_ && pendingAnnoItem_->isVisible())
         if (const auto c = pendingAnnoItem_->colorAtScene(scenePos)) return c;
-    for (auto it = annoItems_.rbegin(); it != annoItems_.rend(); ++it) {
-        const AnnotationItem* item = *it;
+    for (const auto item : std::ranges::reverse_view(annoItems_)) {
         if (!item || !item->isVisible()) continue;
         if (const auto c = item->colorAtScene(scenePos)) return c;
     }

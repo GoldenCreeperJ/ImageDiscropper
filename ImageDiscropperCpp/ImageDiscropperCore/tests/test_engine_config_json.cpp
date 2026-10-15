@@ -1,4 +1,3 @@
-
 // ============================================================================
 // 文件：tests/test_engine_config_json.cpp
 // 作用：配置文件存取验收（SPEC §7）——EngineConfig ↔ JSON 往返、preprocess 队列（含 resize）、
@@ -107,7 +106,7 @@ void testEngineConfigJson() {
     cfg.preprocess.add(preprocess::RotateOp{90});
     cfg.cut.tier = engine::Tier::L3;
     cfg.cut.generator = engine::CutGenerator::GRID;
-    cfg.cut.grid = engine::GridParams{0, 0, 100, 100, engine::RemainderPolicy::PAD};
+    cfg.cut.grid = engine::GridParams{.originX = 0, .originY = 0, .cellWidth = 100, .cellHeight = 100, .remainder = engine::RemainderPolicy::PAD};
     cfg.cut.polarity = engine::Polarity::KEEP;
     cfg.selectedCells = {0, 4};
     cfg.emitParams.mode = engine::EmitMode::MERGED;
@@ -314,14 +313,14 @@ void testEngineConfigJson() {
         ofs.close();
         engine::EngineConfig legacy;
         CHECK(engine::loadEngineConfig(legacyFile.string(), legacy));
-        CHECK(legacy.preprocess.size() == 0);   // 顶层 opacity 步丢弃
+        CHECK(legacy.preprocess.empty());   // 顶层 opacity 步丢弃
         if (legacy.layers.has_value() && legacy.layers->size() == 2) {
             const auto& L0 = (*legacy.layers)[0];
             CHECK(L0.preprocess.size() == 1);   // 仅 gray 保留，opacity 迁移出去
             CHECK(std::holds_alternative<preprocess::GrayOp>(L0.preprocess.items()[0]));
             CHECK(L0.transform.opacity == 138);  // mul=128→mul+add=138
             const auto& L1 = (*legacy.layers)[1];
-            CHECK(L1.preprocess.size() == 0);
+            CHECK(L1.preprocess.empty());
             CHECK(L1.transform.opacity == 90);   // mul=0→取 add=90
         } else {
             CHECK(false);
@@ -449,7 +448,7 @@ void testEngineConfigJson() {
         engine::EngineConfig noOp;
         CHECK(engine::loadEngineConfig(legacyNoOp.string(), noOp));
         CHECK(noOp.canvasOpacity == 255);
-        CHECK(noOp.base.has_value() && noOp.base->preprocess.size() == 0);
+        CHECK(noOp.base.has_value() && noOp.base->preprocess.empty());
     }
 
     // ---- 底图 generate 段 preprocess（色彩步）往返：仅色彩步保留、几何/resize 步写出时被过滤（底图预处理不改画布尺寸）。----

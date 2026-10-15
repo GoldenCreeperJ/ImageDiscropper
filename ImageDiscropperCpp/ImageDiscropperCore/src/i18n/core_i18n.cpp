@@ -47,8 +47,8 @@ State& state() {
 // 转小写以做大小写不敏感的语言码比对（"EN" ≡ "en"，"zh_CN" 的基标签 ≡ "zh"）。
 std::string toLower(const std::string_view text) {
     std::string out(text);
-    std::transform(out.begin(), out.end(), out.begin(),
-                   [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::ranges::transform(out, out.begin(),
+                           [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return out;
 }
 
@@ -64,20 +64,20 @@ void installLanguage(const std::string_view lang, const I18nTable table) {
     const auto [it, inserted] = s.catalogs.try_emplace(code);
     if (inserted) s.langs.push_back(code);
     for (std::size_t i = 0; i < table.count; ++i) {
-        const I18nEntry& e = table.entries[i];
-        if (e.key == nullptr || e.text == nullptr) continue;   // 表写坏时的兜底：跳过坏行而非崩
-        it->second.emplace(e.key, e.text);                     // 重复键保留先登记的一条
+        const auto&[key, text] = table.entries[i];
+        if (key == nullptr || text == nullptr) continue;   // 表写坏时的兜底：跳过坏行而非崩
+        it->second.emplace(key, text);                     // 重复键保留先登记的一条
     }
     // 若当前语言正是这张表，新增条目即时可见（active 指向同一节点，无需重建）。
 }
 
 std::string resolveLanguage(const std::string_view requested) {
     if (requested.empty()) return {};
-    const std::string exact(requested);
+    std::string exact(requested);
     if (exact == kSourceLanguage) return exact;
 
-    State& s = state();
-    if (s.catalogs.find(exact) != s.catalogs.end()) return exact;
+    const State& s = state();
+    if (s.catalogs.contains(exact)) return exact;
 
     // 大小写不敏感的整码匹配（"EN" ≡ "en"，"ZH-cn" ≡ 源语言）：语言码不区分大小写是 BCP-47 惯例。
     const std::string lower = toLower(exact);

@@ -197,7 +197,9 @@ int main() {
         cfg.emitParams.mode = engine::EmitMode::MERGED;
         cfg.emitParams.layout = engine::MergeLayout::COLLAPSE; // 坍缩式合并（SPEC §4.2）
 
-        const auto [ok, error, kept, composition, collapsible] = engine::runEngine(composed, cfg);
+        const auto exp = engine::runEngine(composed, cfg);
+        const bool ok = exp.has_value();
+        const auto [kept, composition, collapsible] = exp.value_or(engine::EngineResult{});
         std::cout << "[L2 collapse] ok=" << ok
                   << " collapsible=" << collapsible
                   << " kept=" << kept.size()
@@ -205,25 +207,25 @@ int main() {
                   << "\n";
         if (ok) {
             const fs::path out = outDir / "l2_collapsed.png";
-            const bool w = engine::exportImage(composition, composed, out.string());
+            const bool w = engine::exportImage(composition, composed, out.string()).has_value();
             std::cout << "  exported -> " << out.string() << " (" << (w ? "OK" : "FAIL") << ")\n";
         } else {
-            std::cout << "  error: " << error << "\n";
+            std::cout << "  error: " << exp.error().message << "\n";
         }
 
         // 9.2 同一作业改为分离导出 → 文件夹（四角 4 张 PNG，直接写入，不压缩）。
         cfg.emitParams.mode = engine::EmitMode::SEPARATE;
-        if (const engine::EngineResult rs = engine::runEngine(composed, cfg); rs.ok) {
+        if (const auto rs = engine::runEngine(composed, cfg); rs.has_value()) {
             const fs::path folder = outDir / "l2_corners"; // 目标文件夹（不存在会自动创建）
-            const bool w = engine::exportImage(rs.composition, composed, folder.string());
-            std::cout << "[L2 separate] kept=" << rs.kept.size()
+            const bool w = engine::exportImage(rs->composition, composed, folder.string()).has_value();
+            std::cout << "[L2 separate] kept=" << rs->kept.size()
                       << " -> " << folder.string() << "/ (" << (w ? "OK" : "FAIL") << ")\n";
         }
 
         // 9.4 把该 L2 作业配置序列化为 JSON 并回读（FR-L3.8 / NFR-4）。
         if (const fs::path jf = outDir / "l2_config.json"; engine::saveEngineConfig(jf.string(), cfg)) {
             engine::EngineConfig loaded;
-            const bool ok1 = engine::loadEngineConfig(jf.string(), loaded);
+            const bool ok1 = engine::loadEngineConfig(jf.string(), loaded).has_value();
             std::cout << "[config json] saved -> " << jf.string() << " reload=" << ok1
                       << " polarity="
                       << (loaded.cut.polarity == engine::Polarity::REMOVE ? "remove" : "keep") << "\n";
@@ -237,7 +239,7 @@ int main() {
         cfg.source = engine::SourceInfo{composed.width(), composed.height()};
         cfg.cut.tier = engine::Tier::L3;
         cfg.cut.generator = engine::CutGenerator::GRID;
-        cfg.cut.grid = engine::GridParams{0, 0, 50, 40, engine::RemainderPolicy::DISCARD};
+        cfg.cut.grid = engine::GridParams{.originX = 0, .originY = 0, .cellWidth = 50, .cellHeight = 40, .remainder = engine::RemainderPolicy::DISCARD};
         cfg.cut.polarity = engine::Polarity::KEEP;
         cfg.selectedCells = {0, 3, 8, 11};               // 4×3 网格的四角单元
         cfg.order.strategy = engine::SortStrategy::ROW_MAJOR;
@@ -245,17 +247,19 @@ int main() {
         cfg.emitParams.layout = engine::MergeLayout::REARRANGE; // 重排式合并（SPEC §4.3）
         cfg.emitParams.cols = 2;
 
-        const engine::EngineResult r = engine::runEngine(composed, cfg);
-        std::cout << "[L3 rearrange] ok=" << r.ok
+        const auto rexp = engine::runEngine(composed, cfg);
+        const bool ok = rexp.has_value();
+        const engine::EngineResult r = rexp.value_or(engine::EngineResult{});
+        std::cout << "[L3 rearrange] ok=" << ok
                   << " kept=" << r.kept.size()
                   << " canvas=" << r.composition.canvasWidth << "x" << r.composition.canvasHeight
                   << "\n";
-        if (r.ok) {
+        if (ok) {
             const fs::path out = outDir / "l3_rearranged.png";
-            const bool w = engine::exportImage(r.composition, composed, out.string());
+            const bool w = engine::exportImage(r.composition, composed, out.string()).has_value();
             std::cout << "  exported -> " << out.string() << " (" << (w ? "OK" : "FAIL") << ")\n";
         } else {
-            std::cout << "  error: " << r.error << "\n";
+            std::cout << "  error: " << rexp.error().message << "\n";
         }
     }
 

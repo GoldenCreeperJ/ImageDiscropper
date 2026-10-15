@@ -1,5 +1,3 @@
-
-
 // ============================================================================
 // 文件：canvas/canvas_scene.cpp
 // 作用：实现 CanvasScene 的图层装配与刷新（见同名头文件说明）。
@@ -298,8 +296,8 @@ void CanvasScene::updateImageLayers(const std::vector<canvas::ImageLayer>& layer
     // 收缩：删除已不在 layers 中的图元（按 id 匹配；防御：绝不删除正在拖拽者）。
     for (int i = imageLayerItems_.size() - 1; i >= 0; --i) {
         ImageLayerItem* it = imageLayerItems_[i];
-        const bool stillPresent = std::any_of(layers.begin(), layers.end(),
-                                              [it](const canvas::ImageLayer& l) { return l.id == it->layerId(); });
+        const bool stillPresent = std::ranges::any_of(layers,
+                                                      [it](const canvas::ImageLayer& l) { return l.id == it->layerId(); });
         if (stillPresent) continue;
         if (it->isDragging()) continue;
         imageLayerItems_.remove(i);
@@ -372,7 +370,7 @@ std::vector<int> CanvasScene::layerStackAt(const QPointF& scenePos) const {
         hits.push_back({it->layerId(), it->zValue(), i});
     }
     // 顶在前：zValue 降序；同 z 则后加入者（绘制在上）在前，保证叠放序确定。
-    std::sort(hits.begin(), hits.end(), [](const Hit& a, const Hit& b) {
+    std::ranges::sort(hits, [](const Hit& a, const Hit& b) {
         if (a.z != b.z) return a.z > b.z;
         return a.order > b.order;
     });

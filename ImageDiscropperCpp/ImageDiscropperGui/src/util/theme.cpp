@@ -51,7 +51,7 @@ bool resolveDark(const Mode mode) {
         if (scheme == Qt::ColorScheme::Dark) return true;
         if (scheme == Qt::ColorScheme::Light) return false;
     }
-    return qApp->palette().color(QPalette::Window).lightness() < 128;
+    return QGuiApplication::palette().color(QPalette::Window).lightness() < 128;
 }
 
 // 深色基线：标准 Fusion-dark 配方；浅色基线：贴近 Qt 默认浅色的显式成表（不依赖平台当前 palette，
@@ -153,7 +153,7 @@ public:
     explicit CheckboxOutlineStyle(QStyle* base) : QProxyStyle(base) {}
 
     void drawPrimitive(const PrimitiveElement element, const QStyleOption* option, QPainter* painter,
-                       const QWidget* widget = nullptr) const override {
+                       const QWidget* widget) const override {
         if (element == PE_IndicatorCheckBox) {
             if (const auto* src = qstyleoption_cast<const QStyleOptionButton*>(option)) {
                 QStyleOptionButton adjusted = *src;
@@ -173,8 +173,7 @@ void repolishWidget(QWidget* w) {
         st->unpolish(w);
         st->polish(w);
     }
-    const auto children = w->children();
-    for (QObject* child : children) {
+    for (const auto children = w->children(); QObject* child : children) {
         if (auto* cw = qobject_cast<QWidget*>(child)) repolishWidget(cw);
     }
     w->update();
@@ -193,8 +192,7 @@ void apply(const Mode mode) {
     }
     QApplication::setPalette(buildPalette(resolveDark(mode)));
     // 全量 re-polish：palette 变更已传播到各控件，但 QSS palette(...) 令牌须重抛光才重解析。
-    const auto tops = QApplication::topLevelWidgets();
-    for (QWidget* top : tops) repolishWidget(top);
+    for (const auto tops = QApplication::topLevelWidgets(); QWidget* top : tops) repolishWidget(top);
 }
 
 } // namespace idc::gui::theme
