@@ -76,7 +76,7 @@ jobs:
             git push origin "refs/tags/${{ inputs.tag }}"
             echo "已创建标签 ${{ inputs.tag }}（指向当前 HEAD）"
           fi
-  # 图标每次发布完整构建一遍（icons-ci = regenerate.sh 全流程 + 闸门 + 产物上传
+  # 图标每次发布完整构建一遍（icons-ci = regenerate.sh 全流程 + 产物上传
   # icon-products 供发布腿落地——派生物不入库，发布腿图标唯一来源即此产物）。
   # 分钟级，先于发布腿完成。
   icons:
@@ -88,7 +88,7 @@ jobs:
   #   · 手动触发可选 scope 覆盖（如移动端未验收时收窄为 desktop）
   #   · v*-rc*（预留）→ 桌面候选版：在 scope 表达式中加 rc 分支即得
   cpp:
-    # needs icons：发布腿消费 icons job 产出的 icon-products；比对失败则本 job 被跳过，
+    # needs icons：发布腿消费 icons job 产出的 icon-products；icons 失败（regenerate 出错 / 产物缺失）则本 job 被跳过，
     # 发布中止（闸门语义）。
     needs: [prepare, icons]
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.build-cpp }}

@@ -80,8 +80,7 @@ for s in 16 22 24 32 48 64 128 256 512; do
   resize $s "$ICONS/linux/hicolor/${s}x${s}/apps/imagediscropper.png"
 done
 for s in 20 29 40 80 120 152 167 180 1024; do resize $s "$ICONS/ios/icon-$s.png"; done
-for s in 48 72 96 144 192; do resize $s "$ICONS/android/mipmap-$s.png"; done
-resize 432 "$ICONS/android/icon-432.png"
+# android/ 仅派生 Play 商店列表图标（512）；启动器/自适应层见 ⑤，res 密度系列见 ⑥。
 resize 512 "$ICONS/android/icon-512.png"
 
 # ---------------------------------------------------------------------------
@@ -150,5 +149,5 @@ echo "  windows/  idc.ico(9) + icon-{16..256}.png + StoreLogo-50.png"
 echo "  mac/      icon_{16..1024}x{16..1024}.png（idc.icns 由 CI macos 腿 make_icns.sh 动态生成）"
 echo "  linux/    hicolor{16,22,24,32,48,64,128,256,512} + scalable/imagediscropper.svg"
 echo "  ios/      icon-{20,29,40,80,120,152,167,180,1024}.png"
-echo "  android/  mipmap-{48,72,96,144,192}.png + icon-432/512 + ic_foreground/ic_background(432, 自适应)"
+echo "  android/  icon-512.png（Play 商店列表图标） + ic_foreground/ic_background(432, 自适应)"
 echo "  res/      ImageDiscropperCpp/packaging/android/res/mipmap-*（legacy 48..192 + foreground 108..432）"

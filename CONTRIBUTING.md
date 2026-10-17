@@ -18,7 +18,7 @@ ctest --test-dir build/windows-debug --output-on-failure    # Core unit_tests + 
 
 建议使用 CLion，直接以 `ImageDiscropperCpp/` 为 CMake 源目录打开工程（CLion 会识别 Presets）。
 Linux / macOS 用 `linux-debug` / `macos-debug` 预设。
-每次 push / PR 由 GitHub Actions（`.github/workflows/ci.yml`）在 **Windows / Linux / macOS 三平台**以 **Release 配置**自动构建（含 GUI，与发布产物同构）并跑同一套测试，同时构建 **Android / iOS** 移动产物（打包验证，交叉编译产物不跑测试）；Debug 配置的全量验证见 cpp-dbg-verify.yml（手动，桌面三平台 + 移动双端）。
+每次 push / PR 由 GitHub Actions（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）在 **Windows / Linux / macOS 三平台**以 **Release 配置**自动构建（含 GUI，与发布产物同构）并跑同一套测试，同时构建 **Android / iOS** 移动产物（打包验证，交叉编译产物不跑测试）；Debug 配置的全量验证见 [`.github/workflows/cpp-verify.yml`](.github/workflows/cpp-verify.yml)（手动 `workflow_dispatch`，桌面三平台跑 ctest + 移动双端仅构建打包）。
 
 ## 代码规范
 
@@ -27,13 +27,10 @@ Linux / macOS 用 `linux-debug` / `macos-debug` 预设。
 - **语言标准**：C++23；命名空间统一（Core 为 `idc`，GUI 为 `idc::gui`）。
 - **注释语言**：中文。每个文件头说明文件作用与分块依据；每个函数首说明用途；复杂逻辑分块处注明分块依据。
 - **严禁上帝文件**：按功能/任务严格分文件，一个关注点一个文件（或一命令一文件）。
-- **文案纪律**：面向人的文案不得内联在使用点，必须进本层常量层（`core_texts.h` / `cli_texts.h` / `gui_texts.h`）并
-  经门面宏取用（`IDC_KTR` / `IDC_CTR` / `IDC_GTR`，键 = `分组::常量名` 由预处理器拼出）；中文即源语言与回退值。
-  **日志不豁免**：stderr 上的详细日志 / 进度提示与报错同属面向人的文案，不得以「机器日志」为由继续内联；
-  但日志的**版式元素**（行首前缀 / 分隔符 / 缩进 / 进度字符）属格式而非文案，不入库、不翻译。
-  **不可译契约永不进语言目录**：GUI `texts::ident`（QSettings 键 / MIME / objectName / 快捷键）、
-  CLI `opt` / `cmd` / `env`、以及 SPEC §7 JSON 的键名与枚举值——它们属行为契约，翻译即破坏互通。机制见
-  [`ImageDiscropperCpp/README.md`](ImageDiscropperCpp/README.md)「三层共用的 i18n」（行为基线见 SPEC §6 NFR-11）。
+- **文案纪律**：面向人的文案不得内联在使用点，必须进本层常量层（`core_texts.h` / `cli_texts.h` / `gui_texts.h`）并经门面宏取用（`IDC_KTR` / `IDC_CTR` / `IDC_GTR`）；中文即源语言与回退值。
+  - **日志不豁免**：stderr 上的详细日志 / 进度提示与报错同属面向人的文案，不得以「机器日志」为由继续内联；但日志的**版式元素**（行首前缀 / 分隔符 / 缩进 / 进度字符）属格式而非文案，不入库、不翻译。
+  - **不可译契约永不进语言目录**：GUI `texts::ident`（QSettings 键 / MIME / objectName / 快捷键）、CLI `opt` / `cmd` / `env`、以及 SPEC §7 JSON 的键名与枚举值——它们属行为契约，翻译即破坏互通。
+  - 机制与行为基线分别见 [`ImageDiscropperCpp/README.md`](ImageDiscropperCpp/README.md)「三层共用的 i18n」与 SPEC §6 NFR-11，本文不重述。
 - **数值纪律**：具业务 / 契约含义的魔数不得散在使用点，进本层数字常量层（`core_nums.h` / `cli_nums.h` / `gui_nums.h`）并按来源模块分组；
   SPEC §7 JSON 的键名与枚举 token 一律走 `keys::` / `defs::` 层（写 / 读两侧同源）。**换算 / 边界常量**（`0` / `1` / `255` 一类 clamp 上下界、单位换算因子）
   与仅在使用点可读的一次性量按判据保持就地，并在行尾注明理由。

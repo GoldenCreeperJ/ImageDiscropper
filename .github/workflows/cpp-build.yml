@@ -157,7 +157,7 @@ jobs:
 
       # ---- 桌面发布产物（CI 不启用） ----
       # Windows/Linux 直接拷贝裸可执行文件；macOS 的 idc_gui 以 .app 捆绑包输出
-      #（打包为 zip 分发——release job 的提平步骤只处理文件，目录会被拆散），
+      #（打包为 DMG 单文件分发——release job 的提平步骤只处理文件，目录会被拆散），
       # 并额外校验二进制无「系统路径之外」的动态依赖（qtbase port 在非 Windows
       # 强制静态，此处防坏产物混入——检测到即失败）。
       - name: Prepare dist artifacts
