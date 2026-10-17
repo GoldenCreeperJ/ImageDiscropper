@@ -295,39 +295,7 @@ void testEngineConfigJson() {
         CHECK(text.find("\"annotations\"") == std::string::npos);
     }
 
-    // ---- 旧配置迁移：图层 preprocess 内 "opacity" 步 → transform.opacity（mul!=0 取 mul+add，mul==0 取 add）；
-    //      顶层画布级 "opacity" 步无对应 → 丢弃（preprocessFromJson 未知 op 返回 false 被跳过）。----
-    {
-        const fs::path legacyFile = dir / "legacy.json";
-        std::ofstream ofs(legacyFile);
-        ofs << R"J({
-  "source": {"width": 10, "height": 10},
-  "preprocess": [ {"op": "opacity", "mul": 200, "add": 0} ],
-  "layers": [
-    { "source": {"kind": "empty"}, "transform": {}, "zOrder": 0,
-      "preprocess": [ {"op": "gray"}, {"op": "opacity", "mul": 128, "add": 10} ] },
-    { "source": {"kind": "empty"}, "transform": {"opacity": 255}, "zOrder": 1,
-      "preprocess": [ {"op": "opacity", "mul": 0, "add": 90} ] }
-  ]
-})J";
-        ofs.close();
-        engine::EngineConfig legacy;
-        CHECK(engine::loadEngineConfig(legacyFile.string(), legacy));
-        CHECK(legacy.preprocess.empty());   // 顶层 opacity 步丢弃
-        if (legacy.layers.has_value() && legacy.layers->size() == 2) {
-            const auto& L0 = (*legacy.layers)[0];
-            CHECK(L0.preprocess.size() == 1);   // 仅 gray 保留，opacity 迁移出去
-            CHECK(std::holds_alternative<preprocess::GrayOp>(L0.preprocess.items()[0]));
-            CHECK(L0.transform.opacity == 138);  // mul=128→mul+add=138
-            const auto& L1 = (*legacy.layers)[1];
-            CHECK(L1.preprocess.empty());
-            CHECK(L1.transform.opacity == 90);   // mul=0→取 add=90
-        } else {
-            CHECK(false);
-        }
-    }
-
-    // ---- 底图 generate 段（同构 ImageLayer）往返：纯图案底 + 落位声明底（不存文件路径）+ 旧配置兼容。----
+    // ---- 底图 generate 段（同构 ImageLayer）往返：纯图案底 + 落位声明底（不存文件路径、box 尺寸由 source 派生不落盘）。----
     {
         // ① 纯图案 Recipe 底：序列化后 generate 段仅图案键（无 file/落位），解析回 recipe。
         const fs::path patFile = dir / "base_pattern.json";
@@ -379,6 +347,12 @@ void testEngineConfigJson() {
         fb.transform.opacity = 64;   // 底图整体不透明度（非默认）：验证随 generate 段 opacity 键往返。
         fc.base = fb;
         CHECK(engine::saveEngineConfig(fileBase.string(), fc));
+        {
+            std::ifstream ifs(fileBase);
+            const std::string text((std::istreambuf_iterator(ifs)), std::istreambuf_iterator<char>());
+            CHECK(text.find("boxWidth") == std::string::npos);   // 底图落位框尺寸不落盘（恒＝source，载入由 source 回填）
+            CHECK(text.find("imageAnchor") != std::string::npos);
+        }
         engine::EngineConfig fg;
         CHECK(engine::loadEngineConfig(fileBase.string(), fg));
         CHECK(fg.base.has_value());
@@ -397,7 +371,7 @@ void testEngineConfigJson() {
             CHECK(b.transform.opacity == 64);   // 底图整体不透明度往返一致
         }
 
-        // ③ 旧配置向后兼容：仅图案键的 generate 段 → Recipe 底（等价旧行为）。
+        // ③ 仅图案键的 generate 段 → Recipe 底（无落位键；缺 opacity 键取默认 255）。
         const fs::path legacyGen = dir / "legacy_gen.json";
         {
             std::ofstream ofs(legacyGen);
@@ -409,7 +383,7 @@ void testEngineConfigJson() {
         if (lg.base.has_value()) {
             CHECK(lg.base->recipe.has_value() && lg.base->recipe->kind == generate::PatternKind::GridLines && lg.base->recipe->period == 8);
             CHECK(!lg.base->hasImagePlacement);
-            CHECK(lg.base->transform.opacity == 255);   // 旧配置无 opacity 键 → 缺省 255（行为不变）
+            CHECK(lg.base->transform.opacity == 255);   // 缺 opacity 键 → 默认 255
         }
     }
 

@@ -7,7 +7,7 @@
 // 说明（Windows 中文路径 / 控制台编码）：源码以 /utf-8 编译，字符串字面量与 std::cout 输出的
 //       均为 UTF-8 字节；但 Windows 控制台缺省用 OEM 代码页（中文系统为 GBK/936）解释这些
 //       字节，导致帮助 / 版本 / 错误文本显示为乱码。故在入口处把控制台输入 / 输出代码页切到
-//       UTF-8（65001），使控制台按 UTF-8 渲染。参数不经窄字符 argv（系统 ANSI 码页）：而由
+//       UTF-8（65001），使控制台按 UTF-8 渲染。参数不经窄字符 argv（系统 ANSI 码页），而由
 //       GetCommandLineW 经 CommandLineToArgvW 取宽参再 WideCharToMultiByte(CP_UTF8) 转 UTF-8，
 //       与 Core「std::string 路径按 UTF-8 解析（core::pathFromUtf8/pathToUtf8）」的契约一致——中文 /
 //       非 ASCII 路径方可正确开合；输出被重定向到文件 / 管道时无控制台，SetConsole*CP 静默失败，

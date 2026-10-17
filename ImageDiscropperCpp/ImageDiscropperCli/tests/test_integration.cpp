@@ -908,6 +908,7 @@ void testIntegration() {
         CHECK(text.find("imageAnchor") != std::string::npos);
         CHECK(text.find("backdrop") != std::string::npos);
         CHECK(text.find("opacity") != std::string::npos);   // generate 段携带底图整体不透明度键（缺省 255）
+        CHECK(text.find("boxWidth") == std::string::npos);   // 底图落位框尺寸不落盘（恒＝source，载入由 source 回填）
     }
 
     // ---- IT-50：底图整体不透明度端到端——Recipe 实色底设 opacity=64 → 载入现算底图（composeBase 不烘焙）+ 边界 applyAlpha

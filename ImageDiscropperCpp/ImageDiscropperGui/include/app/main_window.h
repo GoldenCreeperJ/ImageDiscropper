@@ -155,7 +155,7 @@ private:
     ParamPanel* param_{nullptr};
     ExportPanel* exportPanel_{nullptr};
     PreprocessPanel* preprocessPanel_{nullptr};   // 右侧「预处理」页（FR-1）。
-    ModeToolPanel* toolPanel_{nullptr};             // 左侧「标注工具」组（G-4）。
+    ModeToolPanel* toolPanel_{nullptr};             // 左侧「模式」工具面板（G-4）：画布四态模式条 + 标注形状子行。
     LayerPanel* layerPanel_{nullptr};           // 左侧「图层」组（G-5）。
     LayerEditPanel* layerEditPanel_{nullptr};   // 右侧「图片」页：图层序/落位/画布尺寸编辑（多层画布，无内置图层列表）。
     AnnotationPropPanel* annoPropPanel_{nullptr}; // 右侧「标注」属性页（G-4）。

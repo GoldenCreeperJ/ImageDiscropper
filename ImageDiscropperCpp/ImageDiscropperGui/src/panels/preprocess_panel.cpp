@@ -177,6 +177,9 @@ void PreprocessPanel::onGeoMoveUp() {
     if (row <= 0) return;
     geoPendingRow_ = row - 1;
     emit stepMoveRequested(geoFlatIndex(), false);
+    // 复位挂到信号路径：控制器拒绝移动（越界/跨块）时不发 commitActive、syncFromDocument 不消费 pending，
+    // 故此处兜底清除，免残留 pending 于下次无关同步强制选中错行；成功时同步已置 -1，此赋值幂等。
+    geoPendingRow_ = -1;
 }
 
 void PreprocessPanel::onGeoMoveDown() {
@@ -184,6 +187,8 @@ void PreprocessPanel::onGeoMoveDown() {
     if (row < 0 || row + 1 >= geoList_->count()) return;
     geoPendingRow_ = row + 1;
     emit stepMoveRequested(geoFlatIndex(), true);
+    // 同上：拒绝移动时无 sync 消费 pending，信号路径兜底复位（成功时幂等）。
+    geoPendingRow_ = -1;
 }
 
 // ---- 色彩区动作 ----
@@ -206,6 +211,8 @@ void PreprocessPanel::onColorMoveUp() {
     if (row <= 0) return;   // 首色上移会跨入几何块（破坏 geo→color 不变式），故禁止
     colorPendingRow_ = row - 1;
     emit stepMoveRequested(colorFlatIndex(), false);
+    // 同上：拒绝移动时无 sync 消费 pending，信号路径兜底复位（成功时幂等）。
+    colorPendingRow_ = -1;
 }
 
 void PreprocessPanel::onColorMoveDown() {
@@ -213,6 +220,8 @@ void PreprocessPanel::onColorMoveDown() {
     if (row < 0 || row + 1 >= colorList_->count()) return;
     colorPendingRow_ = row + 1;
     emit stepMoveRequested(colorFlatIndex(), true);
+    // 同上：拒绝移动时无 sync 消费 pending，信号路径兜底复位（成功时幂等）。
+    colorPendingRow_ = -1;
 }
 
 // 「画布尺寸」区动作：把控件值翻译成 resize 意图发信号（真正的重放物化在控制器）。
@@ -337,7 +346,12 @@ void PreprocessPanel::setDocument(Document* doc) {
 void PreprocessPanel::syncFromDocument() {
     const bool has = doc_ && doc_->hasImage();
     setEnabled(has);
-    if (!has) return;
+    if (!has) {
+        // 无图早退前清 pending：正常复位已挂在信号路径的兜底清除上，此处为双保险，防残留行号跨同步泄漏。
+        geoPendingRow_ = -1;
+        colorPendingRow_ = -1;
+        return;
+    }
 
     // ---- 顶部目标标注：三元（图片图层 / 底图 / 画布）----
     if (targetLabel_) {

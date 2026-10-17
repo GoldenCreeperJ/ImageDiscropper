@@ -288,14 +288,14 @@ constexpr core::I18nEntry kEntriesEnHelp[] = {
         "\n"
         "Base image (generate section, optional): the base image = one layer record isomorphic to the layers, only its role is pinned to the bottom, undraggable / its placement unchangeable.\n"
         "      Besides the pattern fields (kind/background/foreground/..., isomorphic to the generate section's pattern params), an image base attached to a new canvas may also carry\n"
-        "      fit + boxWidth/boxHeight + imageAnchor/imagePivot + x/y + backdrop (layer-box backing pattern) placement keys, so the base placement round-trips with the config and is reproducible\n"
+        "      fit + imageAnchor/imagePivot + x/y + backdrop (layer-box backing pattern) placement keys (the placement box size always equals the canvas, derived from source and not stored separately), so the base placement round-trips with the config and is reproducible\n"
         "      (**the config stores only placement, not file paths**; the base bitmap is always supplied at runtime by --input, so the same config can be reused across different inputs for batching).\n"
         "      --input / open image = an identity base with no placement, canvas size = image size; external usage is the same.\n"
         "\n"
         "Preprocessing (preprocess array, optional): six kinds of steps gray/split/invert/rotate/flip/resize (opacity is not a preprocess step; it is carried by the layer compositing parameter).\n"
         "\n"
         "Layer opacity (transform.opacity, optional): the degree of whole-layer fade-out (0..255, default 255 = fully opaque, 0 = fully transparent).\n"
-        "      This parameter acts on the whole layer proportionally to opacity at export compositing time and does not modify the pixels themselves, so it also works on grayscale images; an opacity step written in preprocess in old configs is automatically converted to this layer's transform.opacity on load.\n"
+        "      This parameter acts on the whole layer proportionally to opacity at export compositing time and does not modify the pixels themselves, so it also works on grayscale images.\n"
     },
     {"help::kTextConfigTail",
         "\n"

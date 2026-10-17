@@ -147,13 +147,6 @@ canvas::ImageLayer layerFromJson(const json& v) {
 
     if (const json& pre = at(v, keys::common::kPreprocess); pre.is_array()) {
         for (const json& step : pre) {
-            // 兼容旧配置：图层预处理内的 "opacity" 步→折叠为 transform.opacity（不再当预处理步）。
-            if (jStr(at(step, keys::pre::kOp), "") == defs::kPreStepOpacity) {
-                const int mul = std::clamp(jInt(at(step, keys::pre::kMul), nums::engine::kDefaultOpacity), 0, 255);
-                const int add = std::clamp(jInt(at(step, keys::pre::kAdd), 0), 0, 255);
-                layer.transform.opacity = std::clamp(mul == 0 ? add : mul + add, 0, 255);   // 乘算≈mul、设定≈add（有损近似）。
-                continue;
-            }
             if (preprocess::PreprocessConfig cfg; preprocessFromJson(step, cfg)) layer.preprocess.add(cfg);
         }
     }
@@ -164,7 +157,8 @@ canvas::ImageLayer layerFromJson(const json& v) {
 // 底图 canvas::ImageLayer ↔ SPEC §7「generate」段（同构序列化）。
 //   键名仍叫 "generate"（不破外部/CLI 选项名）。底图不外传文件：来源恒为程序图案（recipe）或
 //   运行时 --input 提供的位图。纯图案底图（有 recipe、无内层落位）仅写图案键；带落位（把外部输入图 /
-//   图案按落位摆入画布）在图案键之外追加 fit/boxWidth/boxHeight/imageAnchor/imagePivot/x/y/backdrop 键——
+//   图案按落位摆入画布）在图案键之外追加 fit/imageAnchor/imagePivot/x/y/backdrop 键——底图落位框尺寸恒＝
+//   画布(source)、属冗余派生值，**不落盘**（读取端据 source 回填，见 engineConfigFromJson）——
 //   **不写 file 路径**：保配置为纯处理配方、可跨不同 --input 批处理复用（路径一旦入配置会使底图被钉死、
 //   批处理结果恒同）。位图恒不入配置。底图钉住最底：transform 恒等、zOrder 固定、不入本段（读取端复位默认）。
 // ---------------------------------------------------------------------------
@@ -181,11 +175,10 @@ json baseToJson(const canvas::ImageLayer& base) {
     for (const preprocess::PreprocessConfig& step : base.preprocess.items())
         if (preprocess::isColorStep(step)) pre.push_back(preprocessToJson(step));
     if (!pre.empty()) gen[keys::common::kPreprocess] = pre;
-    // 内层落位（把外部输入图 / 图案按落位摆入画布时启用）：追加 fit/box*/image* + backdrop 图案；不写文件路径。
+    // 内层落位（把外部输入图 / 图案按落位摆入画布时启用）：追加 fit/image* + backdrop 图案；不写文件路径。
+    //   boxWidth/boxHeight 不写：底图落位框恒＝画布(source)，由读取端据 source 回填，避免与 source 冗余双存。
     if (base.hasImagePlacement) {
         gen[keys::layer::kFit] = imageFitToken(base.imageFit);
-        gen[keys::layer::kBoxWidth] = base.boxWidth;
-        gen[keys::layer::kBoxHeight] = base.boxHeight;
         gen[keys::layer::kImageAnchor] = genAnchorToken(base.imageAnchor);
         gen[keys::layer::kImagePivot] = genAnchorToken(base.imagePivot);
         gen[keys::common::kX] = base.imageX;
@@ -210,12 +203,10 @@ canvas::ImageLayer baseFromJson(const json& gen) {
         base.sourceKind = canvas::LayerSourceKind::Recipe;
         base.recipe = patternParamsFromJson(gen);
     }
-    // 内层落位（存在任一落位键即启用）。
-    if (gen.contains(keys::layer::kFit) || gen.contains(keys::layer::kBoxWidth) || gen.contains(keys::layer::kImageAnchor)) {
+    // 内层落位（存在 fit 或 imageAnchor 键即启用；box 尺寸不落盘，由 engineConfigFromJson 据 source 回填）。
+    if (gen.contains(keys::layer::kFit) || gen.contains(keys::layer::kImageAnchor)) {
         base.hasImagePlacement = true;
         base.imageFit = imageFitFromToken(jStr(at(gen, keys::layer::kFit), defs::kImageFitCrop));
-        base.boxWidth = jInt(at(gen, keys::layer::kBoxWidth), 0);
-        base.boxHeight = jInt(at(gen, keys::layer::kBoxHeight), 0);
         base.imageAnchor = genAnchorFromToken(jStr(at(gen, keys::layer::kImageAnchor), defs::kAnchorCenter));
         base.imagePivot = genAnchorFromToken(jStr(at(gen, keys::layer::kImagePivot), defs::kAnchorCenter));
         base.imageX = jInt(at(gen, keys::common::kX), 0);
@@ -378,18 +369,6 @@ std::expected<void, core::CoreError> engineConfigFromJson(const json& value, Eng
     out.emitParams.rows = jsonToOptInt(at(merge, keys::config::kRows));
     out.emitParams.cellWidth = jsonToOptInt(at(merge, keys::config::kCellWidth));
     out.emitParams.cellHeight = jsonToOptInt(at(merge, keys::config::kCellHeight));
-    // 兼容 SPEC §7 示例的 "cellSize"：{width,height} / {w,h} / [w,h] 三种写法。
-    if (!out.emitParams.cellWidth && !out.emitParams.cellHeight) {
-        if (const json& cs = at(merge, keys::config::kCellSize); cs.is_array() && cs.size() >= 2) {
-            out.emitParams.cellWidth = jInt(cs[0], 0);
-            out.emitParams.cellHeight = jInt(cs[1], 0);
-        } else if (cs.is_object()) {
-            const int w = cs.contains(keys::common::kWidth) ? jInt(at(cs, keys::common::kWidth), 0) : jInt(at(cs, keys::common::kW), 0);
-            const int h = cs.contains(keys::common::kHeight) ? jInt(at(cs, keys::common::kHeight), 0) : jInt(at(cs, keys::common::kH), 0);
-            out.emitParams.cellWidth = w;
-            out.emitParams.cellHeight = h;
-        }
-    }
     out.emitParams.padColor = colorFromHex(jStr(at(merge, keys::config::kPadColor), defs::kPadColorTransparent));
     // arrange：重排填充顺序（缺失取默认 row-major / 无 reverse / 无 snake）。
     const json& arrange = at(merge, keys::config::kArrange);
@@ -398,8 +377,11 @@ std::expected<void, core::CoreError> engineConfigFromJson(const json& value, Eng
     out.emitParams.mergeOrder.snake = jBool(at(arrange, keys::config::kSnake), false);
 
     // generate（可选段）：缺段或非对象 → 无底图（std::nullopt）。解析为同构 canvas::ImageLayer。
-    if (const json& gen = at(value, keys::config::kGenerate); gen.is_object())
+    if (const json& gen = at(value, keys::config::kGenerate); gen.is_object()) {
         out.base = baseFromJson(gen);   // 位图 / 外部文件不入配置：落位底图源图由上层凭运行时 --input 注入 decodedPixels。
+        // 底图落位框尺寸不落盘（§7 设计：base box 恒＝画布）：由 source 回填，令 composeIntoBox 有框可裁、往返逐像素一致。
+        if (out.base->hasImagePlacement) { out.base->boxWidth = out.source.width; out.base->boxHeight = out.source.height; }
+    }
 
     // layers（可选段）：缺段 → 无图层（std::nullopt）。直接以数组承载。
     if (const json& ls = at(value, keys::config::kLayers); ls.is_array()) {

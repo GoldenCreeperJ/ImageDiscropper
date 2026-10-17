@@ -375,14 +375,14 @@ inline constexpr char kTextConfigLayers[] = R"IDCH(
 
 底图（generate 段，可选）：底图＝与图层同构的一条图层记录，仅角色为钉住最底、不可拖 / 不可改落位。
       除图案字段（kind/background/foreground/…，与 generate 段图案参数同构）外，新建画布所附图片底图可额外携
-      fit + boxWidth/boxHeight + imageAnchor/imagePivot + x/y + backdrop（图层框衬底图案）落位键，使底图落位随配置往返、可复现
+      fit + imageAnchor/imagePivot + x/y + backdrop（图层框衬底图案）落位键（落位框尺寸恒＝画布、由 source 派生，不单独存），使底图落位随配置往返、可复现
       （**配置只存落位、不存文件路径**，底图位图恒由运行时 --input 供给，故同一配置可对不同输入批处理复用）。
       --input / 打开图＝无落位、画布尺寸＝图片尺寸的恒等底图，外部用法一致。
 
 预处理（preprocess 数组，可选）：gray/split/invert/rotate/flip/resize 六类步（不透明度不经预处理步，由层合成参数承载）。
 
 层不透明度（transform.opacity，可选）：整层淡出程度（0..255，缺省 255＝完全不透明、0＝完全透明）。
-      该参数在导出合成时按不透明度比例作用于整层、不改动像素本身，故灰度图同样生效；旧配置里写在 preprocess 的 opacity 步骤会在载入时自动转成该层的 transform.opacity。
+      该参数在导出合成时按不透明度比例作用于整层、不改动像素本身，故灰度图同样生效。
 )IDCH";
 inline constexpr char kTextConfigTail[] = R"IDCH(
 示例：

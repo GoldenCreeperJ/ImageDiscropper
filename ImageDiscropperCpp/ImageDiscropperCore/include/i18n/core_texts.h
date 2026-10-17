@@ -35,7 +35,7 @@ namespace idc::core::texts::jsonkey {
 // common：跨段复用的同名键（写出侧与读取侧共用同一定义）。
 // ---------------------------------------------------------------------------
 namespace common {
-inline constexpr char kWidth[] = "width";             // 原图尺寸 / 图层变换 / resize 步 / cellSize 兼容对象。
+inline constexpr char kWidth[] = "width";             // 原图尺寸 / 图层变换 / resize 步。
 inline constexpr char kHeight[] = "height";           // 同上，纵向。
 inline constexpr char kX[] = "x";                     // 图层变换落位 / 内层落位 / 文字标注落点。
 inline constexpr char kY[] = "y";                     // 同上，纵向。
@@ -43,12 +43,9 @@ inline constexpr char kX1[] = "x1";                   // 矩形锚点左上 / �
 inline constexpr char kY1[] = "y1";                   // 同上。
 inline constexpr char kX2[] = "x2";                   // 矩形锚点右下 / 标注双锚点第二点（圆/椭圆编码半轴）。
 inline constexpr char kY2[] = "y2";                   // 同上。
-inline constexpr char kW[] = "w";                     // merge.cellSize 的 {w,h} 兼容写法。
-inline constexpr char kH[] = "h";                     // 同上。
 inline constexpr char kType[] = "type";               // 标注形状类型（annotations[i].type）。
 inline constexpr char kKind[] = "kind";               // 图案类型（generate.kind）/ 图层来源（layers[i].source.kind）。
 inline constexpr char kOpacity[] = "opacity";         // §7 顶层画布级 / 图层与底图合成期 alpha 乘子。
-                                                  // 与 defaults::kPreStepOpacity 同字不同义（现行键名 / 已废弃旧步名哨兵），各立一条。
 inline constexpr char kPreprocess[] = "preprocess";   // §7 顶层、图层、底图三处同名的步骤数组。
 inline constexpr char kTransform[] = "transform";     // 图层变换段 / 标注几何变换段（同名不同义，值仍一致）。
 inline constexpr char kZOrder[] = "zOrder";           // 图层叠放次序 / 标注叠放次序。
@@ -93,7 +90,6 @@ inline constexpr char kCellWidth[] = "cellWidth";     // emit.merge.cellWidth / 
 inline constexpr char kCellHeight[] = "cellHeight";   // 同上，纵向。
 inline constexpr char kPadColor[] = "padColor";       // emit.merge.padColor（十六进制串）。
 inline constexpr char kArrange[] = "arrange";         // emit.merge.arrange 段（重排填充顺序）。
-inline constexpr char kCellSize[] = "cellSize";       // **兼容读取专用**：SPEC §7 示例的旧合并写法。
 } // namespace config
 
 // ---------------------------------------------------------------------------
@@ -151,8 +147,6 @@ inline constexpr char kOp[] = "op";                   // 步类型（gray/split/
 inline constexpr char kMask[] = "mask";               // split/invert 的通道掩码（"111" 之类）。
 inline constexpr char kDeg[] = "deg";                 // rotate 角度。
 inline constexpr char kAxis[] = "axis";               // flip 轴向（horizontal/vertical）。
-inline constexpr char kMul[] = "mul";                 // **旧配置迁移专用**：已废弃 opacity 步的乘算量。
-inline constexpr char kAdd[] = "add";                 // **旧配置迁移专用**：已废弃 opacity 步的加算量。
 } // namespace pre
 
 } // namespace idc::core::texts::jsonkey
@@ -194,8 +188,6 @@ inline constexpr char kAnchorCenter[] = "center";                // 缺层在画
 inline constexpr char kImageFitCrop[] = "crop";                  // 缺 fit：源图→图层框的适应方式（图层与底图两处）。
 inline constexpr char kFlipAxisHorizontal[] = "horizontal";      // 缺 preprocess 步的 axis。与 kPatternOrientation 同字不同义，
                                                                   // 分开定义以免两处日后被误当作同一条修改。
-inline constexpr char kPreStepOpacity[] = "opacity";             // **旧配置迁移专用**：已废弃的预处理步名哨兵。
-                                                                  // 与 common::kOpacity 同字不同义（现行键名 / 旧步名），各立一条以免被误当同一条修改。
 inline constexpr char kLayerSourceEmpty[] = "empty";             // 缺 layers[i].source.kind：降级为空占位层。
 inline constexpr char kPadColorTransparent[] = "#00000000";      // 缺 emit.merge.padColor：拼贴余量全透明。
 inline constexpr char kAnnotationColor[] = "#FF000000";          // 缺 annotations[i] 的 color 与 fillColor（两处同值）。

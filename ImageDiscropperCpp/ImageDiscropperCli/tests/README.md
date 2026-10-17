@@ -19,9 +19,9 @@
 - **进程内调用**：`cli_tests` 链接 `idc_cli_lib`，直接调 `cliMain`（不启动子进程）；用 `rdbuf` 重定向
   `std::cout`/`std::cerr` 到 `ostringstream` 捕获输出，调用后恢复。
 - **合成测试图**：程序化生成 200×150 四象限纯色图（每象限 100×75，恰好对齐 `--grid 0,0,100,75` 的 2×2 网格），
-  用 Core `writeImageFile` 写入系统临时目录——**不依赖仓库内示例图、不依赖网络**。
+  用 Core `io::writeImageFile` 写入系统临时目录——**不依赖仓库内示例图、不依赖网络**。
   象限↔单元映射：`cell(0,0)=index0=红`、`(0,1)=1=绿`、`(1,0)=2=蓝`、`(1,1)=3=黄`。
-- **验证点**：输出图用 Core `readImageFile` 读回，校验尺寸与关键像素颜色（阈值判定，容忍编码微误差）；
+- **验证点**：输出图用 Core `io::readImageFile` 读回，校验尺寸与关键像素颜色（阈值判定，容忍编码微误差）；
   分离导出校验文件数量与各文件尺寸；错误场景校验退出码与 stderr 文本（如 `idc: error:` 前缀、坍缩提示含 “rearrange”）。
 - **临时目录**：`<system-temp>/idc_cli_integration_test`，测试开始 `remove_all`+`create_directories`，结束再 `remove_all` 清理。
 
