@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：app/annotation_coordinator.cpp
+// 文件：app/controllers/annotation_coordinator.cpp
 // 作用：实现 AnnotationCoordinator（见同名头文件说明）。
 // 分块依据：
 //   - connectSignals：标注域全部信号连接（模型/画布/工具面板/图层面板/导出面板/属性面板）+ 烧录初始同步；
@@ -19,7 +19,7 @@
 #include "panels/annotation_prop_panel.h"
 #include "panels/export_panel.h"
 #include "panels/layer_panel.h"
-#include "panels/tool_panel.h"
+#include "panels/mode_tool_panel.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 #include "util/path_qt_adapter.h"
@@ -31,14 +31,14 @@ AnnotationCoordinator::AnnotationCoordinator(QObject* parent) : QObject(parent) 
 void AnnotationCoordinator::setAnnotationBridge(AnnotationBridge* anno) { anno_ = anno; }
 void AnnotationCoordinator::setScene(CanvasScene* scene) { scene_ = scene; }
 void AnnotationCoordinator::setView(CanvasView* view) { view_ = view; }
-void AnnotationCoordinator::setToolPanel(ToolPanel* panel) { toolPanel_ = panel; }
+void AnnotationCoordinator::setToolPanel(ModeToolPanel* panel) { toolPanel_ = panel; }
 void AnnotationCoordinator::setLayerPanel(LayerPanel* panel) { layerPanel_ = panel; }
 void AnnotationCoordinator::setAnnoPropPanel(AnnotationPropPanel* panel) { annoPropPanel_ = panel; }
 void AnnotationCoordinator::setExportPanel(ExportPanel* panel) { exportPanel_ = panel; }
 void AnnotationCoordinator::setPreviewController(PreviewController* preview) { preview_ = preview; }
 void AnnotationCoordinator::setDialogParent(QWidget* parent) { dialogParent_ = parent; }
 
-// ---- 标注（G-4/G-5）：模型/画布/面板 → 本控制器编排 ----
+// ---- 标注（SPEC §8.2 标注绘制与编辑）：模型/画布/面板 → 本控制器编排 ----
 void AnnotationCoordinator::connectSignals() {
     connect(anno_, &AnnotationBridge::changed, this, &AnnotationCoordinator::onAnnoBridgeChanged);
     // 绘制拖拽预览（橡皮筋）：begin/updateShape 仅发 pendingChanged，必须连到实时刷新预览图元，
@@ -73,7 +73,7 @@ void AnnotationCoordinator::connectSignals() {
     connect(scene_, &CanvasScene::annotationTransformed, this, &AnnotationCoordinator::onAnnotationTransformed);
     connect(scene_, &CanvasScene::annotationTransformPreview, this, &AnnotationCoordinator::onAnnotationTransformPreview);
 
-    connect(toolPanel_, &ToolPanel::toolSelected, this, &AnnotationCoordinator::onToolSelected);
+    connect(toolPanel_, &ModeToolPanel::toolSelected, this, &AnnotationCoordinator::onToolSelected);
     connect(layerPanel_, &LayerPanel::baseVisibilityChanged, this, &AnnotationCoordinator::onBaseVisibilityChanged);
     connect(layerPanel_, &LayerPanel::maskVisibilityChanged, this, &AnnotationCoordinator::onMaskVisibilityChanged);
     connect(layerPanel_, &LayerPanel::gridVisibilityChanged, this, &AnnotationCoordinator::onGridVisibilityChanged);
@@ -93,7 +93,7 @@ void AnnotationCoordinator::connectSignals() {
     connect(annoPropPanel_, &AnnotationPropPanel::fontSizeChanged, this, &AnnotationCoordinator::onAnnoFontSizeChanged);
     connect(annoPropPanel_, &AnnotationPropPanel::cornerRadiusChanged, this, &AnnotationCoordinator::onAnnoCornerRadiusChanged);
     connect(annoPropPanel_, &AnnotationPropPanel::transformApplyRequested, this, &AnnotationCoordinator::onAnnoTransformApply);
-    // 叠放次序（从标注菜单迁入属性面板）：4 意图信号 → 层序四槽（作于选中项，经 Bridge 调 Core moveAnnotation）。
+    // 叠放次序（位于属性面板）：4 意图信号 → 层序四槽（作于选中项，经 Bridge 调 Core moveAnnotation）。
     connect(annoPropPanel_, &AnnotationPropPanel::stackRaiseRequested, this, &AnnotationCoordinator::onAnnoRaise);
     connect(annoPropPanel_, &AnnotationPropPanel::stackLowerRequested, this, &AnnotationCoordinator::onAnnoLower);
     connect(annoPropPanel_, &AnnotationPropPanel::stackToFrontRequested, this, &AnnotationCoordinator::onAnnoBringToFront);
@@ -129,8 +129,8 @@ void AnnotationCoordinator::onAnnoSelectionChanged() const {
     annoPropPanel_->syncFromModel();
 }
 
-// 工具变化：同步工具面板形状子行 + 属性面板。绘制态门控（是否进入标注绘制）已由画布四态
-// 模式机接管（CanvasView::canvasMode()==AnnoCreate），故此处不再据工具切 setAnnotationDrawActive。
+// 工具变化：同步工具面板形状子行 + 属性面板。绘制态门控（是否进入标注绘制）由画布四态
+// 模式机承担（CanvasView::canvasMode()==AnnoCreate），本处不据工具切换绘制态。
 void AnnotationCoordinator::onAnnoToolChanged() const {
     toolPanel_->syncFromModel();
     annoPropPanel_->syncFromModel();
@@ -140,7 +140,7 @@ void AnnotationCoordinator::onAnnoToolChanged() const {
 void AnnotationCoordinator::onAnnoDragStart(const QPointF& scenePos) const {
     const core::Point2D p(scenePos.x(), scenePos.y());
     switch (anno_->currentTool()) {
-        case AnnoTool::TEXT: {
+        case AnnoTool::Text: {
             bool ok = false;
             const QString text = QInputDialog::getText(dialogParent_, IDC_GTR(label, kDlgTitleAnnoText),
                 IDC_GTR(label, kDlgLabelAnnoText), QLineEdit::Normal,
@@ -148,11 +148,11 @@ void AnnotationCoordinator::onAnnoDragStart(const QPointF& scenePos) const {
             if (ok && !text.isEmpty()) anno_->addText(p, text.toStdString());
             break;
         }
-        case AnnoTool::POLYLINE:
+        case AnnoTool::Polyline:
             if (anno_->hasPathDraft()) anno_->appendPathPoint(p);
             else anno_->beginPath(p);
             break;
-        case AnnoTool::BRUSH:
+        case AnnoTool::Brush:
             anno_->beginPath(p);
             break;
         default:
@@ -162,18 +162,18 @@ void AnnotationCoordinator::onAnnoDragStart(const QPointF& scenePos) const {
 }
 
 // 绘制手势拖拽（按住左键移动）：两点形状实时更新预览；画笔追加顶点；折线仅橡皮筋预览。
-// 折线为点击式：顶点已在 onAnnoDragStart（按下）落定，故拖拽中只预览、不再追加正式顶点。
+// 折线为点击式：顶点已在 onAnnoDragStart（按下）落定，故拖拽中只预览、不追加正式顶点。
 void AnnotationCoordinator::onAnnoDragMove(const QPointF& scenePos) const {
     const core::Point2D p(scenePos.x(), scenePos.y());
     switch (anno_->currentTool()) {
-        case AnnoTool::BRUSH:
+        case AnnoTool::Brush:
             anno_->appendPathPoint(p);
             break;
-        case AnnoTool::POLYLINE:
+        case AnnoTool::Polyline:
             anno_->previewPolyline(p);   // 按住拖动时也走橡皮筋预览（与悬停一致）。
             break;
-        case AnnoTool::TEXT:
-        case AnnoTool::SELECT:
+        case AnnoTool::Text:
+        case AnnoTool::Select:
             break;
         default:
             anno_->updateShape(p);
@@ -185,12 +185,12 @@ void AnnotationCoordinator::onAnnoDragMove(const QPointF& scenePos) const {
 void AnnotationCoordinator::onAnnoDragEnd(const QPointF& scenePos) const {
     Q_UNUSED(scenePos);
     switch (anno_->currentTool()) {
-        case AnnoTool::BRUSH:
+        case AnnoTool::Brush:
             anno_->commitPath();
             break;
-        case AnnoTool::POLYLINE:
-        case AnnoTool::TEXT:
-        case AnnoTool::SELECT:
+        case AnnoTool::Polyline:
+        case AnnoTool::Text:
+        case AnnoTool::Select:
             break;
         default:
             anno_->commitShape();
@@ -207,7 +207,7 @@ void AnnotationCoordinator::onAnnoEscape() const {
 // 绘制态悬停（未按键移动）：折线实时预览「已落顶点 + 到光标连线」橡皮筋（不落顶点）。
 // 其余工具无悬停语义（两点形状靠拖拽预览、画笔靠按住追点），故忽略。
 void AnnotationCoordinator::onAnnoHover(const QPointF& scenePos) const {
-    if (anno_->currentTool() != AnnoTool::POLYLINE) return;
+    if (anno_->currentTool() != AnnoTool::Polyline) return;
     anno_->previewPolyline(core::Point2D(scenePos.x(), scenePos.y()));
 }
 
@@ -218,7 +218,7 @@ void AnnotationCoordinator::onAnnoFinish() const {
     else anno_->cancelPending();
 }
 
-// SELECT 工具下点中标注图元：委托 Core hitTest 选中（几何命中在 Core，CONTRIBUTING.md「分层纪律」）。
+// Select 工具下点中标注图元：委托 Core hitTest 选中（几何命中在 Core，CONTRIBUTING.md「分层纪律」）。
 void AnnotationCoordinator::onAnnotationSelect(const QPointF& scenePos) const {
     anno_->selectAt(core::Point2D(scenePos.x(), scenePos.y()));
 }
@@ -244,7 +244,7 @@ void AnnotationCoordinator::onAnnotationTransformPreview(const int index, const 
     if (annoPropPanel_) annoPropPanel_->setTransformPreview(sx, sy, rotateDeg);
 }
 
-// 属性面板 → 模型（EDIT 作用选中项，DRAW 改当前默认；均触发 changed→重绘）。
+// 属性面板 → 模型（Edit 作用选中项，Draw 改当前默认；均触发 changed→重绘）。
 void AnnotationCoordinator::onAnnoColorPicked(const QColor& c) const { anno_->setColor(toCoreColor(c)); }
 void AnnotationCoordinator::onAnnoFillColorPicked(const QColor& c) const { anno_->setFillColor(toCoreColor(c)); }
 void AnnotationCoordinator::onAnnoStrokeChanged(const int width) const { anno_->setStrokeWidth(width); }

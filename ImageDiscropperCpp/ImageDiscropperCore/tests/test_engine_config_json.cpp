@@ -41,7 +41,7 @@ idc::annotation::AnnotationSet makeSet() {
         annotation::Annotation a;
         auto poly = std::make_unique<geometry::PolygonShape>(
             std::vector<core::Point2D>{{10, 20}, {60, 20}, {60, 70}, {10, 70}},
-            geometry::ShapeType::RECTANGLE, true, 8.0);
+            geometry::ShapeType::Rectangle, true, 8.0);
         poly->applyObbTransform(1.5, 2.0, 30.0);
         poly->translateWorld(5.0, -7.0); // 变换后移动：xform_ 不动、几何平移。
         a.style.color = core::Color(255, 140, 0, 255);
@@ -57,7 +57,7 @@ idc::annotation::AnnotationSet makeSet() {
         a.style.color = core::kRed;
         a.style.fillColor = core::kRed;
         a.style.strokeWidth = 2;
-        a.shape = std::make_unique<geometry::EllipseShape>(100, 50, 80, 40, geometry::ShapeType::ELLIPSE);
+        a.shape = std::make_unique<geometry::EllipseShape>(100, 50, 80, 40, geometry::ShapeType::Ellipse);
         items.push_back(std::move(a));
     }
     // ③ 文字（TextShape）：位置 + 内容 + 字号。
@@ -79,7 +79,7 @@ idc::annotation::AnnotationSet makeSet() {
         p.closePath();
         a.style.color = core::kBlue;
         a.style.strokeWidth = 4;
-        a.shape = std::make_unique<geometry::PathShape>(std::move(p), geometry::ShapeType::PATH);
+        a.shape = std::make_unique<geometry::PathShape>(std::move(p), geometry::ShapeType::Path);
         items.push_back(std::move(a));
     }
     set.restore(std::move(items));
@@ -104,13 +104,13 @@ void testEngineConfigJson() {
     cfg.source = engine::SourceInfo{800, 600};
     cfg.preprocess.add(preprocess::ResizeOp{400, 300});
     cfg.preprocess.add(preprocess::RotateOp{90});
-    cfg.cut.tier = engine::Tier::L3;
-    cfg.cut.generator = engine::CutGenerator::GRID;
-    cfg.cut.grid = engine::GridParams{.originX = 0, .originY = 0, .cellWidth = 100, .cellHeight = 100, .remainder = engine::RemainderPolicy::PAD};
-    cfg.cut.polarity = engine::Polarity::KEEP;
+    cfg.cut.tier = engine::Tier::Grid;
+    cfg.cut.generator = engine::CutGenerator::Grid;
+    cfg.cut.grid = engine::GridParams{.originX = 0, .originY = 0, .cellWidth = 100, .cellHeight = 100, .remainder = engine::RemainderPolicy::Pad};
+    cfg.cut.polarity = engine::Polarity::Keep;
     cfg.selectedCells = {0, 4};
-    cfg.emitParams.mode = engine::EmitMode::MERGED;
-    cfg.emitParams.layout = engine::MergeLayout::REARRANGE;
+    cfg.emitParams.mode = engine::EmitMode::Merged;
+    cfg.emitParams.layout = engine::MergeLayout::Rearrange;
     cfg.emitParams.cols = 3;
     cfg.emitParams.padColor = core::Color(0, 0, 0, 0);
 
@@ -156,10 +156,10 @@ void testEngineConfigJson() {
     CHECK(std::holds_alternative<preprocess::ResizeOp>(got.preprocess.items()[0]));
     CHECK(std::get<preprocess::ResizeOp>(got.preprocess.items()[0]).width == 400);
     CHECK(std::get<preprocess::RotateOp>(got.preprocess.items()[1]).angle == 90);
-    CHECK(got.cut.tier == engine::Tier::L3 && got.cut.generator == engine::CutGenerator::GRID);
-    CHECK(got.cut.grid.cellWidth == 100 && got.cut.grid.remainder == engine::RemainderPolicy::PAD);
+    CHECK(got.cut.tier == engine::Tier::Grid && got.cut.generator == engine::CutGenerator::Grid);
+    CHECK(got.cut.grid.cellWidth == 100 && got.cut.grid.remainder == engine::RemainderPolicy::Pad);
     CHECK(got.selectedCells.size() == 2 && got.selectedCells[1] == 4);
-    CHECK(got.emitParams.layout == engine::MergeLayout::REARRANGE && got.emitParams.cols == 3);
+    CHECK(got.emitParams.layout == engine::MergeLayout::Rearrange && got.emitParams.cols == 3);
 
     // layers 段往返：配方层（含逐层 preprocess + transform）/ 文件层（仅相对名，像素不入配置）。
     CHECK(got.layers.has_value());
@@ -200,7 +200,7 @@ void testEngineConfigJson() {
     // ① 矩形：类型/圆角/样式 + 变换整体快照（矩阵与累积参数逐项相等）。
     {
         const annotation::Annotation& a = annos[0];
-        CHECK(a.shape->type() == geometry::ShapeType::RECTANGLE);
+        CHECK(a.shape->type() == geometry::ShapeType::Rectangle);
         CHECK(a.style.color == core::Color(255, 140, 0, 255) && a.style.fillColor == core::Color(0, 0, 0, 64));
         CHECK(a.style.strokeWidth == 3 && a.style.fill);
         const auto* poly = dynamic_cast<const geometry::PolygonShape*>(a.shape.get());
@@ -234,7 +234,7 @@ void testEngineConfigJson() {
     // ② 椭圆：包围盒与类型。
     {
         const annotation::Annotation& a = annos[1];
-        CHECK(a.shape->type() == geometry::ShapeType::ELLIPSE);
+        CHECK(a.shape->type() == geometry::ShapeType::Ellipse);
         CHECK(a.style.color == core::kRed && !a.style.fill);
         const auto* ell = dynamic_cast<const geometry::EllipseShape*>(a.shape.get());
         CHECK(ell != nullptr);
@@ -327,7 +327,7 @@ void testEngineConfigJson() {
         }
     }
 
-    // ---- 底图 generate 段（同构 ImageLayer）往返：纯图案底（与旧 generate 逐字段等价）+ 落位声明底（不存文件路径）+ 旧配置兼容。----
+    // ---- 底图 generate 段（同构 ImageLayer）往返：纯图案底 + 落位声明底（不存文件路径）+ 旧配置兼容。----
     {
         // ① 纯图案 Recipe 底：序列化后 generate 段仅图案键（无 file/落位），解析回 recipe。
         const fs::path patFile = dir / "base_pattern.json";
@@ -375,7 +375,7 @@ void testEngineConfigJson() {
         back.kind = generate::PatternKind::Solid;
         back.background = core::Color(10, 20, 30, 255);
         fb.boxBackdrop = back;
-        fb.decodedPixels = core::Image(2, 2, core::ImageFormat::RGBA);   // 位图不入配置：往返后应为空。
+        fb.decodedPixels = core::Image(2, 2, core::ImageFormat::Rgba);   // 位图不入配置：往返后应为空。
         fb.transform.opacity = 64;   // 底图整体不透明度（非默认）：验证随 generate 段 opacity 键往返。
         fc.base = fb;
         CHECK(engine::saveEngineConfig(fileBase.string(), fc));
@@ -501,7 +501,7 @@ void testAnnoParseText() {
             R"J({"type":"rectangle","x1":0,"y1":0,"x2":10,"y2":10,"color":"#FF112233","fill":true,"strokeWidth":3})J",
             out, err));
         CHECK(out.size() == 1 && out[0].shape != nullptr);
-        CHECK(out[0].shape->type() == geometry::ShapeType::RECTANGLE);
+        CHECK(out[0].shape->type() == geometry::ShapeType::Rectangle);
         CHECK(out[0].style.strokeWidth == 3 && out[0].style.fill);
         CHECK(err.empty());
     }
@@ -514,8 +514,8 @@ void testAnnoParseText() {
             R"J([{"type":"circle","x1":10,"y1":10,"x2":20,"y2":10},{"type":"text","x":5,"y":5,"text":"hi","fontSize":10}])J",
             out, err));
         CHECK(out.size() == 2);
-        CHECK(out[0].shape->type() == geometry::ShapeType::CIRCLE);
-        CHECK(out[1].shape->type() == geometry::ShapeType::TEXT);
+        CHECK(out[0].shape->type() == geometry::ShapeType::Circle);
+        CHECK(out[1].shape->type() == geometry::ShapeType::Text);
         // 无显式 zOrder 字段 → 回退为数组下标 0/1。
         CHECK(out[0].zOrder == 0 && out[1].zOrder == 1);
     }
@@ -616,14 +616,14 @@ void testAnnoAnchorRoundTrip() {
 
     struct Case { geometry::ShapeType type; core::Point2D p1; core::Point2D p2; };
     const std::vector<Case> cases = {
-        {geometry::ShapeType::RECTANGLE,         {10, 20},  {60, 70}},
-        {geometry::ShapeType::SQUARE,            {0, 0},    {-10, 6}},    // 负象限生长
-        {geometry::ShapeType::RHOMBUS,           {50, 50},  {80, 30}},
-        {geometry::ShapeType::ISOS_TRIANGLE,     {100, 100},{130, 60}},   // 顶角朝上
-        {geometry::ShapeType::ISOS_TRIANGLE,     {40, 40},  {70, 90}},    // 顶角朝下
-        {geometry::ShapeType::EQU_TRIANGLE,      {50, 50},  {80, 90}},
-        {geometry::ShapeType::RECT_TRIANGLE,     {10, 20},  {50, 40}},
-        {geometry::ShapeType::EQU_RECT_TRIANGLE, {0, 0},    {-6, 10}},
+        {geometry::ShapeType::Rectangle,         {10, 20},  {60, 70}},
+        {geometry::ShapeType::Square,            {0, 0},    {-10, 6}},    // 负象限生长
+        {geometry::ShapeType::Rhombus,           {50, 50},  {80, 30}},
+        {geometry::ShapeType::IsosTriangle,     {100, 100},{130, 60}},   // 顶角朝上
+        {geometry::ShapeType::IsosTriangle,     {40, 40},  {70, 90}},    // 顶角朝下
+        {geometry::ShapeType::EquTriangle,      {50, 50},  {80, 90}},
+        {geometry::ShapeType::RectTriangle,     {10, 20},  {50, 40}},
+        {geometry::ShapeType::EquRectTriangle, {0, 0},    {-6, 10}},
     };
 
     // 源集合：逐 case 经 buildShape 生成规范顶点；先抽取期望顶点/圆角（shape 将被移入集合）。
@@ -672,9 +672,9 @@ void testAnnoAnchorRoundTrip() {
     //   圆：p1=圆心、p2=圆上点（半径=|p1p2|）；椭圆：p1=圆心、半轴=(|Δx|,|Δy|)。往返仅包围盒稳定（p2 方向会被规范化）。
     struct EllipseCase { geometry::ShapeType type; core::Point2D p1; core::Point2D p2; };
     const std::vector<EllipseCase> ellCases = {
-        {geometry::ShapeType::CIRCLE,  {30, 40}, {55, 40}},   // 圆心 + 水平圆上点（半径 25）
-        {geometry::ShapeType::CIRCLE,  {10, 10}, {10, 22}},   // 圆上点非水平（验证距离语义）
-        {geometry::ShapeType::ELLIPSE, {50, 60}, {80, 35}},   // 半轴 (30,25)
+        {geometry::ShapeType::Circle,  {30, 40}, {55, 40}},   // 圆心 + 水平圆上点（半径 25）
+        {geometry::ShapeType::Circle,  {10, 10}, {10, 22}},   // 圆上点非水平（验证距离语义）
+        {geometry::ShapeType::Ellipse, {50, 60}, {80, 35}},   // 半轴 (30,25)
     };
     struct EllipseExpect { double cx, cy, rx, ry; };
     std::vector<EllipseExpect> ellExpect;

@@ -17,8 +17,8 @@
 namespace {
 
 // 测试适配：把 runEngine / runEngineGeometry 的 std::expected<EngineResult, CoreError>
-// 摊平为沿用旧断言写法（r.ok / r.error / r.kept / r.composition / r.collapsible）的结构体，
-// 失败时值成员取默认（kept 空、composition 空、collapsible false），与原 EngineResult 失败态一致。
+// 摊平为 {ok / error / kept / composition / collapsible} 结构体以简化断言，
+// 失败时值成员取默认（kept 空、composition 空、collapsible false）。
 struct TestResult {
     bool ok;
     std::string error;
@@ -34,7 +34,7 @@ TestResult toTest(std::expected<idc::engine::EngineResult, idc::core::CoreError>
 
 // 构造一张带伪随机渐变的 RGBA 图，确保各单元像素互异（便于位置断言）。
 idc::core::Image makeImage(const int w, const int h) {
-    idc::core::Image img(w, h, idc::core::ImageFormat::RGBA);
+    idc::core::Image img(w, h, idc::core::ImageFormat::Rgba);
     for (int y = 0; y < h; ++y)
         for (int x = 0; x < w; ++x)
             img.setPixel(x, y, idc::core::Color(static_cast<std::uint8_t>(x * 7 % 256),
@@ -55,12 +55,12 @@ void testEnginePipeline() {
         const Image img = makeImage(100, 80);
         EngineConfig cfg;
         cfg.source = SourceInfo{100, 80};
-        cfg.cut.tier = Tier::L1;
-        cfg.cut.generator = CutGenerator::RECT;
+        cfg.cut.tier = Tier::Standard;
+        cfg.cut.generator = CutGenerator::Rect;
         cfg.cut.rect = RectRegion(30, 20, 70, 60); // x1,y1,x2,y2
-        cfg.cut.polarity = Polarity::KEEP;
-        cfg.emitParams.mode = EmitMode::MERGED;
-        cfg.emitParams.layout = MergeLayout::COLLAPSE;
+        cfg.cut.polarity = Polarity::Keep;
+        cfg.emitParams.mode = EmitMode::Merged;
+        cfg.emitParams.layout = MergeLayout::Collapse;
         const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
         CHECK(r.collapsible);
@@ -75,11 +75,11 @@ void testEnginePipeline() {
         const Image img = makeImage(100, 80);
         EngineConfig cfg;
         cfg.source = SourceInfo{100, 80};
-        cfg.cut.generator = CutGenerator::HORIZONTAL_LINE;
+        cfg.cut.generator = CutGenerator::HorizontalLine;
         cfg.cut.rect = RectRegion(0, 20, 100, 60); // 仅用 y1,y2
-        cfg.cut.polarity = Polarity::KEEP;
-        cfg.emitParams.mode = EmitMode::MERGED;
-        cfg.emitParams.layout = MergeLayout::COLLAPSE;
+        cfg.cut.polarity = Polarity::Keep;
+        cfg.emitParams.mode = EmitMode::Merged;
+        cfg.emitParams.layout = MergeLayout::Collapse;
         const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
         CHECK(r.composition.canvasWidth == 100 && r.composition.canvasHeight == 40);
@@ -90,11 +90,11 @@ void testEnginePipeline() {
         const Image img = makeImage(100, 80);
         EngineConfig cfg;
         cfg.source = SourceInfo{100, 80};
-        cfg.cut.generator = CutGenerator::VERTICAL_LINE;
+        cfg.cut.generator = CutGenerator::VerticalLine;
         cfg.cut.rect = RectRegion(30, 0, 70, 80); // 仅用 x1,x2
-        cfg.cut.polarity = Polarity::KEEP;
-        cfg.emitParams.mode = EmitMode::MERGED;
-        cfg.emitParams.layout = MergeLayout::COLLAPSE;
+        cfg.cut.polarity = Polarity::Keep;
+        cfg.emitParams.mode = EmitMode::Merged;
+        cfg.emitParams.layout = MergeLayout::Collapse;
         const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
         CHECK(r.composition.canvasWidth == 40 && r.composition.canvasHeight == 80);
@@ -105,12 +105,12 @@ void testEnginePipeline() {
         const Image img = makeImage(100, 80);
         EngineConfig cfg;
         cfg.source = SourceInfo{100, 80};
-        cfg.cut.tier = Tier::L2;
-        cfg.cut.generator = CutGenerator::RECT;
+        cfg.cut.tier = Tier::Erase;
+        cfg.cut.generator = CutGenerator::Rect;
         cfg.cut.rect = RectRegion(30, 20, 70, 60);
-        cfg.cut.polarity = Polarity::REMOVE;
-        cfg.emitParams.mode = EmitMode::MERGED;
-        cfg.emitParams.layout = MergeLayout::COLLAPSE;
+        cfg.cut.polarity = Polarity::Remove;
+        cfg.emitParams.mode = EmitMode::Merged;
+        cfg.emitParams.layout = MergeLayout::Collapse;
         const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
         CHECK(r.collapsible);
@@ -131,11 +131,11 @@ void testEnginePipeline() {
         const Image img = makeImage(100, 80);
         EngineConfig cfg;
         cfg.source = SourceInfo{100, 80};
-        cfg.cut.generator = CutGenerator::HORIZONTAL_LINE;
+        cfg.cut.generator = CutGenerator::HorizontalLine;
         cfg.cut.rect = RectRegion(0, 20, 100, 60);
-        cfg.cut.polarity = Polarity::REMOVE;
-        cfg.emitParams.mode = EmitMode::MERGED;
-        cfg.emitParams.layout = MergeLayout::COLLAPSE;
+        cfg.cut.polarity = Polarity::Remove;
+        cfg.emitParams.mode = EmitMode::Merged;
+        cfg.emitParams.layout = MergeLayout::Collapse;
         const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
         CHECK(r.collapsible);
@@ -147,11 +147,11 @@ void testEnginePipeline() {
         const Image img = makeImage(100, 80);
         EngineConfig cfg;
         cfg.source = SourceInfo{100, 80};
-        cfg.cut.generator = CutGenerator::VERTICAL_LINE;
+        cfg.cut.generator = CutGenerator::VerticalLine;
         cfg.cut.rect = RectRegion(30, 0, 70, 80);
-        cfg.cut.polarity = Polarity::REMOVE;
-        cfg.emitParams.mode = EmitMode::MERGED;
-        cfg.emitParams.layout = MergeLayout::COLLAPSE;
+        cfg.cut.polarity = Polarity::Remove;
+        cfg.emitParams.mode = EmitMode::Merged;
+        cfg.emitParams.layout = MergeLayout::Collapse;
         const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
         CHECK(r.collapsible);
@@ -163,13 +163,13 @@ void testEnginePipeline() {
         const Image img = makeImage(100, 80);
         EngineConfig cfg;
         cfg.source = SourceInfo{100, 80};
-        cfg.cut.generator = CutGenerator::RECT;
+        cfg.cut.generator = CutGenerator::Rect;
         cfg.cut.rect = RectRegion(30, 20, 70, 60);
-        cfg.emitParams.mode = EmitMode::MERGED;
-        cfg.emitParams.layout = MergeLayout::COLLAPSE;
-        cfg.cut.polarity = Polarity::KEEP;
+        cfg.emitParams.mode = EmitMode::Merged;
+        cfg.emitParams.layout = MergeLayout::Collapse;
+        cfg.cut.polarity = Polarity::Keep;
         const auto rk = toTest(runEngine(img, cfg));
-        cfg.cut.polarity = Polarity::REMOVE;
+        cfg.cut.polarity = Polarity::Remove;
         const auto rr = toTest(runEngine(img, cfg));
         CHECK(rk.ok && rr.ok);
         CHECK(rk.kept.size() == 1); // 中心一块
@@ -181,14 +181,14 @@ void testEnginePipeline() {
         const Image img = makeImage(300, 300);
         EngineConfig cfg;
         cfg.source = SourceInfo{300, 300};
-        cfg.cut.tier = Tier::L3;
-        cfg.cut.generator = CutGenerator::GRID;
-        cfg.cut.grid = GridParams{.originX = 0, .originY = 0, .cellWidth = 100, .cellHeight = 100, .remainder = RemainderPolicy::DISCARD}; // 300/100 → 3×3 自动推导
-        cfg.cut.polarity = Polarity::KEEP;
+        cfg.cut.tier = Tier::Grid;
+        cfg.cut.generator = CutGenerator::Grid;
+        cfg.cut.grid = GridParams{.originX = 0, .originY = 0, .cellWidth = 100, .cellHeight = 100, .remainder = RemainderPolicy::Discard}; // 300/100 → 3×3 自动推导
+        cfg.cut.polarity = Polarity::Keep;
         cfg.selectedCells = {0, 2, 6, 8}; // 四角单元
-        cfg.order.strategy = SortStrategy::ROW_MAJOR;
-        cfg.emitParams.mode = EmitMode::MERGED;
-        cfg.emitParams.layout = MergeLayout::REARRANGE;
+        cfg.order.strategy = SortStrategy::RowMajor;
+        cfg.emitParams.mode = EmitMode::Merged;
+        cfg.emitParams.layout = MergeLayout::Rearrange;
         cfg.emitParams.cols = 2;
         cfg.emitParams.rows = 2;
         const auto r = toTest(runEngine(img, cfg));
@@ -206,14 +206,14 @@ void testEnginePipeline() {
         auto base = [&] {
             EngineConfig cfg;
             cfg.source = SourceInfo{300, 300};
-            cfg.cut.tier = Tier::L3;
-            cfg.cut.generator = CutGenerator::GRID;
-            cfg.cut.grid = GridParams{.originX = 0, .originY = 0, .cellWidth = 100, .cellHeight = 100, .remainder = RemainderPolicy::DISCARD};
-            cfg.cut.polarity = Polarity::KEEP;
+            cfg.cut.tier = Tier::Grid;
+            cfg.cut.generator = CutGenerator::Grid;
+            cfg.cut.grid = GridParams{.originX = 0, .originY = 0, .cellWidth = 100, .cellHeight = 100, .remainder = RemainderPolicy::Discard};
+            cfg.cut.polarity = Polarity::Keep;
             cfg.selectedCells = {0, 1, 2, 3};
-            cfg.order.strategy = SortStrategy::ROW_MAJOR;
-            cfg.emitParams.mode = EmitMode::MERGED;
-            cfg.emitParams.layout = MergeLayout::REARRANGE;
+            cfg.order.strategy = SortStrategy::RowMajor;
+            cfg.emitParams.mode = EmitMode::Merged;
+            cfg.emitParams.layout = MergeLayout::Rearrange;
             cfg.emitParams.cols = 2;
             cfg.emitParams.rows = 2;
             return cfg;
@@ -223,7 +223,7 @@ void testEnginePipeline() {
           CHECK(r.ok && r.composition.placements.size() == 4);
           CHECK(r.composition.placements[1].dest.left == 100 && r.composition.placements[1].dest.top == 0); }
         // 列优先：槽序 [0,2,1,3] → 块1 落 slot2=(r1,c0)。
-        { EngineConfig cfg = base(); cfg.emitParams.mergeOrder.strategy = SortStrategy::COLUMN_MAJOR;
+        { EngineConfig cfg = base(); cfg.emitParams.mergeOrder.strategy = SortStrategy::ColumnMajor;
           const auto r = toTest(runEngine(img, cfg)); CHECK(r.ok);
           CHECK(r.composition.placements[1].dest.left == 0 && r.composition.placements[1].dest.top == 100); }
         // 蛇形（行优先）：槽序 [0,1,3,2] → 块2 落 slot3=(r1,c1)。
@@ -241,12 +241,12 @@ void testEnginePipeline() {
         const Image img = makeImage(100, 80);
         EngineConfig cfg;
         cfg.source = SourceInfo{100, 80};
-        cfg.cut.tier = Tier::L2;
-        cfg.cut.generator = CutGenerator::RECT;
+        cfg.cut.tier = Tier::Erase;
+        cfg.cut.generator = CutGenerator::Rect;
         cfg.cut.rect = RectRegion(30, 20, 70, 60);
-        cfg.cut.polarity = Polarity::REMOVE;
-        cfg.emitParams.mode = EmitMode::MERGED;
-        cfg.emitParams.layout = MergeLayout::REARRANGE; // 非网格模式重排 → 拒绝
+        cfg.cut.polarity = Polarity::Remove;
+        cfg.emitParams.mode = EmitMode::Merged;
+        cfg.emitParams.layout = MergeLayout::Rearrange; // 非网格模式重排 → 拒绝
         const auto r = toTest(runEngine(img, cfg));
         CHECK(!r.ok);
         CHECK(r.error.find("网格") != std::string::npos);
@@ -255,16 +255,16 @@ void testEnginePipeline() {
     // ---- 排序策略：Sequence::build 生成序号（FR-L3.5）。----
     {
         Sequence s;
-        s.build(9, 3, 3, SequenceParams{.strategy = SortStrategy::ROW_MAJOR, .reverse = false, .snake = false});
+        s.build(9, 3, 3, SequenceParams{.strategy = SortStrategy::RowMajor, .reverse = false, .snake = false});
         CHECK((s.order() == std::vector{0, 1, 2, 3, 4, 5, 6, 7, 8}));
 
-        s.build(9, 3, 3, SequenceParams{.strategy = SortStrategy::COLUMN_MAJOR, .reverse = false, .snake = false});
+        s.build(9, 3, 3, SequenceParams{.strategy = SortStrategy::ColumnMajor, .reverse = false, .snake = false});
         CHECK((s.order() == std::vector{0, 3, 6, 1, 4, 7, 2, 5, 8}));
 
-        s.build(9, 3, 3, SequenceParams{.strategy = SortStrategy::ROW_MAJOR, .reverse = true, .snake = false}); // 整体逆序
+        s.build(9, 3, 3, SequenceParams{.strategy = SortStrategy::RowMajor, .reverse = true, .snake = false}); // 整体逆序
         CHECK((s.order() == std::vector{8, 7, 6, 5, 4, 3, 2, 1, 0}));
 
-        s.build(9, 3, 3, SequenceParams{.strategy = SortStrategy::ROW_MAJOR, .reverse = false, .snake = true}); // 蛇形
+        s.build(9, 3, 3, SequenceParams{.strategy = SortStrategy::RowMajor, .reverse = false, .snake = true}); // 蛇形
         CHECK((s.order() == std::vector{0, 1, 2, 5, 4, 3, 6, 7, 8}));
 
         Sequence custom;
@@ -277,12 +277,12 @@ void testEnginePipeline() {
         const Image img = makeImage(120, 80);
         EngineConfig cfg;
         cfg.source = SourceInfo{120, 80};
-        cfg.cut.tier = Tier::L2;
-        cfg.cut.generator = CutGenerator::RECT;
+        cfg.cut.tier = Tier::Erase;
+        cfg.cut.generator = CutGenerator::Rect;
         cfg.cut.rect = RectRegion(30, 20, 90, 60);
-        cfg.cut.polarity = Polarity::REMOVE;
-        cfg.emitParams.mode = EmitMode::MERGED;
-        cfg.emitParams.layout = MergeLayout::COLLAPSE;
+        cfg.cut.polarity = Polarity::Remove;
+        cfg.emitParams.mode = EmitMode::Merged;
+        cfg.emitParams.layout = MergeLayout::Collapse;
         // 预览侧：先用流水线把尺寸推演出来（rotate90 交换 → 80×120），再以该尺寸走仅尺寸入口。
         cfg.preprocess.add(idc::preprocess::RotateOp{90});
         const auto g = cfg.preprocess.geometryOutput(img.width(), img.height());

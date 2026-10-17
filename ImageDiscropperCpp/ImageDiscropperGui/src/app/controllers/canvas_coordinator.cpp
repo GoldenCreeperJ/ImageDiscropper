@@ -1,7 +1,7 @@
 // ============================================================================
-// 文件：app/canvas_coordinator.cpp
+// 文件：app/controllers/canvas_coordinator.cpp
 // 作用：实现 CanvasCoordinator 的画布四态落地与交互写回编排（见同名头文件说明）。
-//       全部槽/连接自 MainWindow 原封迁出：意图 → Document（或场景高亮），
+//       本 TU 汇集画布交互的槽/连接：意图 → Document（或场景高亮），
 //       预览刷新仍由 PreviewController 经 Document 信号承担。
 // ============================================================================
 #include "app/controllers/canvas_coordinator.h"
@@ -16,7 +16,7 @@
 #include "model/annotation_bridge.h"
 #include "model/document.h"
 #include "panels/param_panel.h"
-#include "panels/tool_panel.h"
+#include "panels/mode_tool_panel.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 
@@ -30,9 +30,9 @@ void CanvasCoordinator::setScene(CanvasScene* scene) { scene_ = scene; }
 void CanvasCoordinator::setView(CanvasView* view) { view_ = view; }
 void CanvasCoordinator::setParamPanel(ParamPanel* param) { param_ = param; }
 void CanvasCoordinator::setStatusBar(StatusBar* status) { status_ = status; }
-void CanvasCoordinator::setToolPanel(ToolPanel* toolPanel) { toolPanel_ = toolPanel; }
+void CanvasCoordinator::setToolPanel(ModeToolPanel* toolPanel) { toolPanel_ = toolPanel; }
 
-// 连接画布/场景/参数面板/工具面板意图信号（自 MainWindow::connectAll 迁出；其余连接住在属主旁）。
+// 连接画布/场景/参数面板/工具面板意图信号（其余连接住在各自属主旁）。
 void CanvasCoordinator::connectSignals() {
     connect(view_, &CanvasView::rubberSelect, this, &CanvasCoordinator::onRubberSelect);
     connect(view_, &CanvasView::nudgeSelection, this, &CanvasCoordinator::onNudge);
@@ -44,7 +44,7 @@ void CanvasCoordinator::connectSignals() {
     connect(scene_, &CanvasScene::cellReordered, this, &CanvasCoordinator::onCellReordered);
     connect(param_, &ParamPanel::rectSelected, this, &CanvasCoordinator::onRectSelected);
     // 画布四态互斥模式（「交互模式」面板顶部按钮）→ 落地：切视图模式 + 场景图元可交互性 + 取消前态选中。
-    connect(toolPanel_, &ToolPanel::modeChanged, this, &CanvasCoordinator::applyCanvasMode);
+    connect(toolPanel_, &ModeToolPanel::modeChanged, this, &CanvasCoordinator::applyCanvasMode);
     // 画布上拾取图片图层（转发自 ImageLayerItem）：按下选中该层（预处理目标切到该层）并刷新当前态提示。
     connect(scene_, &CanvasScene::imageLayerPressed, this, [this](const int id) {
         doc_->selectLayer(id);
@@ -78,7 +78,7 @@ void CanvasCoordinator::connectSignals() {
     });
 }
 
-// 画布四态互斥模式落地（计划 Phase 4）：任一时刻只处一态——
+// 画布四态互斥模式落地：任一时刻只处一态——
 //   · 切视图模式（CanvasView 据此路由左键手势）+ 场景图元可交互性（拾取框 / 标注图元）；
 //   · 进入一态即取消前态选中：标注相关态清标注选中、非图片相关态清选中层（回到「画布」预处理目标）。
 // 菜单勾选态回同步由 MainWindow::connectAll 的 modeChanged 第二条连接承担（MainWindowUi::syncCanvasModeActions）。
@@ -98,15 +98,15 @@ void CanvasCoordinator::applyCanvasMode(const CanvasMode mode) const {
         case CanvasMode::AnnoSelect:
             if (doc_->selectedLayerId()) doc_->selectLayer(std::nullopt);      // 关键：选中图片后可切回画布
             if (doc_->baseSelected()) doc_->selectBase(false);                 // 离开图片拾取态：底图→画布
-            // 选取态必须把标注工具切到 SELECT（→ AnnotationEditor EDIT 模式）：属性写回 change* 仅在 EDIT
-            // 作用选中项，否则从绘制态（DRAW）切回时，选中标注能显示属性却改不动（颜色/填充/粗细/圆角落回默认）。
-            if (anno_->currentTool() != AnnoTool::SELECT) anno_->setTool(AnnoTool::SELECT);
+            // 选取态必须把标注工具切到 Select（→ AnnotationEditor Edit 模式）：属性写回 change* 仅在 Edit
+            // 作用选中项，否则从绘制态（Draw）切回时，选中标注能显示属性却改不动（颜色/填充/粗细/圆角落回默认）。
+            if (anno_->currentTool() != AnnoTool::Select) anno_->setTool(AnnoTool::Select);
             break;
         case CanvasMode::AnnoCreate:
             if (doc_->selectedLayerId()) doc_->selectLayer(std::nullopt);
             if (doc_->baseSelected()) doc_->selectBase(false);                 // 离开图片拾取态：底图→画布
             if (anno_->selectedIndex()) anno_->clearSelection();
-            if (anno_->currentTool() == AnnoTool::SELECT) anno_->setTool(AnnoTool::RECT);  // 绘制态需一个形状
+            if (anno_->currentTool() == AnnoTool::Select) anno_->setTool(AnnoTool::Rect);  // 绘制态需一个形状
             break;
     }
     updateInteractionHint();
@@ -136,7 +136,7 @@ void CanvasCoordinator::onRubberSelect(const QRectF& sceneRect) const {
     if (!doc_->hasImage()) return;
     // L3 网格分割不用矩形选区：框选（含从图像外起拖、未被 CellPickerItem grab 而落到视图橡皮筋的情形）
     // → 把命中的单元并入选择集（与 picker 自身框选发出的 cellsMarqueeSelected 走同一 addCells 路径）。
-    if (doc_->mode() == engine::Tier::L3) {
+    if (doc_->mode() == engine::Tier::Grid) {
         if (const std::vector<int> idx = scene_->cellsIntersecting(sceneRect); !idx.empty()) doc_->addCells(idx);
         return;
     }
@@ -148,7 +148,7 @@ void CanvasCoordinator::onRubberSelect(const QRectF& sceneRect) const {
     const engine::RectRegion rr(qRound(l), qRound(t), qRound(r), qRound(b));
     if (rr.width() <= 0 || rr.height() <= 0) return; // 忽略退化选区。
     // L2 多矩形并集：框选逐个追加矩形（而非替换单选区）。
-    if (doc_->mode() == engine::Tier::L2 && doc_->l2Sub() == L2Sub::MULTI_RECT) {
+    if (doc_->mode() == engine::Tier::Erase && doc_->l2Sub() == L2Sub::MultiRect) {
         doc_->addRect(rr);
         return;
     }
@@ -163,7 +163,7 @@ void CanvasCoordinator::onSelectionEdited(const QRectF& sceneRect) const {
 // L2 多矩形：拖动/缩放第 index 个选区框 → 写回 Document 对应矩形（选区框已钳制到图像内）。
 void CanvasCoordinator::onMultiRectEdited(const int index, const QRectF& sceneRect) const {
     if (index < 0 || !doc_->hasImage()) return;
-    if (doc_->mode() != engine::Tier::L2 || doc_->l2Sub() != L2Sub::MULTI_RECT) return;
+    if (doc_->mode() != engine::Tier::Erase || doc_->l2Sub() != L2Sub::MultiRect) return;
     const engine::RectRegion rr(qRound(sceneRect.left()), qRound(sceneRect.top()),
                                      qRound(sceneRect.right()), qRound(sceneRect.bottom()));
     doc_->updateRect(static_cast<std::size_t>(index), rr);
@@ -180,19 +180,19 @@ void CanvasCoordinator::onRectSelected(const int index) const {
 
 // L3 单击切换某单元：写回 Document（触发刷新与点选图元高亮更新）。
 void CanvasCoordinator::onCellToggled(const int index) const {
-    if (!doc_->hasImage() || doc_->mode() != engine::Tier::L3) return;
+    if (!doc_->hasImage() || doc_->mode() != engine::Tier::Grid) return;
     doc_->toggleCell(index);
 }
 
 // L3 拖拽框选：把命中的单元并入选择集（去重）。
 void CanvasCoordinator::onCellsMarquee(const std::vector<int>& indices) const {
-    if (!doc_->hasImage() || doc_->mode() != engine::Tier::L3) return;
+    if (!doc_->hasImage() || doc_->mode() != engine::Tier::Grid) return;
     doc_->addCells(indices);
 }
 
-// L3 CUSTOM 拖拽调序：把 from 单元移到 to 单元原序位（重排选择集顺序即自定义输出序）。
+// L3 Custom 拖拽调序：把 from 单元移到 to 单元原序位（重排选择集顺序即自定义输出序）。
 void CanvasCoordinator::onCellReordered(const int fromIndex, const int toIndex) const {
-    if (!doc_->hasImage() || doc_->mode() != engine::Tier::L3) return;
+    if (!doc_->hasImage() || doc_->mode() != engine::Tier::Grid) return;
     doc_->moveCellOrder(fromIndex, toIndex);
 }
 
@@ -208,19 +208,19 @@ void CanvasCoordinator::onNudge(const int dx, const int dy) const {
     doc_->setRect(engine::RectRegion(nl, nt, nl + w, nt + h));
 }
 
-// 清除切割线（清除选区；按模式路由——原实现只清矩形，L3 的单元选择集与 L2 多矩形列表不受影响）：
+// 清除切割线（清除选区；按模式路由——不同模式的选区形态各异，非仅清单矩形）：
 //   · L3：显式单元选择集即选区（rect 恒空），清 cells；
 //   · L2 MULTI_RECT：选区＝多矩形列表，连同单矩形一并清；
 //   · 其余（L1 / L2 单矩形）：清单矩形。
 void CanvasCoordinator::onClearCut() const {
     if (!doc_->hasImage()) return;
-    if (doc_->mode() == engine::Tier::L3) {
+    if (doc_->mode() == engine::Tier::Grid) {
         if (doc_->selectedCells().empty()) return;
         doc_->clearCells(); // 触发 changed → refreshPreview 清空叠加层。
         status_->notify(IDC_GTR(status, kCellsCleared), false);
         return;
     }
-    if (doc_->mode() == engine::Tier::L2 && doc_->l2Sub() == L2Sub::MULTI_RECT) {
+    if (doc_->mode() == engine::Tier::Erase && doc_->l2Sub() == L2Sub::MultiRect) {
         if (!doc_->hasRect() && doc_->rects().empty()) return;
         doc_->clearRect();
         doc_->clearRects();
@@ -234,19 +234,19 @@ void CanvasCoordinator::onClearCut() const {
 
 // L3 全选单元（与参数面板「全选」按钮同一 Document 入口；面板按钮无提示，此处保持一致）。
 void CanvasCoordinator::onCellsSelectAll() const {
-    if (!doc_->hasImage() || doc_->mode() != engine::Tier::L3) return;
+    if (!doc_->hasImage() || doc_->mode() != engine::Tier::Grid) return;
     doc_->selectAllCells();
 }
 
 // L3 反选单元。
 void CanvasCoordinator::onCellsInvert() const {
-    if (!doc_->hasImage() || doc_->mode() != engine::Tier::L3) return;
+    if (!doc_->hasImage() || doc_->mode() != engine::Tier::Grid) return;
     doc_->invertCells();
 }
 
 // L3 清空单元选择集。
 void CanvasCoordinator::onCellsClear() const {
-    if (!doc_->hasImage() || doc_->mode() != engine::Tier::L3) return;
+    if (!doc_->hasImage() || doc_->mode() != engine::Tier::Grid) return;
     doc_->clearCells();
 }
 

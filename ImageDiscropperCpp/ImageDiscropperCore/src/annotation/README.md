@@ -5,8 +5,8 @@
 
 **分块依据**：按「构造 → 光栅化 → 标注集合 → 视图坐标 → 段级 JSON」五种关注点拆分，互不耦合。
 - `shape_factory.cpp` 只关心「锚点 → Shape」的构造分支，与像素无关。
-- `rasterizer.cpp` 只关心「Shape → Image」的像素写入：先用 `fillColor`（`fill` 为真且非 LINE，折线 / 画笔隐式闭合）扫描线填充内部，再用 `color` 抗锯齿描边，并做 Alpha 混合。
-- `annotation_set.cpp` 只关心标注数据列表的结构操作（`add` / `removeAt` / `moveItem` / `popBack` / `clear` / `restore`）与 zOrder 不变式规范化、命中检测（`hitTest` 顶层优先）与烧录合成（`burnIn(base)`）——**不持底图、不含会话态**：当前工具 / 编辑模式 / 选中 / 撤销重做已拆至 GUI `AnnotationEditor`（其组合本集合并自行编排条目级撤销）。
+- `rasterizer.cpp` 只关心「Shape → Image」的像素写入：先用 `fillColor`（`fill` 为真且非 Line，折线 / 画笔隐式闭合）扫描线填充内部，再用 `color` 抗锯齿描边，并做 Alpha 混合。
+- `annotation_set.cpp` 只关心标注数据列表的结构操作（`add` / `removeAt` / `moveItem` / `popBack` / `clear` / `restore`）与 zOrder 不变式规范化、命中检测（`hitTest` 顶层优先）与烧录合成（`burnIn(base)`）——**不持底图、不含会话态**：当前工具 / 编辑模式 / 选中 / 撤销重做归 GUI `AnnotationEditor`（其组合本集合并自行编排条目级撤销）。
 - `view_transform.cpp` 只关心屏幕 / 逻辑坐标换算与视图适配。
 - `annotation_json.cpp` 只关心 SPEC §7 `annotations` **段元素**的 JSON ↔ `Annotation`：段级重建与逐条校验在此（不拼装整档文档）。
   对内供 `engine_config_json` 调用（`annotationsSegmentToJson` / `annotationsFromSegmentJson`），对外实现 `annotation_json.h` 的

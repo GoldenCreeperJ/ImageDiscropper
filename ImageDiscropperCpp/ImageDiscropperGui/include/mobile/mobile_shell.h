@@ -3,7 +3,7 @@
 // 作用：MobileShell——移动端顶层壳（SPEC §8.3 布局）：
 //       「画布为主 + 底部工具条 + 抽屉式面板」的 QMainWindow 形态，与桌面 MainWindow 并列。
 // 分块依据：
-//   - 继承 MainWindow 复用其**全部**业务槽、四控制器接线与 Document 单一真相源
+//   - 继承 MainWindow 复用其**全部**业务槽、八控制器接线与 Document 单一真相源
 //     （经保护构造 MobileShellTag 跳过桌面骨架；initCore 接线序列两端逐行共用）——
 //     移动端不复刻任何编排/引擎逻辑（行为同构、零行为分支的结构性保证）；
 //   - 骨架装配在 mobile_shell_ui.{h,cpp} 的建造者 MobileShellUi（MainWindow 的 friend，

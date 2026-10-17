@@ -10,14 +10,14 @@
 namespace idc::engine {
 
 // 按当前极性解析出“最终保留”的单元序号集合（SPEC §1 阶段④）。
-//   KEEP   → 返回所有被选中的序号（R = S）；
-//   REMOVE → 返回所有未被选中的序号（R = 全集 \ S，反向剔除内核）。
+//   Keep   → 返回所有被选中的序号（R = S）；
+//   Remove → 返回所有未被选中的序号（R = 全集 \ S，反向剔除内核）。
 std::vector<std::size_t> Selection::resolve() const {
     std::vector<std::size_t> kept;
     kept.reserve(selected_.size());
     for (std::size_t i = 0; i < selected_.size(); ++i) {
-        // KEEP 保留选中项；REMOVE 保留未选中项（补集）。
-        if (polarity_ == Polarity::KEEP ? selected_[i] : !selected_[i]) kept.push_back(i);
+        // Keep 保留选中项；Remove 保留未选中项（补集）。
+        if (polarity_ == Polarity::Keep ? selected_[i] : !selected_[i]) kept.push_back(i);
     }
     return kept;
 }

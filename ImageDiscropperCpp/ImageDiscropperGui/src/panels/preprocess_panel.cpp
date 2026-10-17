@@ -1,12 +1,12 @@
 // ============================================================================
-// 文件：panels/image_panel.cpp
+// 文件：panels/preprocess_panel.cpp
 // 作用：实现图像处理面板——顶部独立「画布尺寸（Resize）」区 + 「几何操作」区/列表 + 「色彩操作」区/列表。
 // 分块依据：构造函数只做「排版 + 串联信号」；两区各自的操作类型下拉 + 参数控件按类型启停；
 //           尺寸区控件在有图时常开；槽函数只把控件值翻译成轻操作 PreprocessConfig 或 resize 意图发信号，绝不触碰像素运算。
 //           信号携带扁平队列下标（色彩项 = 几何项数 + 色彩行）；「几何块在前、色彩块在后」的不变式由控制器保证。
 // 视觉规范（本目录 README「画布视觉规范」）：面板内边距 8px、控件间距 6px、分组间距 12px。
 // ============================================================================
-#include "panels/image_panel.h"
+#include "panels/preprocess_panel.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -55,7 +55,7 @@ void applyMaskTo(const std::string& mask, QCheckBox* r, QCheckBox* g, QCheckBox*
 } // namespace
 
 // 构造：上「画布尺寸（Resize）」+ 中「几何操作」区/列表 + 「色彩操作」区/列表 + 下「重置」。
-ImagePanel::ImagePanel(QWidget* parent) : QWidget(parent) {
+PreprocessPanel::PreprocessPanel(QWidget* parent) : QWidget(parent) {
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx,
                              nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx);   // 面板内边距。
@@ -67,7 +67,7 @@ ImagePanel::ImagePanel(QWidget* parent) : QWidget(parent) {
     i18n::bindToolTip(retranslator_, targetLabel_, IDC_GT(tooltip, kPreprocessTarget));
     root->addWidget(targetLabel_);
 
-    // 分区构建（画布尺寸 / 几何操作 / 色彩操作；实现见 image_panel_sections.cpp）。
+    // 分区构建（画布尺寸 / 几何操作 / 色彩操作；实现见 preprocess_panel_sections.cpp）。
     buildResizeSection(root);
     buildGeoSection(root);
     buildColorSection(root);
@@ -79,34 +79,34 @@ ImagePanel::ImagePanel(QWidget* parent) : QWidget(parent) {
     root->addWidget(resetBtn_);
 
     // ---- 串联信号 ----
-    connect(geoTypeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ImagePanel::onGeoTypeChanged);
-    connect(geoAddBtn_, &QPushButton::clicked, this, &ImagePanel::onGeoAdd);
-    connect(geoReplaceBtn_, &QPushButton::clicked, this, &ImagePanel::onGeoReplace);
-    connect(geoDelBtn_, &QPushButton::clicked, this, &ImagePanel::onGeoDelete);
-    connect(geoUpBtn_, &QPushButton::clicked, this, &ImagePanel::onGeoMoveUp);
-    connect(geoDownBtn_, &QPushButton::clicked, this, &ImagePanel::onGeoMoveDown);
+    connect(geoTypeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &PreprocessPanel::onGeoTypeChanged);
+    connect(geoAddBtn_, &QPushButton::clicked, this, &PreprocessPanel::onGeoAdd);
+    connect(geoReplaceBtn_, &QPushButton::clicked, this, &PreprocessPanel::onGeoReplace);
+    connect(geoDelBtn_, &QPushButton::clicked, this, &PreprocessPanel::onGeoDelete);
+    connect(geoUpBtn_, &QPushButton::clicked, this, &PreprocessPanel::onGeoMoveUp);
+    connect(geoDownBtn_, &QPushButton::clicked, this, &PreprocessPanel::onGeoMoveDown);
     connect(geoList_, &QListWidget::currentRowChanged, this, [this](int) { onGeoSelectionChanged(); });
 
-    connect(colorTypeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ImagePanel::onColorTypeChanged);
-    connect(colorAddBtn_, &QPushButton::clicked, this, &ImagePanel::onColorAdd);
-    connect(colorReplaceBtn_, &QPushButton::clicked, this, &ImagePanel::onColorReplace);
-    connect(colorDelBtn_, &QPushButton::clicked, this, &ImagePanel::onColorDelete);
-    connect(colorUpBtn_, &QPushButton::clicked, this, &ImagePanel::onColorMoveUp);
-    connect(colorDownBtn_, &QPushButton::clicked, this, &ImagePanel::onColorMoveDown);
+    connect(colorTypeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &PreprocessPanel::onColorTypeChanged);
+    connect(colorAddBtn_, &QPushButton::clicked, this, &PreprocessPanel::onColorAdd);
+    connect(colorReplaceBtn_, &QPushButton::clicked, this, &PreprocessPanel::onColorReplace);
+    connect(colorDelBtn_, &QPushButton::clicked, this, &PreprocessPanel::onColorDelete);
+    connect(colorUpBtn_, &QPushButton::clicked, this, &PreprocessPanel::onColorMoveUp);
+    connect(colorDownBtn_, &QPushButton::clicked, this, &PreprocessPanel::onColorMoveDown);
     connect(colorList_, &QListWidget::currentRowChanged, this, [this](int) { onColorSelectionChanged(); });
 
-    connect(resetBtn_, &QPushButton::clicked, this, &ImagePanel::resetRequested);
-    connect(applySizeBtn_, &QPushButton::clicked, this, &ImagePanel::onApplyResize);
-    connect(scaleSizeBtn_, &QPushButton::clicked, this, &ImagePanel::onScaleResizeClicked);
-    connect(clearSizeBtn_, &QPushButton::clicked, this, &ImagePanel::onClearResizeClicked);
-    connect(resizeW_, QOverload<int>::of(&QSpinBox::valueChanged), this, &ImagePanel::onResizeWidthEdited);
+    connect(resetBtn_, &QPushButton::clicked, this, &PreprocessPanel::resetRequested);
+    connect(applySizeBtn_, &QPushButton::clicked, this, &PreprocessPanel::onApplyResize);
+    connect(scaleSizeBtn_, &QPushButton::clicked, this, &PreprocessPanel::onScaleResizeClicked);
+    connect(clearSizeBtn_, &QPushButton::clicked, this, &PreprocessPanel::onClearResizeClicked);
+    connect(resizeW_, QOverload<int>::of(&QSpinBox::valueChanged), this, &PreprocessPanel::onResizeWidthEdited);
 
     onGeoTypeChanged(geoTypeCombo_->currentIndex());
     onColorTypeChanged(colorTypeCombo_->currentIndex());
 }
 
 // ---- 几何区：类型启停（旋转→角度，翻转→方向）----
-void ImagePanel::onGeoTypeChanged(const int index) const {
+void PreprocessPanel::onGeoTypeChanged(const int index) const {
     const bool has = doc_ && doc_->hasImage();
     rotAngle_->setEnabled(has && index == kRotate);
     flipDir_->setEnabled(has && index == kFlip);
@@ -115,7 +115,7 @@ void ImagePanel::onGeoTypeChanged(const int index) const {
 }
 
 // ---- 色彩区：类型启停（反色 / 分离→通道；黑白→通道隐藏），叠加灰度产出智能禁用 ----
-void ImagePanel::onColorTypeChanged(const int index) const {
+void PreprocessPanel::onColorTypeChanged(const int index) const {
     const bool has = doc_ && doc_->hasImage();
     const bool chan = index == kInvert || index == kSplit;
     if (colorChanRow_) colorChanRow_->setVisible(chan);
@@ -131,7 +131,7 @@ void ImagePanel::onColorTypeChanged(const int index) const {
 }
 
 // 依几何类型 + 参数构造 PreprocessConfig（RotateOp / FlipOp）。
-preprocess::PreprocessConfig ImagePanel::buildGeoConfig() const {
+preprocess::PreprocessConfig PreprocessPanel::buildGeoConfig() const {
     switch (geoTypeCombo_->currentIndex()) {
         case kRotate: return preprocess::RotateOp{rotAngle_->currentData().toInt()};
         case kFlip:   return preprocess::FlipOp{flipDir_->currentData().toInt() != 0};
@@ -140,7 +140,7 @@ preprocess::PreprocessConfig ImagePanel::buildGeoConfig() const {
 }
 
 // 依色彩类型 + 参数构造 PreprocessConfig（GrayOp / InvertOp / SplitOp）。
-preprocess::PreprocessConfig ImagePanel::buildColorConfig() const {
+preprocess::PreprocessConfig PreprocessPanel::buildColorConfig() const {
     switch (colorTypeCombo_->currentIndex()) {
         case kGray:   return preprocess::GrayOp{};
         case kInvert: {
@@ -158,28 +158,28 @@ preprocess::PreprocessConfig ImagePanel::buildColorConfig() const {
 }
 
 // ---- 几何区动作 ----
-void ImagePanel::onGeoAdd() { emit stepAppendRequested(buildGeoConfig()); }
+void PreprocessPanel::onGeoAdd() { emit stepAppendRequested(buildGeoConfig()); }
 
-void ImagePanel::onGeoReplace() {
+void PreprocessPanel::onGeoReplace() {
     const int idx = geoFlatIndex();
     if (idx < 0) return;
     emit stepReplaceRequested(idx, buildGeoConfig());
 }
 
-void ImagePanel::onGeoDelete() {
+void PreprocessPanel::onGeoDelete() {
     const int idx = geoFlatIndex();
     if (idx < 0) return;
     emit stepRemoveRequested(idx);
 }
 
-void ImagePanel::onGeoMoveUp() {
+void PreprocessPanel::onGeoMoveUp() {
     const int row = geoList_->currentRow();
     if (row <= 0) return;
     geoPendingRow_ = row - 1;
     emit stepMoveRequested(geoFlatIndex(), false);
 }
 
-void ImagePanel::onGeoMoveDown() {
+void PreprocessPanel::onGeoMoveDown() {
     const int row = geoList_->currentRow();
     if (row < 0 || row + 1 >= geoList_->count()) return;
     geoPendingRow_ = row + 1;
@@ -187,28 +187,28 @@ void ImagePanel::onGeoMoveDown() {
 }
 
 // ---- 色彩区动作 ----
-void ImagePanel::onColorAdd() { emit stepAppendRequested(buildColorConfig()); }
+void PreprocessPanel::onColorAdd() { emit stepAppendRequested(buildColorConfig()); }
 
-void ImagePanel::onColorReplace() {
+void PreprocessPanel::onColorReplace() {
     const int idx = colorFlatIndex();
     if (idx < 0) return;
     emit stepReplaceRequested(idx, buildColorConfig());
 }
 
-void ImagePanel::onColorDelete() {
+void PreprocessPanel::onColorDelete() {
     const int idx = colorFlatIndex();
     if (idx < 0) return;
     emit stepRemoveRequested(idx);
 }
 
-void ImagePanel::onColorMoveUp() {
+void PreprocessPanel::onColorMoveUp() {
     const int row = colorList_->currentRow();
     if (row <= 0) return;   // 首色上移会跨入几何块（破坏 geo→color 不变式），故禁止
     colorPendingRow_ = row - 1;
     emit stepMoveRequested(colorFlatIndex(), false);
 }
 
-void ImagePanel::onColorMoveDown() {
+void PreprocessPanel::onColorMoveDown() {
     const int row = colorList_->currentRow();
     if (row < 0 || row + 1 >= colorList_->count()) return;
     colorPendingRow_ = row + 1;
@@ -216,17 +216,17 @@ void ImagePanel::onColorMoveDown() {
 }
 
 // 「画布尺寸」区动作：把控件值翻译成 resize 意图发信号（真正的重放物化在控制器）。
-void ImagePanel::onApplyResize() { emit resizeAppliedRequested(resizeW_->value(), resizeH_->value()); }
+void PreprocessPanel::onApplyResize() { emit resizeAppliedRequested(resizeW_->value(), resizeH_->value()); }
 
-void ImagePanel::onScaleResizeClicked() {
+void PreprocessPanel::onScaleResizeClicked() {
     const double factor = static_cast<double>(resizeScalePct_->value()) / 100.0;
     emit resizeScaleRequested(factor);
 }
 
-void ImagePanel::onClearResizeClicked() { emit resizeClearedRequested(); }
+void PreprocessPanel::onClearResizeClicked() { emit resizeClearedRequested(); }
 
 // ---- 扁平下标映射 ----
-int ImagePanel::geoRowCount() const {
+int PreprocessPanel::geoRowCount() const {
     if (!doc_) return 0;
     int n = 0;
     for (const auto& cfg : doc_->activeSession().steps().items()) {
@@ -236,19 +236,19 @@ int ImagePanel::geoRowCount() const {
     return n;
 }
 
-int ImagePanel::geoFlatIndex() const {
+int PreprocessPanel::geoFlatIndex() const {
     const int row = geoList_ ? geoList_->currentRow() : -1;
     return row;   // 几何行 = 扁平下标（几何块恒在前）
 }
 
-int ImagePanel::colorFlatIndex() const {
+int PreprocessPanel::colorFlatIndex() const {
     const int row = colorList_ ? colorList_->currentRow() : -1;
     if (row < 0) return -1;
     return geoRowCount() + row;   // 色彩行需加几何项数偏移
 }
 
 // 几何列表选中：把该步参数回灌几何配置区，刷新按钮启停。
-void ImagePanel::onGeoSelectionChanged() {
+void PreprocessPanel::onGeoSelectionChanged() {
     const int row = geoList_->currentRow();
     if (row >= 0 && doc_) {
         if (const auto& steps = doc_->activeSession().steps().items(); static_cast<std::size_t>(row) < steps.size()) loadGeoIntoControls(steps[static_cast<std::size_t>(row)]);
@@ -262,7 +262,7 @@ void ImagePanel::onGeoSelectionChanged() {
 }
 
 // 色彩列表选中：把该步参数回灌色彩配置区，刷新按钮启停。
-void ImagePanel::onColorSelectionChanged() {
+void PreprocessPanel::onColorSelectionChanged() {
     const int row = colorList_->currentRow();
     if (row >= 0 && doc_) {
         const auto& steps = doc_->activeSession().steps().items();
@@ -277,7 +277,7 @@ void ImagePanel::onColorSelectionChanged() {
 }
 
 // 把某几何步参数回灌几何控件（类型下拉 + 角度 / 方向）。
-void ImagePanel::loadGeoIntoControls(const preprocess::PreprocessConfig& cfg) {
+void PreprocessPanel::loadGeoIntoControls(const preprocess::PreprocessConfig& cfg) {
     std::visit([this]<typename T0>(const T0& op) {
         using T = std::decay_t<T0>;
         if constexpr (std::is_same_v<T, preprocess::RotateOp>) {
@@ -292,7 +292,7 @@ void ImagePanel::loadGeoIntoControls(const preprocess::PreprocessConfig& cfg) {
 }
 
 // 把某色彩步参数回灌色彩控件（类型下拉 + 通道勾选）。
-void ImagePanel::loadColorIntoControls(const preprocess::PreprocessConfig& cfg) {
+void PreprocessPanel::loadColorIntoControls(const preprocess::PreprocessConfig& cfg) {
     std::visit([this]<typename T0>(const T0& op) {
         using T = std::decay_t<T0>;
         if constexpr (std::is_same_v<T, preprocess::GrayOp>) {
@@ -308,7 +308,7 @@ void ImagePanel::loadColorIntoControls(const preprocess::PreprocessConfig& cfg) 
 }
 
 // 某步的中文描述（列表文本）。
-QString ImagePanel::describeStep(const preprocess::PreprocessConfig& cfg) {
+QString PreprocessPanel::describeStep(const preprocess::PreprocessConfig& cfg) {
     return std::visit([]<typename T0>(const T0& op) -> QString {
         using T = std::decay_t<T0>;
         if constexpr (std::is_same_v<T, preprocess::GrayOp>) {
@@ -328,13 +328,13 @@ QString ImagePanel::describeStep(const preprocess::PreprocessConfig& cfg) {
 }
 
 // 绑定 Document。
-void ImagePanel::setDocument(Document* doc) {
+void PreprocessPanel::setDocument(Document* doc) {
     doc_ = doc;
     syncFromDocument();
 }
 
 // 从 Document 反向同步：整板启停、刷新尺寸区、按类型重建几何 / 色彩两列表、重置按钮启停。
-void ImagePanel::syncFromDocument() {
+void PreprocessPanel::syncFromDocument() {
     const bool has = doc_ && doc_->hasImage();
     setEnabled(has);
     if (!has) return;
@@ -413,7 +413,7 @@ void ImagePanel::syncFromDocument() {
 }
 
 // 保持宽高比时，改宽联动算高（比例取当前输出尺寸；纯 UI 便利，不涉及切割几何）。
-void ImagePanel::onResizeWidthEdited(const int value) const {
+void PreprocessPanel::onResizeWidthEdited(const int value) const {
     if (!resizeKeepRatio_->isChecked() || !doc_ || !doc_->hasImage()) return;
     const int cw = doc_->width();
     const int ch = doc_->height();

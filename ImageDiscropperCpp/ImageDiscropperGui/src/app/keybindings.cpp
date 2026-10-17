@@ -31,7 +31,7 @@ int idxOf(const CommandId id) { return static_cast<int>(id); }
 } // namespace
 
 // ---------------------------------------------------------------------------
-// 命令注册表：id + 应用类 + 默认键 + 可译显示名（复用 menu 组，命令名不再新增译文）。
+// 命令注册表：id + 应用类 + 默认键 + 可译显示名（复用 menu 组，命令名不新增译文）。
 // 默认键以 QKeySequence::StandardKey 构造以保平台原生；DeleteAnnotation 携 Del/Backspace 两 alternate。
 // ---------------------------------------------------------------------------
 const std::vector<CommandDef>& KeyBindings::registry() {

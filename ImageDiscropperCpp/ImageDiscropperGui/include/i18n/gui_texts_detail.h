@@ -1,10 +1,10 @@
 // ============================================================================
-// 文件：include/i18n/gui_texts_detail.h（GUI 常量层 · 字符串 · 后半：tooltip / status / msg）
-// 作用：原 gui_texts.h 拆出的两半之一——收录三个**可译组**：
+// 文件：i18n/gui_texts_detail.h（GUI 常量层 · 字符串 · 后半：tooltip / status / msg）
+// 作用：常量层拆分两半之一——收录三个**可译组**：
 //       · tooltip —— 悬停 / 状态栏说明（桌面与移动两处入口同源）；
 //       · status  —— 状态栏与进度提示（含 %N 占位符的回报整句）；
 //       · msg     —— 弹窗正文 / 标题 / 确认问句 / 桥与相册发布的失败报因。
-//       ident / menu / label 见同目录 gui_texts_base.h；gui_texts.h 已转为聚合转发头。
+//       ident / menu / label 见同目录 gui_texts_base.h；gui_texts.h 为聚合转发头。
 // 架构定位：GUI 顶层 i18n 基建；本半面向「运行时反馈与人读说明」，与基座的「契约 + 静态标签」分工。
 // 命名 / 类型：k + 域 + 语义驼峰；inline constexpr char[]（UTF-8 无 BOM）；「&」「…」与 %N 编号逐字保留。
 // 目录与对账：tooltip / status / msg 的英文表住 src/i18n/lang_en_detail.cpp（后半，与 menu/label
@@ -87,7 +87,7 @@ inline constexpr char kLayerWidthSpin[]    = "目标宽（0＝用原生尺寸不
 inline constexpr char kLayerHeightSpin[]   = "目标高（0＝用原生尺寸不缩放）。";
 inline constexpr char kLayerOpacitySpin[]  = "不透明度 0–255（255 不透明），影响预览与导出。";
 inline constexpr char kLayerCanvasSizeApply[] = "改画布尺寸：仅清空框选/网格选区，保留图层与标注。";
-// 以下为预处理面板（src/panels/image_panel.cpp 与 image_panel_sections.cpp）各控件悬停说明。
+// 以下为预处理面板（src/panels/preprocess_panel.cpp 与 preprocess_panel_sections.cpp）各控件悬停说明。
 inline constexpr char kPreprocessTarget[]   = "预处理作用于当前目标：选中图层/底图（仅色彩）/画布。";
 inline constexpr char kResizeEdgeSpin[]     = "目标边长（像素）；勾选保持宽高比时改宽联动高。";
 inline constexpr char kResizeScaleSpin[]    = "按当前画布尺寸目标（无则原图尺寸）的百分比缩放。";
@@ -121,7 +121,7 @@ inline constexpr char kStackToFrontBtn[]    = "将选中标注移到最顶层。
 inline constexpr char kStackToBackBtn[]     = "将选中标注移到最底层。";
 inline constexpr char kDeleteSelectedAnnoBtn[] = "删除选中标注（无选中置灰，可撤销）。";
 inline constexpr char kClearAllAnnoBtn[]    = "清除全部标注（不影响底图/图层/预处理，可撤销）。";
-// 以下为工具面板（src/panels/tool_panel.cpp）的形状悬停说明（与菜单侧 tooltip 不共用：面板说「怎么拖」，菜单说「在哪儿选」）。
+// 以下为工具面板（src/panels/mode_tool_panel.cpp）的形状悬停说明（与菜单侧 tooltip 不共用：面板说「怎么拖」，菜单说「在哪儿选」）。
 inline constexpr char kModeMarqueeBtn[]     = "框选生成/拖动选区；标注与图片落位框不可拾取";
 inline constexpr char kModeImagePickBtn[]   = "点选/拖拽图片图层落位框调位。";
 inline constexpr char kModeAnnoSelectBtn[]  = "点选/拖动/手柄变换既有标注；禁框选。";
@@ -150,11 +150,11 @@ inline constexpr char kLayerShowSelection[] = "显示/隐藏选区边框与手�
 inline constexpr char kLayerShowNumber[]    = "显示 / 隐藏单元编号角标（仅自定义排序时出现）";
 // 移动端专属控件（src/mobile/mobile_step_pad.cpp）：8 向步进盘的倍率切换按钮。
 inline constexpr char kStepFactorBtn[]      = "切换步进倍率（对应桌面 Shift 大步）";
-// 左侧模式面板（src/panels/left_panel.cpp）的六个按钮：与菜单侧 tooltip 措辞不同（面板无快捷键说明），各自逐字保留。
+// 左侧模式面板（src/panels/left_panel.cpp）的五个按钮：与菜单侧 tooltip 措辞不同（面板无快捷键说明），各自逐字保留。
 inline constexpr char kModeL1Btn[]          = "保留选框内区域得裁剪结果，默认模式。";
 inline constexpr char kModeL2Btn[]          = "每矩形删除贯穿全图的十字带；多矩形取并集。";
 inline constexpr char kModeL3Btn[]          = "以基准点 + 单元尺寸铺满全图，选择单元并排序导出。";
-inline constexpr char kPolarityKeepBtn[]    = "保留选区内的单元（绿色遮罩）。";   // 与 tooltip::kPolarityKeep 现同值（快捷键已从菜单侧说明中移除）。
+inline constexpr char kPolarityKeepBtn[]    = "保留选区内的单元（绿色遮罩）。";   // 与 tooltip::kPolarityKeep 同值（两侧均不含快捷键说明）。
 inline constexpr char kPolarityRemoveBtn[]  = "剔除选区内的单元（红色遮罩），保留其余部分。";   // 同上（tooltip::kPolarityRemove）。
 // 落位行（src/app/forms/placement_row.cpp）的偏移框说明：与图层编辑面板的 tooltip::kLayerOffsetXSpin / kLayerOffsetYSpin
 // 措辞微异（本组无「结果」二字、句末无句号），故不合并。
@@ -224,10 +224,10 @@ inline constexpr char kGridDerivedInfo[]   = "网格：%1 行 × %2 列 · 共 %
 inline constexpr char kGridPendingInfo[]   = "网格：待计算";                        // 尚未能推导出行列时的初值。
 inline constexpr char kGridSelectedInfo[]  = "已选：%1 单元";                        // 面板初值与同步回显均取本模板（初值传 0）。
 inline constexpr char kRectListItem[]      = "矩形 %1：(%2,%3)-(%4,%5)";           // 多矩形列表行文本（列表重建与单行刷新两处同源）。
-inline constexpr char kCollapseHintInit[]  = "坍缩可行性：请先框选选区。";         // MainWindow 回灌前的占位提示。
+inline constexpr char kCollapseHintInit[]  = "坍缩可行性：请先框选选区。";         // PreviewController 回灌前的占位提示。
 inline constexpr char kCollapseHintOk[]    = "坍缩可行：剩余块可紧贴拼成一张图。";
 inline constexpr char kCollapseHintFail[]  = "坍缩不可行：%1（导出将自动改用分离导出）";
-// 预处理面板（src/panels/image_panel.cpp）的实时回显与队列行文本。
+// 预处理面板（src/panels/preprocess_panel.cpp）的实时回显与队列行文本。
 inline constexpr char kTargetLabelFmt[]    = "当前目标：%1";              // 三元目标名见 label::kImageLayerName / kTargetCanvasName 与 menu::kShowBase。
 inline constexpr char kTargetLabelInit[]   = "当前目标：画布";            // 尚未同步时的初值（与模板+「画布」同字）。
 inline constexpr char kCurrentSizeFmt[]    = "当前输出尺寸: %1×%2";

@@ -36,12 +36,12 @@
 #include "panels/accordion_panel.h"   // applyPanelMinWidths 需完整类型取 accordion_->sizeHint()。
 #include "panels/annotation_prop_panel.h"   // retranslateUi 调 annoPropPanel_->retranslate()。
 #include "panels/export_panel.h"
-#include "panels/image_panel.h"       // retranslateUi 调 imagePanel_->retranslate()。
+#include "panels/preprocess_panel.h"       // retranslateUi 调 preprocessPanel_->retranslate()。
 #include "panels/layer_edit_panel.h"  // retranslateUi 调 layerEditPanel_->retranslate()。
 #include "panels/layer_panel.h"
 #include "panels/left_panel.h"        // retranslateUi 调 left_->retranslate()。
 #include "panels/param_panel.h"       // retranslateUi 调 param_->retranslate()。
-#include "panels/tool_panel.h"
+#include "panels/mode_tool_panel.h"
 #include "util/gui_nums.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
@@ -100,10 +100,9 @@ void MainWindow::initCore() {
 
     preprocess_ = new PreprocessController(this);
     preprocess_->setDocument(&doc_);
-    preprocess_->setAnnotationBridge(&annoBridge_);
     preprocess_->setStatusBar(status_);
     preprocess_->setDialogParent(this);
-    preprocess_->setImagePanel(imagePanel_);
+    preprocess_->setPreprocessPanel(preprocessPanel_);
     preprocess_->connectSignals();
 
     annotation_ = new AnnotationCoordinator(this);
@@ -207,19 +206,19 @@ void MainWindow::connectAll() {
     // 模式变更后先 applyCanvasMode 落地、再读视图态回同步菜单勾选。
     // 附带重测左栏最小宽：形状子行（3 列网格，仅「标注绘制」态可见）在 modeChanged 发射前刚完成显隐，
     // 隐藏态不参与 sizeHint——不随显隐重测，英文绘制态的长工具名（Right Triangle 等）会被截断。
-    connect(toolPanel_, &ToolPanel::modeChanged, this, [this] {
+    connect(toolPanel_, &ModeToolPanel::modeChanged, this, [this] {
         MainWindowUi::syncCanvasModeActions(*this);
         applyPanelMinWidths();
     });
 
     // 用户切模式(L1/L2/L3)或极性(K/R)后，若不在「框选」态则回到框选态（统一收口）：
     // 菜单动作 / LeftPanel 按钮 / 快捷键均经 doc_.setMode / setPolarity 发此信号，一处覆盖全部入口；
-    // ToolPanel::setMode 对已选中按钮为无操作（不重复发 modeChanged），故无需额外判当前态。
+    // ModeToolPanel::setMode 对已选中按钮为无操作（不重复发 modeChanged），故无需额外判当前态。
     connect(&doc_, &Document::modeOrPolarityChanged, this,
             [this] { toolPanel_->setMode(CanvasMode::Marquee); });
 
     // 标注上下文变化 → 重算撤销/重做启用态（annoBridge_→history_）：两者均随窗口同生命周期
-    //（doc_/annoBridge_ 按值、history_ 是本窗子对象），重建不再有跨窗常驻问题，连接回归本窗。
+    //（doc_/annoBridge_ 按值、history_ 是本窗子对象），无跨窗常驻问题，连接落在本窗。
     connect(&annoBridge_, &AnnotationBridge::changed, history_, &DocHistory::updateEnabled);
     connect(&annoBridge_, &AnnotationBridge::selectionChanged, history_, &DocHistory::updateEnabled);
     connect(&annoBridge_, &AnnotationBridge::toolChanged, history_, &DocHistory::updateEnabled);
@@ -229,7 +228,7 @@ void MainWindow::connectAll() {
     connect(&annoBridge_, &AnnotationBridge::changed, this, [this] { MainWindowUi::syncAnnoSelActions(*this); });
 }
 
-// 同步左侧面板与右侧「参数/导出/图像」页 + 菜单/工具栏动作到 Document（实现在 MainWindowUi，纯 UI 状态）。
+// 同步左侧面板与右侧「图片/预处理/参数/导出」各节 + 菜单/工具栏动作到 Document（实现在 MainWindowUi，纯 UI 状态）。
 void MainWindow::syncPanels() const {
     MainWindowUi::syncUi(*this);
 }
@@ -254,7 +253,7 @@ void MainWindow::retranslateUi() {
     if (layerPanel_) layerPanel_->retranslate();
     if (param_) param_->retranslate();
     if (exportPanel_) exportPanel_->retranslate();
-    if (imagePanel_) imagePanel_->retranslate();
+    if (preprocessPanel_) preprocessPanel_->retranslate();
     if (layerEditPanel_) layerEditPanel_->retranslate();
     if (annoPropPanel_) annoPropPanel_->retranslate();
     // 菜单/工具栏/折叠节标题均已在装配期登记入 retranslator_（见 main_window_ui.cpp / main_window_menus.cpp），
@@ -274,7 +273,7 @@ void MainWindow::retranslateUi() {
 // 时才跟随内容回收（退出绘制态可缩回）。
 void MainWindow::applyPanelMinWidths() {
     // 承重：shapeArea_（形状子行，仅「标注绘制」态可见）显隐的几何失效沿祖先链**逐层** post
-    // LayoutRequest（shapeArea_→box→ToolPanel→leftContainer_→viewport），每层处理时又向父层再 post
+    // LayoutRequest（shapeArea_→box→ModeToolPanel→leftContainer_→viewport），每层处理时又向父层再 post
     // 新事件——单轮事件循环只推进一层，同步读到的 sizeHint（容器与子面板皆有）会停在“进态撑大”
     // 的旧值，退绘制态便测不回窄宽。故先多轮冲刷待处理布局事件至排空（链深有界），再实测。
     for (int pass = 0; pass < 4; ++pass)
@@ -385,16 +384,16 @@ void MainWindow::onZoomChanged(const qreal factor) const {
 // 工具栏/快捷键切换模式（L1/L2/L3）。
 void MainWindow::onModeAction(const int tierInt) {
     switch (tierInt) {
-        case 1: doc_.setMode(engine::Tier::L1); break;
-        case 2: doc_.setMode(engine::Tier::L2); break;
-        case 3: doc_.setMode(engine::Tier::L3); break;
+        case 1: doc_.setMode(engine::Tier::Standard); break;
+        case 2: doc_.setMode(engine::Tier::Erase); break;
+        case 3: doc_.setMode(engine::Tier::Grid); break;
         default: break;
     }
 }
 
 // K/R 快捷键切换极性。
 void MainWindow::onPolarityShortcut(const bool remove) {
-    doc_.setPolarity(remove ? engine::Polarity::REMOVE : engine::Polarity::KEEP);
+    doc_.setPolarity(remove ? engine::Polarity::Remove : engine::Polarity::Keep);
 }
 
 // 编辑菜单撤销：上下文路由——标注上下文转发到标注撤销，否则走文档参数撤销。

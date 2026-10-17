@@ -62,7 +62,7 @@ ParamPanel::ParamPanel(QWidget* parent) : QWidget(parent) {
     pages_[1] = buildL2Page();
     pages_[2] = buildL3Page();
     for (QWidget* page : { pages_[0].data(), pages_[1].data(), pages_[2].data() }) {
-        stack_->addWidget(page);   // 参加顺序即 L1/L2/L3（index 0/1/2）。
+        stack_->addWidget(page);   // 加入顺序即 L1/L2/L3（index 0/1/2）。
     }
     // 切页时重钳当前页高度（reflowStack 为公有槽，供 currentChanged 直连）。
     connect(qobject_cast<QStackedLayout*>(stack_->layout()), &QStackedLayout::currentChanged,
@@ -70,7 +70,7 @@ ParamPanel::ParamPanel(QWidget* parent) : QWidget(parent) {
     // 垂直保持 Preferred：高度由 reflowStack 显式钳 min=max 定住（见 PageSizedStack）。
     stack_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     root->addWidget(stack_);
-    // 尾部 stretch：tab 页（移动端 QTabWidget）比钳定后的 stack 高时，QWidgetItem 会把
+    // 尾部 stretch：移动端抽屉页（面板外套 QScrollArea、置于 QStackedWidget）比钳定后的 stack 高时，QWidgetItem 会把
     // max 受限的 widget 在格子里**居中**；加 stretch 吸收剩余空间保证顶部对齐。
     root->addStretch(1);
     reflowStack();   // 初始按当前页钳一次高（宽度未定时用 sizeHint 宽，后续 resizeEvent 会校准）。
@@ -98,6 +98,7 @@ void ParamPanel::resizeEvent(QResizeEvent* ev) {
     QWidget::resizeEvent(ev);
     reflowStack();
 }
+
 void ParamPanel::setDocument(Document* doc) {
     doc_ = doc;
     syncFromDocument();
@@ -169,15 +170,15 @@ void ParamPanel::syncFromDocument() {
                            .arg(doc_->selectedCells().size()));
 
     // 「转为网格」按钮：有可转换的选区几何时可用——单选区 rect_ 有效，
-    // 或多矩形并集（MULTI_RECT）列表非空（转换时取其包围盒，见 Document::convertRectToGrid）。
+    // 或多矩形并集（MultiRect）列表非空（转换时取其包围盒，见 Document::convertRectToGrid）。
     if (l2ToGridBtn_) {
         const bool singleOk = doc_->hasRect() && doc_->rect().width() > 0 && doc_->rect().height() > 0;
-        const bool multiOk = doc_->l2Sub() == L2Sub::MULTI_RECT && !doc_->rects().empty();
+        const bool multiOk = doc_->l2Sub() == L2Sub::MultiRect && !doc_->rects().empty();
         l2ToGridBtn_->setEnabled(singleOk || multiOk);
     }
 
-    // L2 多矩形列表：仅 MULTI_RECT 显示；依 doc_->rects() 重建，并把选中项坐标回填 spinbox。
-    const bool multi = doc_->l2Sub() == L2Sub::MULTI_RECT;
+    // L2 多矩形列表：仅 MultiRect 显示；依 doc_->rects() 重建，并把选中项坐标回填 spinbox。
+    const bool multi = doc_->l2Sub() == L2Sub::MultiRect;
     if (l2MultiBox_) l2MultiBox_->setVisible(multi);
     if (multi && l2RectList_) {
         syncingRectList_ = true;               // 抑制重建期间的 currentRowChanged 回环。
@@ -196,7 +197,7 @@ void ParamPanel::syncFromDocument() {
             l2RectList_->setCurrentRow(prevRow >= 0 && prevRow <= last ? prevRow : last);
         }
         syncingRectList_ = false;
-        // 选中矩形坐标覆盖到 spinbox（此前按单 rect_ 回填的值在多矩形下无意义）。
+        // 选中矩形坐标覆盖到 spinbox（多矩形下单 rect_ 的回填值无意义，须按当前行矩形回填）。
         const int row = l2RectList_->currentRow();
         if (row >= 0 && row < static_cast<int>(rs.size())) {
             const auto& rr = rs[static_cast<std::size_t>(row)];
@@ -217,9 +218,9 @@ void ParamPanel::syncFromDocument() {
 // 切换到某模式对应的页。
 void ParamPanel::setMode(const engine::Tier tier) const {
     switch (tier) {
-        case engine::Tier::L1: stack_->setCurrentIndex(0); break;
-        case engine::Tier::L2: stack_->setCurrentIndex(1); break;
-        case engine::Tier::L3: stack_->setCurrentIndex(2); break;
+        case engine::Tier::Standard: stack_->setCurrentIndex(0); break;
+        case engine::Tier::Erase: stack_->setCurrentIndex(1); break;
+        case engine::Tier::Grid: stack_->setCurrentIndex(2); break;
     }
 }
 
@@ -253,7 +254,7 @@ void ParamPanel::onCoordEdited() const {
 // 组装规范化矩形（左上/右下）写回 Document。
 void ParamPanel::applyCoordsToDocument() const {
     if (!doc_) return;
-    const bool l1 = doc_->mode() == engine::Tier::L1;
+    const bool l1 = doc_->mode() == engine::Tier::Standard;
     const QSpinBox* x1 = l1 ? l1x1_ : l2x1_;
     const QSpinBox* y1 = l1 ? l1y1_ : l2y1_;
     const QSpinBox* x2 = l1 ? l1x2_ : l2x2_;
@@ -265,7 +266,7 @@ void ParamPanel::applyCoordsToDocument() const {
     // 此处拒绝退化输入（保持上一次有效选区），Document::setRect 另有兜底（CONTRIBUTING.md「分层纪律」）。
     if (r.width() <= 0 || r.height() <= 0) return;
     // L2 多矩形：坐标框编辑的是列表中当前选中的矩形（updateRect），而非单选区 rect_。
-    if (!l1 && doc_->l2Sub() == L2Sub::MULTI_RECT) {
+    if (!l1 && doc_->l2Sub() == L2Sub::MultiRect) {
         if (l2RectList_) {
             if (const int row = l2RectList_->currentRow(); row >= 0) doc_->updateRect(static_cast<std::size_t>(row), r);
         }

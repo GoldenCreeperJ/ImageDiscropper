@@ -1,12 +1,12 @@
 # include/app/forms — 新建画布对话框的采参组件声明
 
-**目录作用**：`NewCanvasDialog` 拆出的**两个可复用采参组件**的类声明——
+**目录作用**：`NewCanvasDialog` 的**两个可复用采参组件**的类声明——
 程序化图案参数表单 `PatternFormWidget` 与「锚点 / 枢轴 / 自由偏移」落位行 `PlacementRow`。
 实现在同名镜像目录 [src/app/forms/](../../../src/app/forms/README.md)。
 
 **分块依据**：按**共用语境**切分，而非按对话框切分——两个组件都被「新建画布」与「添加图片图层」
-两处复用（原对话框内两组装配代码逐行重复），且与「尺寸 / 附加图片 / 预览 / 定稿」等对话框流程无耦合，
-故独立成组件，`NewCanvasDialog` 只保留剩余编排（对话框约 700 行拆至约 350 行）。
+两处复用，且与「尺寸 / 附加图片 / 预览 / 定稿」等对话框流程无耦合，
+故独立成组件，`NewCanvasDialog` 只保留剩余编排。
 **组件只采参、不生成像素、不落语义**：像素生成一律交上游（CONTRIBUTING「分层纪律」），
 显隐由上游 `setVisible` 控制；这一组件边界亦是 Rust 第二实现（`ImageDiscropperRust/GuideLine.md`）可直接对齐的目标。
 

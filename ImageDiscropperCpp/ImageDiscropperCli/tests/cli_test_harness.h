@@ -27,7 +27,7 @@
 // CLI 测试段（定义于独立 .cpp，由 test_main.cpp 的 main() 调用）。
 //   testArgParser   —— 单元：ArgParser 语法归类 + parseGlobalOptions 全局选项。
 //   testValueParser —— 单元：value_parser 全部“字符串 → 类型”解析与格式校验。
-//   testIntegration —— 集成：IT-1~IT-31，进程内调用 cliMain，校验退出码 / 输出尺寸 / 像素顺序。
+//   testIntegration —— 集成：IT-1~IT-53，进程内调用 cliMain，校验退出码 / 输出尺寸 / 像素顺序。
 // ---------------------------------------------------------------------------
 void testArgParser();
 void testValueParser();

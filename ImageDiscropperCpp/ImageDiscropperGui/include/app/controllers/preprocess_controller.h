@@ -1,9 +1,9 @@
 // ============================================================================
 // 文件：app/controllers/preprocess_controller.h
-// 作用：PreprocessController——预处理编排控制器：从 MainWindow 拆出声明式队列的
+// 作用：PreprocessController——预处理编排控制器：承载声明式队列的
 //       增删移改提交链（commitPipeline：重放 + 几何签名尺寸门）与忙碌对话框（runWithBusyDialog）。
 // 分块依据：
-//   - 预处理（FR-1 / G-3）是「图像页面板 + 图像菜单」共用的完整数据流，独占一块；
+//   - 预处理（SPEC §3.1 FR-1）是「图像页面板 + 图像菜单」共用的完整数据流，独占一块；
 //   - 队列物化经 EngineBridge::applyPipeline 委托 Core PreprocessPipeline::apply，GUI 不自实现像素运算（分层纪律）。
 // 说明：图像菜单的动作经 MainWindowUi 的 lambda 直接调用本控制器 public 槽（与面板信号同一入口）。
 // ============================================================================
@@ -25,9 +25,8 @@ class QWidget;
 namespace idc::gui {
 
 class Document;
-class AnnotationBridge;
 class StatusBar;
-class ImagePanel;
+class PreprocessPanel;
 
 // ---------------------------------------------------------------------------
 // runInBusyDialog：在应用级模态、不可取消的忙碌对话框（不确定进度条）内同步执行 op。
@@ -41,7 +40,7 @@ void runInBusyDialog(QWidget* parent, bool fullscreen, const QString& text,
 // ---------------------------------------------------------------------------
 // PreprocessController：声明式预处理队列编排（入队 / 编辑 / 删除 / 移动 / 重置）。
 // 每次队列编辑：从 original_ 重放整链物化 working_，并按几何签名（geomSig）前后比较做尺寸门
-//（尺寸或净旋转象限变 → 清框选/多矩形/单元/标注；否则保留），再回灌 Document。
+//（尺寸或净旋转象限变 → 仅清框选/多矩形/单元；标注与图片图层恒保留——矢量叠加可落在画布外），再回灌 Document。
 // ---------------------------------------------------------------------------
 class PreprocessController : public QObject {
     Q_OBJECT
@@ -50,19 +49,18 @@ public:
 
     // 依赖注入（setter 模式，与面板一致）。
     void setDocument(Document* doc);
-    void setAnnotationBridge(AnnotationBridge* anno);  // 几何失效 clearAll
     void setStatusBar(StatusBar* status);
     void setDialogParent(QWidget* parent);             // 忙碌对话框父窗口（MainWindow）
     /// 忙碌全屏遮罩模式（SPEC §8.2 桌面对话框→移动端全屏遮罩）：
     /// 仅 MobileShell 开启；默认 false 保持桌面居中小对话框不变。
     void setBusyOverlayMode(bool overlay);
-    /// 当前是否处于忙碌全屏遮罩形态（SPEC §8.2）：供 MainWindow 把同形态传给 NewCanvasDialog 等独立对话框。
+    /// 当前是否处于忙碌全屏遮罩形态（SPEC §8.2）：供 SessionController 把同形态传给 NewCanvasDialog 等独立对话框。
     bool busyOverlayMode() const { return busyOverlay_; }
-    void setImagePanel(ImagePanel* panel);
-    void connectSignals();                             // ImagePanel 队列意图信号 → 本控制器槽
+    void setPreprocessPanel(PreprocessPanel* panel);
+    void connectSignals();                             // PreprocessPanel 队列意图信号 → 本控制器槽
 
     // 配置载入：把一份已加载的预处理队列（含 ResizeOp）应用到当前图——从 original_ 重放、
-    // 过尺寸门、回灌 Document。由 MainWindow::onLoadConfig 在参数还原后调用。
+    // 过尺寸门、回灌 Document。由 ConfigController::onLoadConfig 在参数还原后调用。
     void applyLoadedQueue(const preprocess::PreprocessPipeline& pipeline);
 
     // 多层画布重组（接 Document::layersChanged）：图层栈/画布尺寸声明变时，由 EngineBridge::composeCanvas
@@ -121,19 +119,18 @@ private:
     void runWithBusyDialog(const QString& text, const std::function<void()>& op) const;
 
     // ---------------------------------------------------------------------------
-    // 图层物化缓存刷新（缺口 1）：composeCanvas 每次全量物化所有层（文件层重跑 applyExec、配方层重跑 makePattern），
-    //   拖动某层＝所有层预处理重跑。现每层「声明态会话 + 物化签名 + 缩放前位图」统一由 Document 持有
-    //   （LayerSessionStore，见 model/layer_session_store.h）；本控制器仅驱动刷新，不再自持缓存。
+    // 图层物化缓存刷新：composeCanvas 每次全量物化所有层（文件层重跑 applyExec、配方层重跑 makePattern），
+    //   拖动某层＝所有层预处理重跑。每层「声明态会话 + 物化签名 + 缩放前位图」统一由 Document 持有
+    //   （LayerSessionStore，见 model/layer_session_store.h）；本控制器仅驱动刷新，不自持缓存。
     // ---------------------------------------------------------------------------
     // 依当前栈刷新 Document 图层会话库的物化缓存：签名变的层才重跑 materializeLayer（写回 store），命中层复用缓存位图；
     //   同时经 store.prune 剔除已删层。刷新后 store.materialized() 直作 composeCanvas 的 materialized 入参（未命中回退由 Core 现算）。
     void syncLayerMaterialCache(const std::vector<canvas::ImageLayer>& layers) const;
 
     Document* doc_{nullptr};
-    AnnotationBridge* anno_{nullptr};
     StatusBar* status_{nullptr};
     QWidget* dialogParent_{nullptr};
-    ImagePanel* imagePanel_{nullptr};
+    PreprocessPanel* preprocessPanel_{nullptr};
     // 重采样（含 resize 的整链重放）进行中标志：防止模态对话框期间的重入（如快捷键再次触发）。
     bool busyResample_{false};
     bool busyOverlay_{false};             // 忙碌全屏遮罩模式（MobileShell 开启；SPEC §8.2）

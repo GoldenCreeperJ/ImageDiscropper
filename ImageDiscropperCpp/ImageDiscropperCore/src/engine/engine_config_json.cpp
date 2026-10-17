@@ -42,8 +42,7 @@ bool preprocessFromJson(const json& v, preprocess::PreprocessConfig& out) {
     if (op == "rotate") { RotateOp s; s.angle = jInt(at(v, keys::pre::kDeg), 0); out = s; return true; }
     if (op == "flip") { FlipOp s; s.horizontal = jStr(at(v, keys::pre::kAxis), defs::kFlipAxisHorizontal) == defs::kFlipAxisHorizontal; out = s; return true; }
     if (op == "resize") { ResizeOp s; s.width = jInt(at(v, keys::common::kWidth), 0); s.height = jInt(at(v, keys::common::kHeight), 0); out = s; return true; }
-    // 旧 "opacity" 步已不再是预处理（不透明度上移为图层合成期参数）：这里不再识别→未知 op 返回 false 被调用方跳过
-    //（图层预处理内的旧 opacity 步由 layerFromJson 专门迁移到 transform.opacity；顶层画布级旧 opacity 无对应→丢弃）。
+    // opacity 不是预处理步（不透明度由图层 transform.opacity 承载）：未知 op 返回 false，调用方跳过。
     return false;
 }
 
@@ -89,7 +88,7 @@ json layerToJson(const canvas::ImageLayer& layer) {
 
     o[keys::common::kZOrder] = layer.zOrder;
 
-    // 内层两级落位（仅启用时写入；缺省段在旧配置中不存在 → 读取端默认 hasImagePlacement=false）。
+    // 内层两级落位（仅启用时写入；缺省段读取端默认 hasImagePlacement=false）。
     if (layer.hasImagePlacement) {
         json ip;
         ip[keys::layer::kFit] = imageFitToken(layer.imageFit);
@@ -132,7 +131,7 @@ canvas::ImageLayer layerFromJson(const json& v) {
 
     layer.zOrder = jInt(at(v, keys::common::kZOrder), 0);
 
-    // 内层两级落位（可选段）：存在则启用 hasImagePlacement，缺失保持关闭（旧配置）。
+    // 内层两级落位（可选段）：存在则启用 hasImagePlacement，缺失保持关闭。
     if (v.contains(keys::layer::kImagePlacement)) {
         const json& ip = v[keys::layer::kImagePlacement];
         layer.hasImagePlacement = true;
@@ -148,7 +147,7 @@ canvas::ImageLayer layerFromJson(const json& v) {
 
     if (const json& pre = at(v, keys::common::kPreprocess); pre.is_array()) {
         for (const json& step : pre) {
-            // 旧配置迁移：图层预处理内的 "opacity" 步→折叠为 transform.opacity（不再当预处理步）。
+            // 兼容旧配置：图层预处理内的 "opacity" 步→折叠为 transform.opacity（不再当预处理步）。
             if (jStr(at(step, keys::pre::kOp), "") == defs::kPreStepOpacity) {
                 const int mul = std::clamp(jInt(at(step, keys::pre::kMul), nums::engine::kDefaultOpacity), 0, 255);
                 const int add = std::clamp(jInt(at(step, keys::pre::kAdd), 0), 0, 255);
@@ -164,21 +163,20 @@ canvas::ImageLayer layerFromJson(const json& v) {
 // ---------------------------------------------------------------------------
 // 底图 canvas::ImageLayer ↔ SPEC §7「generate」段（同构序列化）。
 //   键名仍叫 "generate"（不破外部/CLI 选项名）。底图不外传文件：来源恒为程序图案（recipe）或
-//   运行时 --input 提供的位图。纯图案底图（有 recipe、无内层落位）仅写图案键，与旧 generate
-//   逐字段等价（向后兼容）；带落位（把外部输入图 / 图案按落位摆入画布）在图案键之外追加
-//   fit/boxWidth/boxHeight/imageAnchor/imagePivot/x/y/backdrop 键——**不写 file 路径**：保配置为纯
-//   处理配方、可跨不同 --input 批处理复用（路径一旦入配置会使底图被钉死、批处理结果恒同）。位图恒不入配置。
-//   底图钉住最底：transform 恒等、zOrder 固定、不入本段（读取端复位默认）。
+//   运行时 --input 提供的位图。纯图案底图（有 recipe、无内层落位）仅写图案键；带落位（把外部输入图 /
+//   图案按落位摆入画布）在图案键之外追加 fit/boxWidth/boxHeight/imageAnchor/imagePivot/x/y/backdrop 键——
+//   **不写 file 路径**：保配置为纯处理配方、可跨不同 --input 批处理复用（路径一旦入配置会使底图被钉死、
+//   批处理结果恒同）。位图恒不入配置。底图钉住最底：transform 恒等、zOrder 固定、不入本段（读取端复位默认）。
 // ---------------------------------------------------------------------------
 json baseToJson(const canvas::ImageLayer& base) {
     json gen;
-    // 图案键（仅当有配方）：与旧 generate 等价；无配方（纯落位 / 外部图底）→ 不写顶层图案键。
+    // 图案键（仅当有配方）：无配方（纯落位 / 外部图底）→ 不写顶层图案键。
     if (base.recipe) gen.update(patternParamsToJson(*base.recipe));
     // 底图整体不透明度（合成期 alpha 乘子 0..255）：随段写入 opacity 键，供 GUI 载入回填 baseOpacity、
-    //   CLI 在边界施加淡出。旧配置无此键 → baseFromJson 读缺省 255，行为不变。
+    //   CLI 在边界施加淡出。
     gen[keys::common::kOpacity] = base.transform.opacity;
     // 底图色彩预处理步（仅色彩合法：gray/invert/split；几何/resize 会改画布尺寸，写出时过滤掉）。
-    //   缺省空 → 不写 preprocess 键（旧配置无此键 → baseFromJson 读为空）。
+    //   缺省空 → 不写 preprocess 键。
     json pre = json::array();
     for (const preprocess::PreprocessConfig& step : base.preprocess.items())
         if (preprocess::isColorStep(step)) pre.push_back(preprocessToJson(step));
@@ -201,7 +199,7 @@ canvas::ImageLayer baseFromJson(const json& gen) {
     // 底图整体不透明度：读 opacity（缺省 255）→ transform.opacity；上层（GUI Document / CLI config）据此在合成边界施加淡出。
     base.transform.opacity = std::clamp(jInt(at(gen, keys::common::kOpacity), nums::engine::kDefaultOpacity), 0, 255);
     // 底图色彩预处理（可选 preprocess 数组）：仅接受色彩步（gray/invert/split），几何/resize 步忽略
-    //   （底图预处理不改画布尺寸 / 坐标基准；还原端遇非法几何步静默丢弃）。旧配置无此段 → 空。
+    //   （底图预处理不改画布尺寸 / 坐标基准；还原端遇非法几何步静默丢弃）。
     if (const json& preArr = at(gen, keys::common::kPreprocess); preArr.is_array()) {
         for (const json& step : preArr) {
             if (preprocess::PreprocessConfig cfg; preprocessFromJson(step, cfg) && preprocess::isColorStep(cfg)) base.preprocess.add(cfg);
@@ -210,7 +208,7 @@ canvas::ImageLayer baseFromJson(const json& gen) {
     // 图案键存在（含 "kind"）→ 解析配方并置 Recipe；否则 recipe 留空（底图为运行时 --input 位图，仅存落位参数）。
     if (gen.contains(keys::common::kKind)) {
         base.sourceKind = canvas::LayerSourceKind::Recipe;
-        base.recipe = patternParamsFromJson(gen);   // 旧配置仅图案键 → 与旧 generate 等价。
+        base.recipe = patternParamsFromJson(gen);
     }
     // 内层落位（存在任一落位键即启用）。
     if (gen.contains(keys::layer::kFit) || gen.contains(keys::layer::kBoxWidth) || gen.contains(keys::layer::kImageAnchor)) {
@@ -251,11 +249,11 @@ json engineConfigToJson(const EngineConfig& config, const annotation::Annotation
     cut[keys::config::kTier] = tierName(config.cut.tier);
     cut[keys::config::kGenerator] = generatorName(config.cut.generator);
     cut[keys::config::kPolarity] = polarityName(config.cut.polarity);
-    if (config.cut.generator == CutGenerator::MULTI_RECT) {
+    if (config.cut.generator == CutGenerator::MultiRect) {
         json rs = json::array();
         for (const RectRegion& r : config.cut.rects) rs.push_back(rectToJson(r));
         cut[keys::config::kParams] = json{{keys::config::kRects, rs}};
-    } else if (config.cut.generator == CutGenerator::GRID) {
+    } else if (config.cut.generator == CutGenerator::Grid) {
         cut[keys::config::kParams] = gridToJson(config.cut.grid);
     } else {
         cut[keys::config::kParams] = rectToJson(config.cut.rect);
@@ -281,7 +279,7 @@ json engineConfigToJson(const EngineConfig& config, const annotation::Annotation
     merge[keys::config::kCellWidth] = optIntToJson(config.emitParams.cellWidth);
     merge[keys::config::kCellHeight] = optIntToJson(config.emitParams.cellHeight);
     merge[keys::config::kPadColor] = colorToHex(config.emitParams.padColor);
-    // arrange：重排填充顺序（仅 REARRANGE 用；与顶层 order 选择排序正交）。
+    // arrange：重排填充顺序（仅 Rearrange 用；与顶层 order 选择排序正交）。
     json arrange;
     arrange[keys::config::kStrategy] = strategyName(config.emitParams.mergeOrder.strategy);
     arrange[keys::config::kReverse] = config.emitParams.mergeOrder.reverse;
@@ -297,7 +295,7 @@ json engineConfigToJson(const EngineConfig& config, const annotation::Annotation
     root[keys::config::kEmit] = emit;
 
     // generate：底图描述（可选段）——缺省省略（表示用外部输入图，非生成底图）。
-    //   底图＝同构 canvas::ImageLayer：纯图案底图序列化与旧「generate」逐字段等价；带落位时追加
+    //   底图＝同构 canvas::ImageLayer：纯图案底图（仅配方、无落位）序列化为纯 recipe 形态的 generate 段；带落位时追加
     //   fit/box*/image*/backdrop 键（**不含 file 路径**，外部图凭运行时 --input 供给以保批处理复用）。尺寸恒取 source.width/height。
     if (config.base.has_value())
         root[keys::config::kGenerate] = baseToJson(*config.base);
@@ -309,7 +307,7 @@ json engineConfigToJson(const EngineConfig& config, const annotation::Annotation
         root[keys::config::kLayers] = arr;
     }
 
-    // annotations：标注列表（可选段）——集合为空或无标注时省略，保持旧文件观感不变。
+    // annotations：标注列表（可选段）——集合为空或无标注时省略（输出不含 annotations 键）。
     // 段内逐条序列化实现归属 annotation 模块（经 json_common.h 交换 JSON 片段）。
     if (annoSet != nullptr && !annoSet->annotations().empty())
         root[keys::config::kAnnotations] = annotation::annotationsSegmentToJson(*annoSet);
@@ -329,7 +327,7 @@ std::expected<void, core::CoreError> engineConfigFromJson(const json& value, Eng
     out.source.width = jInt(at(src, keys::common::kWidth), 0);
     out.source.height = jInt(at(src, keys::common::kHeight), 0);
 
-    // opacity（顶层可选键）：画布级整体不透明度，缺省 255、夹 [0,255]（旧配置无键 → 不透明、行为不变）。
+    // opacity（顶层可选键）：画布级整体不透明度，缺省 255、夹 [0,255]。
     out.canvasOpacity = std::clamp(jInt(at(value, keys::common::kOpacity), nums::engine::kDefaultOpacity), 0, 255);
 
     // preprocess。
@@ -342,15 +340,15 @@ std::expected<void, core::CoreError> engineConfigFromJson(const json& value, Eng
 
     // cut。
     const json& cut = at(value, keys::config::kCut);
-    out.cut.tier = tierFromName(jStr(at(cut, keys::config::kTier), defs::kTierL2));
+    out.cut.tier = tierFromName(jStr(at(cut, keys::config::kTier), defs::kTierErase));
     out.cut.generator = generatorFromName(jStr(at(cut, keys::config::kGenerator), defs::kGeneratorRect));
     out.cut.polarity = polarityFromName(jStr(at(cut, keys::config::kPolarity), defs::kPolarityRemove));
     const json& params = at(cut, keys::config::kParams);
-    if (out.cut.generator == CutGenerator::MULTI_RECT) {
+    if (out.cut.generator == CutGenerator::MultiRect) {
         out.cut.rects.clear();
         if (const json& rs = at(params, keys::config::kRects); rs.is_array())
             for (const json& r : rs) out.cut.rects.push_back(rectFromJson(r));
-    } else if (out.cut.generator == CutGenerator::GRID) {
+    } else if (out.cut.generator == CutGenerator::Grid) {
         out.cut.grid = gridFromJson(params);
     } else {
         out.cut.rect = rectFromJson(params);
@@ -403,7 +401,7 @@ std::expected<void, core::CoreError> engineConfigFromJson(const json& value, Eng
     if (const json& gen = at(value, keys::config::kGenerate); gen.is_object())
         out.base = baseFromJson(gen);   // 位图 / 外部文件不入配置：落位底图源图由上层凭运行时 --input 注入 decodedPixels。
 
-    // layers（可选段）：缺段 → 无图层（std::nullopt）。直接以数组承载（不再兼容旧对象形）。
+    // layers（可选段）：缺段 → 无图层（std::nullopt）。直接以数组承载。
     if (const json& ls = at(value, keys::config::kLayers); ls.is_array()) {
         std::vector<canvas::ImageLayer> layers;
         for (const json& lv : ls) layers.push_back(layerFromJson(lv));

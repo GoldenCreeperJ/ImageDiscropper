@@ -6,20 +6,20 @@
 //   - 与 Palette / CanvasPrefs / UiPrefs 同属「应用级偏好单例」一族：不进 §7 EngineConfig、不进
 //     DocHistory 撤销栈（改键不构成可撤销的一步）；持久化各走独立 QSettings 组（shortcuts/），互不耦合；
 //   - 只做「键 ↔ 命令」的数据与生效，不感知菜单/对话框如何呈现——命令名复用 menu 组 TextRef，
-//     界面装配（外观对话框快捷键 Tab）与事件分派（KeyRouter）各自取本层，二者都不再各存一份键表。
+//     界面装配（外观对话框快捷键 Tab）与事件分派（KeyRouter）各自取本层，二者共用同一键表、各不另存。
 // 设计取舍（双应用路径，务必理解）：
 //   · 组合键类命令（Kind::Action）→ 生效即 `QAction::setShortcut(effective)`：Qt 原生处理，编辑时**强制含 Ctrl/Alt**
 //     以杜绝裸字母/纯 Shift 抢占文本输入（如 Shift+A 吞大写）；
 //   · 单键类命令（Kind::Route）→ **不注册为 QAction/QShortcut**（窗口级 shortcut 会先于焦点控件与
 //     CanvasView::keyPressEvent 吞键、令「绘制态 Esc 收笔」永久失效），仍由 KeyRouter 走 keyPressEvent 分派，
-//     只是把「按 Qt::Key_x 硬编码」改为「按本表 effective 匹配 key+modifiers → 命中回 id」。focus 守卫与
+//     分派据本表 effective 匹配 key+modifiers → 命中回 id（非按 Qt::Key_x 硬编码）。focus 守卫与
 //     Esc 上游收笔顺序完全保持（见 app/controllers/key_router.cpp）。
 //   · 每条命令只编辑其 **primary 序列**；DeleteAnnotation 的默认携 `Del`/`Backspace` 两个 alternate，
 //     未自定义前二者皆生效，自定义后由用户完全拥有。
 // 说明：
 //   · defaultSeq 以 QKeySequence::StandardKey 构造（未覆盖时保持平台原生，如 mac Cmd）；覆盖值以
 //     PortableText 落盘（mac 下 Ctrl 记号不回映射 Cmd，Windows 主目标，接受）；
-//   · effective 为空 = 该命令已解绑（Action 类清 shortcut，Route 类不再匹配）；
+//   · effective 为空 = 该命令已解绑（Action 类清 shortcut，Route 类不匹配）；
 //   · changed(CommandId) 在任一生效键变更后发出：菜单 QAction 即时 setShortcut、编辑器单元格即时刷新。
 // ============================================================================
 #pragma once

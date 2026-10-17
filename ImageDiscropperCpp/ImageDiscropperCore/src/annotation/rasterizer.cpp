@@ -59,14 +59,14 @@ static std::vector<std::vector<core::Point2D>> extractPolylines(const geometry::
     std::vector<core::Point2D> current;
     core::Point2D first{0, 0};
     for (const auto&[type, coords] : flat.segments()) {
-        if (type == geometry::PathSegmentType::MOVE_TO) {
+        if (type == geometry::PathSegmentType::MoveTo) {
             if (!current.empty()) polylines.push_back(current);
             current.clear();
             first = {coords[0], coords[1]};
             current.push_back(first);
-        } else if (type == geometry::PathSegmentType::LINE_TO) {
+        } else if (type == geometry::PathSegmentType::LineTo) {
             current.emplace_back(coords[0], coords[1]);
-        } else if (type == geometry::PathSegmentType::CLOSE) {
+        } else if (type == geometry::PathSegmentType::Close) {
             if (!current.empty() &&
                 (current.back().x != first.x || current.back().y != first.y)) {
                 current.push_back(first);
@@ -186,10 +186,10 @@ void rasterize(core::Image& image, const geometry::Shape& shape, const PaintStyl
     const auto polys = extractPolylines(flat);
     if (polys.empty()) return;
 
-    const bool isLine = shape.type() == geometry::ShapeType::LINE;
+    const bool isLine = shape.type() == geometry::ShapeType::Line;
     const int strokeW = std::max(nums::annotation::kMinStrokeWidth, style.strokeWidth);
 
-    // 2. 填充（LINE 不填充；用独立 fillColor 填内部）
+    // 2. 填充（Line 不填充；用独立 fillColor 填内部）
     if (style.fill && !isLine) {
         fillPolygon(image, polys, style.fillColor);
     }

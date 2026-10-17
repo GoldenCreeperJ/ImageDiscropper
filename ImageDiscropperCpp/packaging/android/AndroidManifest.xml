@@ -6,10 +6,9 @@
     android:versionName="-- %%INSERT_VERSION_NAME%% --">
     <!-- %%INSERT_PERMISSIONS -->
     <!-- %%INSERT_FEATURES -->
-    <!-- 注：不再写 <uses-sdk>——Qt 6.11 起 minSdk/targetSdk 经部署设置 JSON（CMake 目标属性
+    <!-- 注：本 manifest 不含 <uses-sdk>——Qt 6.11 起 minSdk/targetSdk 经部署设置 JSON（CMake 目标属性
          QT_ANDROID_MIN_SDK_VERSION 等）流入 gradle.properties，由 AGP 注入；
-         manifest 若残留旧式 %%ANDROID_MIN_SDK_VERSION%% 占位符会触发 androiddeployqt
-         的 minSdk>=28 守卫（未替换占位符 toInt()=0）。 -->
+         残留 %%ANDROID_MIN_SDK_VERSION%% 占位符会触发 androiddeployqt 的 minSdk>=28 守卫（未替换占位符 toInt()=0）。 -->
     <supports-screens android:anyDensity="true"
                       android:largeScreens="true"
                       android:normalScreens="true"

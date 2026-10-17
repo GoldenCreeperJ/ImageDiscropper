@@ -5,7 +5,7 @@
 //           头文件不放任何状态（门面宏与表类型是无状态的），故下游 include 零负担。
 // 说明：
 //   · 目录容器选 `std::map<std::string_view, std::string_view, std::less<>>` 而非 unordered_map：
-//     C++17 的 unordered_map 没有透明查找（find(string_view) 会先构造一个临时 std::string），
+//     unordered_map 没有透明查找（find(string_view) 会先构造一个临时 std::string），
 //     千余条目下「每次查表一次堆分配」比 O(log n) 的十次短串比较贵得多；std::map 的
 //     std::less<> 是透明比较器，find 直接吃 string_view，零分配。
 //   · 键与值都是静态字面量的 view，不持有所有权；表数组是 namespace 作用域的 constexpr 对象，
@@ -37,7 +37,7 @@ struct State {
     std::string lang{kSourceLanguage};                             // 当前语言码
 };
 
-// Meyers 单例：C++11 起函数局部静态量初始化线程安全，且规避静态初始化顺序问题
+// Meyers 单例：函数局部静态量初始化线程安全，且规避静态初始化顺序问题
 // （各层表文件的 install 调用发生在 main 内，必然晚于此处首次访问）。
 State& state() {
     static State s;

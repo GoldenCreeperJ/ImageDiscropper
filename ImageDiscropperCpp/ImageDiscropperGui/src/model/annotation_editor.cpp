@@ -1,15 +1,14 @@
 // ============================================================================
 // 文件：model/annotation_editor.cpp
 // 作用：实现 include/model/annotation_editor.h 声明的 AnnotationEditor 会话状态机。
-//       自原 Core annotation::AnnotationLayer 的「会话半边」迁入——数据/合成委托
-//       AnnotationSet，本文件只编排交互态（模式/选中/属性模板）与撤销重做。
+//       数据/合成委托 AnnotationSet，本文件只编排交互态（模式/选中/属性模板）与撤销重做。
 // 分块依据：
 //   1. 底图与会话      —— setImage / setEditType
-//   2. 属性修改        —— change*（EDIT 作用选中项、DRAW 改当前模板的双分支）
+//   2. 属性修改        —— change*（Edit 作用选中项、Draw 改当前模板的双分支）
 //   3. 形状提交与编辑  —— addAnnotation / selectedAnnotation
 //   4. 撤销 / 重做 / 清除 —— revoke/redo/clear/removeAnnotation/moveAnnotation/restoreAnnotations
-// 说明：撤销重做不再复用 core::HistoryManager，改在 AnnotationSet + redoStack_ 上
-//       1:1 复刻其**条目级**语义（列表即主栈、撤销弹尾入重做栈、新操作清重做）。
+// 说明：撤销重做在 AnnotationSet + redoStack_ 上实现**条目级**语义
+//       （列表即主栈、撤销弹尾入重做栈、新操作清重做）。
 // ============================================================================
 #include "model/annotation_editor.h"
 
@@ -29,7 +28,7 @@ void AnnotationEditor::setImage(const core::Image& img) {
     selectedIndex_.reset();
 }
 
-// 切换编辑模式：MOVE / EDIT / DRAW。切换时清空当前选中，避免跨模式残留选中项。
+// 切换编辑模式：Move / Edit / Draw。切换时清空当前选中，避免跨模式残留选中项。
 void AnnotationEditor::setEditType(const EditType t) {
     editType_ = t;
     selectedIndex_.reset();
@@ -39,17 +38,17 @@ void AnnotationEditor::setEditType(const EditType t) {
 // 属性修改
 // ===========================================================================
 
-// EDIT 模式且选中有效时返回选中项可写引用，否则 nullptr。
+// Edit 模式且选中有效时返回选中项可写引用，否则 nullptr。
 annotation::Annotation* AnnotationEditor::editableSelected() {
-    if (editType_ != EditType::EDIT || !selectedIndex_ ||
+    if (editType_ != EditType::Edit || !selectedIndex_ ||
         *selectedIndex_ >= set_.size()) {
         return nullptr;
     }
     return &set_.mutableAnnotations()[*selectedIndex_];
 }
 
-// 修改颜色（边框 / 描边色）：EDIT 模式下作用到选中形状；否则修改当前工具颜色。
-// 若当前填充色仍与边框色联动（未显式改过填充色），则同步更新默认填充色，使新标注填充保持旧观感。
+// 修改颜色（边框 / 描边色）：Edit 模式下作用到选中形状；否则修改当前工具颜色。
+// 若当前填充色仍与边框色联动（未显式改过填充色），则同步更新默认填充色，使后续新标注的填充仍与边框色一致。
 void AnnotationEditor::changeColor(const core::Color& c) {
     if (annotation::Annotation* a = editableSelected()) {
         a->style.color = c;
@@ -59,7 +58,7 @@ void AnnotationEditor::changeColor(const core::Color& c) {
     }
 }
 
-// 修改填充色：EDIT 作用选中项的 fillColor；DRAW 改当前默认填充色并断开与边框色的联动。
+// 修改填充色：Edit 作用选中项的 fillColor；Draw 改当前默认填充色并断开与边框色的联动。
 void AnnotationEditor::changeFillColor(const core::Color& c) {
     if (annotation::Annotation* a = editableSelected()) {
         a->style.fillColor = c;
@@ -87,15 +86,15 @@ void AnnotationEditor::changeFill(const bool fill) {
     }
 }
 
-// 修改当前文本内容（TEXT 类型使用）。
+// 修改当前文本内容（Text 类型使用）。
 void AnnotationEditor::changeText(const std::string& text) { currentText_ = text; }
 
-// 修改当前字号（TEXT 类型使用）。
+// 修改当前字号（Text 类型使用）。
 void AnnotationEditor::changeFontSize(const double size) {
     currentFontSize_ = std::max(static_cast<double>(nums::model::kFontSizeMinPx), size);
 }
 
-// 修改转角圆角半径：EDIT 模式下就地写到选中形状的几何（无转角概念的形状为空调用），
+// 修改转角圆角半径：Edit 模式下就地写到选中形状的几何（无转角概念的形状为空调用），
 // 否则记为下一次绘制的默认圆角半径。与颜色/填充的事后编辑一致：不推历史快照（可撤销的仍是 add/remove）。
 void AnnotationEditor::changeCornerRadius(const double r) {
     const double radius = r < 0.0 ? 0.0 : r;

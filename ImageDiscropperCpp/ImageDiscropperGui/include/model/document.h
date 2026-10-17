@@ -31,25 +31,25 @@
 
 namespace idc::gui {
 
-class ConfigCodec;   // 配置映射拆至 model/config_codec（friend 直读私有状态，见下方转发）。
+class ConfigCodec;   // 配置映射在 model/config_codec（friend 直读私有状态，见下方转发）。
 
 // L1 标准提取的形状选择（映射到 Core 的 CutGenerator）。
 enum class L1Shape {
-    RECT,   // 矩形选框 → CutGenerator::RECT
-    HBAND,  // 横带     → CutGenerator::HORIZONTAL_LINE
-    VBAND,  // 竖带     → CutGenerator::VERTICAL_LINE
+    Rect,   // 矩形选框 → CutGenerator::Rect
+    Hband,  // 横带     → CutGenerator::HorizontalLine
+    Vband,  // 竖带     → CutGenerator::VerticalLine
 };
 
 // L2 反向剔除的子功能（映射到 Core 的 CutGenerator）。
 enum class L2Sub {
-    CROSS,       // 十字切割（单矩形诱导贯穿十字带）→ CutGenerator::RECT
-    HLINE,       // 横线切割 → CutGenerator::HORIZONTAL_LINE
-    VLINE,       // 竖线切割 → CutGenerator::VERTICAL_LINE
-    MULTI_RECT,  // 多矩形并集剔除（各矩形诱导十字带取并集）→ CutGenerator::MULTI_RECT
+    Cross,     // 十字切割（单矩形诱导贯穿十字带）→ CutGenerator::Rect
+    Hline,     // 横线切割 → CutGenerator::HorizontalLine
+    Vline,     // 竖线切割 → CutGenerator::VerticalLine
+    MultiRect, // 多矩形并集剔除（各矩形诱导十字带取并集）→ CutGenerator::MultiRect
 };
 
-// 独立画布尺寸 ResizeTarget 已迁至 model/preprocess_session.h（供零 Qt 会话对象独立编译），
-// 经上方 include 传递可见；Document 及各调用点无需改动引用。
+// 独立画布尺寸 ResizeTarget 定义于 model/preprocess_session.h（零 Qt 会话对象独立编译），
+// 经上方 include 传递可见。
 
 // 共享预处理面板的「当前目标」（三元）：
 //   • 选中某图片图层时为该层（逐层预处理，几何 + 色彩）；
@@ -139,7 +139,7 @@ public:
     // 候选前缀是否需要重烤：无缓存，或已缓存 basePath_ 与之逐字段不等 → true。供 commitPipeline 提交前判 baseDirty。
     bool baseDirtyFor(const preprocess::PreprocessPipeline& prefix) const { return preprocess_.baseDirtyFor(prefix); }
 
-    // ---- 多层画布（Phase 3-4：画布层概念，引擎零改动）----
+    // ---- 多层画布（画布层概念，引擎零改动）----
     // 画布由「底图（input 生态位，不入 layers、无 transform）」+「叠加图片图层栈」展平得来：layersActive_ 为真时，
     // original_ 恒为 composeCanvas(layers_, canvasW, canvasH, baseImage_) 的产物（由 PreprocessController 经
     // EngineBridge 物化回灌），其上再叠画布级预处理（preprocess_）得 working_。底图 baseImage_ 独立保留，供重组。
@@ -174,7 +174,7 @@ public:
     //   底图 baseOpacity 正交。恒在产出边界（PreprocessController commitPipeline / 导出重算）逐像素 applyAlpha 施加一次，
     //   不烘焙进缓存位图（working_ 每次从基准重放、非累加 → 无重复淡出）。随 §7 顶层 opacity 键往返。
     int canvasOpacity() const { return canvasOpacity_; }
-    // 相等早退；否则置值后发 changed()（刷新面板 / 历史采集）——重算 working_ 由调用方（MainWindow）随后走 replayCanvasPreprocess。
+    // 相等早退；否则置值后发 changed()（刷新面板 / 历史采集）——重算 working_ 由调用方（SessionController）随后走 replayCanvasPreprocess。
     void setCanvasOpacity(int opacity);
 
     // ---- 底图（画布基座）可选中 + 底图色彩预处理 ----
@@ -227,7 +227,7 @@ public:
     // 清空全部图片图层并回退为单图底图态：original_ 还原为纯底图 baseImage_、清 layers_/会话/画布尺寸，
     //   **保留画布级预处理声明与标注**（工作图随后由调用方重放色彩预处理）。仅图层态有效，否则早退返回 false。
     bool clearAllLayersToBase();
-    // 声明画布尺寸：更新 canvasW/H 并发 layersChanged（交控制器重组）。尺寸变化只清框选、不清图层/标注（决策 3）。
+    // 声明画布尺寸：更新 canvasW/H 并发 layersChanged（交控制器重组）。尺寸变化只清框选、不清图层/标注。
     void setCanvasSize(int width, int height);
 
     // 确保当前处于图层画布态（供「添加图片图层」在无图层画布时也能进入图层编辑）：
@@ -254,7 +254,7 @@ public:
     void setRect(const engine::RectRegion& r);     // 设置选区并置 hasRect_
     void clearRect();                                   // 清除选区（Esc / 右键清除）
 
-    // ---- L2 多矩形并集（FR-L2 多矩形；仅 L2Sub::MULTI_RECT 生效）----
+    // ---- L2 多矩形并集（FR-L2 多矩形；仅 L2Sub::MultiRect 生效）----
     // rects_ 为用户框选追加的多个矩形，Core 对每个矩形诱导贯穿十字带后取并集剔除。
     // GUI 只维护矩形列表（增/删/改/清空）并搬运进 CutConfig::rects，不做任何并集/几何计算（CONTRIBUTING.md「分层纪律」）。
     const std::vector<engine::RectRegion>& rects() const { return rects_; }
@@ -278,7 +278,7 @@ public:
     const QString& outputFile() const { return outputFile_; }
     void setOutputFile(const QString& f);
 
-    // ---- 重排合并参数（FR-L3.7 / SPEC §4.3；仅 MERGED+REARRANGE 生效）----
+    // ---- 重排合并参数（FR-L3.7 / SPEC §4.3；仅 Merged+Rearrange 生效）----
     // cols/rows/cellWidth/cellHeight 以 0 表示「未指定」→ buildEngineConfig 保持 nullopt，
     // 交 Core compose 依保留块数自动推导画布；正值才写入。padColor 为空位/余量填充色。
     // GUI 只搬运字段，画布尺寸/落位全由 Core compose 计算（CONTRIBUTING.md「分层纪律」）。
@@ -291,11 +291,11 @@ public:
     core::Color padColor() const { return padColor_; }
     void setPadColor(core::Color c);    // 空位/余量填充色（默认透明）
 
-    // ---- 重排填充顺序（MergeOrder；仅 MERGED+REARRANGE 生效，与 L3 选择排序 order_ 正交）----
-    // order_ 决定「保留块的先后列表」（含 CUSTOM 拖拽序）；mergeOrder_ 决定「该列表以行/列优先
+    // ---- 重排填充顺序（MergeOrder；仅 Merged+Rearrange 生效，与 L3 选择排序 order_ 正交）----
+    // order_ 决定「保留块的先后列表」（含 Custom 拖拽序）；mergeOrder_ 决定「该列表以行/列优先
     // + 蛇形? + 倒序? 的路径铺进 cols×rows 输出画布」。GUI 只搬运字段，落位由 Core compose 计算（CONTRIBUTING.md「分层纪律」）。
     const engine::MergeOrder& mergeOrder() const { return mergeOrder_; }
-    void setMergeOrderStrategy(engine::SortStrategy s); // 仅 ROW_MAJOR / COLUMN_MAJOR（CUSTOM 按行优先）
+    void setMergeOrderStrategy(engine::SortStrategy s); // 仅 RowMajor / ColumnMajor（Custom 按行优先）
     void setMergeOrderReverse(bool on);                      // 填充路径整体倒序
     void setMergeOrderSnake(bool on);                        // 填充路径蛇形
 
@@ -305,7 +305,7 @@ public:
     void setGridOrigin(int x, int y);                  // 基准点 (x0,y0)
     void setCellSize(int w, int h);                    // 单元尺寸 (cellWidth,cellHeight)
     void setRemainder(engine::RemainderPolicy p); // 余量策略 discard/keep-partial/pad
-    // 派生行列数（只读显示，由 MainWindow 依 Core Grid 结果回灌；不触发 changed 以免回环）。
+    // 派生行列数（只读显示，由 PreviewController 依 Core Grid 结果回灌；不触发 changed 以免回环）。
     int gridRows() const { return gridRows_; }
     int gridCols() const { return gridCols_; }
     void setDerivedGridSize(int rows, int cols);
@@ -334,8 +334,8 @@ public:
     // ---- 组装 Core 配置（纯字段搬运 + 枚举映射，无引擎逻辑）----
     // 依当前模式/子选项构建切割配置。
     engine::CutConfig buildCutConfig() const;
-    // 运行/可序列化配置组装与反向还原已拆至 ConfigCodec（model/config_codec，本类 friend）；
-    // 以下为保持公有 API 形状的一行转发（定义在 document.cpp，避免头文件依赖 ConfigCodec 完整类型）。
+    // 运行/可序列化配置组装与反向还原在 ConfigCodec（model/config_codec，本类 friend）；
+    // 以下为转发到 ConfigCodec 的一行包装（定义在 document.cpp，避免头文件依赖 ConfigCodec 完整类型）。
     engine::EngineConfig buildEngineConfig() const;
     engine::EngineConfig buildSerializableConfig() const;
     void applyEngineConfig(const engine::EngineConfig& cfg);
@@ -360,7 +360,7 @@ private:
     PreprocessSession preprocess_;
     QString imagePath_;
 
-    // 多层画布声明态（Phase 3-4）：layersActive_ 为真时 original_ 由下方底图 + 叠加层栈展平而来。
+    // 多层画布声明态：layersActive_ 为真时 original_ 由下方底图 + 叠加层栈展平而来。
     core::Image baseImage_;                                  // 画布底图像素（input 生态位；overlays 之下的基座，不随重组刷新）
     std::optional<canvas::ImageLayer> baseLayer_;            // 底图声明（同构 ImageLayer，钉住最底：图案配方或文件+落位），随 §7 generate 段往返
     std::uint8_t baseOpacity_{255};                          // 底图整体不透明度（0..255，255＝不透明）：合成边界淡出用，内存 baseLayer_ 声明恒存 255
@@ -373,7 +373,7 @@ private:
         bool valid = false;
         int baseWidth = 0;
         int baseHeight = 0;
-        core::ImageFormat baseFormat = core::ImageFormat::RGBA;
+        core::ImageFormat baseFormat = core::ImageFormat::Rgba;
         std::uint64_t baseFingerprint = 0;   // 首尾各采样至多 4 字节的轻量内容指纹（O(1)，不遍历全图）
         std::uint8_t opacity = 255;
         preprocess::PreprocessPipeline steps;
@@ -398,18 +398,18 @@ private:
     int nextLayerId_{1};                                     // 递增图层 id 发号器（跨会话稳定标识）
     LayerSessionStore layerSessions_;                        // 每层预处理声明态 + 物化签名 + 物化位图（按 layerId，单点生命周期）
 
-    engine::Tier mode_{engine::Tier::L1};
-    engine::Polarity polarity_{engine::Polarity::KEEP};
-    L1Shape l1Shape_{L1Shape::RECT};
-    L2Sub l2Sub_{L2Sub::CROSS};
+    engine::Tier mode_{engine::Tier::Standard};
+    engine::Polarity polarity_{engine::Polarity::Keep};
+    L1Shape l1Shape_{L1Shape::Rect};
+    L2Sub l2Sub_{L2Sub::Cross};
 
     engine::RectRegion rect_{};
     bool hasRect_{false};
     std::vector<engine::RectRegion> rects_;  // L2 多矩形并集列表（其余子功能恒空）
 
-    engine::EmitMode emitMode_{engine::EmitMode::MERGED};
-    engine::MergeLayout layout_{engine::MergeLayout::COLLAPSE};
-    engine::ExportFormat format_{engine::ExportFormat::PNG};
+    engine::EmitMode emitMode_{engine::EmitMode::Merged};
+    engine::MergeLayout layout_{engine::MergeLayout::Collapse};
+    engine::ExportFormat format_{engine::ExportFormat::Png};
     int quality_{nums::model::kDefaultExportQualityPercent};   // 出厂默认转引 Core（与导出面板 range 同源）。
     QString naming_{QString::fromUtf8(texts::ident::kNamingDefaultTemplate)};   // 命名模板初值与面板输入框初值同字。
     QString outputDir_;
@@ -424,7 +424,7 @@ private:
     engine::MergeOrder mergeOrder_;                 // 重排填充顺序（默认行优先、不蛇形、不倒序）
 
     // L3 网格参数：默认单元 100×100（避免 GridParams 默认 1×1 在大图产生海量单元）。
-    engine::GridParams grid_{0, 0, 100, 100, engine::RemainderPolicy::DISCARD};
+    engine::GridParams grid_{0, 0, 100, 100, engine::RemainderPolicy::Discard};
     int gridRows_{0};                    // 派生行数（只读显示）
     int gridCols_{0};                    // 派生列数（只读显示）
     engine::SequenceParams order_;  // 排序策略（默认 row-major）

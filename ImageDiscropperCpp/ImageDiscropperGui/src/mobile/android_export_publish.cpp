@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：mobile/android_export_publish.cpp
-// 作用：实现 Android 导出发布编排（见同名头文件说明）——原驻 main_window.cpp 匿名命名空间，
-//       随导出域拆至 ExportController 一并迁出；仅 Q_OS_ANDROID 编译。
+// 作用：实现 Android 导出发布编排（见同名头文件说明）——MediaStore 插入 / fd 写入 /
+//       pending finalize / 文档目录兜底；仅 Q_OS_ANDROID 编译。
 // ============================================================================
 #include "mobile/android_export_publish.h"
 
@@ -21,9 +21,9 @@ namespace idc::gui {
 
 QString exportFormatExt(const engine::ExportFormat fmt) {
     switch (fmt) {
-        case engine::ExportFormat::JPEG: return QStringLiteral("jpg");
-        case engine::ExportFormat::BMP:  return QStringLiteral("bmp");
-        case engine::ExportFormat::WEBP: return QStringLiteral("webp");
+        case engine::ExportFormat::Jpeg: return QStringLiteral("jpg");
+        case engine::ExportFormat::Bmp:  return QStringLiteral("bmp");
+        case engine::ExportFormat::Webp: return QStringLiteral("webp");
         default:                         return QStringLiteral("png");
     }
 }

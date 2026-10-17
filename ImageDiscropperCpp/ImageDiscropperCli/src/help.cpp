@@ -3,19 +3,18 @@
 // 作用：CLI 帮助文本输出的全部实现——顶层帮助 / 版本 / 子命令分派，五个子命令的帮助
 //       文本本体，跨命令复用的通用小节（标注段 / 图案矩阵 / 生成源段），以及各命令选项
 //       列宽的编译期推导。对外只经 include/help.h 暴露 printTopHelp / printVersion /
-//       printCommandHelp；其余皆为本 TU 内部件。（原 src/help/ 目录与 help_common.* 已合并至此。）
+//       printCommandHelp；其余皆为本 TU 内部件。
 // 分块依据：帮助是纯文本输出，集中一处便于命令清单 / 术语 / 示例与规格保持一致（SPEC §2.2 术语、
 //       帮助要求与版本格式见 Cli README）；命令名统一用实际可执行名 "idc"。文本本体（散文块 /
 //       用法列 / 描述列）全在 cli_texts.h::help，本 TU 只决定输出顺序与列宽。
 // 列宽（constexpr optWidth）：用法列内容不随语言变（optionRow 的 opt 恒为不可译契约串 hp::kUse*），
-//       故其最长长度为编译期常量——从字符串真长推导，零运行期开销，既根除旧手数的 off-by-one
-//       （曾把 --annotation '<json>' 数成 22，实为 21），加/减选项时列宽亦自动跟进。
+//       故其最长长度为编译期常量——从字符串真长推导，零运行期开销，加/减选项时列宽自动跟进。
 // i18n 分工：用法列 help::kUse* = 选项名 + 占位符，属**不可译契约**（optionRow 的 opt 形参 const char*）；
 //       描述列 / 小节 lead / 散文块走门面 IDC_CTR（返回 std::string，形参 const std::string&）。
 // 排版约定：选项行 = 两空格缩进 + 定宽选项列 + 两空格 + 描述；选项按功能分组、组标题独占一行、组间空行；
 //       需求标签统一为 [必填] / [可重复]，条件性必填写入描述括注。
 // 测试约束：IT-13 断言 --version 形如 "idc <ver> (core <ver>)"；IT-14 断言顶层帮助含全部子命令名
-//       （extract / erase / grid / config）——排版调整不得破坏这两条。
+//       （extract / erase / grid / new / config）——排版调整不得破坏这两条。
 // 说明：版本号来自编译期宏 IDC_CLI_VERSION / IDC_CORE_VERSION（由 CMake 注入，与构建系统一致）。
 // ============================================================================
 #include "help.h"
@@ -97,7 +96,7 @@ void optionRow(const int width, const char* opt, const std::string& desc) {
     std::cout << "  " << std::left << std::setw(width) << opt << "  " << desc << '\n';
 }
 
-// ── 跨命令通用小节（原 help_common.cpp）─────────────────────────────────────
+// ── 跨命令通用小节 ────────────────────────────────────
 // 标注段（extract / erase / grid / config 四层命令通用）：自包含的完整字段说明与示例，
 // 不引用任何工程文档（用户只需读 --help 即可写出一条合法标注）。lead 为命令差异提示，省略即无。
 void annotationSection(const int width, const std::string& lead = {}) {

@@ -134,7 +134,7 @@ bool insertToGallery(const QString& displayName, const QString& relativePath,
         return false;
     }
     // 键名即 MediaStore.MediaColumns 常量值（注意 DISPLAY_NAME 为 _display_name，
-    // 带下划线前缀——真机曾误写 display_name 被华为 MediaProvider 拒绝）。
+    // 带下划线前缀，误写 display_name 会被 MediaProvider 拒绝）。
     // 首选 IS_PENDING=1（见头文件说明：无 pending 直插会被扫描竞态随机删行）；
     // 拒绝该列的设备降级无 pending。
     const auto tryInsert = [&](const bool pending) {

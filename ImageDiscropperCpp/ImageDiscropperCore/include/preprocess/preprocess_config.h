@@ -16,12 +16,12 @@ namespace idc::preprocess {
 // 分块依据：一个枚举值 = 一种独立的预处理动作，与 PreprocessConfig 变体的一个分支一一对应。
 // ---------------------------------------------------------------------------
 enum class PreprocessType {
-    GRAY,    // 灰度化（黑白）
-    INVERT,  // 按通道反色
-    SPLIT,   // 按通道分离
-    ROTATE,  // 旋转（90 / 180 / 270）
-    FLIP,    // 翻转（水平 / 垂直）
-    RESIZE,  // 尺寸调整（目标宽高，重采样）
+    Gray,    // 灰度化（黑白）
+    Invert,  // 按通道反色
+    Split,   // 按通道分离
+    Rotate,  // 旋转（90 / 180 / 270）
+    Flip,    // 翻转（水平 / 垂直）
+    Resize,  // 尺寸调整（目标宽高，重采样）
 };
 
 // 将 PreprocessType 转换为字符串，便于日志与序列化。
@@ -72,7 +72,7 @@ struct ResizeOp {
 // PreprocessConfig：使用 std::variant 组合所有操作类型
 // 顺序即为 variant index 顺序（GrayOp=0, SplitOp=1, InvertOp=2, RotateOp=3,
 // FlipOp=4, ResizeOp=5），修改时请同步更新相关测试。
-// 不透明度已从本管线移除（旧 OpacityOp）：改由 canvas::ImageTransform.opacity 承载（合成期 alpha 乘子）。
+// 不透明度不在本管线，由 canvas::ImageTransform.opacity 承载（合成期 alpha 乘子）。
 // ---------------------------------------------------------------------------
 using PreprocessConfig = std::variant<
     GrayOp, SplitOp, InvertOp, RotateOp, FlipOp, ResizeOp
@@ -85,7 +85,7 @@ PreprocessConfig makeDefaultConfig(PreprocessType t);
 PreprocessType configType(const PreprocessConfig& cfg);
 
 // 轻操作分类（几何 / 色彩）：Rotate/Flip = 几何，Gray/Split/Invert = 色彩，Resize 二者皆非。
-// 单一真相源——Core 执行层融合（applyExec 计划构建 buildExecPlan）、控制器不变式（appendLightKeepingInvariant）、面板双列表下标映射均以此为准，口径不漂移。
+// 单一真相源——Core 执行层融合（applyExec 计划构建 buildExecPlan）、GUI 预处理会话（preprocess_session）、面板扁平下标映射（preprocess_panel）均以此为准，口径不漂移。
 bool isGeometryStep(const PreprocessConfig& cfg);
 bool isColorStep(const PreprocessConfig& cfg);
 

@@ -35,29 +35,29 @@ BoundingBox BoundingBox::united(const BoundingBox& o) const {
 // Path 构建接口
 // ---------------------------------------------------------------------------
 
-// 抬笔移动：追加一段 MOVE_TO。
+// 抬笔移动：追加一段 MoveTo。
 void Path::moveTo(double x, double y) {
-    segments_.push_back({PathSegmentType::MOVE_TO, {x, y}});
+    segments_.push_back({PathSegmentType::MoveTo, {x, y}});
 }
 
-// 直线段：追加一段 LINE_TO。
+// 直线段：追加一段 LineTo。
 void Path::lineTo(double x, double y) {
-    segments_.push_back({PathSegmentType::LINE_TO, {x, y}});
+    segments_.push_back({PathSegmentType::LineTo, {x, y}});
 }
 
-// 二次贝塞尔：追加一段 QUAD_TO。
+// 二次贝塞尔：追加一段 QuadTo。
 void Path::quadTo(double cx, double cy, double x, double y) {
-    segments_.push_back({PathSegmentType::QUAD_TO, {cx, cy, x, y}});
+    segments_.push_back({PathSegmentType::QuadTo, {cx, cy, x, y}});
 }
 
-// 三次贝塞尔：追加一段 CUBIC_TO。
+// 三次贝塞尔：追加一段 CubicTo。
 void Path::cubicTo(double c1x, double c1y, double c2x, double c2y, double x, double y) {
-    segments_.push_back({PathSegmentType::CUBIC_TO, {c1x, c1y, c2x, c2y, x, y}});
+    segments_.push_back({PathSegmentType::CubicTo, {c1x, c1y, c2x, c2y, x, y}});
 }
 
 // 闭合当前子路径。
 void Path::closePath() {
-    segments_.push_back({PathSegmentType::CLOSE, {}});
+    segments_.push_back({PathSegmentType::Close, {}});
 }
 
 // 追加另一路径的所有段。
@@ -98,7 +98,7 @@ BoundingBox Path::bounds() const {
 }
 
 // ---------------------------------------------------------------------------
-// 内部工具：把 QUAD_TO 离散化为若干 LINE_TO
+// 内部工具：把 QuadTo 离散化为若干 LineTo
 // 说明：使用固定步长（依据 flatness 计算），保证曲率越大分段越多。
 // ---------------------------------------------------------------------------
 static void flattenQuad(Path& out, const double cx, const double cy, const double x0, const double y0,
@@ -118,7 +118,7 @@ static void flattenQuad(Path& out, const double cx, const double cy, const doubl
     }
 }
 
-// 把 CUBIC_TO 离散化为若干 LINE_TO。
+// 把 CubicTo 离散化为若干 LineTo。
 static void flattenCubic(Path& out, const double c1x, const double c1y, const double c2x, const double c2y,
                          const double x0, const double y0, const double x1, const double y1, const double flatness) {
     const double dev = std::max(
@@ -135,31 +135,31 @@ static void flattenCubic(Path& out, const double c1x, const double c1y, const do
     }
 }
 
-// 扁平化：把所有 QUAD_TO / CUBIC_TO 展开为 LINE_TO。
+// 扁平化：把所有 QuadTo / CubicTo 展开为 LineTo。
 Path Path::flattened(const double flatness) const {
     Path out;
     double curX = 0.0, curY = 0.0;
     for (const auto&[type, coords] : segments_) {
         switch (type) {
-            case PathSegmentType::MOVE_TO:
+            case PathSegmentType::MoveTo:
                 out.moveTo(coords[0], coords[1]);
                 curX = coords[0]; curY = coords[1];
                 break;
-            case PathSegmentType::LINE_TO:
+            case PathSegmentType::LineTo:
                 out.lineTo(coords[0], coords[1]);
                 curX = coords[0]; curY = coords[1];
                 break;
-            case PathSegmentType::QUAD_TO:
+            case PathSegmentType::QuadTo:
                 flattenQuad(out, coords[0], coords[1], curX, curY,
                             coords[2], coords[3], flatness);
                 curX = coords[2]; curY = coords[3];
                 break;
-            case PathSegmentType::CUBIC_TO:
+            case PathSegmentType::CubicTo:
                 flattenCubic(out, coords[0], coords[1], coords[2], coords[3],
                              curX, curY, coords[4], coords[5], flatness);
                 curX = coords[4]; curY = coords[5];
                 break;
-            case PathSegmentType::CLOSE:
+            case PathSegmentType::Close:
                 out.closePath();
                 break;
         }
@@ -175,14 +175,14 @@ static std::vector<std::vector<core::Point2D>> extractPolylines(const Path& flat
     std::vector<core::Point2D> current;
     core::Point2D first{0, 0};
     for (const auto&[type, coords] : flat.segments()) {
-        if (type == PathSegmentType::MOVE_TO) {
+        if (type == PathSegmentType::MoveTo) {
             if (!current.empty()) polylines.push_back(current);
             current.clear();
             first = {coords[0], coords[1]};
             current.push_back(first);
-        } else if (type == PathSegmentType::LINE_TO) {
+        } else if (type == PathSegmentType::LineTo) {
             current.emplace_back(coords[0], coords[1]);
-        } else if (type == PathSegmentType::CLOSE) {
+        } else if (type == PathSegmentType::Close) {
             if (!current.empty() && (current.back().x != first.x || current.back().y != first.y)) {
                 current.push_back(first);
             }
@@ -202,7 +202,7 @@ bool Path::contains(const double px, const double py, const double flatness) con
         for (std::size_t i = 0; i + 1 < poly.size(); ++i) {
             const double x1 = poly[i].x, y1 = poly[i].y;
             const double x2 = poly[i + 1].x;
-            if (const double y2 = poly[i + 1].y; (y1 > py) != (y2 > py)) {
+            if (const double y2 = poly[i + 1].y; y1 > py != y2 > py) {
                 if (const double xIntersect = x1 + (py - y1) * (x2 - x1) / (y2 - y1); px < xIntersect) ++crossings;
             }
         }

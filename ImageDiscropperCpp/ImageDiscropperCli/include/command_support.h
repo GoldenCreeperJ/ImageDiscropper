@@ -7,8 +7,7 @@
 // 分块依据：
 //   - 这里只放「跨命令复用、且不含任何切割 / 几何 / 排序 / 极性语义」的胶水助手；单个命令
 //     特有的参数装配仍留在各自 commands/*.cpp（CONTRIBUTING.md「分层纪律」：CLI 不实现引擎逻辑，本文件也不实现）。
-//   - 全部为 inline（与 cli_error.h 的 makeError 同为头内联）——体量小、无独立编译单元价值，
-//     故不新增 .cpp，也就不必改动 CMake 源清单（降低构建接入风险）。
+//   - 全部为 inline（与 cli_error.h 的 makeError 同为头内联）——体量小、无独立编译单元价值，不新增 .cpp。
 //   - 复用既有模块：cli_error（错误格式）、exit_code（退出码）、arg_parser（选项读取）、
 //     value_parser（值解析）、job（JobOptions）与 Core 的 CompositionParams（导出参数）。
 // 常量层：本文件是公共头，因此写全限定名 texts::opt::…（不用命名空间别名，以免污染使用者），

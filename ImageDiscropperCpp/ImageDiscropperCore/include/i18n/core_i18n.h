@@ -7,13 +7,9 @@
 //       各层的译文表由各自装配：GUI / CLI 的表住各自层（不让无关层为其膨胀），Core 报因的表
 //       住 Core 自己（src/i18n/lang_en.cpp），由本头声明的 installCoreCatalogs() 登记；
 //       GUI / CLI 的 installCatalogs() 各调用它一次，三层共用同一份，不为同一句话存两遍译文。
-// 为什么自研而不用 Qt Linguist（tr() / lupdate / .ts / .qm）：
-//       · 本项目全部文案住在常量层的 `inline constexpr char kXxx[]`，lupdate 抽不到常量，
-//         其「扫描源码生成 .ts」这一核心能力在此无用；
-//       · .qm 是 Qt6 内部的 QCbor 容器格式，零 Qt 的 Core / CLI 读不了；
-//       · 引 qttools 会无条件拖进 host:qttools[linguist] → [designer] → qtbase[network,png]，
-//         重编 host + target 两套 qtbase，且改动 vcpkg.json 使 CI 的 vcpkg 整树缓存失效
-//         （缓存键含 hashFiles(vcpkg.json)）。
+// 为什么自研而不用 Qt Linguist（tr() / lupdate / .ts / .qm）：全部文案住在常量层的
+//       `inline constexpr char kXxx[]`，lupdate 抽不到常量；.qm 是 Qt6 内部二进制格式，
+//       零 Qt 的 Core / CLI 读不了；引 qttools 还会连带拖进整套 qtbase 双份构建。
 //       结论：中文常量本身即「源语言文本 + 回退值」，译文表只存「键 → 该语言文本」，
 //       编译期内嵌，无需任何构建期工具链与运行时资源文件。
 // 键形态：`<分组>::<常量名>`（如 "menu::kMenuFile"）。键由门面宏经预处理器 `#` 字符串化生成，
@@ -21,18 +17,16 @@
 //       由 unit_tests 的目录对账用例断言全局唯一（tests/test_i18n_catalog.cpp）。
 // 占位符：句式里要嵌入序号 / 路径等运行期值时，写成**单条整句 + %N**（如 "第 %1 个标注元素：%2"），
 //       不拆成前后两段碎片——拆开后译者无法重组语序（英语就把序号挪到句尾）。
-//       替换由 i18n::formatPattern 完成（配 IDC_KTRF 宏）；源语言下替换结果与旧的字符串拼接逐字节相同。
+//       替换由 i18n::formatPattern 完成（配 IDC_KTRF 宏）；源语言下替换结果与直接字符串拼接逐字节相同。
 // 语言码：BCP-47 风格短码。源语言 kSourceLanguage 恒可用且**不建表**——它的译文就是常量层本身，
-//       再存一份纯属重复；其余语言码由各层表文件登记（一期内置 kLangCodeEn）。
+//       再存一份纯属重复；其余语言码由各层表文件登记（当前内置 kLangCodeEn）。
 // 回退纪律：语言未装 / 该语言缺该键 → 原样返回调用点传入的中文源值。
 //       故「译文缺失」永远是**渐进补全**而非崩溃或空白，zh-CN 路径永远是零行为变化。
 // 生命周期与线程：语言表只在**进程启动期单线程**登记（GUI 在 QApplication 构造之后、顶层窗口构造
-//       之前；CLI 在 cliMain 顶部），运行期不再增删表项；语言切换（setLanguage）虽已支持运行期热切换，
-//       但不靠加锁、而靠一条纪律保证安全：切换只发生在**模态静止点**——外观对话框是模态框，用户选定
-//       语言即在对话框自身的事件循环里同步改全局语言，此刻主窗手势 / 刷新全被阻塞；GUI 任何耗时重计算
-//       （如预处理）也同步跑在主线程并以忙碌模态框呈现，两个模态框不可能同开。全 GUI 无脱离主线程的
-//       并发读者，故对表的读写恒在同一线程串行发生、天然无竞争。若将来引入后台线程读文案，须先补同步
-//       再允许其并跑（届时本条失效）。
+//       之前；CLI 在 cliMain 顶部），运行期不再增删表项；语言切换（setLanguage）支持运行期热切换，
+//       安全由纪律保证：切换只发生在**模态静止点**（外观对话框为模态框，选定语言即在其事件循环里
+//       同步改全局语言，此刻主窗手势/刷新全部阻塞；GUI 耗时重计算亦同步跑在主线程）。全 GUI 无脱离
+//       主线程的并发读者，表读写恒在同一线程串行发生。若将来引入后台线程读文案，须先补同步。
 // ============================================================================
 #pragma once
 
@@ -48,7 +42,7 @@ namespace idc::core {
 
 // 源语言码：常量层的中文即该语言的文本，故不为它建表，只在可用语言清单里占首位。
 inline constexpr auto kSourceLanguage = "zh-CN";
-// 一期唯一目标语言码：各层表文件的登记码与 GUI 语言下拉 / CLI --lang 的取值共用此名，
+// 目标语言码：各层表文件的登记码与 GUI 语言下拉 / CLI --lang 的取值共用此名，
 // 免得三处各写一份 "en" 而漂移（加一门语言 = 新增一张表 + 一个码常量 + 注册一次，见 README）。
 inline constexpr auto kLangCodeEn = "en";
 
@@ -64,7 +58,6 @@ struct I18nEntry {
 
 // ---------------------------------------------------------------------------
 // I18nTable：一门语言的一段表（指针 + 计数）。
-// 本工程的 C++ 标准是 17，没有 std::span，故以这对成员表达「一段连续条目」；
 // 计数由 makeI18nTable 从数组维度推导，调用点不写数字——杜绝「加了行忘了改数」。
 // ---------------------------------------------------------------------------
 struct I18nTable {
@@ -89,7 +82,7 @@ void installLanguage(std::string_view lang, I18nTable table);
 // 登记 Core 层自己的英文目录（表在 src/i18n/lang_en.cpp）。
 // 由各层的 installCatalogs() 调用——GUI 与 CLI 都要显示 Core 的报因，故两边都装一次；
 // 同语言累加不冲突，且表只有一份，不存在两侧漂移。
-// 不自动装配（不靠静态对象自注册）：idc_cli_lib 是静态库，未被引用的翻译单元会被链接器
+// 不自动装配（不靠静态对象自注册）：CLI 侧是静态库，未被引用的翻译单元会被链接器
 // 整块丢弃，自注册会随调用点变化而静默失效，故一律显式调用。
 void installCoreCatalogs();
 
@@ -105,9 +98,9 @@ std::string translate(std::string_view key, std::string_view fallbackUtf8);
 // 把 text 里的 %N（N＝1..9）依次替换为 args 的对应项（args[0] 填 %1）。
 // 按**编号**取值而非按出现顺序，故译文可自由调整语序（"Item #%1: %2" 与 "第 %1 个：%2" 共用一份 args）；
 // 同一占位符可重复出现；编号越界或 text 里无占位符 → 原样保留该片段，绝不崩、绝不吞字。
-// 复数：本机制**不做**单复数变形（只按编号填槽）。故 "Delete all %1 annotations?" 在 count=1 时显示
-//       "1 annotations"、英文形态不完美——属已知边界：此类确认框的数量几乎恒 >1，v1 可接受。将来要处理时
-//       在 formatPattern 之上加 plural 变体（按数值选不同模板），勿改本函数的填槽语义。
+// 复数：本机制**不做**单复数变形（只按编号填槽）。如 "Delete all %1 annotations?" 在 count=1 时显示
+//       "1 annotations"、英文形态不完美——属已知边界：此类确认框的数量几乎恒 >1。将来要处理时在
+//       formatPattern 之上加 plural 变体（按数值选不同模板），勿改本函数的填槽语义。
 std::string formatPattern(const std::string &text, std::initializer_list<std::string> args);
 
 // 当前生效语言码（已归一、已回退后的结果，供 UI 回显与日志）。
@@ -129,7 +122,7 @@ std::vector<std::string> availableLanguages();
 // 键与源值同源于一次书写：# 把两个标识符变成字符串，逗号后的 `::name` 取到中文常量本身，
 // 因此「键拼错」与「回退值写错」两类笔误都在编译期暴露（未声明的标识符）。
 // Core 的可译分组只有 texts::msg（jsonkey / defaults 是不可译契约，永不进目录）。
-// msg 里现已包含图案类型的显示名（patternKindName 的返回值），它同样面向人、可译。
+// msg 里包含图案类型的显示名（patternKindName 的返回值），它同样面向人、可译。
 // ---------------------------------------------------------------------------
 #define IDC_KTR(group, name) \
     ::idc::core::i18n::translate(#group "::" #name, ::idc::core::texts::group::name)

@@ -1,8 +1,8 @@
 // ============================================================================
-// 文件：src/util/output_preview_renderer.cpp
+// 文件：util/output_preview_renderer.cpp
 // 作用：实现导出输出预览的离屏渲染（见同名头说明）——bakeAnnotationsInto 把标注烘焙进源图，
 //       composeOutputThumbnail 按 Core Composition 把源图 blit 成降采样输出缩略图。
-// 分块依据：从 app 层 MainWindow 下沉的**纯渲染**逻辑；只消费 Core 结果 + Qt 绘图，不含引擎/几何计算。
+// 分块依据：本层承载导出预览的**纯渲染**逻辑（app 层只做编排）；只消费 Core 结果 + Qt 绘图，不含引擎/几何计算。
 // 说明：标注绘制复用 util/annotation_qt_painter::paintAnnotation（与画布图元同一外观）；坐标映射与
 //       Core exportSeparate/exportMerged 的 source→dest 语义一致（预览忠实，溢出块由 drawPixmap 裁剪）。
 // ============================================================================
@@ -71,7 +71,7 @@ QPixmap composeOutputThumbnail(const engine::Composition& comp, const QPixmap& s
         return out;
     }
 
-    // 分离模式：无统一画布（canvasWidth/Height=0）→ 拼接触图（cols=ceil(sqrt(n))），每块等比缩放进格子居中。
+    // 分离模式：无统一画布（canvasWidth/Height=0）→ 拼接缩图（cols=ceil(sqrt(n))），每块等比缩放进格子居中。
     const int n = static_cast<int>(comp.placements.size());
     int cols = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(n))));
     if (cols < 1) cols = 1;

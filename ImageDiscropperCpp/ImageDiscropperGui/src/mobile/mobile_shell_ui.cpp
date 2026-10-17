@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：mobile/mobile_shell_ui.cpp
 // 作用：MobileShellUi 实现——移动端骨架建造（部件创建/回填与连接全在此，见同名
-//       头文件说明）。逻辑自移动壳拆分独立成文（与桌面 main_window_ui.cpp 同纪律）。
+//       头文件说明）。装配逻辑独立成文（与桌面 main_window_ui.cpp 同纪律）。
 // 分块依据：
 //   - 部件创建/回填与连接全在 MobileShellUi；MobileShell 构造只规定装配顺序；
 //   - 底部工具条按钮 → MainWindow 既有私有槽 / CanvasView request*/gesture* 入口，
@@ -47,14 +47,14 @@
 #include "mobile/touch_scroll.h"
 #include "panels/annotation_prop_panel.h"
 #include "panels/export_panel.h"
-#include "panels/image_panel.h"
+#include "panels/preprocess_panel.h"
 #include "panels/layer_edit_panel.h"
 #include "panels/layer_panel.h"
 #include "panels/left_panel.h"
 #include "panels/param_panel.h"
-#include "panels/tool_panel.h"
+#include "panels/mode_tool_panel.h"
 #include "util/gui_nums.h"
-#include "util/scrollable_dialog.h"   // showScrollableMessage：使用说明 / 关于长文本改可滚动信息框（item 4）
+#include "util/scrollable_dialog.h"   // showScrollableMessage：使用说明 / 关于长文本改可滚动信息框
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 #include "i18n/retranslate.h"
@@ -75,15 +75,15 @@ void MobileShellUi::buildCentral(MainWindow* w) {
     w->left_ = new LeftPanel(w);
     w->param_ = new ParamPanel(w);
     w->exportPanel_ = new ExportPanel(w);
-    w->imagePanel_ = new ImagePanel(w);
-    w->toolPanel_ = new ToolPanel(w);
+    w->preprocessPanel_ = new PreprocessPanel(w);
+    w->toolPanel_ = new ModeToolPanel(w);
     w->layerPanel_ = new LayerPanel(w);
     w->layerEditPanel_ = new LayerEditPanel(w);
     w->annoPropPanel_ = new AnnotationPropPanel(w);
     w->left_->setDocument(&w->doc_);
     w->param_->setDocument(&w->doc_);
     w->exportPanel_->setDocument(&w->doc_);
-    w->imagePanel_->setDocument(&w->doc_);
+    w->preprocessPanel_->setDocument(&w->doc_);
     w->layerEditPanel_->setDocument(&w->doc_);
     w->toolPanel_->setModel(&w->annoBridge_);
     w->layerPanel_->setModel(&w->annoBridge_);
@@ -93,7 +93,7 @@ void MobileShellUi::buildCentral(MainWindow* w) {
 }
 
 // 抽屉：桌面八分区折叠为六页——页区用 QStackedWidget、页签换成横向可滑按钮条（窄屏放不满 6 个页头时
-//       左右滑动触达其余页，item 1）。标注工具并入「模式」、图片/图层编辑并入「图层」，与桌面左栏 + 右栏
+//       左右滑动触达其余页）。标注工具并入「模式」、图片/图层编辑并入「图层」，与桌面左栏 + 右栏
 //       折叠节的分区归属一一对齐；停靠底部、初始隐藏，由工具条「面板」按钮开合。
 // rightTabs_ 回填 QStackedWidget → PreviewController 的 currentWidget()/祖先比较与 currentChanged 接线
 //       对 QStackedWidget 同样成立（页面即滚动包裹后的面板祖先），「错误定位到某页」逻辑自动沿用。
@@ -114,7 +114,7 @@ void MobileShellUi::buildDrawer(MainWindow* w) {
         sa->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         sa->setWidget(content);
         installTouchScroll(sa);
-        // item 6：登记本页滚动区，由 applyPanelMinWidths 按与桌面同一落点抬最小宽（max(设计下限, 内容自然宽)，
+        // 登记本页滚动区，由 applyPanelMinWidths 按与桌面同一落点抬最小宽（max(设计下限, 内容自然宽)，
         // 构造末 + 语言重放 + 进出绘制态重测），使页区随内容加宽、长标签 / 形状子行不被裁掉。
         w->drawerPageScrolls_.push_back(sa);
         return sa;
@@ -134,7 +134,7 @@ void MobileShellUi::buildDrawer(MainWindow* w) {
     groupScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     groupScroll->setWidget(groupContainer);
     installTouchScroll(groupScroll);
-    // item 6：模式/图层页（含 toolPanel_ 形状子行）同受 applyPanelMinWidths 抬滚动区最小宽——进标注绘制态时
+    // 模式/图层页（含 toolPanel_ 形状子行）同受 applyPanelMinWidths 抬滚动区最小宽——进标注绘制态时
     // 形状子行（3 列网格）变宽会带动本页加宽、不被裁（与其余抽屉页同一落点）。
     w->drawerPageScrolls_.push_back(groupScroll);
 
@@ -183,7 +183,7 @@ void MobileShellUi::buildDrawer(MainWindow* w) {
 
     addPage(groupScroll, IDC_GT(label, kModeSection));
     addPage(scrollPage(w->layerEditPanel_), IDC_GT(label, kSecImage));
-    addPage(scrollPage(w->imagePanel_), IDC_GT(label, kSecPreprocess));
+    addPage(scrollPage(w->preprocessPanel_), IDC_GT(label, kSecPreprocess));
     addPage(scrollPage(w->annoPropPanel_), IDC_GT(label, kSecAnnotation));
     addPage(scrollPage(w->param_), IDC_GT(label, kSecParam));
     addPage(scrollPage(w->exportPanel_), IDC_GT(label, kExportBoxTitle));
@@ -219,7 +219,7 @@ void MobileShellUi::buildDrawer(MainWindow* w) {
 }
 
 // 状态栏精简（SPEC §8.3）：紧凑模式隐藏坐标/RGB/提示标签，只留缩放；模式/保留块数
-// 已随状态栏瘦身并入提示线（CanvasCoordinator「交互模式：…」hint），提示仍经 showMessage 限时弹出。
+// 经提示线呈现（CanvasCoordinator「交互模式：…」hint），提示仍经 showMessage 限时弹出。
 void MobileShellUi::buildStatus(MainWindow* w) {
     w->status_ = new StatusBar(w);
     w->status_->setCompactMode(true);
@@ -314,7 +314,7 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
     addLambda(IDC_GT(menu, kZoomIn), [w] { w->view_->zoomIn(); });
     addLambda(IDC_GT(label, kTbFit), [w] { w->view_->fitToWindow(); });   // 与双击适应同源。
 
-    // 「面板」：开合抽屉（item 5：置于「步进」「更多」之前，高频开合更靠手侧）。尺寸按当前方向：
+    // 「面板」：开合抽屉（置于「步进」「更多」之前，高频开合更靠手侧）。尺寸按当前方向：
     // 竖屏取高、横屏取宽，比例见 nums::mobile::kDrawerPortraitHeightNum / kDrawerLandscapeWidthNum / kDrawerRatioDen；画布仍为主。
     addLambda(IDC_GT(label, kPanelToggle), [w] {
         auto* drawer = w->findChild<QDockWidget*>(QLatin1String(kDrawerName));
@@ -358,7 +358,7 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
     padButton->setMenu(padMenu);
     lay->addWidget(padButton, 0, stripIndex++);
 
-    // 「更多」：桌面菜单里低频项的触控等价物（配置存取 FR-L3.8、重置全部、重置视图、
+    // 「更多」：桌面菜单里低频项的触控等价物（配置存取 FR-L3.8、重置全部、
     // 使用说明/关于/退出）；清除全部标注不在此——已在抽屉「标注」页按钮，一个功能一个地方。
     auto* moreButton = new QToolButton(host);
     i18n::bindButton(w->retranslator_, moreButton, IDC_GT(label, kTbMore));

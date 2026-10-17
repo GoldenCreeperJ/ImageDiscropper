@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：panels/param_panel_pages.cpp
 // 作用：ParamPanel 的 L1/L2/L3 三页构建（buildL1Page/buildL2Page/buildL3Page，TU 拆分）。
-//       自 param_panel.cpp 原封迁出（同 Document 先例：类不拆、仅分 TU 编译，公有 API 不变）。
+//       本 TU 仅按页分拆编译，类不拆。
 // ============================================================================
 #include "panels/param_panel.h"
 
@@ -90,8 +90,8 @@ QWidget* ParamPanel::buildL2Page() {
     form->addRow(QStringLiteral("y2"), l2y2_);
     v->addWidget(box);
 
-    // ---- 多矩形并集列表（仅 l2Sub_==MULTI_RECT 显示）----
-    // 追加矩形的主入口是画布框选（MainWindow.onRubberSelect）；此处提供列表可视化 +
+    // ---- 多矩形并集列表（仅 l2Sub_==MultiRect 显示）----
+    // 追加矩形的主入口是画布框选（CanvasCoordinator::onRubberSelect）；此处提供列表可视化 +
     // 选中项坐标微调（复用上方 x1/y1/x2/y2）+ 删除/清空。面板只搬运，不做并集计算（CONTRIBUTING.md「分层纪律」）。
     l2MultiBox_ = new QGroupBox(page);
     i18n::bindTitle(retranslator_, dynamic_cast<QGroupBox*>(l2MultiBox_), IDC_GT(label, kMultiRectBox));
@@ -111,10 +111,10 @@ QWidget* ParamPanel::buildL2Page() {
     i18n::bindText(retranslator_, mnote, IDC_GT(label, kMultiRectNote));
     mnote->setWordWrap(true);
     mv->addWidget(mnote);
-    l2MultiBox_->setVisible(false); // 默认隐藏，切到 MULTI_RECT 才显示（见 syncFromDocument）。
+    l2MultiBox_->setVisible(false); // 默认隐藏，切到 MultiRect 才显示（见 syncFromDocument）。
     v->addWidget(l2MultiBox_);
     
-    // 坍缩可行性提示：由 MainWindow 依 Core isCollapsible 结果回灌（初值绑定，动态值由 syncPanels 重派生）。
+    // 坍缩可行性提示：由 PreviewController 依 Core isCollapsible 结果回灌（初值绑定，动态值由 syncPanels 重派生）。
     collapseHint_ = new QLabel(page);
     i18n::bindText(retranslator_, collapseHint_, IDC_GT(status, kCollapseHintInit));
     collapseHint_->setWordWrap(true);
@@ -144,7 +144,7 @@ QWidget* ParamPanel::buildL2Page() {
 
 // L3 页：网格定义（基准点 + 单元尺寸 + 余量策略）+ 选择集（全选/反选/清空）+ 排序。
 // 说明：行列数由 Core 依图像边界自动推导（只读回显），面板不输入行列数（CONTRIBUTING.md「分层纪律」）；
-//       画布上可单击单元切换选中、拖拽框选批量选中、CUSTOM 下拖拽调序（见 canvas/cell_picker_item）；本页提供按钮式选择集与排序策略。
+//       画布上可单击单元切换选中、拖拽框选批量选中、Custom 下拖拽调序（见 canvas/cell_picker_item）；本页提供按钮式选择集与排序策略。
 QWidget* ParamPanel::buildL3Page() {
     auto* page = new QWidget(this);
     auto* v = new QVBoxLayout(page);
@@ -167,7 +167,7 @@ QWidget* ParamPanel::buildL3Page() {
     i18n::bindFormRow(retranslator_, defForm, gch_, IDC_GT(label, kCellHeightLabel));
 
     gRemainder_ = new QComboBox(defBox);
-    // 索引与 Core RemainderPolicy 一致：0=DISCARD, 1=KEEP_PARTIAL, 2=PAD。
+    // 索引与 Core RemainderPolicy 一致：0=Discard, 1=KeepPartial, 2=Pad。
     i18n::addItemsI18n(retranslator_, gRemainder_, {IDC_GT(menu, kRemainderDiscard),
                                                     IDC_GT(menu, kRemainderKeep),
                                                     IDC_GT(menu, kRemainderPad)});
@@ -209,7 +209,7 @@ QWidget* ParamPanel::buildL3Page() {
     // 1×3 横排：策略下拉 / 反向 / 蛇形 同占一行（策略下拉占余宽，两个复选框按文字取宽）。
     auto* sortRow = new QHBoxLayout(sortBox);
     gSort_ = new QComboBox(sortBox);
-    // 索引与 Core SortStrategy 一致：0=ROW_MAJOR, 1=COLUMN_MAJOR, 2=CUSTOM。
+    // 索引与 Core SortStrategy 一致：0=RowMajor, 1=ColumnMajor, 2=Custom。
     i18n::addItemsI18n(retranslator_, gSort_, {IDC_GT(menu, kSortRowMajor),
                                                IDC_GT(menu, kSortColMajor),
                                                IDC_GT(menu, kSortCustom)});
@@ -237,7 +237,5 @@ QWidget* ParamPanel::buildL3Page() {
     connect(clrBtn, &QPushButton::clicked, this, &ParamPanel::onClearCells);
     return page;
 }
-
-// 绑定 Document 并同步一次。
 
 } // namespace idc::gui

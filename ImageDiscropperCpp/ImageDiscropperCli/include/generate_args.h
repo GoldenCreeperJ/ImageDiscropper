@@ -10,7 +10,7 @@
 //   - resolveInputImage 统一「输入图像来源」：--input 读文件（委托 job::loadInputImage），
 //     或用 --size(+--pattern…) 生成画布；命令层据此把「必填 / 互斥」校验与取图一步收敛，避免四命令重复。
 // 说明：选项集合与 GUI「新建」对话框字段一一对应——
-//       --size WxH | --pattern <kind> | --orientation horizontal|vertical |
+//       --size WxH | --pattern <kind> | --orientation horizontal|vertical|diagonal-down|diagonal-up |
 //       --bg <#RRGGBB/#AARRGGBB> | --fg <同> | --period N | --line-width N | --dot-radius N |
 //       --seed N（噪声种子，>=0，仅 --pattern noise 生效）| --noise full-color|grayscale|two-color（仅 noise）。
 //       底色 --bg 的 alpha 生效（<FF 即透明 / 半透明画布）。缺省：pattern=solid、bg=白(不透明)、fg=黑、

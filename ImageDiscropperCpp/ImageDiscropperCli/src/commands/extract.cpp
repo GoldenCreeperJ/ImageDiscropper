@@ -7,7 +7,7 @@
 // 分块依据：一个子命令一个文件（严禁上帝文件）；执行与退出码映射复用 job（同一执行通道），
 //       值解析复用 value_parser，报错样板复用 command_support，均不在此重实现（CONTRIBUTING.md「分层纪律」）。
 // 常量层：选项名取 texts::opt（不可译）、报错文案经门面 IDC_CTR(msg, ...) 取 texts::msg；
-//       跨命令重复的同值文案（缺输入 / 矩形退化 / 带退化 …）已在 msg 里归一，不再就地写。
+//       跨命令重复的同值文案（缺输入 / 矩形退化 / 带退化 …）由 msg 归一，不就地重复。
 // 说明：L1 的保留区恒为「单个中心矩形」或「整条带」，其补集必为若干整行/整列，故必可坍缩为
 //       单图；explicitCollapse 恒为 false，本命令不会触发坍缩不可行（退出码 2 仅 L2/config 才可能）。
 // ============================================================================
@@ -60,10 +60,10 @@ int cmdExtract(const std::vector<std::string>& tokens, const GlobalOptions& go) 
 
     // --- 装配 EngineConfig 的固定部分：L1 极性恒 keep、输出恒为合并单图（collapse）。---
     engine::EngineConfig config;
-    config.cut.tier = engine::Tier::L1;
-    config.cut.polarity = engine::Polarity::KEEP;
-    config.emitParams.mode = engine::EmitMode::MERGED;
-    config.emitParams.layout = engine::MergeLayout::COLLAPSE;
+    config.cut.tier = engine::Tier::Standard;
+    config.cut.polarity = engine::Polarity::Keep;
+    config.emitParams.mode = engine::EmitMode::Merged;
+    config.emitParams.layout = engine::MergeLayout::Collapse;
 
     // --- 第 5 步：几何格式校验（在调用 Core 之前，错误一律退出码 1）。---
     // 带的两个坐标先暂存，待读取图像尺寸后再构造「贯穿全图」的带矩形（横带宽=W、竖带高=H）。
@@ -74,18 +74,18 @@ int cmdExtract(const std::vector<std::string>& tokens, const GlobalOptions& go) 
         if (!parseRect(args.get(opts::kRect), r, err)) return argError(err);
         if (r.width() <= 0 || r.height() <= 0)
             return argError(IDC_CTR(msg, kErrRectDegenerate), IDC_CTR(msg, kHintRectOrder));
-        config.cut.generator = engine::CutGenerator::RECT;
+        config.cut.generator = engine::CutGenerator::Rect;
         config.cut.rect = r;
     } else if (args.has(opts::kHband)) {
         if (!parseBand(args.get(opts::kHband), bandA, bandB, err)) return argError(err);
         if (bandA >= bandB)
             return argError(IDC_CTR(msg, kErrHbandDegenerate), IDC_CTR(msg, kHintHbandOrder));
-        config.cut.generator = engine::CutGenerator::HORIZONTAL_LINE;
+        config.cut.generator = engine::CutGenerator::HorizontalLine;
     } else { // --vband
         if (!parseBand(args.get(opts::kVband), bandA, bandB, err)) return argError(err);
         if (bandA >= bandB)
             return argError(IDC_CTR(msg, kErrVbandDegenerate), IDC_CTR(msg, kHintVbandOrder));
-        config.cut.generator = engine::CutGenerator::VERTICAL_LINE;
+        config.cut.generator = engine::CutGenerator::VerticalLine;
     }
     // 公共导出选项：--format（合并时作为扩展名回退）/ --quality（JPEG/WebP）/ --naming（L1 合并单图用不到，但保持一致）。
     if (!applyExportOptions(args, config.emitParams, err)) return argError(err);
@@ -97,9 +97,9 @@ int cmdExtract(const std::vector<std::string>& tokens, const GlobalOptions& go) 
         return toInt(ec);
 
     // --- 装配切割几何：带需图像尺寸构造贯穿全图的矩形；并写入 source（供 --save-config 完整）。---
-    if (config.cut.generator == engine::CutGenerator::HORIZONTAL_LINE)
+    if (config.cut.generator == engine::CutGenerator::HorizontalLine)
         config.cut.rect = engine::horizontalBand(bandA, bandB, image.width());
-    else if (config.cut.generator == engine::CutGenerator::VERTICAL_LINE)
+    else if (config.cut.generator == engine::CutGenerator::VerticalLine)
         config.cut.rect = engine::verticalBand(bandA, bandB, image.height());
     config.source.width = image.width();
     config.source.height = image.height();

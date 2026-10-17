@@ -2,7 +2,7 @@
 // 文件：util/scrollable_dialog.cpp
 // 作用：实现对话框滚动外壳与屏幕尺寸护栏（见同名头文件说明）。
 // 分块依据：wrapScrollable 只做「装 QScrollArea + 换装触控滚动」；护栏为自包含事件过滤器（DialogSizeGuard）；
-//           showScrollableMessage 组合二者呈现长文本信息框。滚动换装委托 mobile/touch_scroll（已升 common 层）。
+//           showScrollableMessage 组合二者呈现长文本信息框。滚动换装委托 mobile/touch_scroll（归 common/util 组编译）。
 // ============================================================================
 #include "util/scrollable_dialog.h"
 
@@ -149,7 +149,7 @@ void showScrollableMessage(QWidget* parent, const QString& title, const QString&
     auto* label = new QLabel(text, body);
     label->setWordWrap(true);
     label->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    label->setMinimumWidth(nums::mobile::kInfoDialogMinWidthPx);   // 控宽：窄屏 + word wrap 不再顶成竖窄条。
+    label->setMinimumWidth(nums::mobile::kInfoDialogMinWidthPx);   // 控宽：窄屏 + word wrap 不顶成竖窄条。
     bodyLay->addWidget(label);
     bodyLay->addStretch(1);
 

@@ -25,7 +25,7 @@ namespace idc::engine {
 struct Fragment {
     RectRegion region;                 // 片段的矩形范围
     int index{-1};                     // 序号（-1 表示尚未编号）
-    RegionKind kind{RegionKind::RECT}; // 片段种类
+    RegionKind kind{RegionKind::Rect}; // 片段种类
     int row{-1};                       // 源网格行号（-1 表示非网格来源；供 {row} 命名）
     int col{-1};                       // 源网格列号（-1 表示非网格来源；供 {col} 命名）
 };
@@ -35,8 +35,8 @@ struct Fragment {
 // ---------------------------------------------------------------------------
 class RegionSet {
 public:
-    // 追加一个区域（兼容接口）：序号 -1、种类 RECT、行列 -1。
-    void add(const RectRegion& r) { fragments_.push_back(Fragment{r, -1, RegionKind::RECT, -1, -1}); }
+    // 追加一个区域（兼容接口）：序号 -1、种类 Rect、行列 -1。
+    void add(const RectRegion& r) { fragments_.push_back(Fragment{r, -1, RegionKind::Rect, -1, -1}); }
     // 追加一个带序号 / 种类 / 行列的片段（split 产出用，序号与行列贯穿后续合成与命名）。
     void add(const RectRegion& r, const int index, const RegionKind kind,
              const int row = -1, const int col = -1) {

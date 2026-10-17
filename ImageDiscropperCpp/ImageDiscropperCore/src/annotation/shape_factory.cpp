@@ -27,28 +27,28 @@ std::vector<core::Point2D> pathVertices(const geometry::Path& path) {
     std::vector<core::Point2D> pts;
     for (const auto&[type, coords] : path.segments()) {
         switch (type) {
-            case geometry::PathSegmentType::MOVE_TO:
-            case geometry::PathSegmentType::LINE_TO:
+            case geometry::PathSegmentType::MoveTo:
+            case geometry::PathSegmentType::LineTo:
                 pts.emplace_back(coords[0], coords[1]);
                 break;
-            case geometry::PathSegmentType::QUAD_TO:
+            case geometry::PathSegmentType::QuadTo:
                 pts.emplace_back(coords[2], coords[3]);
                 break;
-            case geometry::PathSegmentType::CUBIC_TO:
+            case geometry::PathSegmentType::CubicTo:
                 pts.emplace_back(coords[4], coords[5]);
                 break;
-            case geometry::PathSegmentType::CLOSE:
+            case geometry::PathSegmentType::Close:
                 break;
         }
     }
     return pts;
 }
 
-// 退化占位：输入尺寸过小时返回一条退化开放直线（2 顶点 PolygonShape，类型 LINE）。
+// 退化占位：输入尺寸过小时返回一条退化开放直线（2 顶点 PolygonShape，类型 Line）。
 std::unique_ptr<geometry::Shape> degenerateLine(const double x1, const double y1,
                                                 const double x2, const double y2) {
     return std::make_unique<geometry::PolygonShape>(
-        std::vector<core::Point2D>{{x1, y1}, {x2, y2}}, geometry::ShapeType::LINE, false);
+        std::vector<core::Point2D>{{x1, y1}, {x2, y2}}, geometry::ShapeType::Line, false);
 }
 
 } // namespace
@@ -69,28 +69,28 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
     constexpr double kEps = nums::annotation::kDegenerateEpsPx;
 
     switch (req.type) {
-        case ShapeType::LINE:
+        case ShapeType::Line:
             // 直线＝2 顶点开放多边形（端点无夹角，不倒角）。
             return std::make_unique<geometry::PolygonShape>(
-                std::vector<core::Point2D>{{x1, y1}, {x2, y2}}, ShapeType::LINE, false);
+                std::vector<core::Point2D>{{x1, y1}, {x2, y2}}, ShapeType::Line, false);
 
-        case ShapeType::PATH:
+        case ShapeType::Path:
             // 画笔自由路径：仅 PathShape 承载，无转角倒角。
             return std::make_unique<geometry::PathShape>(req.path, req.type);
 
-        case ShapeType::POLYLINE:
+        case ShapeType::Polyline:
             // 折线：抽取路径顶点转为开放 PolygonShape，cornerRadius>0 时内部顶点倒角。
             return std::make_unique<geometry::PolygonShape>(
-                pathVertices(req.path), ShapeType::POLYLINE, false, req.cornerRadius);
+                pathVertices(req.path), ShapeType::Polyline, false, req.cornerRadius);
 
-        case ShapeType::CIRCLE: {
+        case ShapeType::Circle: {
             // 起点为圆心，两点距离为半径
             return std::make_unique<geometry::EllipseShape>(
                 x1 - distance, y1 - distance, 2 * distance, 2 * distance,
-                ShapeType::CIRCLE);
+                ShapeType::Circle);
         }
 
-        case ShapeType::ELLIPSE: {
+        case ShapeType::Ellipse: {
             // 落点为中心，|dx|、|dy| 为两半轴。
             const double a = std::abs(dx);
             const double b = std::abs(dy);
@@ -98,10 +98,10 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
                 return degenerateLine(x1, y1, x1, y1);
             }
             return std::make_unique<geometry::EllipseShape>(
-                x1 - a, y1 - b, 2 * a, 2 * b, ShapeType::ELLIPSE);
+                x1 - a, y1 - b, 2 * a, 2 * b, ShapeType::Ellipse);
         }
 
-        case ShapeType::RECTANGLE: {
+        case ShapeType::Rectangle: {
             // 并入 PolygonShape：四点闭合多边形，cornerRadius>0 时转角倒角。
             const double minX = std::min(x1, x2);
             const double minY = std::min(y1, y2);
@@ -111,10 +111,10 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
                 {minX, minY}, {minX + w, minY}, {minX + w, minY + h}, {minX, minY + h},
             };
             return std::make_unique<geometry::PolygonShape>(
-                std::move(pts), ShapeType::RECTANGLE, true, req.cornerRadius);
+                std::move(pts), ShapeType::Rectangle, true, req.cornerRadius);
         }
 
-        case ShapeType::SQUARE: {
+        case ShapeType::Square: {
             // 落点为正方形的一个顶点，边长取 max(|dx|,|dy|)，轴对齐、朝光标所在象限生长（不随拖动旋转）。
             const double side = std::max(std::abs(dx), std::abs(dy));
             if (side < kEps) {
@@ -129,10 +129,10 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
                 {x1, y1 + gy * side},
             };
             return std::make_unique<geometry::PolygonShape>(
-                std::move(pts), ShapeType::SQUARE, true, req.cornerRadius);
+                std::move(pts), ShapeType::Square, true, req.cornerRadius);
         }
 
-        case ShapeType::RHOMBUS: {
+        case ShapeType::Rhombus: {
             // 起点为中心，|dx|、|dy| 为半对角线
             const double halfD1 = std::abs(dx);
             const double halfD2 = std::abs(dy);
@@ -146,10 +146,10 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
                 {x1, y1 + halfD2},
             };
             return std::make_unique<geometry::PolygonShape>(
-                std::move(pts), ShapeType::RHOMBUS, true, req.cornerRadius);
+                std::move(pts), ShapeType::Rhombus, true, req.cornerRadius);
         }
 
-        case ShapeType::ISOS_TRIANGLE: {
+        case ShapeType::IsosTriangle: {
             // 起点为底边中点，|dx| 为半底边，|dy| 为高
             const double halfBase = std::abs(dx);
             const double height = std::abs(dy);
@@ -163,10 +163,10 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
                 {x1, y1 - signY * height},
             };
             return std::make_unique<geometry::PolygonShape>(
-                std::move(pts), ShapeType::ISOS_TRIANGLE, true, req.cornerRadius);
+                std::move(pts), ShapeType::IsosTriangle, true, req.cornerRadius);
         }
 
-        case ShapeType::EQU_TRIANGLE: {
+        case ShapeType::EquTriangle: {
             // 等边三角形：参照等腰——落点为底边中点，底边水平，顶角朝光标竖向生长（不随拖动旋转）。
             // 等边只有一个自由度：取 |dx|（半底边）与 |dy|/√3（由高反推的半底边）较大者，使形状跟随光标主方向放大。
             const double halfBase = std::max(std::abs(dx), std::abs(dy) / std::sqrt(3.0));
@@ -181,11 +181,11 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
                 {x1, y1 - signY * height},
             };
             return std::make_unique<geometry::PolygonShape>(
-                std::move(pts), ShapeType::EQU_TRIANGLE, true, req.cornerRadius);
+                std::move(pts), ShapeType::EquTriangle, true, req.cornerRadius);
         }
 
-        case ShapeType::RECT_TRIANGLE: {
-            // 直角三角形：落点为直角顶点，两直角边分别沿轴取 dx、dy（不再用斜边点 p2）。
+        case ShapeType::RectTriangle: {
+            // 直角三角形：落点为直角顶点，两直角边分别沿轴取 dx、dy（不用斜边点）。
             if (std::abs(dx) < kEps && std::abs(dy) < kEps) {
                 return degenerateLine(x1, y1, x1, y1);
             }
@@ -193,10 +193,10 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
                 {x1, y1}, {x2, y1}, {x1, y2},
             };
             return std::make_unique<geometry::PolygonShape>(
-                std::move(pts), ShapeType::RECT_TRIANGLE, true, req.cornerRadius);
+                std::move(pts), ShapeType::RectTriangle, true, req.cornerRadius);
         }
 
-        case ShapeType::EQU_RECT_TRIANGLE: {
+        case ShapeType::EquRectTriangle: {
             // 等腰直角三角形：落点为直角顶点，两直角边等长 = max(|dx|,|dy|)，沿轴朝光标象限（不随拖动旋转）。
             const double leg = std::max(std::abs(dx), std::abs(dy));
             if (leg < kEps) {
@@ -210,10 +210,10 @@ std::unique_ptr<geometry::Shape> buildShape(const ShapeRequest& req) {
                 {x1, y1 + gy * leg},
             };
             return std::make_unique<geometry::PolygonShape>(
-                std::move(pts), ShapeType::EQU_RECT_TRIANGLE, true, req.cornerRadius);
+                std::move(pts), ShapeType::EquRectTriangle, true, req.cornerRadius);
         }
 
-        case ShapeType::TEXT: {
+        case ShapeType::Text: {
             return std::make_unique<geometry::TextShape>(req.text, x1, y1, req.fontSize);
         }
     }

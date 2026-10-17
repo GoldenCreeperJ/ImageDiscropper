@@ -1,8 +1,8 @@
 // ============================================================================
 // 文件：panels/export_panel_merge.cpp
 // 作用：ExportPanel 的「合并重排」域成员实现（TU 拆分）——重排参数输入区（列/行/单元尺寸/
-//       填充色）与重排编排区（上下文回灌/自动行列/警告判定/排序与蛇形逆序）。自
-//       export_panel.cpp 原封迁出（同 Document 先例：类不拆、仅分 TU 编译，公有 API 不变）。
+//       填充色）与重排编排区（上下文回灌/自动行列/警告判定/排序与蛇形逆序）。
+//       本 TU 仅按域分拆编译，类不拆。
 // ============================================================================
 #include "panels/export_panel.h"
 
@@ -81,7 +81,7 @@ void ExportPanel::updatePadColorSwatch() const {
 }
 
 
-// 回灌重排上下文（MainWindow 依 Core 引擎结果调用）：保留块数 + 网格单元尺寸。
+// 回灌重排上下文（PreviewController 依 Core 引擎结果调用）：保留块数 + 网格单元尺寸。
 void ExportPanel::setRearrangeContext(const int keptCount, const int cellW, const int cellH) {
     keptCount_ = keptCount < 0 ? 0 : keptCount;
     cellW_ = cellW < 0 ? 0 : cellW;
@@ -115,8 +115,8 @@ void ExportPanel::applyAutoGrid() {
 
 // 重排填充顺序：行/列优先（与 L3 选择排序正交）。
 void ExportPanel::onMergeSortChanged(const int index) const {
-    if (doc_) doc_->setMergeOrderStrategy(index == 1 ? engine::SortStrategy::COLUMN_MAJOR
-                                                     : engine::SortStrategy::ROW_MAJOR);
+    if (doc_) doc_->setMergeOrderStrategy(index == 1 ? engine::SortStrategy::ColumnMajor
+                                                     : engine::SortStrategy::RowMajor);
 }
 
 // 重排填充：蛇形。

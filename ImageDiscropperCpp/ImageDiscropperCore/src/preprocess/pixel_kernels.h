@@ -2,13 +2,12 @@
 // 文件：src/preprocess/pixel_kernels.h
 // 作用：preprocess 私有像素核声明——90° 系列旋转、水平/垂直翻转、按通道反色/分离，
 //       以及两枚执行层融合核：channelMap（f(v)=(v&K)^J 一步位映射）与 remapD4（D4 单趟重排）。
-//       实现自原 pixel_ops 模块逐字迁入（纯搬家：算法、容差与掩码口径零改动），
 //       几何为纯位置置换（GRAY 经 getGray→setGray 单字节直拷，保持字节级无损）。
 // 分块依据：Core 私有内部头（仿 src/json_common.h 先例）——不放 include/、不对下游
 //       暴露；仅 preprocess_pipeline.cpp 经 applyOne 分派使用。逐步执行语义同时充当
 //       execPlan 融合执行等价性验证的参照 oracle。
-//       缩放（resized/scaled）与取色（colorAt）、灰度化（toGray）核已落户 core::Image，
-//       不在此重复声明。
+//       缩放（resized/scaled）与取色（colorAt）、灰度化（toGray）核属 core::Image，
+//       本头不重复声明。
 // ============================================================================
 #pragma once
 
@@ -40,7 +39,7 @@ core::Image splitChannels(const core::Image& src, const std::string& mask = "111
 
 // 融合位映射核：逐通道执行 f(v) = (v & K[c]) ^ J[c]，一步覆盖 直通(10)/反色(11)/强制0(00)/强制255(01) 四态。
 // k / j 均为长度 3 的 '0'/'1' 串（R/G/B）：k 长度非 3 归一 "111"（AND 恒等），**j 长度非 3 归一 "000"（XOR 恒等）**。
-// alpha 字节原样拷贝保留（不透明度不再是预处理步，已上移为图层合成期参数）。仅对多通道图有意义：
+// alpha 字节原样拷贝保留（不透明度由 canvas::ImageTransform.opacity 在合成期承载）。仅对多通道图有意义：
 // GRAY 图防御性返回副本（灰度态取反请走 invertChannels 的 gray 分支）。
 // splitChannels / invertChannels 的多通道路径即本核的 (K,"000") / ("111",J) 特例；
 // execPlan 把任意 Split/Invert 序列折成单次 channelMap，是「(v&K)^J 融合」的落点。

@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：app/preview_controller.cpp
+// 文件：app/controllers/preview_controller.cpp
 // 作用：实现 PreviewController（见同名头文件说明）。
 // 分块依据：
 //   - rebuildPreviewPixmap：预览底图 + 导出预览小源图重建；
@@ -40,8 +40,8 @@ constexpr int kExportPreviewMaxDim = 192;
 
 // 「导出」页是否正在展示（多页容器多型分发）：
 //   · 桌面 AccordionPanel——折叠式多节可同开，「展示」＝该节展开；
-//   · 移动端 QTabWidget / QStackedWidget（抽屉已改为横向按钮条 + QStackedWidget）——页面外套 QScrollArea，
-//     页面 widget 不再是 exportPanel_ 本身而是其祖先容器，故相等比较放宽为「位于当前页内」（面板即直接页面时等价）。
+//   · 移动端 QStackedWidget（抽屉为横向可滑按钮条 + QStackedWidget 页区；本函数对 QTabWidget 亦同口径兼容）——页面外套 QScrollArea，
+//     页面 widget 是 exportPanel_ 的祖先容器而非其本身，故相等比较放宽为「位于当前页内」（面板即直接页面时等价）。
 bool showingExportPage(QWidget* container, const QWidget* exportPanel) {
     if (!container || !exportPanel) return false;
     if (const auto* acc = qobject_cast<AccordionPanel*>(container)) return acc->isSectionExpanded(exportPanel);
@@ -69,8 +69,8 @@ void PreviewController::setMultiPageContainer(QWidget* tabs) { rightTabs_ = tabs
 void PreviewController::setLayerPanel(LayerPanel* panel) { layerPanel_ = panel; }
 
 // 切到「导出」页时补渲染输出预览（A：不可见时不渲染，切回时若已脏则重算）。
-// 多型分发：桌面 AccordionPanel::sectionToggled / 移动端 QTabWidget 或 QStackedWidget::currentChanged 各自接线。
-// 画布右键「切换预览遮罩」也在此接线（自 MainWindow::connectAll 迁入，同属预览域）。
+// 多型分发：桌面 AccordionPanel::sectionToggled / 移动端 QStackedWidget::currentChanged 各自接线（另兼容 QTabWidget）。
+// 画布右键「切换预览遮罩」也在此接线（同属预览域）。
 void PreviewController::connectSignals() {
     if (const auto* acc = qobject_cast<AccordionPanel*>(rightTabs_))
         connect(acc, &AccordionPanel::sectionToggled, this, &PreviewController::onRightTabChanged);
@@ -165,8 +165,8 @@ void PreviewController::refreshPreview() {
 
     // L3 网格分割：网格由「基准点 + 单元尺寸 + 余量策略」定义，不依赖选区矩形，
     // 故在选区判定之前单独处理。网格线交给 GridLayer 画灰色虚线；橙色选区框在 L3 隐藏，
-    // 单元点选改由 CellPickerItem 承担（见下方 updateCellSelection）。遮罩仍复用 runEngine 的 kept 结果（红底 + 绿块）。
-    if (doc_->mode() == engine::Tier::L3) {
+    // 单元点选由 CellPickerItem 承担（见下方 updateCellSelection）。遮罩仍复用 runEngine 的 kept 结果（红底 + 绿块）。
+    if (doc_->mode() == engine::Tier::Grid) {
         const engine::EngineConfig cfg = doc_->buildEngineConfig();
         // 依 Core 网格产出刷新网格线，并回灌派生行列数（供参数面板只读显示）。
         const engine::Grid grid = EngineBridge::buildGrid(cfg.cut, cfg.source);
@@ -208,7 +208,7 @@ void PreviewController::refreshPreview() {
     // 用 Core 诱导网格画灰色网格线（各矩形十字带并集诱导），但不启动单元点选图元——
     // picker 会 grab 鼠标、阻断画布框选（多矩形靠框选逐个追加）。橙色轮廓标出各矩形，
     // 单选区框隐藏。遮罩复用 runPreviewGeometry 的 kept 结果（CONTRIBUTING.md「分层纪律」：GUI 不算并集）。
-    if (doc_->mode() == engine::Tier::L2 && doc_->l2Sub() == L2Sub::MULTI_RECT) {
+    if (doc_->mode() == engine::Tier::Erase && doc_->l2Sub() == L2Sub::MultiRect) {
         scene_->updateMultiRects(doc_->rects());     // 增量刷新可拖拽选区框（拖拽中不回设正在拖者）。
         scene_->clearCutLines();
         scene_->syncSelection(doc_->rect(), false);  // 隐藏单选区框（改用多矩形轮廓）。
@@ -322,7 +322,7 @@ void PreviewController::onRightTabChanged() {
 
 // 输出预览的源图（B）：默认用未烧录的小源图；若「导出时烧录标注」开启且有标注，则委托 util::bakeAnnotationsInto
 // 把各标注按世界路径矢量烘焙到小源图副本上（working→小图变换），使预览与最终「烧录后随像素被切割落位」一致。
-// 渲染逻辑已下沉到 util（无状态），本方法只做「是否烧录 + 取哪张源图」的编排（app 层只编排，CONTRIBUTING.md「分层纪律」）。
+// 渲染逻辑在 util（无状态），本方法只做「是否烧录 + 取哪张源图」的编排（app 层只编排，CONTRIBUTING.md「分层纪律」）。
 QPixmap PreviewController::exportPreviewSource() const {
     if (exportSrcPixmap_.isNull()) return exportSrcPixmap_;
     if (!anno_->burnInEnabled() || anno_->count() == 0) return exportSrcPixmap_;

@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：include/i18n/gui_i18n.h
+// 文件：i18n/gui_i18n.h
 // 作用：GUI 层的 i18n 门面——IDC_GTR 宏（查表取 QString）+ 本层译文表的装配入口。
 // 架构定位：util（与 gui_texts.h / gui_nums.h 同族的基建头）。业务代码只认 IDC_GTR，
 //       不直接调 core::i18n——语言状态与查表实现在 Core（三层共用一份进程表），
@@ -42,7 +42,7 @@ struct TextRef {
 
 inline QString qs(const TextRef &ref) { return qs(ref.key, ref.text); }
 
-// 登记本层全部内置语言的译文表（一期仅英文）。必须在 setupFromPreference 之前调用。
+// 登记本层全部内置语言的译文表（当前仅英文一表）。必须在 setupFromPreference 之前调用。
 // 定义在表文件 src/i18n/lang_en.cpp 内——译文表归本层所有，不经 image_discropper_core 传播。
 void installCatalogs();
 
@@ -61,7 +61,7 @@ void setupFromPreference(const QString& pref);
 std::string resolveForPreference(const QString& pref);
 
 // 当前生效语言码（透传 Core 只读访问器）：已归一、已回退后的结果，供 UI 回显与「偏好 vs 生效」比对。
-// 业务代码据此判语言，**不再直接调 core::i18n::language()**（门面纪律：上层只认本门面）。
+// 业务代码据此判语言，**不直接调 core::i18n::language()**（门面纪律：上层只认本门面）。
 inline std::string language() { return core::i18n::language(); }
 
 // 判定「按 pref 应生效的语言」是否不同于「当前已生效语言」——不同则需原地重放各窗文案。

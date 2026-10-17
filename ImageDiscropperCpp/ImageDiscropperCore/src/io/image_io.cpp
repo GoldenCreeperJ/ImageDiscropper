@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：src/engine/image_io.cpp
+// 文件：src/io/image_io.cpp
 // 作用：image_io.h 的实现——图像编解码 I/O（SPEC §4.5）：把 core::Image 编码为
 //       PNG/JPEG/BMP/WebP（写盘 / 编码到内存两种出口），并从文件解码图像为 core::Image。
 // 分块依据：stb（header-only）负责解码（stb_image）与 PNG/JPEG/BMP 编码（stb_image_write），
@@ -8,10 +8,10 @@
 //       三者均只在本文件内使用，其余模块经 image_io.h 间接调用，不直接接触 stb / libwebp，
 //       避免重复符号与依赖扩散。
 // ============================================================================
-#include "engine/image_io.h"
+#include "io/image_io.h"
 
 #include "core/core_nums.h" // 质量范围上下限（常量层）
-#include "core/path_utf8.h" // pathFromUtf8（取代 C++23 已移除的 u8path）
+#include "core/path_utf8.h" // pathFromUtf8（UTF-8 路径 → 宽字符路径）
 
 // stb_image（解码）+ stb_image_write（编码）：全工程仅此一处定义各自实现宏（header-only 库要求）。
 #define STB_IMAGE_IMPLEMENTATION
@@ -28,12 +28,12 @@
 #include <fstream>
 #include <iterator>
 
-namespace idc::engine {
+namespace idc::io {
 namespace {
 
 // 把任意格式图像整理为 RGBA 连续缓冲（PNG / WebP 用，保留 alpha 通道）。
 std::vector<std::uint8_t> toRGBABuffer(const core::Image& img) {
-    if (img.format() == core::ImageFormat::RGBA) {
+    if (img.format() == core::ImageFormat::Rgba) {
         // 指针区间构造即可；std::from_range 区间构造对 GCC<15 / libc++<19 不可用。
         return std::vector(img.data(), img.data() + img.sizeInBytes());
     }
@@ -95,9 +95,9 @@ bool encodeWebP(const core::Image& image, const int quality, std::vector<std::ui
 
 } // namespace
 
-// 从文件解码图像为 core::Image（统一加载为 RGBA，4 通道）；成功返回 true 并填充 out。
-// 底层用 stb_image，支持 PNG/JPEG/BMP/WebP/GIF/TGA 等；path 为空 / 文件不存在 / 无法读取 /
-// 格式不支持时返回 false（对应 CLI 输入文件错误 / E-8）。
+// 从文件解码图像为 core::Image（统一加载为 RGBA，4 通道）；成功填充 out。
+// 底层用 stb_image，支持 PNG/JPEG/BMP/WebP/GIF/TGA 等；失败时 path 为空报 PathEmpty，
+// 其余（文件不存在 / 无法读取 / 格式不支持）报 DecodeFailed（对应 CLI 输入文件错误 / E-8）。
 // path 按 UTF-8 解析：经 pathFromUtf8→宽字符路径打开后从内存解码，绕开 stb 内部
 // fopen 的窄字符（Windows 系统 ANSI 码页）限制——中文 / 非 ASCII 文件名亦可正确读取。
 std::expected<void, core::CoreError> readImageFile(const std::string& path, core::Image& out) {
@@ -116,14 +116,14 @@ std::expected<void, core::CoreError> readImageFile(const std::string& path, core
         return ioFail(core::CoreError::Code::DecodeFailed); // 解码失败：文件不存在 / 非图像 / 不支持的格式。
     }
     // core::Image 的 RGBA 缓冲为紧凑行主序（w*h*4，无行填充），与 stb 输出布局一致，直接整体拷贝。
-    out.reallocate(w, h, core::ImageFormat::RGBA);
+    out.reallocate(w, h, core::ImageFormat::Rgba);
     std::memcpy(out.data(), data,
                 static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4);
     stbi_image_free(data);
     return {};
 }
 
-// 将图像编码到内存缓冲；成功返回 true。支持 PNG/JPEG/BMP（stb）与 WebP（libwebp）。
+// 将图像编码到内存缓冲；成功把编码字节写入 out。支持 PNG/JPEG/BMP（stb）与 WebP（libwebp）。
 std::expected<void, core::CoreError> encodeImageToMemory(const core::Image& image, const ExportFormat format,
                          const int quality, const core::Color& jpegBg,
                          std::vector<std::uint8_t>& out) {
@@ -133,27 +133,27 @@ std::expected<void, core::CoreError> encodeImageToMemory(const core::Image& imag
     const int h = image.height();
 
     switch (format) {
-        case ExportFormat::PNG: {
+        case ExportFormat::Png: {
             const std::vector<std::uint8_t> rgba = toRGBABuffer(image);
             return fromEncode(stbi_write_png_to_func(stbAppendCallback, &out, w, h, 4,
                                                      rgba.data(), w * 4) != 0);
         }
-        case ExportFormat::BMP: {
+        case ExportFormat::Bmp: {
             const std::vector<std::uint8_t> rgb = toRGBBuffer(image, jpegBg);
             return fromEncode(stbi_write_bmp_to_func(stbAppendCallback, &out, w, h, 3, rgb.data()) != 0);
         }
-        case ExportFormat::JPEG: {
+        case ExportFormat::Jpeg: {
             const std::vector<std::uint8_t> rgb = toRGBBuffer(image, jpegBg);
             const int q = std::clamp(quality, core::nums::engine::kQualityMin, core::nums::engine::kQualityMax);
             return fromEncode(stbi_write_jpg_to_func(stbAppendCallback, &out, w, h, 3, rgb.data(), q) != 0);
         }
-        case ExportFormat::WEBP:
+        case ExportFormat::Webp:
             return fromEncode(encodeWebP(image, quality, out)); // WebP：libwebp 编码到内存。
     }
     return ioFail(core::CoreError::Code::EncodeFailed);
 }
 
-// 将图像编码并写入文件；成功返回 true。支持 PNG/JPEG/BMP（stb）与 WebP（libwebp）；写盘失败（E-8）返回 false。
+// 将图像编码并写入文件；支持 PNG/JPEG/BMP（stb）与 WebP（libwebp）；写盘失败报 Io（E-8）。
 // 先统一编码到内存，再经 pathFromUtf8→宽字符路径落盘：绕开 stbi_write_* 内部 fopen 的
 // 窄字符（Windows 系统 ANSI 码页）限制——中文 / 非 ASCII 导出路径亦可正确写入。
 std::expected<void, core::CoreError> writeImageFile(const std::string& path, const core::Image& image,
@@ -170,4 +170,4 @@ std::expected<void, core::CoreError> writeImageFile(const std::string& path, con
     return {};
 }
 
-} // namespace idc::engine
+} // namespace idc::io

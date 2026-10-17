@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：model/config_codec.cpp
 // 作用：实现 ConfigCodec 的 Document ↔ EngineConfig 字段映射（见同名头文件说明）；
-//       自 Document 三个成员函数原封迁出，仅改为「friend 直读私有状态」的静态函数形态。
+//       实现为「friend 直读私有状态」的静态函数（Document ↔ EngineConfig 映射）。
 // ============================================================================
 #include "model/config_codec.h"
 
@@ -29,7 +29,7 @@ engine::EngineConfig ConfigCodec::buildEngineConfig(const Document& doc) {
     // 自动推导选择区（engine.cpp：「显式 selectedCells 优先，否则按生成器几何自动推导」）。
     // 若不加模式门控，从 L3 切回 L1/L2 时残留的 L3 单元序号会被套用到形状不同的诱导网格上，
     // 使保留集算错甚至为空、遮罩消失。故此处按模式门控，维持「L1/L2 selectedCells 恒空」不变式。
-    cfg.selectedCells = doc.mode_ == engine::Tier::L3 ? doc.selectedCells_ : std::vector<int>{};
+    cfg.selectedCells = doc.mode_ == engine::Tier::Grid ? doc.selectedCells_ : std::vector<int>{};
 
     // 排序策略（FR-L3.5）：row-major / column-major / reverse / snake / custom。
     cfg.order = doc.order_;
@@ -41,7 +41,7 @@ engine::EngineConfig ConfigCodec::buildEngineConfig(const Document& doc) {
     cfg.emitParams.quality = doc.quality_;
     cfg.emitParams.naming = doc.naming_.toStdString();
     cfg.emitParams.padColor = doc.padColor_;
-    // 重排填充顺序（MergeOrder）：与选择排序 doc.order_ 正交，仅 REARRANGE 时被 Core compose 使用。
+    // 重排填充顺序（MergeOrder）：与选择排序 doc.order_ 正交，仅 Rearrange 时被 Core compose 使用。
     cfg.emitParams.mergeOrder = doc.mergeOrder_;
     // 重排画布参数（FR-L3.7）：0 视为未指定 → 保持 nullopt 交 Core compose 自动推导；
     // 仅正值写入 optional，避免用 0 覆盖 Core 的默认布局（否则画布尺寸会被算成 0）。
@@ -56,7 +56,7 @@ engine::EngineConfig ConfigCodec::buildEngineConfig(const Document& doc) {
 
 // 构建可序列化配置（保存 / 载入）：复用 buildEngineConfig 的切割/选择/排序/导出字段，
 // 唯 preprocess 段填入「[resize?] + 轻操作队列」的完整有效管线（resize 恒置首位）、source 取原图尺寸
-//——还原端从 original 重放整链复现 working_（旧配置载入时在控制器侧归一化抽出 resize）。
+//——还原端从 original 重放整链复现 working_（配置载入时在控制器侧归一化抽出 resize）。
 engine::EngineConfig ConfigCodec::buildSerializableConfig(const Document& doc) {
     engine::EngineConfig cfg = buildEngineConfig(doc);
     // 序列化携带画布级完整有效管线（[resize?] + 轻操作队列，resize 恒首位）——由画布会话统一推演。
@@ -99,24 +99,24 @@ void ConfigCodec::applyEngineConfig(Document& doc, const engine::EngineConfig& c
     doc.polarity_ = cfg.cut.polarity;
 
     // ---- 生成器 + tier → L1 形状 / L2 子功能（逆向 buildCutConfig 的映射）----
-    // L3 恒为 GRID、无子选项；未知生成器回退到各模式默认值，保证枚举有效。
+    // L3 恒为 Grid、无子选项；未知生成器回退到各模式默认值，保证枚举有效。
     switch (cfg.cut.tier) {
-        case engine::Tier::L1:
+        case engine::Tier::Standard:
             switch (cfg.cut.generator) {
-                case engine::CutGenerator::HORIZONTAL_LINE: doc.l1Shape_ = L1Shape::HBAND; break;
-                case engine::CutGenerator::VERTICAL_LINE:   doc.l1Shape_ = L1Shape::VBAND; break;
-                default:                                         doc.l1Shape_ = L1Shape::RECT;  break;
+                case engine::CutGenerator::HorizontalLine: doc.l1Shape_ = L1Shape::Hband; break;
+                case engine::CutGenerator::VerticalLine:   doc.l1Shape_ = L1Shape::Vband; break;
+                default:                                        doc.l1Shape_ = L1Shape::Rect;  break;
             }
             break;
-        case engine::Tier::L2:
+        case engine::Tier::Erase:
             switch (cfg.cut.generator) {
-                case engine::CutGenerator::HORIZONTAL_LINE: doc.l2Sub_ = L2Sub::HLINE;      break;
-                case engine::CutGenerator::VERTICAL_LINE:   doc.l2Sub_ = L2Sub::VLINE;      break;
-                case engine::CutGenerator::MULTI_RECT:      doc.l2Sub_ = L2Sub::MULTI_RECT; break;
-                default:                                         doc.l2Sub_ = L2Sub::CROSS;      break;
+                case engine::CutGenerator::HorizontalLine: doc.l2Sub_ = L2Sub::Hline;     break;
+                case engine::CutGenerator::VerticalLine:   doc.l2Sub_ = L2Sub::Vline;     break;
+                case engine::CutGenerator::MultiRect:      doc.l2Sub_ = L2Sub::MultiRect; break;
+                default:                                        doc.l2Sub_ = L2Sub::Cross;     break;
             }
             break;
-        case engine::Tier::L3:
+        case engine::Tier::Grid:
             break; // 网格模式无 L1/L2 子选项。
     }
 
@@ -149,10 +149,10 @@ void ConfigCodec::applyEngineConfig(Document& doc, const engine::EngineConfig& c
 
     // ---- 维持模型不变式：合并重排为 L3 专属（Core runEngine 硬约束）----
     // 载入/还原出「非 L3 + 重排」的非法组合时复位为坍缩，与 setMode 的守卫一致，避免引擎拿到非法配置。
-    if (doc.mode_ != engine::Tier::L3 && doc.layout_ == engine::MergeLayout::REARRANGE)
-        doc.layout_ = engine::MergeLayout::COLLAPSE;
+    if (doc.mode_ != engine::Tier::Grid && doc.layout_ == engine::MergeLayout::Rearrange)
+        doc.layout_ = engine::MergeLayout::Collapse;
 
-    // ---- 多层画布声明还原（Phase 3：与 buildSerializableConfig 互逆；layers 入快照使图层可撤销）----
+    // ---- 多层画布声明还原（与 buildSerializableConfig 互逆；layers 入快照使图层可撤销）----
     // 底图配方（§7 generate 段）回装为声明态（像素重生由调用方 onLoadConfig 专步回灌 setBaseImage，不走快照）；
     // 画布级 preprocess 仍交由 PreprocessController.applyLoadedQueue 在配置载入时单独重放（不入文档快照）；
     // 图层声明（transform/z/逐层 preprocess/尺寸）在此还原：位图不入快照，按 id 合并回现有内存像素供合成。
@@ -172,7 +172,7 @@ void ConfigCodec::applyEngineConfig(Document& doc, const engine::EngineConfig& c
         for (const auto& step : doc.baseLayer_->preprocess.items())
             if (preprocess::isColorStep(step)) colorSteps.add(step);
         doc.baseSession_.setSteps(std::move(colorSteps));
-        doc.baseLayer_->preprocess.clear();   // 内存声明剥离 preprocess：重生底图时 composeBase 不再施加（改由 fadedCanvasBase）
+        doc.baseLayer_->preprocess.clear();   // 内存声明剥离 preprocess：重生底图时 composeBase 不施加（由 fadedCanvasBase 承担）
     }
     bool layersRestored = false;
     if (cfg.layers.has_value()) {

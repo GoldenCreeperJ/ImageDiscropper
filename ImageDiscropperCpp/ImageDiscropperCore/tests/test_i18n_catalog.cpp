@@ -309,7 +309,7 @@ void testI18nCatalog() {
             }
         }
 
-        // —— 覆盖率：逐可译组打印「已译/总数」，未译不 fail（一期允许渐进补全）。——
+        // —— 覆盖率：逐可译组打印「已译/总数」，未译不 fail（允许渐进补全）。——
         std::cout << "  [" << name << "]";
         std::size_t totalAll = 0;
         std::size_t doneAll = 0;

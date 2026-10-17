@@ -25,7 +25,7 @@
 #include "annotation/view_transform.h"
 #include "geometry/shapes.h"
 #include "core/history_manager.h"
-#include "core/pipeline_manager.h"
+#include "core/pipeline.h"
 #include "preprocess/preprocess_pipeline.h"
 #include "generate/pattern.h"
 #include "canvas/layer.h"   // 多层画布：ImageLayer / composeCanvas / materializeLayer
@@ -35,26 +35,13 @@
 #include "model/preprocess_session.h"
 
 // ---------------------------------------------------------------------------
-// core 模块测试：颜色运算、图像读写、格式转换
+// core 模块测试：图像读写、格式转换
 // ---------------------------------------------------------------------------
 static void testCore() {
     using namespace idc::core;
 
-    // 反色
-    constexpr Color c(10, 20, 30, 255);
-    const Color inv = inverse(c);
-    CHECK(inv.r == 245 && inv.g == 235 && inv.b == 225 && inv.a == 255);
-
-    // 感知反色：亮色 → 黑，暗色 → 白
-    CHECK(perceivedInverse(Color(255, 255, 255)).r == 0);
-    CHECK(perceivedInverse(Color(0, 0, 0)).r == 255);
-
-    // 互补色：红色的互补色应接近青色
-    const Color comp = complementary(Color(255, 0, 0));
-    CHECK(comp.r < 32 && comp.g > 200 && comp.b > 200);
-
     // 图像读写与格式转换
-    Image img(4, 3, ImageFormat::RGBA);
+    Image img(4, 3, ImageFormat::Rgba);
     img.fill(Color(100, 150, 200, 255));
     CHECK(img.getPixel(0, 0) == Color(100, 150, 200, 255));
     CHECK(img.getPixel(3, 2) == Color(100, 150, 200, 255));
@@ -74,8 +61,8 @@ static void testGeometry() {
     using namespace idc;
     using namespace idc::geometry;
 
-    // 矩形（已并入 PolygonShape：四点闭合多边形）包围盒 / 内部判定 / 控制点
-    const PolygonShape rect({{10, 20}, {40, 20}, {40, 60}, {10, 60}}, ShapeType::RECTANGLE, true);
+    // 矩形（PolygonShape：四点闭合多边形）包围盒 / 内部判定 / 控制点
+    const PolygonShape rect({{10, 20}, {40, 20}, {40, 60}, {10, 60}}, ShapeType::Rectangle, true);
     const auto [x, y, width, height] = rect.bounds();
     CHECK(x == 10 && y == 20 && width == 30 && height == 40);
     CHECK(rect.contains(core::Point2D{25, 40}));
@@ -99,7 +86,7 @@ static void testGeometry() {
     CHECK(p.distanceToOutline(50, 50) > 40.0); // 中心离边框较远
     CHECK(p.distanceToOutline(0, 50) < 1.0);   // 边框上
 
-    // 文本宽度估算：按字符数（非字节数）——ASCII 半宽、多字节字符全宽，中文不再被高估。
+    // 文本宽度估算：按字符数（非字节数）——ASCII 半宽、多字节字符全宽，中文按全宽计（不逐字节高估）。
     const TextShape asciiText("abc", 0, 0, 10);
     const auto [ax, ay, aw, ah] = asciiText.bounds();
     CHECK(aw == 15.0);                       // 3 个 ASCII × 0.5 × 10
@@ -114,11 +101,11 @@ static void testGeometry() {
     // 注：先将 toPath() 存为命名 Path 再遍历（直接 x.toPath().segments() 会使临时量悬挂）。
     auto hasQuadSeg = [](const Path& p) {
         for (const auto&[type, coords] : p.segments()) {
-            if (type == PathSegmentType::QUAD_TO) return true;
+            if (type == PathSegmentType::QuadTo) return true;
         }
         return false;
     };
-    const PolygonShape rrect({{0, 0}, {100, 0}, {100, 100}, {0, 100}}, ShapeType::RECTANGLE, true, 20.0);
+    const PolygonShape rrect({{0, 0}, {100, 0}, {100, 100}, {0, 100}}, ShapeType::Rectangle, true, 20.0);
     const Path rrectPath = rrect.toPath();
     CHECK(hasQuadSeg(rrectPath));
     const auto [rx, ry, rw, rh] = rrect.bounds();
@@ -126,7 +113,7 @@ static void testGeometry() {
     CHECK(rrect.cornerRadius() == 20.0);
 
     // setter 往返 + 负值钳为 0；clone 保留圆角半径。
-    PolygonShape mut({{0, 0}, {10, 0}, {10, 10}}, ShapeType::ISOS_TRIANGLE, true);
+    PolygonShape mut({{0, 0}, {10, 0}, {10, 10}}, ShapeType::IsosTriangle, true);
     mut.setCornerRadius(5.0);
     CHECK(mut.cornerRadius() == 5.0);
     mut.setCornerRadius(-3.0);
@@ -134,8 +121,8 @@ static void testGeometry() {
     mut.setCornerRadius(7.0);
     CHECK(mut.clone()->cornerRadius() == 7.0);
 
-    // 开放折线：内部顶点倒角（含 QUAD）；现由 PolygonShape 直接表达（不再走 PathShape）。
-    const PolygonShape openLine({{0, 0}, {50, 0}, {50, 50}, {100, 50}}, ShapeType::POLYLINE, false, 10.0);
+    // 开放折线：内部顶点倒角（含 QuadTo）；由 PolygonShape 直接表达。
+    const PolygonShape openLine({{0, 0}, {50, 0}, {50, 50}, {100, 50}}, ShapeType::Polyline, false, 10.0);
     const Path openPath = openLine.toPath();
     CHECK(hasQuadSeg(openPath));
 
@@ -149,7 +136,7 @@ static void testPixelOps() {
     using namespace idc;
 
     // 构造一张 8x8 的渐变彩色图
-    core::Image img(8, 8, core::ImageFormat::RGBA);
+    core::Image img(8, 8, core::ImageFormat::Rgba);
     for (int y = 0; y < 8; ++y) {
         for (int x = 0; x < 8; ++x) {
             img.setPixel(x, y, core::Color(x * 32, y * 32, 128, 255));
@@ -177,7 +164,7 @@ static void testPixelOps() {
     CHECK(flipH.getPixel(7, 0) == img.getPixel(0, 0));
 
     // 缩放：放大到 16x16
-    core::Image scaled = img.resized(16, 16, core::ResampleMode::BILINEAR);
+    core::Image scaled = img.resized(16, 16, core::ResampleMode::Bilinear);
     CHECK(scaled.width() == 16 && scaled.height() == 16);
 
     // 通道反色：R 通道反色后 (0,0) 处 R 应变为 255 - 0 = 255
@@ -196,7 +183,7 @@ static void testPixelOps() {
     CHECK(!img.colorAt(100, 100).has_value());
 
     // ---- 灰度图反色（黑白后仍可反色）：对单一亮度通道取 255 - v，格式仍为 GRAY ----
-    core::Image gimg(4, 4, core::ImageFormat::GRAY);
+    core::Image gimg(4, 4, core::ImageFormat::Gray);
     for (int y = 0; y < 4; ++y)
         for (int x = 0; x < 4; ++x)
             gimg.setGray(x, y, static_cast<std::uint8_t>(x * 40 + y * 10)); // 值域 0..150
@@ -219,7 +206,7 @@ static void testPixelOps() {
     CHECK(gsplit.getGray(2, 2) == gimg.getGray(2, 2));
 
     // ---- 彩色反色 "111"：R/G/B 全反、alpha 保留 ----
-    core::Image aimg(2, 2, core::ImageFormat::RGBA);
+    core::Image aimg(2, 2, core::ImageFormat::Rgba);
     aimg.fill(core::Color(10, 200, 30, 77));
     const core::Image ainv = preprocess::applyOne(aimg, preprocess::InvertOp{std::string("111")});
     CHECK(ainv.getPixel(0, 0) == core::Color(245, 55, 225, 77)); // alpha=77 不变
@@ -228,11 +215,11 @@ static void testPixelOps() {
     const core::Image asplit = preprocess::applyOne(aimg, preprocess::SplitOp{std::string("010")});
     CHECK(asplit.getPixel(1, 1) == core::Color(0, 200, 0, 77));
 
-    // ---- resize 等价性：纯色图缩放后仍为同一纯色（NEAREST / BILINEAR 均不应引入偏差；2× 放大→权重为二进制精确值）----
-    core::Image solid(6, 4, core::ImageFormat::RGBA);
+    // ---- resize 等价性：纯色图缩放后仍为同一纯色（Nearest / Bilinear 均不应引入偏差；2× 放大→权重为二进制精确值）----
+    core::Image solid(6, 4, core::ImageFormat::Rgba);
     solid.fill(core::Color(12, 34, 56, 78));
-    const core::Image solidNear = solid.resized(12, 8, core::ResampleMode::NEAREST);
-    const core::Image solidBil = solid.resized(12, 8, core::ResampleMode::BILINEAR);
+    const core::Image solidNear = solid.resized(12, 8, core::ResampleMode::Nearest);
+    const core::Image solidBil = solid.resized(12, 8, core::ResampleMode::Bilinear);
     CHECK(solidNear.width() == 12 && solidNear.height() == 8);
     CHECK(solidNear.getPixel(0, 0) == core::Color(12, 34, 56, 78));
     CHECK(solidNear.getPixel(11, 7) == core::Color(12, 34, 56, 78));
@@ -241,29 +228,29 @@ static void testPixelOps() {
     CHECK(solidBil.getPixel(11, 7) == core::Color(12, 34, 56, 78));
 
     // ---- resize 最近邻：2x2 放大到 4x4，四象限精确复制（验证采样坐标无偏移）----
-    core::Image quad(2, 2, core::ImageFormat::RGB);
+    core::Image quad(2, 2, core::ImageFormat::Rgb);
     quad.setPixel(0, 0, core::Color(255, 0, 0, 255));   // 左上 红
     quad.setPixel(1, 0, core::Color(0, 255, 0, 255));   // 右上 绿
     quad.setPixel(0, 1, core::Color(0, 0, 255, 255));   // 左下 蓝
     quad.setPixel(1, 1, core::Color(255, 255, 0, 255)); // 右下 黄
-    const core::Image quad4 = quad.resized(4, 4, core::ResampleMode::NEAREST);
+    const core::Image quad4 = quad.resized(4, 4, core::ResampleMode::Nearest);
     CHECK(quad4.getPixel(0, 0) == core::Color(255, 0, 0, 255));
     CHECK(quad4.getPixel(3, 0) == core::Color(0, 255, 0, 255));
     CHECK(quad4.getPixel(0, 3) == core::Color(0, 0, 255, 255));
     CHECK(quad4.getPixel(3, 3) == core::Color(255, 255, 0, 255));
 
     // ---- resize 灰度：GRAY 输入缩放后仍为 GRAY，纯色保持（单通道路径）----
-    core::Image gsolid(4, 4, core::ImageFormat::GRAY);
+    core::Image gsolid(4, 4, core::ImageFormat::Gray);
     for (int y = 0; y < 4; ++y)
         for (int x = 0; x < 4; ++x)
             gsolid.setGray(x, y, 200);
-    const core::Image gscaled = gsolid.resized(8, 8, core::ResampleMode::BILINEAR);
+    const core::Image gscaled = gsolid.resized(8, 8, core::ResampleMode::Bilinear);
     CHECK(gscaled.isGray());
     CHECK(gscaled.getGray(3, 5) == 200);
 
     // ---- 灰度几何无损：旋转 / 翻转是纯位置置换，不得改变任何灰度值（回归护栏：
-    //      旧实现经 getPixel→setPixel 的 BT.601 重压缩会使灰度值每漂移 ±1~2）。----
-    core::Image gv(5, 3, core::ImageFormat::GRAY);
+    //      几何若经 getPixel→setPixel 的 BT.601 重压缩会使灰度值漂移 ±1~2）。----
+    core::Image gv(5, 3, core::ImageFormat::Gray);
     for (int y = 0; y < 3; ++y)
         for (int x = 0; x < 5; ++x)
             gv.setGray(x, y, static_cast<std::uint8_t>(x * 7 + y * 13 + 11)); // 逐像素唯一且非平凡
@@ -301,21 +288,21 @@ static void testAnnotation() {
     annotation::ShapeRequest req;
     req.p1 = {10, 10};
     req.p2 = {50, 40};
-    req.type = geometry::ShapeType::RECTANGLE;
+    req.type = geometry::ShapeType::Rectangle;
     auto rect = annotation::buildShape(req);
     CHECK(rect != nullptr);
-    CHECK(rect->type() == geometry::ShapeType::RECTANGLE);
+    CHECK(rect->type() == geometry::ShapeType::Rectangle);
 
     // ShapeFactory：圆
-    req.type = geometry::ShapeType::CIRCLE;
+    req.type = geometry::ShapeType::Circle;
     req.p1 = {100, 100};
     req.p2 = {120, 100}; // 半径 20
     auto circle = annotation::buildShape(req);
     CHECK(circle != nullptr);
-    CHECK(circle->type() == geometry::ShapeType::CIRCLE);
+    CHECK(circle->type() == geometry::ShapeType::Circle);
 
     // Rasterizer：200x200 白底上画填充矩形，验证填充色与边框色分离（rect 为 (10,10)-(50,40)）
-    core::Image canvas(200, 200, core::ImageFormat::RGBA);
+    core::Image canvas(200, 200, core::ImageFormat::Rgba);
     canvas.fill(core::kWhite);
     annotation::PaintStyle style;
     style.color = core::kBlue;         // 边框 / 描边色
@@ -331,7 +318,7 @@ static void testAnnotation() {
     CHECK(edge.b > 200 && edge.r < 50);
 
     // AnnotationSet：结构操作（add / removeAt / popBack / clear / restore）+ zOrder 不变式 + 命中检测
-    // ——会话态（编辑模式 / 属性模板 / 选中 / 撤销重做）已拆至 GUI AnnotationEditor（下方专项断言，
+    // ——会话态（编辑模式 / 属性模板 / 选中 / 撤销重做）位于 GUI AnnotationEditor（下方专项断言，
     //   经跨模块直编 annotation_editor.cpp 回归）；本段只验无头侧成立的数据 / 合成原语。
     annotation::AnnotationSet set;
     {
@@ -353,7 +340,7 @@ static void testAnnotation() {
     {
         std::vector<annotation::Annotation> items;
         annotation::ShapeRequest rr;
-        rr.type = geometry::ShapeType::RECTANGLE;
+        rr.type = geometry::ShapeType::Rectangle;
         for (const core::Color& c : {core::kRed, core::kGreen, core::kBlue}) {
             annotation::Annotation a;
             a.style.color = c;
@@ -397,24 +384,24 @@ static void testAnnotation() {
     set.clear();
     CHECK(set.annotations().empty());
 
-    // Shape::translate：就地平移保留具体类型（不再退化为通用 PATH）。
-    // 矩形：平移后 type() 仍为 RECTANGLE，包围盒按 (dx,dy) 偏移、宽高不变。
+    // Shape::translate：就地平移保留具体类型（不退化为通用 Path）。
+    // 矩形：平移后 type() 仍为 Rectangle，包围盒按 (dx,dy) 偏移、宽高不变。
     annotation::ShapeRequest r4;
     r4.p1 = {10, 10};
     r4.p2 = {30, 20};
-    r4.type = geometry::ShapeType::RECTANGLE;
+    r4.type = geometry::ShapeType::Rectangle;
     auto movable = annotation::buildShape(r4);
     const auto [x0, y0, width0, height0] = movable->bounds();
     movable->translate(5, 7);
     const auto [x1, y1, width1, height1] = movable->bounds();
-    CHECK(movable->type() == geometry::ShapeType::RECTANGLE);            // 类型未退化
+    CHECK(movable->type() == geometry::ShapeType::Rectangle);            // 类型未退化
     CHECK(std::abs(x1 - x0 - 5.0) < 1e-6);
     CHECK(std::abs(y1 - y0 - 7.0) < 1e-6);
     CHECK(std::abs(width1 - width0) < 1e-6 && std::abs(height1 - height0) < 1e-6);
 
-    // 文字：平移后仍为 TEXT（保留字形渲染所需的类型身份），基线锚点随之偏移。
+    // 文字：平移后仍为 Text（保留字形渲染所需的类型身份），基线锚点随之偏移。
     annotation::ShapeRequest r5;
-    r5.type = geometry::ShapeType::TEXT;
+    r5.type = geometry::ShapeType::Text;
     r5.p1 = {40, 40};
     r5.p2 = {40, 40};
     r5.text = "hi";
@@ -423,13 +410,13 @@ static void testAnnotation() {
     const geometry::BoundingBox t0 = txt->bounds();
     txt->translate(-3, 4);
     const geometry::BoundingBox t1 = txt->bounds();
-    CHECK(txt->type() == geometry::ShapeType::TEXT);                     // 未退化为 PATH
+    CHECK(txt->type() == geometry::ShapeType::Text);                     // 未退化为 Path
     CHECK(std::abs(t1.x - t0.x + 3.0) < 1e-6);
     CHECK(std::abs(t1.y - t0.y - 4.0) < 1e-6);
 
-    // 多边形（正方形）：落点为顶点、边长 max(dx,dy) 轴对齐；平移后仍为 SQUARE、逐顶点偏移。
+    // 多边形（正方形）：落点为顶点、边长 max(dx,dy) 轴对齐；平移后仍为 Square、逐顶点偏移。
     annotation::ShapeRequest r6;
-    r6.type = geometry::ShapeType::SQUARE;
+    r6.type = geometry::ShapeType::Square;
     r6.p1 = {0, 0};
     r6.p2 = {10, 6};   // dx=10、dy=6 → 边长 max = 10
     auto sq = annotation::buildShape(r6);
@@ -438,7 +425,7 @@ static void testAnnotation() {
     CHECK(std::abs(width - 10.0) < 1e-6 && std::abs(height - 10.0) < 1e-6);
     sq->translate(2, 2);
     const geometry::BoundingBox s1 = sq->bounds();
-    CHECK(sq->type() == geometry::ShapeType::SQUARE);
+    CHECK(sq->type() == geometry::ShapeType::Square);
     CHECK(std::abs(s1.x - x - 2.0) < 1e-6 && std::abs(s1.y - y - 2.0) < 1e-6);
 
     // ViewTransform：屏幕 ↔ 逻辑坐标
@@ -450,22 +437,22 @@ static void testAnnotation() {
     CHECK(std::abs(logical.y - 50.0) < 0.5);
 
     // ---- AnnotationEditor：编辑会话（GUI 半边，零 Qt，跨模块直编）的会话态断言 ----
-    //   恢复拆分暂删的会话语义：属性模板 / change* 的 EDIT–DRAW 双分支 / 撤销重做条目级编排 /
+    //   覆盖会话语义：属性模板 / change* 的 EDIT–DRAW 双分支 / 撤销重做条目级编排 /
     //   选中跟随 / 切模式清选中 / 空 base 合成口径。
     {
         using gui::AnnotationEditor;
         using gui::EditType;
         auto makeRect = [](const double x0, const double y0, const double x1, const double y1) {
             annotation::ShapeRequest r;
-            r.type = geometry::ShapeType::RECTANGLE;
+            r.type = geometry::ShapeType::Rectangle;
             r.p1 = {x0, y0};
             r.p2 = {x1, y1};
             return annotation::buildShape(r);
         };
 
         AnnotationEditor ed;
-        // DRAW 模式：change* 作用当前属性模板；填充色初始与边框色联动，显式改填充后断联动。
-        ed.setEditType(EditType::DRAW);
+        // Draw 模式：change* 作用当前属性模板；填充色初始与边框色联动，显式改填充后断联动。
+        ed.setEditType(EditType::Draw);
         ed.changeColor(core::kBlue);                      // 联动 → 填充色也变蓝
         CHECK(ed.currentColor() == core::kBlue && ed.currentFillColor() == core::kBlue);
         ed.changeFillColor(core::kRed);                   // 显式改填充 → 断联动
@@ -490,15 +477,15 @@ static void testAnnotation() {
         ed.redo();                                        // 重做栈已清 → 无变化
         CHECK(ed.annotations().size() == 2);
 
-        // EDIT 模式：change* 作用选中项、不污染属性模板；切模式清选中。
-        ed.setEditType(EditType::EDIT);                   // 切模式 → 清选中
+        // Edit 模式：change* 作用选中项、不污染属性模板；切模式清选中。
+        ed.setEditType(EditType::Edit);                   // 切模式 → 清选中
         CHECK(!ed.selectedAnnotationIndex().has_value());
         ed.selectAnnotation(0);
         ed.changeColor(core::kBlack);                     // 改选中项颜色
         CHECK(ed.annotations()[0].style.color == core::kBlack);
         CHECK(ed.currentColor() == core::kGreen);         // 模板未被选中项编辑污染
 
-        // hitTest 委托集合：命中顶层填充矩形 (40,40)-(50,50) → index 1；EDIT 改其线宽。
+        // hitTest 委托集合：命中顶层填充矩形 (40,40)-(50,50) → index 1；Edit 改其线宽。
         if (const auto hit = ed.hitTest({45, 45}); hit.has_value()) {
             ed.selectAnnotation(hit);
         } else { CHECK(false); }
@@ -524,7 +511,7 @@ static void testAnnotation() {
             a.shape = makeRect(60, 60, 70, 70);
             restoreItems.push_back(std::move(a));
         }
-        ed.setEditType(EditType::DRAW);
+        ed.setEditType(EditType::Draw);
         ed.selectAnnotation(0);
         ed.restoreAnnotations(std::move(restoreItems));
         CHECK(ed.annotations().size() == 1);
@@ -544,7 +531,7 @@ static void testAnnotation() {
 static void testPreprocess() {
     using namespace idc;
 
-    core::Image img(16, 16, core::ImageFormat::RGBA);
+    core::Image img(16, 16, core::ImageFormat::Rgba);
     img.fill(core::Color(128, 64, 32, 255));
 
     preprocess::PreprocessPipeline pipe;
@@ -567,17 +554,17 @@ static void testPreprocess() {
     CHECK(pipe.size() == 2);
 
     // configType 与 preprocessTypeName 辅助函数
-    CHECK(preprocess::configType(preprocess::GrayOp{}) == preprocess::PreprocessType::GRAY);
-    CHECK(std::string(preprocess::preprocessTypeName(preprocess::PreprocessType::FLIP)) == "Flip");
+    CHECK(preprocess::configType(preprocess::GrayOp{}) == preprocess::PreprocessType::Gray);
+    CHECK(std::string(preprocess::preprocessTypeName(preprocess::PreprocessType::Flip)) == "Flip");
 
     // ResizeOp：目标尺寸重采样；configType / typeName / makeDefaultConfig 均覆盖 RESIZE。
     preprocess::PreprocessPipeline pipe2;
     pipe2.add(preprocess::ResizeOp{24, 12});
     const core::Image r2 = pipe2.apply(img);
     CHECK(r2.width() == 24 && r2.height() == 12);
-    CHECK(preprocess::configType(preprocess::ResizeOp{}) == preprocess::PreprocessType::RESIZE);
-    CHECK(std::string(preprocess::preprocessTypeName(preprocess::PreprocessType::RESIZE)) == "Resize");
-    CHECK(std::holds_alternative<preprocess::ResizeOp>(preprocess::makeDefaultConfig(preprocess::PreprocessType::RESIZE)));
+    CHECK(preprocess::configType(preprocess::ResizeOp{}) == preprocess::PreprocessType::Resize);
+    CHECK(std::string(preprocess::preprocessTypeName(preprocess::PreprocessType::Resize)) == "Resize");
+    CHECK(std::holds_alternative<preprocess::ResizeOp>(preprocess::makeDefaultConfig(preprocess::PreprocessType::Resize)));
     // 非正尺寸 → 无操作（原样返回，不崩溃）。
     CHECK(preprocess::PreprocessPipeline{}.apply(img).width() == 16);
     {
@@ -701,10 +688,10 @@ static void testPreprocess() {
         CHECK(bx == 5 && by == -2);                    // 往返还原原增量
     }
 
-    // ---- 折叠/执行融合回归队列：applyExec 与逐步 apply 逐像素等价（声明层 folded() 已删除）----
+    // ---- 执行融合回归队列：applyExec 与逐步 apply 逐像素等价 ----
     // 非方形渐变图：区分 rotate90/270 的宽高互换、flip 的 H/V 轴向，且内容逐像素唯一（镜像/旋转可辨）。
     auto buildFoldImg = [] {
-        core::Image im(6, 4, core::ImageFormat::RGBA);
+        core::Image im(6, 4, core::ImageFormat::Rgba);
         for (int y = 0; y < 4; ++y)
             for (int x = 0; x < 6; ++x)
                 im.setPixel(x, y, core::Color(static_cast<std::uint8_t>(x * 40),
@@ -720,8 +707,8 @@ static void testPreprocess() {
         return true;
     };
     const core::Image fbase = buildFoldImg();
-    // 正确性口径（folded() 删除后）：applyExec（execPlan + channelMap/remapD4 单趟融合核）与逐步 apply 必逐像素等价（含尺寸/格式）。
-    // 旧 folded() 的“趟数不增 / 幂等 / 折叠前后尺寸一致”类断言随声明层入口退役；下方回归队列 + 种子随机性质测试共同保证等价性。
+    // 正确性口径：applyExec（execPlan + channelMap/remapD4 单趟融合核）与逐步 apply 必逐像素等价（含尺寸/格式）。
+    // 下方回归队列 + 种子随机性质测试共同保证等价性。
     // 注：rotQuad 不作断言——geometryOutput 忽略 flip 累加，与像素执行序无关，applyExec 不改净几何签名。
     auto checkFold = [&](const preprocess::PreprocessPipeline& p) {
         CHECK(imagesEqual(p.apply(fbase), p.applyExec(fbase)));
@@ -773,8 +760,8 @@ static void testPreprocess() {
     // 跨 gray 色彩不合并：gray 前后 invert 分属多通道位映射 / 灰度态整幅翻两侧，均保留。
     { preprocess::PreprocessPipeline q; q.add(InvertOp{}); q.add(GrayOp{}); q.add(InvertOp{}); checkFold(q); }
 
-    // 注：不透明度不再是预处理步（旧 OpacityOp / channelMapAlpha 融合核已移除），
-    //     改由图层合成期 ImageTransform.opacity 承载，相关断言见 testCanvas。
+    // 注：不透明度归图层合成期 ImageTransform.opacity 承载（非预处理步），
+    //     相关断言见 testCanvas。
 
     // ---- applyExec：执行层融合专项（channelMap 四态 / 几何跨 gray 合并 / GRAY 输入 / 种子随机性质）----
     // channelMap 强制255 四态（K=000∧J=111）：单 op 词表不可表达，仅 Split("000")+Invert("111") 两步可达；
@@ -791,7 +778,7 @@ static void testPreprocess() {
     { preprocess::PreprocessPipeline q; q.add(RotateOp{90}); q.add(GrayOp{}); q.add(RotateOp{90}); checkFold(q); }
     // alpha≠255 基图：融合位映射必原样保留 alpha 字节。
     auto buildAlphaImg = [] {
-        core::Image im(5, 3, core::ImageFormat::RGBA);
+        core::Image im(5, 3, core::ImageFormat::Rgba);
         for (int y = 0; y < 3; ++y)
             for (int x = 0; x < 5; ++x)
                 im.setPixel(x, y, core::Color(static_cast<std::uint8_t>(x * 50 + 7),
@@ -814,7 +801,7 @@ static void testPreprocess() {
         checkExecOn(q, ebase);
     }
     // GRAY 输入基图：Split 全变死步、Invert 按整幅奇偶、几何/resize 保持灰度——计划按 inputIsGray 初始化灰度态。
-    core::Image gbase(6, 4, core::ImageFormat::GRAY);
+    core::Image gbase(6, 4, core::ImageFormat::Gray);
     for (int y = 0; y < 4; ++y)
         for (int x = 0; x < 6; ++x)
             gbase.setGray(x, y, static_cast<std::uint8_t>((x * 40 + y * 17) % 256));
@@ -942,7 +929,7 @@ static void testPreprocessSession() {
     pref2.add(preprocess::ResizeOp{20, 20});
     PreprocessSession bs;
     CHECK(bs.baseDirtyFor(pref1));                          // 无缓存 → 脏
-    bs.setBase(core::Image(1, 1, core::ImageFormat::RGBA), pref1);
+    bs.setBase(core::Image(1, 1, core::ImageFormat::Rgba), pref1);
     CHECK(!bs.baseDirtyFor(pref1));                         // 同前缀 → 复用
     CHECK(bs.baseDirtyFor(pref2));                          // 异前缀 → 脏
     bs.clearBase();
@@ -953,7 +940,7 @@ static void testPreprocessSession() {
     c.setResize(ResizeTarget{5, 5});
     preprocess::PreprocessPipeline cSteps; cSteps.add(preprocess::GrayOp{});
     c.setSteps(cSteps);
-    c.setBase(core::Image(1, 1, core::ImageFormat::RGBA), preprocess::PreprocessPipeline{});
+    c.setBase(core::Image(1, 1, core::ImageFormat::Rgba), preprocess::PreprocessPipeline{});
     CHECK(c.hasPreprocess() && c.hasBase());
     c.clear();
     CHECK(!c.hasPreprocess() && !c.hasBase() && !c.hasResize());
@@ -962,7 +949,7 @@ static void testPreprocessSession() {
 }
 
 // ---------------------------------------------------------------------------
-// history 能力测试（原 history 模块、现属 core）：泛型撤销 / 重做栈
+// history 能力测试（core::HistoryManager<T>）：泛型撤销 / 重做栈
 // ---------------------------------------------------------------------------
 static void testHistory() {
     idc::core::HistoryManager<int> h;
@@ -1097,8 +1084,8 @@ static void testEngine() {
     CHECK(sel.selectedCount() == 4);
     sel.invert();
     CHECK(sel.selectedCount() == 0);
-    sel.setPolarity(Polarity::REMOVE);
-    CHECK(sel.polarity() == Polarity::REMOVE);
+    sel.setPolarity(Polarity::Remove);
+    CHECK(sel.polarity() == Polarity::Remove);
 
     // Sequence：自定义序列可直接设置
     Sequence seq;
@@ -1108,14 +1095,14 @@ static void testEngine() {
     // EngineConfig：三层模式共用的配置聚合可正常构造与赋值
     EngineConfig cfg;
     cfg.source = SourceInfo{1920, 1080};
-    cfg.cut.tier = Tier::L2;
-    cfg.cut.generator = CutGenerator::RECT;
+    cfg.cut.tier = Tier::Erase;
+    cfg.cut.generator = CutGenerator::Rect;
     cfg.cut.rect = RectRegion(300, 200, 900, 700);
-    cfg.cut.polarity = Polarity::REMOVE;
-    cfg.emitParams.mode = EmitMode::MERGED;
-    cfg.emitParams.layout = MergeLayout::COLLAPSE;
-    CHECK(cfg.source.width == 1920 && cfg.cut.tier == Tier::L2);
-    CHECK(cfg.cut.polarity == Polarity::REMOVE);
+    cfg.cut.polarity = Polarity::Remove;
+    cfg.emitParams.mode = EmitMode::Merged;
+    cfg.emitParams.layout = MergeLayout::Collapse;
+    CHECK(cfg.source.width == 1920 && cfg.cut.tier == Tier::Erase);
+    CHECK(cfg.cut.polarity == Polarity::Remove);
 
     std::cout << "[engine] OK\n";
 }
@@ -1142,7 +1129,7 @@ static void testGenerate() {
     solid.kind = PatternKind::Solid;
     solid.background = core::Color(10, 20, 30, 128);
     const core::Image s = makePattern(4, 3, solid);
-    CHECK(!s.empty() && s.width() == 4 && s.height() == 3 && s.format() == core::ImageFormat::RGBA);
+    CHECK(!s.empty() && s.width() == 4 && s.height() == 3 && s.format() == core::ImageFormat::Rgba);
     CHECK(s.getPixel(0, 0) == core::Color(10, 20, 30, 128));
     CHECK(s.getPixel(3, 2) == core::Color(10, 20, 30, 128));
 
@@ -1200,7 +1187,7 @@ static void testGenerate() {
     clamp.period = 0;
     CHECK(!makePattern(4, 4, clamp).empty());
 
-    // 斜纹已合进条纹（↘ 沿 x−y，DiagonalDown）：主对角 x==y 恒 v=0 → 偶带=背景；(2,0) v=2 → 奇带=前景
+    // 斜纹即条纹的 DiagonalDown 取向（↘ 沿 x−y）：主对角 x==y 恒 v=0 → 偶带=背景；(2,0) v=2 → 奇带=前景
     PatternParams ds;
     ds.kind = PatternKind::Stripes;
     ds.orientation = Orientation::DiagonalDown;
@@ -1211,7 +1198,7 @@ static void testGenerate() {
     CHECK(d.getPixel(0, 0) == core::kWhite && d.getPixel(1, 1) == core::kWhite && d.getPixel(3, 3) == core::kWhite);
     CHECK(d.getPixel(2, 0) == core::kBlack);
 
-    // 同心方框已合进同心环（orientation=Vertical → 切比雪夫方环）：中心在环上=前景；(2,0) 距中心 2、周期 4 → 环间=背景
+    // 同心方框即同心环的 Vertical 取向（orientation=Vertical → 切比雪夫方环）：中心在环上=前景；(2,0) 距中心 2、周期 4 → 环间=背景
     PatternParams rr;
     rr.kind = PatternKind::Concentric;
     rr.orientation = Orientation::Vertical;
@@ -1259,8 +1246,8 @@ static void testGenerate() {
     const core::Color gp = gray.getPixel(3, 3);
     CHECK(gp.r == gp.g && gp.g == gp.b && gp.a == 255);
 
-    // 旧「贴图图案 PatternKind::Image / ImageScale」已彻底移除：图片落位统一走 composeCanvas
-    //   两段合成（见 testCanvas 的 File 层缩放/锚点落位/越界裁剪用例），此处不再有用例。
+    // 图片不是程序化图案类型：落位统一走 composeCanvas
+    //   两段合成（见 testCanvas 的 File 层缩放/锚点落位/越界裁剪用例）。
 
     std::cout << "[generate] OK\n";
 }
@@ -1274,7 +1261,7 @@ static void testCanvas() {
     using namespace idc::canvas;
 
     auto solid = [](const int w, const int h, const core::Color& c) {
-        core::Image im(w, h, core::ImageFormat::RGBA);
+        core::Image im(w, h, core::ImageFormat::Rgba);
         im.fill(c);
         return im;
     };
@@ -1295,7 +1282,7 @@ static void testCanvas() {
         CHECK(out.getPixel(2, 2) == blue);
     }
 
-    // ---- 图片图层整体显隐已下沉到调用方：传空 layers → 仅底图（透明）；传全层 → 顶层覆盖中央 ----
+    // ---- 图片图层整体显隐由调用方处理：传空 layers → 仅底图（透明）；传全层 → 顶层覆盖中央 ----
     {
         ImageLayer a; a.sourceKind = LayerSourceKind::File; a.decodedPixels = solid(4, 4, red); a.zOrder = 0; a.id = 1;
         ImageLayer b; b.sourceKind = LayerSourceKind::File; b.decodedPixels = solid(2, 2, blue); b.zOrder = 1; b.id = 2;
@@ -1363,7 +1350,7 @@ static void testCanvas() {
         CHECK(out.getPixel(0, 0).a == 0);     // 画布外区域透明
     }
 
-    // ---- 逐层预处理物化：File 层不透明红 + Invert → materialize 反色、alpha 不变（预处理不再含不透明度）----
+    // ---- 逐层预处理物化：File 层不透明红 + Invert → materialize 反色、alpha 不变（不透明度属合成期，非预处理步）----
     {
         ImageLayer a; a.sourceKind = LayerSourceKind::File; a.decodedPixels = solid(2, 2, red);
         a.preprocess.add(preprocess::InvertOp{"111"});
@@ -1400,7 +1387,7 @@ static void testCanvas() {
         auto composeOne = [](const core::Color& srcPx, const int opacity) {
             // 透明底
             ImageLayer a; a.sourceKind = LayerSourceKind::File;
-            a.decodedPixels = core::Image(1, 1, core::ImageFormat::RGBA);
+            a.decodedPixels = core::Image(1, 1, core::ImageFormat::Rgba);
             a.decodedPixels.setPixel(0, 0, srcPx);
             a.transform.opacity = opacity;
             const std::vector st = {a};
@@ -1418,7 +1405,7 @@ static void testCanvas() {
     {
         std::vector<ImageLayer> st;   // 透明底
         ImageLayer a; a.sourceKind = LayerSourceKind::File;
-        core::Image g(2, 2, core::ImageFormat::GRAY); g.fill(core::Color(50, 50, 50, 255));
+        core::Image g(2, 2, core::ImageFormat::Gray); g.fill(core::Color(50, 50, 50, 255));
         a.decodedPixels = g;
         a.transform.opacity = 128;   // (255·128+127)/255 = 128
         st = {a};
@@ -1459,7 +1446,7 @@ static void testCanvas() {
 
     // ---- composeBase（底图同构 ImageLayer 展平，SPEC §7 generate 段）----
     {
-        // Recipe 底（纯图案、无内层落位）：按 source 尺寸现算图案、铺满画布（与旧 generate 段口径一致）。
+        // Recipe 底（纯图案、无内层落位）：按 source 尺寸现算图案、铺满画布。
         ImageLayer base;
         base.sourceKind = LayerSourceKind::Recipe;
         generate::PatternParams pp;
@@ -1489,7 +1476,7 @@ static void testCanvas() {
                 CHECK(viaBase.getPixel(x, y) == viaCanvas.getPixel(x, y));
     }
 
-    // ---- 整层生效（色彩及底色）：源空但带底色框 + Invert → 框底色一起被反色（旧口径预处理早于进框、底色不受影响）----
+    // ---- 整层生效（色彩及底色）：源空但带底色框 + Invert → 框底色一起被反色（预处理作用于含底色的整层、底色亦参与）----
     {
         ImageLayer a; a.id = 20; a.sourceKind = LayerSourceKind::File;   // decodedPixels 空（仅靠底色框呈现）
         a.hasImagePlacement = true; a.boxWidth = 2; a.boxHeight = 2;
@@ -1507,7 +1494,7 @@ static void testCanvas() {
     {
         ImageLayer a; a.id = 21; a.sourceKind = LayerSourceKind::File;
         a.decodedPixels = solid(2, 4, red);
-        a.transform.width = 2; a.transform.height = 4;    // 旧口径下 scaleToTarget 会把旋转结果硬拉回 2×4
+        a.transform.width = 2; a.transform.height = 4;    // scaleToTarget 不覆盖几何步：旋转后宽高互换，不被拉回 2×4
         a.preprocess.add(preprocess::RotateOp{90});
         const auto p = layerPlacement(a, 8, 8);
         CHECK(p.has_value() && p->width == 4 && p->height == 2);   // 几何步改变最终足迹（4×2）

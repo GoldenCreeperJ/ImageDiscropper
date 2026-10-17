@@ -13,7 +13,7 @@
 //     Android/iOS → MobileShell（画布为主 + 底部工具条/抽屉，SPEC §8.3），单目标 idc_gui；
 //     桌面两产物（同一 common，本文件各编一份）——idc_gui 纯桌面（不含移动码、无 --mobile）；
 //     idc_gui_mobile 经 IDC_GUI_HAS_MOBILE + IDC_GUI_FORCE_MOBILE 双击即移动骨架（开发预览，
-//     无需命令行）。两壳共用同一套接线与业务槽（MobileShell 继承 MainWindow），入口代码形状不变。
+//     无需命令行）。两壳共用同一套接线与业务槽（MobileShell 继承 MainWindow），入口代码同源一致。
 //   · 宏由 CMake 目标编排注入（IDC_GUI_MOBILE 开关控制是否产出 idc_gui_mobile）；
 //     Android/iOS 构建由 CMake 强制含移动壳（下方 #error 双重兜底）。
 // ============================================================================
@@ -25,7 +25,7 @@
 
 #include <memory>
 
-// 静态链接 Qt 时，平台插件不再以 DLL/dylib/so 形式加载，需显式导入。
+// 静态链接 Qt 时，平台插件不以 DLL/dylib/so 形式加载，需显式导入。
 #ifdef QT_STATIC
 #include <QtPlugin>
 #if defined(Q_OS_WIN)
@@ -50,7 +50,7 @@ Q_IMPORT_PLUGIN(QXcbIntegrationPlugin)
 #endif
 
 int main(int argc, char* argv[]) {
-    const QApplication app(argc, argv);   // 非 const：setWindowIcon 需要可写对象。
+    const QApplication app(argc, argv);   // 入口仅使用静态方法（setApplicationName/setWindowIcon 等）与 const 引用（parser.process/connect context），无需可写实例。
     QApplication::setApplicationName(QString::fromUtf8(idc::gui::texts::ident::kSettingsApp));
     QApplication::setApplicationDisplayName(QStringLiteral("ImageDiscropper"));
     QApplication::setApplicationVersion(QStringLiteral(IDC_GUI_VERSION));
@@ -69,7 +69,7 @@ int main(int argc, char* argv[]) {
     // 运行期可经外观对话框即时再应用（选定即 theme::apply + 全量 re-polish，见 app/appearance_dialog.cpp）。
     idc::gui::theme::apply(idc::gui::theme::fromString(idc::gui::UiPrefs::instance().themeMode()));
 
-    // 运行期跟随系统：强制 Fusion + 显式 palette 后，OS 深浅色切换不再由平台 style 自动驱动控件（旧
+    // 运行期跟随系统：强制 Fusion + 显式 palette 后，OS 深浅色切换不再由平台 style 自动驱动控件（默认
     // 原生 windows11 style 会），故补一条重放——仅当偏好为 System 且生效深浅**真的翻转**时才 apply，
     // 比对当前 Window 明度与 resolveDark(System) 是否一致，避免个别平台虚发信号导致无谓全量 re-polish 闪烁。
     if (const QStyleHints* hints = QApplication::styleHints()) {
@@ -93,10 +93,10 @@ int main(int argc, char* argv[]) {
     parser.process(app);
 
     // 顶层壳：含移动码的构建（Android/iOS 移动构建、idc_gui_mobile 预览产物）恒为
-    // MobileShell——双产物结构下无 --mobile 运行时开关（旧单 exe 时代的开关已随
-    // 该结构废弃，删除）；纯桌面 idc_gui 无移动码，恒为桌面形态。两壳堆叠在
+    // MobileShell——双产物结构下无 --mobile 运行时开关（移动与否由构建产物决定，非运行时开关）；
+    // 纯桌面 idc_gui 无移动码，恒为桌面形态。两壳堆叠在
     // MainWindow 公共面上（openImageFromPath 同源）。
-    // 语言热切换不再销毁重建窗口，而是原地只改文本（MainWindow::retranslateUi）——
+    // 语言热切换原地只改文本（MainWindow::retranslateUi），不销毁重建窗口——
     // Document/AnnotationBridge/DocHistory 随窗口存活，UI 状态与业务态全程无损。
     std::unique_ptr<idc::gui::MainWindow> window;
 #ifdef IDC_GUI_HAS_MOBILE

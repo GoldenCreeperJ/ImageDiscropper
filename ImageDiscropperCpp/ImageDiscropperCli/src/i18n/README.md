@@ -14,7 +14,7 @@
 | `lang_en_help.cpp` | **CLI 英文译文表 · help 半**：`texts::help` 的 `kDesc*` / `kLead*` / `kText*`（散文块整段一键）译文 + `installHelpCatalog()` 定义；`kUse*`（用法列）属脚本契约永不进表                                                                        |
 
 > **必须在 `applyLanguage()` 之前装配**：`installCatalogs()` 在 `cliMain` 顶部走一次，表未登记时任何码都解析为
-> 「未安装」。一期按调用生效：`cli_tests` 进程内多次调 `cliMain`，语言在每次调用开头按同一优先级重决议，互不污染。
+> 「未安装」。按调用生效：`cli_tests` 进程内多次调 `cliMain`，语言在每次调用开头按同一优先级重决议，互不污染。
 
 > **为何 help 拆两 TU**：help 译文体量与 msg 相当且形态各异（长散文），独立成文件便于核对；跨 TU 装表靠
 > `installCatalogs()` 内先声明后调用 `installHelpCatalog()`（同语言累加，无需头文件暴露）。

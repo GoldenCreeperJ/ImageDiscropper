@@ -1,9 +1,9 @@
 // ============================================================================
 // 文件：include/core/image.h
-// 作用：定义图像像素容器 Image。
-//       支持 RGB / RGBA / GRAY 三种像素模式，提供像素读写、拷贝、通道访问与通用像素
-//       原语（重采样缩放 / 取色）等基础操作。preprocess / annotation 等上层模块的
-//       算法都在此数据结构上进行。
+// 作用：定义图像像素容器 Image——支持 RGB / RGBA / GRAY 三种像素模式，提供像素
+//       读写、深拷贝、通道访问与通用像素原语（重采样缩放 resized / scaled、取色
+//       colorAt、裁剪 crop、贴图 blit 等）。preprocess / annotation / canvas /
+//       engine 等上层模块的算法都在此数据结构上进行。
 // ============================================================================
 #pragma once
 
@@ -17,23 +17,23 @@ namespace idc::core {
 
 // ---------------------------------------------------------------------------
 // ImageFormat：像素存储模式
-//   RGB  —— 每像素 3 字节，无 alpha
-//   RGBA —— 每像素 4 字节，带 alpha
-//   GRAY —— 每像素 1 字节，灰度
+//   Rgb  —— 每像素 3 字节，无 alpha
+//   Rgba —— 每像素 4 字节，带 alpha
+//   Gray —— 每像素 1 字节，灰度
 // ---------------------------------------------------------------------------
 enum class ImageFormat {
-    RGB,
-    RGBA,
-    GRAY,
+    Rgb,
+    Rgba,
+    Gray,
 };
 
 // 返回该格式下每像素字节数。
 std::size_t bytesPerPixel(ImageFormat fmt);
 
-// 缩放算法（原 pixel_ops::ResampleMode 迁入 core，供 resized / scaled 使用）。
+// 缩放算法（供 resized / scaled 使用）。
 enum class ResampleMode {
-    NEAREST,    // 最近邻，速度快，锯齿明显
-    BILINEAR,   // 双线性插值，速度中等，效果均衡
+    Nearest,   // 最近邻，速度快，锯齿明显
+    Bilinear,  // 双线性插值，速度中等，效果均衡
 };
 
 // ---------------------------------------------------------------------------
@@ -57,7 +57,7 @@ public:
     int width() const { return width_; }
     int height() const { return height_; }
     ImageFormat format() const { return format_; }
-    bool isGray() const { return format_ == ImageFormat::GRAY; }
+    bool isGray() const { return format_ == ImageFormat::Gray; }
     bool empty() const { return width_ <= 0 || height_ <= 0 || data_.empty(); }
 
     // 像素索引：越界时返回 false，调用方据此判断是否跳过。
@@ -69,7 +69,7 @@ public:
     // 写入像素颜色：GRAY 模式忽略 alpha，取亮度作为灰度值；RGB 模式忽略 alpha。
     void setPixel(int x, int y, const Color& c);
 
-    // 直接按字节访问像素，性能敏感路径使用。越界行为未定义。
+    // 直接按字节访问像素，性能敏感路径使用。越界返回 nullptr。
     std::uint8_t* pixelPtr(int x, int y);
     const std::uint8_t* pixelPtr(int x, int y) const;
 
@@ -89,10 +89,10 @@ public:
     Image toGray() const;
 
     // 重采样缩放：按目标宽高进行最近邻 / 双线性重采样，保留内容；非法目标尺寸或空图返回 0×0。
-    // 原 pixel_ops::resize 逐字迁入——预览降采样（GUI）与 ResizeOp 物化（preprocess）共用同一核。
-    Image resized(int newWidth, int newHeight, ResampleMode mode = ResampleMode::BILINEAR) const;
+    // 预览降采样（GUI）与 ResizeOp 物化（preprocess）共用同一核。
+    Image resized(int newWidth, int newHeight, ResampleMode mode = ResampleMode::Bilinear) const;
     // 按比例缩放：factor 必须 > 0，先换算目标宽高再委托 resized。
-    Image scaled(double factor, ResampleMode mode = ResampleMode::BILINEAR) const;
+    Image scaled(double factor, ResampleMode mode = ResampleMode::Bilinear) const;
     // 拾取指定坐标的像素颜色（“颜色选取”用）；越界返回 std::nullopt。
     std::optional<Color> colorAt(int x, int y) const;
 
@@ -114,7 +114,7 @@ public:
 private:
     int width_{0};
     int height_{0};
-    ImageFormat format_{ImageFormat::RGBA};
+    ImageFormat format_{ImageFormat::Rgba};
     std::vector<std::uint8_t> data_;
 
     // 计算给定坐标在 data_ 中的字节偏移，越界时返回 -1。

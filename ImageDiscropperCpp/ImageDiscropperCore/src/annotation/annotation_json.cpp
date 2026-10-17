@@ -2,14 +2,13 @@
 // 文件：src/annotation/annotation_json.cpp
 // 作用：标注 ↔ JSON 的实现（SPEC §7 annotations 段）——单条形状几何 / 样式 / 变换整体快照的双向映射，
 //       段级交换函数（供 engine 组装 / 解析整份 §7 文档），以及公共的标注文本解析入口。
-// 分块依据：原实现随配置存取寄生于 engine_config_json.cpp；数据层解耦后归位到 annotation 模块，
-//       engine 仅经私有内部头 src/json_common.h 声明的 annotationsSegmentToJson / annotationsFromSegmentJson
-//       调用本文件，公共头只暴露 parseAnnotationsFromJsonText（std 级 API，不外泄 nlohmann）。
-// 说明：本次为**纯搬家重构**——函数体逐字迁移，未改任何容差 / 缺省值 / 校验语义（向后兼容旧配置文件）。
-//       通用 JSON 助手（at/jInt/… / colorToHex/colorFromHex）来自 src/json_common.h（idc::jsonutil），与 engine 共用一份。
+// 分块依据：标注 JSON 序列化归属 annotation 模块；engine 仅经私有内部头 src/json_common.h 声明的
+//       annotationsSegmentToJson / annotationsFromSegmentJson 调用本文件，公共头只暴露
+//       parseAnnotationsFromJsonText（std 级 API，不外泄 nlohmann）。
+// 说明：通用 JSON 助手（at/jInt/… / colorToHex/colorFromHex）来自 src/json_common.h（idc::jsonutil），与 engine 共用一份。
 // 常量层：键名 keys:: / 兜底默认串 defs:: / 默认数字 nums:: 三个别名仅在本文件匿名
 //       命名空间内可见；校验报因一律走门面 IDC_KTR / IDC_KTRF（缺译文自动回退常量层）。
-//       文本值与旧字面量逐字节相同（含全角标点与尾随空格），改动须同步 include/i18n/core_texts.h。
+//       文本值为对外契约（含全角标点与尾随空格），改动须同步 include/i18n/core_texts.h。
 // ============================================================================
 #include "annotation/annotation_json.h"
 
@@ -42,7 +41,7 @@ namespace {
 using json = nlohmann::json;
 using geometry::ShapeType;
 
-// §7 annotations 段键名 / 兜底默认串 / 默认数字的别名（单一真相源见 include/i18n/core_texts.h ）。
+// §7 annotations 段键名 / 兜底默认串 / 默认数字的别名（单一真相源见 include/i18n/core_texts.h）。
 namespace keys = core::texts::jsonkey;
 namespace defs = core::texts::defaults;
 namespace nums = core::nums;
@@ -63,30 +62,30 @@ using jsonutil::jStr;
 // ShapeType ↔ 短横线小写串（与其余枚举串风格一致；与 shapeTypeName 的大写日志串分开维护）。
 const char* annoShapeTypeName(const ShapeType t) {
     switch (t) {
-        case ShapeType::LINE: return "line";
-        case ShapeType::RECTANGLE: return "rectangle";
-        case ShapeType::SQUARE: return "square";
-        case ShapeType::RHOMBUS: return "rhombus";
-        case ShapeType::ELLIPSE: return "ellipse";
-        case ShapeType::CIRCLE: return "circle";
-        case ShapeType::POLYLINE: return "polyline";
-        case ShapeType::PATH: return "path";
-        case ShapeType::TEXT: return "text";
-        case ShapeType::ISOS_TRIANGLE: return "isos-triangle";
-        case ShapeType::EQU_TRIANGLE: return "equ-triangle";
-        case ShapeType::RECT_TRIANGLE: return "rect-triangle";
-        case ShapeType::EQU_RECT_TRIANGLE: return "equ-rect-triangle";
+        case ShapeType::Line: return "line";
+        case ShapeType::Rectangle: return "rectangle";
+        case ShapeType::Square: return "square";
+        case ShapeType::Rhombus: return "rhombus";
+        case ShapeType::Ellipse: return "ellipse";
+        case ShapeType::Circle: return "circle";
+        case ShapeType::Polyline: return "polyline";
+        case ShapeType::Path: return "path";
+        case ShapeType::Text: return "text";
+        case ShapeType::IsosTriangle: return "isos-triangle";
+        case ShapeType::EquTriangle: return "equ-triangle";
+        case ShapeType::RectTriangle: return "rect-triangle";
+        case ShapeType::EquRectTriangle: return "equ-rect-triangle";
     }
     return "line";
 }
 // 严格解析 type 串：仅接受已知的标注类型名；未知或空串返回 nullopt（供标注载入的强制校验使用）。
 std::optional<ShapeType> strictShapeTypeFromName(const std::string& s) {
     static const std::pair<const char*, ShapeType> kAll[] = {
-        {"line", ShapeType::LINE}, {"rectangle", ShapeType::RECTANGLE}, {"square", ShapeType::SQUARE},
-        {"rhombus", ShapeType::RHOMBUS}, {"ellipse", ShapeType::ELLIPSE}, {"circle", ShapeType::CIRCLE},
-        {"polyline", ShapeType::POLYLINE}, {"path", ShapeType::PATH}, {"text", ShapeType::TEXT},
-        {"isos-triangle", ShapeType::ISOS_TRIANGLE}, {"equ-triangle", ShapeType::EQU_TRIANGLE},
-        {"rect-triangle", ShapeType::RECT_TRIANGLE}, {"equ-rect-triangle", ShapeType::EQU_RECT_TRIANGLE},
+        {"line", ShapeType::Line}, {"rectangle", ShapeType::Rectangle}, {"square", ShapeType::Square},
+        {"rhombus", ShapeType::Rhombus}, {"ellipse", ShapeType::Ellipse}, {"circle", ShapeType::Circle},
+        {"polyline", ShapeType::Polyline}, {"path", ShapeType::Path}, {"text", ShapeType::Text},
+        {"isos-triangle", ShapeType::IsosTriangle}, {"equ-triangle", ShapeType::EquTriangle},
+        {"rect-triangle", ShapeType::RectTriangle}, {"equ-rect-triangle", ShapeType::EquRectTriangle},
     };
     for (const auto&[name, t] : kAll)
         if (s == name) return t;
@@ -96,9 +95,9 @@ std::optional<ShapeType> strictShapeTypeFromName(const std::string& s) {
 // 双锚点约束图元：几何由 buildShape(p1,p2) 派生，杜绝手填顶点不满足类型约束。
 bool isAnchorConstrained(const ShapeType t) {
     switch (t) {
-        case ShapeType::RECTANGLE: case ShapeType::SQUARE: case ShapeType::RHOMBUS:
-        case ShapeType::ISOS_TRIANGLE: case ShapeType::EQU_TRIANGLE:
-        case ShapeType::RECT_TRIANGLE: case ShapeType::EQU_RECT_TRIANGLE:
+        case ShapeType::Rectangle: case ShapeType::Square: case ShapeType::Rhombus:
+        case ShapeType::IsosTriangle: case ShapeType::EquTriangle:
+        case ShapeType::RectTriangle: case ShapeType::EquRectTriangle:
             return true;
         default:
             return false;
@@ -130,8 +129,8 @@ void anchorFromConstrained(const geometry::PolygonShape& poly,
         return std::array{mnx, mny, mxx, mxy};
     };
     switch (poly.type()) {
-        case ShapeType::RECTANGLE:
-        case ShapeType::SQUARE: {
+        case ShapeType::Rectangle:
+        case ShapeType::Square: {
             // 取 pts[0]（buildShape 保留的 p1 起始角）与其对角 pts[2] 作锚点：
             //   矩形 pts[0]=(minX,minY)、pts[2]=(maxX,maxY)，与 bbox 等价；
             //   正方形 pts[0]=原 p1、pts[2]=对角，重建后顶点序/朝向严格一致（用 bbox 会致旋转错位）。
@@ -139,7 +138,7 @@ void anchorFromConstrained(const geometry::PolygonShape& poly,
             x2 = pts[2].x; y2 = pts[2].y;
             break;
         }
-        case ShapeType::RHOMBUS: {
+        case ShapeType::Rhombus: {
             const auto b = boundsOf();
             const double cx = (b[0] + b[2]) / 2.0, cy = (b[1] + b[3]) / 2.0;
             x1 = cx; y1 = cy;                    // 中心
@@ -147,8 +146,8 @@ void anchorFromConstrained(const geometry::PolygonShape& poly,
             y2 = cy + (b[3] - b[1]) / 2.0;
             break;
         }
-        case ShapeType::ISOS_TRIANGLE:
-        case ShapeType::EQU_TRIANGLE: {
+        case ShapeType::IsosTriangle:
+        case ShapeType::EquTriangle: {
             // 底边＝两条等 y 顶点；顶点＝第三点。底边中点为 p1，(中点x+半底, 顶点y) 为 p2。
             int bi0 = -1, bi1 = -1, ai = -1;
             for (int i = 0; i < 3 && bi0 < 0; ++i)
@@ -160,8 +159,8 @@ void anchorFromConstrained(const geometry::PolygonShape& poly,
             x2 = baseMidX + halfBase; y2 = pts[ai].y;   // y2 落在顶点行，编码高度与朝向
             break;
         }
-        case ShapeType::RECT_TRIANGLE:
-        case ShapeType::EQU_RECT_TRIANGLE: {
+        case ShapeType::RectTriangle:
+        case ShapeType::EquRectTriangle: {
             // 直角顶点＝与另两点分别共享 x / y 的那一点；p2＝(另一点x, 第三点y)。
             int corner = -1, hb = -1, vc = -1;
             for (int i = 0; i < 3; ++i) {
@@ -185,14 +184,14 @@ void anchorFromConstrained(const geometry::PolygonShape& poly,
     (void)eps;
 }
 
-// 路径段类型 ↔ 单字母短串（MOVE_TO/LINE_TO/QUAD_TO/CUBIC_TO/CLOSE）。
+// 路径段类型 ↔ 单字母短串（MoveTo/LineTo/QuadTo/CubicTo/Close）。
 const char* segTypeName(const geometry::PathSegmentType t) {
     switch (t) {
-        case geometry::PathSegmentType::MOVE_TO: return "M";
-        case geometry::PathSegmentType::LINE_TO: return "L";
-        case geometry::PathSegmentType::QUAD_TO: return "Q";
-        case geometry::PathSegmentType::CUBIC_TO: return "C";
-        case geometry::PathSegmentType::CLOSE: return "Z";
+        case geometry::PathSegmentType::MoveTo: return "M";
+        case geometry::PathSegmentType::LineTo: return "L";
+        case geometry::PathSegmentType::QuadTo: return "Q";
+        case geometry::PathSegmentType::CubicTo: return "C";
+        case geometry::PathSegmentType::Close: return "Z";
     }
     return "M";
 }
@@ -233,7 +232,7 @@ json shapeToJson(const geometry::Shape& s) {
         const double cx = ell->centerX(), cy = ell->centerY();
         const double rx = ell->radiusX(), ry = ell->radiusY();
         o[keys::common::kX1] = cx; o[keys::common::kY1] = cy;
-        if (s.type() == ShapeType::CIRCLE) { o[keys::common::kX2] = cx + rx; o[keys::common::kY2] = cy; }   // 圆：p2 取水平向圆上点，半径 = rx
+        if (s.type() == ShapeType::Circle) { o[keys::common::kX2] = cx + rx; o[keys::common::kY2] = cy; }   // 圆：p2 取水平向圆上点，半径 = rx
         else { o[keys::common::kX2] = cx + rx; o[keys::common::kY2] = cy + ry; }                             // 椭圆：p2 编码两半轴 (rx, ry)
     } else if (const auto* path = dynamic_cast<const geometry::PathShape*>(&s)) {
         json segs = json::array();
@@ -282,13 +281,13 @@ std::unique_ptr<geometry::Shape> anchoredShapeFromJson(const json& v, const Shap
     bool ok = true;
     std::string why;   // 取译文后为值类型（非 const char*）：下面与 kErrAnchorDegenerate 拼接。
     switch (type) {
-        case ShapeType::RECTANGLE:      ok = std::abs(dx) > eps && std::abs(dy) > eps; why = IDC_KTR(msg, kErrRectSize); break;
-        case ShapeType::SQUARE:         ok = std::max(std::abs(dx), std::abs(dy)) > eps; why = IDC_KTR(msg, kErrSquareSize); break;
-        case ShapeType::RHOMBUS:        ok = std::abs(dx) > eps && std::abs(dy) > eps; why = IDC_KTR(msg, kErrRhombusSize); break;
-        case ShapeType::ISOS_TRIANGLE:  ok = std::abs(dx) > eps && std::abs(dy) > eps; why = IDC_KTR(msg, kErrIsosTriangleSize); break;
-        case ShapeType::EQU_TRIANGLE:   ok = std::max(std::abs(dx), std::abs(dy) / std::sqrt(3.0)) > eps; why = IDC_KTR(msg, kErrEquTriangleSize); break;
-        case ShapeType::RECT_TRIANGLE:  ok = std::abs(dx) > eps && std::abs(dy) > eps; why = IDC_KTR(msg, kErrRectTriangleSize); break;
-        case ShapeType::EQU_RECT_TRIANGLE: ok = std::max(std::abs(dx), std::abs(dy)) > eps; why = IDC_KTR(msg, kErrEquRectTriangleSize); break;
+        case ShapeType::Rectangle:      ok = std::abs(dx) > eps && std::abs(dy) > eps; why = IDC_KTR(msg, kErrRectSize); break;
+        case ShapeType::Square:         ok = std::max(std::abs(dx), std::abs(dy)) > eps; why = IDC_KTR(msg, kErrSquareSize); break;
+        case ShapeType::Rhombus:        ok = std::abs(dx) > eps && std::abs(dy) > eps; why = IDC_KTR(msg, kErrRhombusSize); break;
+        case ShapeType::IsosTriangle:   ok = std::abs(dx) > eps && std::abs(dy) > eps; why = IDC_KTR(msg, kErrIsosTriangleSize); break;
+        case ShapeType::EquTriangle:    ok = std::max(std::abs(dx), std::abs(dy) / std::sqrt(3.0)) > eps; why = IDC_KTR(msg, kErrEquTriangleSize); break;
+        case ShapeType::RectTriangle:   ok = std::abs(dx) > eps && std::abs(dy) > eps; why = IDC_KTR(msg, kErrRectTriangleSize); break;
+        case ShapeType::EquRectTriangle: ok = std::max(std::abs(dx), std::abs(dy)) > eps; why = IDC_KTR(msg, kErrEquRectTriangleSize); break;
         default: break;
     }
     if (!ok) { reason = IDC_KTR(msg, kErrAnchorDegenerate) + why; return nullptr; }
@@ -300,7 +299,7 @@ std::unique_ptr<geometry::Shape> anchoredShapeFromJson(const json& v, const Shap
     return buildShape(req);
 }
 
-// 直线 / 折线：points 顶点数组（LINE 恰 2 顶点、POLYLINE ≥2）+ 可选 closed/cornerRadius。
+// 直线 / 折线：points 顶点数组（Line 恰 2 顶点、Polyline ≥2）+ 可选 closed/cornerRadius。
 std::unique_ptr<geometry::Shape> lineShapeFromJson(const json& v, const ShapeType type, std::string& reason) {
     const json& pts = at(v, keys::common::kPoints);
     if (!pts.is_array()) { reason = IDC_KTR(msg, kErrNoPoints); return nullptr; }
@@ -308,8 +307,8 @@ std::unique_ptr<geometry::Shape> lineShapeFromJson(const json& v, const ShapeTyp
     for (const json& p : pts)
         if (p.is_array() && p.size() >= 2 && p[0].is_number() && p[1].is_number())
             points.emplace_back(p[0].get<double>(), p[1].get<double>());
-    if (type == ShapeType::LINE && points.size() != 2) { reason = IDC_KTR(msg, kErrLineNeeds2Points); return nullptr; }
-    if (type == ShapeType::POLYLINE && points.size() < 2) { reason = IDC_KTR(msg, kErrPolylineNeedsPoints); return nullptr; }
+    if (type == ShapeType::Line && points.size() != 2) { reason = IDC_KTR(msg, kErrLineNeeds2Points); return nullptr; }
+    if (type == ShapeType::Polyline && points.size() < 2) { reason = IDC_KTR(msg, kErrPolylineNeedsPoints); return nullptr; }
     return std::make_unique<geometry::PolygonShape>(std::move(points), type,
                                                     jBool(at(v, keys::common::kClosed), false),
                                                     std::max(0.0, jDouble(at(v, keys::common::kCornerRadius), 0.0)));
@@ -322,9 +321,9 @@ std::unique_ptr<geometry::Shape> ellipseShapeFromJson(const json& v, const Shape
           && needNumField(v, keys::common::kX2, x2, reason) && needNumField(v, keys::common::kY2, y2, reason))) return nullptr;
     const double dx = x2 - x1, dy = y2 - y1;
     constexpr double eps = nums::annotation::kDegenerateEpsPx;
-    if (type == ShapeType::CIRCLE) {
+    if (type == ShapeType::Circle) {
         if (std::hypot(dx, dy) <= eps) { reason = IDC_KTR(msg, kErrCircleDegenerate); return nullptr; }
-    } else { // ELLIPSE：两半轴均须 > 0（杜绝退化扁平椭圆）
+    } else { // Ellipse：两半轴均须 > 0（杜绝退化扁平椭圆）
         if (std::abs(dx) <= eps || std::abs(dy) <= eps) { reason = IDC_KTR(msg, kErrEllipseDegenerate); return nullptr; }
     }
     ShapeRequest req;
@@ -334,7 +333,7 @@ std::unique_ptr<geometry::Shape> ellipseShapeFromJson(const json& v, const Shape
     return buildShape(req);
 }
 
-// PATH：M/L/Q/C/Z 段序列（逐段校验坐标个数，全部无效才判错）。
+// Path：M/L/Q/C/Z 段序列（逐段校验坐标个数，全部无效才判错）。
 std::unique_ptr<geometry::Shape> pathShapeFromJson(const json& v, const ShapeType type, std::string& reason) {
     const json& segs = at(v, keys::anno::kSegments);
     if (!segs.is_array() || segs.empty()) { reason = IDC_KTR(msg, kErrPathNoSegments); return nullptr; }
@@ -355,7 +354,7 @@ std::unique_ptr<geometry::Shape> pathShapeFromJson(const json& v, const ShapeTyp
     return std::make_unique<geometry::PathShape>(std::move(path), type);
 }
 
-// TEXT：text 内容 + x/y 落点 + 正 fontSize。
+// Text：text 内容 + x/y 落点 + 正 fontSize。
 std::unique_ptr<geometry::Shape> textShapeFromJson(const json& v, std::string& reason) {
     const json& fj = at(v, keys::anno::kFontSize);
     double fontSize = nums::annotation::kDefaultFontSizePx;
@@ -377,10 +376,10 @@ std::unique_ptr<geometry::Shape> shapeFromJson(const json& v, std::string& reaso
 
     std::unique_ptr<geometry::Shape> shape;
     if (isAnchorConstrained(type)) shape = anchoredShapeFromJson(v, type, reason);
-    else if (type == ShapeType::LINE || type == ShapeType::POLYLINE) shape = lineShapeFromJson(v, type, reason);
-    else if (type == ShapeType::ELLIPSE || type == ShapeType::CIRCLE) shape = ellipseShapeFromJson(v, type, reason);
-    else if (type == ShapeType::PATH) shape = pathShapeFromJson(v, type, reason);
-    else shape = textShapeFromJson(v, reason);   // TEXT
+    else if (type == ShapeType::Line || type == ShapeType::Polyline) shape = lineShapeFromJson(v, type, reason);
+    else if (type == ShapeType::Ellipse || type == ShapeType::Circle) shape = ellipseShapeFromJson(v, type, reason);
+    else if (type == ShapeType::Path) shape = pathShapeFromJson(v, type, reason);
+    else shape = textShapeFromJson(v, reason);   // Text
     if (!shape) return nullptr;
     transformFromJson(at(v, keys::common::kTransform), *shape);
     return shape;

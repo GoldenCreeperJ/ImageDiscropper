@@ -1,8 +1,7 @@
 // ============================================================================
 // 文件：canvas/canvas_scene_rects.cpp
-// 作用：CanvasScene 的「L2 多矩形」图元域成员实现（TU 拆分）——多矩形诱导切割线/可拖拽
-//       选区框组/手柄尺寸/拖拽态与高亮。自 canvas_scene.cpp 原封迁出（同 Document 先例：
-//       类不拆、仅分 TU 编译，公有 API 不变）。
+// 作用：CanvasScene 的「L2 多矩形」图元域成员实现（同类分 TU 编译）——多矩形诱导切割线/可拖拽
+//       选区框组/手柄尺寸/拖拽态与高亮。CanvasScene 类不拆分，仅按职责分 TU 编译。
 // ============================================================================
 #include "canvas/canvas_scene.h"
 
@@ -23,7 +22,7 @@ void CanvasScene::updateMultiRectCutLines(const engine::Grid& grid, const bool s
     gridLayer_.rebuild(*this, grid, imgW_, imgH_, show && cutLinesVisible_, /*asCutLines=*/true);
 }
 
-// 依 Document 多矩形列表刷新可交互的橙色选区框（L2 MULTI_RECT）。每个矩形一个 SelectionRectItem，
+// 依 Document 多矩形列表刷新可交互的橙色选区框（L2 MultiRect）。每个矩形一个 SelectionRectItem，
 // 可整体移动 / 四角缩放 / 拖边微调，与单矩形选区一致。坐标即原图像素（场景坐标），无需换算。
 // 【拖拽安全】增量维护：按数量增删末位图元、逐个刷新几何；绝不 clear+重建（否则会在拖拽中
 // 删除正在处理鼠标事件的图元→崩溃）；且跳过对正在拖拽图元的回设（避免逐帧量化抖动）。
@@ -74,7 +73,7 @@ void CanvasScene::updateMultiRects(const std::vector<engine::RectRegion>& rects)
     multiBoundsH_ = imgH_;
 }
 
-// 清空多矩形选区框（非 MULTI_RECT / 换图时）。
+// 清空多矩形选区框（非 MultiRect / 换图时）。
 void CanvasScene::clearMultiRects() {
     for (auto* item : multiRectItems_) { removeItem(item); delete item; }
     multiRectItems_.clear();

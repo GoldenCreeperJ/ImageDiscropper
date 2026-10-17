@@ -1,9 +1,8 @@
 // ============================================================================
 // 文件：model/annotation_bridge_pending.cpp
-// 作用：AnnotationBridge 的「绘制流程」域成员实现（TU 拆分）——工具 pending 草稿重建、
+// 作用：AnnotationBridge 的「绘制流程」域成员实现（同类其它 TU 分块）——工具 pending 草稿重建、
 //       两点形状 begin/update/commit、折线/画笔路径 begin/append/preview/commit、
-//       文字添加。自 annotation_bridge.cpp 原封迁出（同 Document 先例：类不拆、
-//       仅分 TU 编译，公有 API 不变）。
+//       文字添加。AnnotationBridge 类不拆分，仅按职责分 TU 编译。
 // ============================================================================
 #include "model/annotation_bridge.h"
 
@@ -25,7 +24,7 @@ void AnnotationBridge::rebuildPending(const core::Point2D current) {
     req.text = editor_.currentText();
     req.fontSize = editor_.currentFontSize();
     req.cornerRadius = editor_.currentCornerRadius();
-    if (tool_ == AnnoTool::POLYLINE || tool_ == AnnoTool::BRUSH) {
+    if (tool_ == AnnoTool::Polyline || tool_ == AnnoTool::Brush) {
         req.path = pathDraft_;                 // buildShape 将 path 封装为 PathShape
     } else {
         req.p1 = anchor_;
@@ -74,11 +73,11 @@ void AnnotationBridge::appendPathPoint(const core::Point2D p) {
 }
 
 // 折线橡皮筋预览：以「已落顶点的草稿 + 一段到光标的临时连线」构造 pending，供移动时实时成形。
-// 仅 POLYLINE 生效且需已有草稿；临时段写入 req.path 的副本，**不污染 pathDraft_**（左键点击才落顶点）。
+// 仅 Polyline 生效且需已有草稿；临时段写入 req.path 的副本，**不污染 pathDraft_**（左键点击才落顶点）。
 void AnnotationBridge::previewPolyline(const core::Point2D cursor) {
-    if (tool_ != AnnoTool::POLYLINE || pathDraft_.empty()) return;
+    if (tool_ != AnnoTool::Polyline || pathDraft_.empty()) return;
     annotation::ShapeRequest req;
-    req.type = geometry::ShapeType::POLYLINE;
+    req.type = geometry::ShapeType::Polyline;
     req.cornerRadius = editor_.currentCornerRadius();
     req.path = pathDraft_;                     // 拷贝草稿（含已落顶点）
     req.path.lineTo(cursor.x, cursor.y);       // 追加橡皮筋临时段（仅预览）
@@ -95,7 +94,7 @@ void AnnotationBridge::commitPath() {
     // 依 pathDraft_ 的正式顶点重建形状后提交：**不复用 pending_**——折线的 pending_ 可能是
     // previewPolyline 追加了橡皮筋临时段的预览形状，收笔时须丢弃该临时段，只保留已落顶点。
     annotation::ShapeRequest req;
-    req.type = shapeTypeForTool(tool_);        // POLYLINE→POLYLINE，BRUSH→PATH
+    req.type = shapeTypeForTool(tool_);        // Polyline→Polyline，Brush→Path
     req.cornerRadius = editor_.currentCornerRadius();
     req.path = pathDraft_;
     editor_.addAnnotation(idc::annotation::buildShape(req));
@@ -107,7 +106,7 @@ void AnnotationBridge::commitPath() {
 void AnnotationBridge::addText(const core::Point2D p, const std::string& text) {
     if (text.empty()) return;
     annotation::ShapeRequest req;
-    req.type = geometry::ShapeType::TEXT;
+    req.type = geometry::ShapeType::Text;
     req.p1 = p;
     req.p2 = p;
     req.text = text;
@@ -116,8 +115,5 @@ void AnnotationBridge::addText(const core::Point2D p, const std::string& text) {
     editor_.addAnnotation(idc::annotation::buildShape(req));
     emit changed();
 }
-
-// ===========================================================================
-// 5. 选择 / 移动 / 删除（复用 Core）
 
 } // namespace idc::gui

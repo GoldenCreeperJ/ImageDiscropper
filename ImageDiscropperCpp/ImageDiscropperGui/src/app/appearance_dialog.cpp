@@ -64,7 +64,7 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
     auto* prefs = &CanvasPrefs::instance();
 
     auto* outer = new QVBoxLayout(this);
-    // 内容改多 Tab：配色 / 其他（交互·语言·主题·输出）/ 快捷键（仅桌面）。每页各自包 QScrollArea 适应小屏，
+    // 内容采多 Tab 布局：配色（六色 + 深浅色主题）/ 其他（交互·语言·输出）/ 快捷键（仅桌面）。每页各自包 QScrollArea 适应小屏，
     // 底部提示与「恢复默认/关闭」按钮盒常驻 Tab 之外（快捷键的复位在自身 Tab 内，互不越权）。
     tabs_ = new QTabWidget(this);
     outer->addWidget(tabs_, 1);
@@ -82,7 +82,7 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
     auto* colorContent = new QWidget(colorPage);
     auto* colorVbox = new QVBoxLayout(colorContent);
 
-    // ---- 上区：画布配色（写 Palette，改动即时联动重绘）----
+    // ---- 配色页 · 画布六色（写 Palette，改动即时联动重绘）----
     auto* colorBox = new QGroupBox(colorContent);
     i18n::bindTitle(retranslator_, colorBox, IDC_GT(label, kPaletteBoxTitle));
     auto* cform = new QFormLayout(colorBox);
@@ -123,7 +123,7 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
 
     // ---- 配色页附：外观主题（写 UiPrefs，**对话框内即时 theme::apply + 全量 re-polish、不关面板**）----
     // 深浅色主题与画布六色正交（theme::apply 不触 Palette），同属「看颜色」的诉求，故并入本页而非「其他」。
-    // 下拉选中即：落盘 mode 串 → theme::apply（强制 Fusion 已首次完成、重灌 palette + 递归 re-polish）→ 发 themeApplied() 供宿主兑底刷新。
+    // 下拉选中即：落盘 mode 串 → theme::apply（强制 Fusion 已首次完成、重灌 palette + 递归 re-polish）→ 发 themeApplied() 供宿主兜底刷新。
     auto* themeBox = new QGroupBox(colorContent);
     i18n::bindTitle(retranslator_, themeBox, IDC_GT(label, kThemeBoxTitle));
     auto* tform = new QFormLayout(themeBox);
@@ -146,7 +146,7 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
         const QString mode = themeCombo_->currentData().toString();
         UiPrefs::instance().setThemeMode(mode);
         theme::apply(theme::fromString(mode));   // 立即重灌 palette + 递归 re-polish（含本对话框）
-        emit themeApplied();                      // 通知宿主作兑底刷新（re-polish 已覆盖 chrome）
+        emit themeApplied();                      // 通知宿主作兜底刷新（re-polish 已覆盖 chrome）
     });
     i18n::bindFormRow(retranslator_, tform, themeCombo_, IDC_GT(label, kThemeField));
     auto* themeHint = new QLabel(themeBox);
@@ -162,7 +162,7 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
     addTab(colorPage, IDC_GT(label, kTabColors));
 
     // ===================== Tab 二：其他（交互 / 语言 / 输出）=====================
-    // 下方三个 QGroupBox 沿用局部名 content/vbox（即本页容器），代码与拆 Tab 前逐字一致。
+    // 本页容器局部名 content/vbox；页内三个 QGroupBox（语言 / 交互 / 输出）在末尾按「语言置顶」重排 addWidget。
     auto* otherPage = new QScrollArea(tabs_);
     otherPage->setWidgetResizable(true);
     otherPage->setFrameShape(QFrame::NoFrame);
@@ -170,7 +170,7 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
     auto* content = new QWidget(otherPage);
     auto* vbox = new QVBoxLayout(content);
 
-    // ---- 中区：画布交互（写 CanvasPrefs；手柄/缩放改动即时重算，新建尺寸仅记住下次用）----
+    // ---- 其他页 · 画布交互（写 CanvasPrefs；手柄/缩放改动即时重算，新建尺寸仅记住下次用）----
     auto* interBox = new QGroupBox(content);
     i18n::bindTitle(retranslator_, interBox, IDC_GT(label, kInteractionBoxTitle));
     auto* iform = new QFormLayout(interBox);
@@ -193,7 +193,7 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
     {
         auto* s = new QSpinBox;
         s->setRange(0, nums::app::kScrollMarginPercentMax);
-        i18n::bindSpecialValue(retranslator_, s, IDC_GT(label, kNoMarginSpecialValue));   // 0 = 图像边缘即滚动极限（旧观感）
+        i18n::bindSpecialValue(retranslator_, s, IDC_GT(label, kNoMarginSpecialValue));   // 0 = 图像边缘即滚动极限（无边距观感）
         s->setSuffix(QStringLiteral(" %"));
         s->setValue(prefs->scrollMarginPercent());
         connect(s, qOverload<int>(&QSpinBox::valueChanged), this,
@@ -250,14 +250,14 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
         newHeightSpin_ = s;
         addSpinRow(s, IDC_GT(label, kNewHeightField), IDC_GT(tooltip, kNewHeightSpin));
     }
-    // ---- 下区：应用语言（写 UiPrefs，**对话框内即时热切换、不关面板**）----
+    // ---- 其他页 · 应用语言（写 UiPrefs，**对话框内即时热切换、不关面板**）----
     // 下拉选中即：落盘偏好 → 切全局语言 → 重放本对话框自身文案 → 发 languageApplied() 令宿主主窗原地重放。
     // 全 GUI 无工作线程，单线程切换安全；模态期间主窗在信号槽内被程序化更新（不销毁、状态无损）。
     auto* langBox = new QGroupBox(content);
     i18n::bindTitle(retranslator_, langBox, IDC_GT(label, kLangBoxTitle));
     auto* lform = new QFormLayout(langBox);
     langCombo_ = new QComboBox;
-    langCombo_->setMinimumHeight(nums::dialog::kTouchFieldMinHeightPx);   // 触控下限，与上两区一致
+    langCombo_->setMinimumHeight(nums::dialog::kTouchFieldMinHeightPx);   // 触控下限，与本页其它数值框一致
     // 三项的**显示文字**可译，**项数据**（语言码）不可译：取 ident 与 Core 常量。
     // “English” 一类语言名以其自身书写展示是惯例，故本条在任何语言下都不进译文表（bindItemTexts 重放时逐字不变）。
     langCombo_->addItem(IDC_GTR(label, kLangFollowSystem),
@@ -287,7 +287,7 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
     i18n::bindText(retranslator_, langHint, IDC_GT(label, kLangApplyHint));
     lform->addRow(QString(), langHint);
 
-    // ---- 第四区：默认输出文件夹（写 UiPrefs，**仅桌面**；即时落盘）----
+    // ---- 其他页 · 默认输出文件夹（写 UiPrefs，**仅桌面**；即时落盘）----
     // 行内可手输路径 + 「浏览…」选目录；构造时回显一次已存偏好。文案经 bind 助手随语言热切换一并重放。
     // Android 导出走相册固定目录、无文件夹概念，故本项不参与（export_controller 的 Android 分支不读本值）。
     auto* exportBox = new QGroupBox(content);
@@ -297,7 +297,7 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
     auto* dirRowLay = new QHBoxLayout(dirRow);
     dirRowLay->setContentsMargins(0, 0, 0, 0);
     defaultExportDirEdit_ = new QLineEdit(dirRow);
-    defaultExportDirEdit_->setMinimumHeight(nums::dialog::kTouchFieldMinHeightPx);   // 触控下限，与上三区一致
+    defaultExportDirEdit_->setMinimumHeight(nums::dialog::kTouchFieldMinHeightPx);   // 触控下限，与本页其它数值框一致
     defaultExportDirEdit_->setText(UiPrefs::instance().defaultExportDir());
     i18n::bindPlaceholder(retranslator_, defaultExportDirEdit_, IDC_GT(label, kExportDirPlaceholder));
     auto* dirBrowseBtn = new QPushButton(dirRow);
@@ -363,7 +363,7 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
     refreshInteraction();
 
     // 屏幕尺寸护栏：小屏 / 横屏时按可用几何钳最大宽 / 高，内容超出由各页内部滚动区消化、
-    // 底部提示与按钮行常驻 Tab 之外→恒可关闭；旋转后重钳、部件零重建（item 2/8）。
+    // 底部提示与按钮行常驻 Tab 之外→恒可关闭；旋转后重钳、部件零重建。
     limitDialogToScreen(this);
 }
 
@@ -559,7 +559,7 @@ void AppearanceDialog::syncShortcutRow(const CommandId id) const {
 }
 
 // 把冲突提示延后到当前点击事件处理完后的事件轮次（QTimer::singleShot(0)）。
-// 目的：从 clicked 槽里**同步**弹模态框，会因按钮激活态/焦点回落导致同一次点击派生多次 clicked（上一版重入守卫只拦模态循环内的重入，拦不住相隔的第二次）。
+// 目的：从 clicked 槽里**同步**弹模态框，会因按钮激活态/焦点回落导致同一次点击派生多次 clicked；仅靠重入守卫拦不住落在后续事件轮次的第二次。
 // 延后后，多个 clicked 均先落到本方法：靠 pending 标志合并为一次排期，定时器触发时只扫一次、只弹一次。
 void AppearanceDialog::scheduleConflictReport() {
     if (conflictReportPending_) return;   // 已有待处理的提示：合并同一次点击的重复触发。

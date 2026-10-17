@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：canvas/items/image_layer_item.h
 // 作用：多层画布上「单个图片图层」的落位框图元——以 canvas::layerPlacement 得到的画布坐标
-//       矩形，用青色虚线框叠加渲染（不改底图像素，标注在底图之上、标注之下，见 z_order）。
+//       矩形，用青色虚线框叠加渲染（不改底图像素，本图层位于底图之上、标注之下，见 z_order）。
 //       默认仅示意（不可交互，Qt::NoButton，不抢既有框选/标注/选区交互）；
 //       图层拾取模式开启时经 setInteractive(true) 允许左键抓取：按下发 pressed(id) 选中，
 //       拖拽本地图元位移作视觉反馈，释放发 moved(id, dxPx, dyPx) 交上层把偏移累加进 ImageTransform。
@@ -38,14 +38,14 @@ public:
     bool selectedFrame() const { return selected_; }
 
     // 交互态（图层拾取模式）：true 时由场景拾取命中作为候选可拖；false 时不作拾取候选。
-    //   注：图元自身不再直接接受鼠标（恒 Qt::NoButton），拾取/拖拽统一由 CanvasScene 路由（支持重叠循环选层）。
+    //   注：图元自身不直接接受鼠标（恒 Qt::NoButton），拾取/拖拽统一由 CanvasScene 路由（支持重叠循环选层）。
     void setInteractive(bool on);
     bool interactive() const { return interactive_; }
 
     // 是否正处于拖拽手势中（供上层在拖拽期跳过对本图元的回设）。
     bool isDragging() const { return dragging_; }
 
-    // ---- 拖拽手势三段（由 CanvasScene 在拾取模式下驱动，不再依赖图元自身鼠标事件）----
+    // ---- 拖拽手势三段（由 CanvasScene 在拾取模式下驱动，不依赖图元自身鼠标事件）----
     // beginDrag：按下即选中本层（发 pressed(id)）并复位任何遗留位移，从本次场景坐标起拖。
     void beginDrag(const QPointF& scenePos);
     // dragMove：逐帧累加视觉位移（setPos 反馈，不回写模型）。

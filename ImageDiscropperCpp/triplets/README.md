@@ -76,4 +76,4 @@ dbg + rel 双配置重复构建（构建量减半）。
   在 arm64 mac 构建机上与 `--build` 恰好同名 → autoconf 判定「本机构建」→ 运行测试二进制 →
   iOS 二进制无法执行 → configure exit 77。`--host` 与 `--build` 不同名即触发交叉模式
   （改用缓存提示、不再运行测试程序）。libb2 是 iOS 目标唯一的 autotools 端口，
-  故此前从未踩中。
+  故该交叉模式差异仅在此端口暴露。

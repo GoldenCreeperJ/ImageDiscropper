@@ -1,8 +1,7 @@
 // ============================================================================
 // 文件：app/forms/pattern_form.cpp
-// 作用：实现 PatternFormWidget 的图案参数表单（见同名头文件说明）；自 NewCanvasDialog
-//       原封迁出（控件构建 / 采参汇编 / 图案相关显隐与文案 / 取色），仅把 refreshPreview
-//       收尾改为发 paramsChanged() 交上游。
+// 作用：实现 PatternFormWidget 的图案参数表单（见同名头文件说明）——
+//       承载控件构建 / 采参汇编 / 图案相关显隐与文案 / 取色，参数变化发 paramsChanged() 交上游刷新预览。
 // ============================================================================
 #include "app/forms/pattern_form.h"
 
@@ -30,7 +29,7 @@ PatternFormWidget::PatternFormWidget(QWidget* parent) : QWidget(parent) {
     grid->setContentsMargins(0, 0, 0, 0);
 
     int row = 0;
-    // ---- 图案类型 ----（旧「图片」条目已移除：图片不再是图案，改走上游「附加图片」独立入口）
+    // ---- 图案类型 ----（图片不属于图案类型，经上游「附加图片」独立入口提供）
     kindCombo_ = new QComboBox(this);
     for (const auto k : {generate::PatternKind::Solid, generate::PatternKind::LinearGradient,
                          generate::PatternKind::RadialGradient, generate::PatternKind::Checkerboard,
@@ -38,7 +37,7 @@ PatternFormWidget::PatternFormWidget(QWidget* parent) : QWidget(parent) {
                          generate::PatternKind::DotGrid, generate::PatternKind::Concentric,
                          generate::PatternKind::RadialRays, generate::PatternKind::HueGradient,
                          generate::PatternKind::Noise}) {
-        // Core 返回的是按当前语言现取的显示名（std::string）；Qt5 的 fromUtf8 不吃 std::string，故 c_str()。
+        // Core 返回的是按当前语言现取的显示名（std::string）；此处经 c_str() 走 fromUtf8 的 const char* 重载。
         kindCombo_->addItem(QString::fromUtf8(generate::patternKindName(k).c_str()));
         // itemData 存枚举值，避免依赖显示序与枚举数值一致。
         kindCombo_->setItemData(kindCombo_->count() - 1, static_cast<int>(k));

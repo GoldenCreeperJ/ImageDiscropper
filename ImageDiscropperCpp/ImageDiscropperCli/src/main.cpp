@@ -7,12 +7,11 @@
 // 说明（Windows 中文路径 / 控制台编码）：源码以 /utf-8 编译，字符串字面量与 std::cout 输出的
 //       均为 UTF-8 字节；但 Windows 控制台缺省用 OEM 代码页（中文系统为 GBK/936）解释这些
 //       字节，导致帮助 / 版本 / 错误文本显示为乱码。故在入口处把控制台输入 / 输出代码页切到
-//       UTF-8（65001），使控制台按 UTF-8 渲染。参数不再沿用窄字符 argv（系统 ANSI 码页）：改由
+//       UTF-8（65001），使控制台按 UTF-8 渲染。参数不经窄字符 argv（系统 ANSI 码页）：而由
 //       GetCommandLineW 经 CommandLineToArgvW 取宽参再 WideCharToMultiByte(CP_UTF8) 转 UTF-8，
 //       与 Core「std::string 路径按 UTF-8 解析（core::pathFromUtf8/pathToUtf8）」的契约一致——中文 /
-//       非 ASCII 路径方可正确开合（注：__wargv 仅在 wmain 入口下由 UCRT 填充，main 入口下为 NULL）；
-//       输出被重定向到文件 / 管道时无控制台，SetConsole*CP 静默失败，UTF-8 字节原样写入（符合预期，
-//       亦不影响集成测试用 rdbuf 捕获）。
+//       非 ASCII 路径方可正确开合；输出被重定向到文件 / 管道时无控制台，SetConsole*CP 静默失败，
+//       UTF-8 字节原样写入（符合预期，亦不影响集成测试用 rdbuf 捕获）。
 // ============================================================================
 #include <cstdlib>
 #include <string>
@@ -36,8 +35,7 @@ static void enableUtf8Console() {
 static std::string toUtf8(const wchar_t* w) {
     const int need = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
     if (need <= 0) return {};
-    // 注意：cchWideChar=-1 时 need **含结尾 NUL**，缓冲区必须开 need 字节再剥尾——
-    // 原实现开 need-1 字节写入 need 字节（含 NUL），1 字节堆溢出，debug 堆守卫在退出时报错。
+    // cchWideChar=-1 时 need 含结尾 NUL：缓冲区开 need 字节写入，再剥去尾部 NUL。
     std::string s(static_cast<std::size_t>(need), '\0');
     WideCharToMultiByte(CP_UTF8, 0, w, -1, s.data(), need, nullptr, nullptr);
     if (!s.empty() && s.back() == '\0') s.pop_back();
@@ -51,8 +49,7 @@ int main(const int argc, char** argv) {
     enableUtf8Console(); // 必须先于任何输出，避免首行中文乱码。
     (void)argc;
     (void)argv;          // 窄 argv 为系统 ANSI 码页，弃用。
-    // 宽参数来源：__wargv 仅在 wmain 入口下由 UCRT 填充，main 入口下恒为 NULL
-    // （曾致任意带参数运行解引用空指针崩溃）；改从 GetCommandLineW 经 CommandLineToArgvW 取。
+    // main 入口下 __wargv 不可用（仅 wmain 由 UCRT 填充），故从 GetCommandLineW 经 CommandLineToArgvW 取宽参。
     int wargc = 0;
     wchar_t** wargv = CommandLineToArgvW(GetCommandLineW(), &wargc);
     std::vector<std::string> args;

@@ -16,8 +16,7 @@
 //   · §7 读取里「无值即不生效」的 0/1 型占位回退（width/height/x/y/cols/rows/zOrder 缺省 0）：
 //     语义即「没写＝不设」，抽成常量反而掩盖意图，保持就地。
 //   · tests/ 与 examples/ 内的期望值和示例值（属测试断言，改动即改测试意图）。
-// 现状：P2（Core 数字上提）已完成 —— engine / preprocess / annotation / generate / geometry 五组已填，
-//       canvas 组经盘点无条目（理由见该组注释）。新模块头只写全限定名，不在公共头内引入别名。
+// 约定：新模块头只写全限定名（如 nums::engine::kDefaultQuality），不在公共头内引入别名。
 // ============================================================================
 #pragma once
 
@@ -26,7 +25,7 @@
 namespace idc::core::nums {
 
 // engine：SPEC §7 配置读写的兜底默认与边界（src/engine/engine_config_json*.cpp、
-//       include/engine/composition.h、src/engine/image_io.cpp）。
+//       include/engine/composition.h、src/io/image_io.cpp）。
 namespace engine {
 inline constexpr int kDefaultOpacity = 255;      // 缺 opacity 键时的回退值＝全不透明乘子。四处共用：顶层画布级、
                                                  // 底图 generate 段、图层 transform、旧 opacity 迁移步的 mul。

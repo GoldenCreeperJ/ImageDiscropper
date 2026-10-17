@@ -1,13 +1,12 @@
 // ============================================================================
 // 文件：app/controllers/session_controller.h
 // 作用：SessionController——文档会话生命周期编排：打开/新建画布/添加图片图层/清空图层/
-//       重置全部 + 图层编辑面板声明态 CRUD 接线。从 MainWindow 拆出（原 onOpen/onNew/
-//       onAddImageLayer/onClearAllLayers/onDestroyAll/openImageFromPath 及
-//       LayerEditPanel/LayerPanel 相关信号串联）。
+//       重置全部 + 图层编辑面板声明态 CRUD 接线（onOpen/onNew/onAddImageLayer/
+//       onClearAllLayers/onDestroyAll/openImageFromPath 及 LayerEditPanel/LayerPanel 相关信号串联）。
 // 分块依据：会话生命周期是独立关注点——换底图/换图/图层栈变更一族均「意图 → Document
 //       声明态 → 控制器重组预览」，与画布交互/导出/配置域无耦合（CONTRIBUTING.md「分层纪律」）。
 // 说明：openImageFromPath 为公共入口（main.cpp 命令行首参 / 桌面与移动共用），
-//       MainWindow 保留一行转发以维持公共面不变。
+//       经 MainWindow::openImageFromPath 一行转发到本控制器。
 // ============================================================================
 #pragma once
 
@@ -23,7 +22,7 @@ class AnnotationBridge;
 class PreprocessController;
 class DocHistory;
 class StatusBar;
-class ToolPanel;
+class ModeToolPanel;
 class LayerEditPanel;
 class LayerPanel;
 
@@ -41,7 +40,7 @@ public:
     void setPreprocessController(PreprocessController* preprocess);
     void setHistory(DocHistory* history);
     void setStatusBar(StatusBar* status);
-    void setToolPanel(ToolPanel* toolPanel);       // 添加图层后切图片拾取态 / 清空后回框选
+    void setToolPanel(ModeToolPanel* toolPanel);       // 添加图层后切图片拾取态 / 清空后回框选
     void setLayerEditPanel(LayerEditPanel* panel);
     void setLayerPanel(LayerPanel* panel);         // 图片图层整体显隐开关接线
     void setDialogParent(QWidget* parent);
@@ -64,7 +63,7 @@ private:
     PreprocessController* preprocess_{nullptr};
     DocHistory* history_{nullptr};
     StatusBar* status_{nullptr};
-    ToolPanel* toolPanel_{nullptr};
+    ModeToolPanel* toolPanel_{nullptr};
     LayerEditPanel* layerEditPanel_{nullptr};
     LayerPanel* layerPanel_{nullptr};
     QWidget* dialogParent_{nullptr};

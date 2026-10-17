@@ -1,12 +1,12 @@
 // ============================================================================
 // 文件：src/engine/export.cpp
 // 作用：实现导出阶段——exportImage 把合成结果 Composition 落盘（SPEC §4.1/§4.2/§4.5）。
-//       分离模式（SEPARATE）把每个保留片段裁剪编码后，直接写入目标文件夹（不压缩打包）；
-//       合并模式（MERGED）构建画布、blit 各片段后写单图。像素搬运在此发生（split 只产区域描述）。
+//       分离模式（Separate）把每个保留片段裁剪编码后，直接写入目标文件夹（不压缩打包）；
+//       合并模式（Merged）构建画布、blit 各片段后写单图。像素搬运在此发生（split 只产区域描述）。
 // 分块依据：导出是唯一接触“像素裁剪 + 编码 I/O”的阶段，独立于合成计算（composition.cpp）；
-//       编码委托 image_io（stb），本文件只做编排、命名与目录管理。
-// 说明：SEPARATE 时 outputPath 为目标文件夹——不存在则自动创建（含多级父目录），仅在创建
-//       失败（如被同名文件占用 / 权限不足）时返回 false（E-8）；MERGED 时 outputPath 为单图
+//       编码委托 io::writeImageFile（stb），本文件只做编排、命名与目录管理。
+// 说明：Separate 时 outputPath 为目标文件夹——不存在则自动创建（含多级父目录），仅在创建
+//       失败（如被同名文件占用 / 权限不足）时返回 false（E-8）；Merged 时 outputPath 为单图
 //       文件路径，其父目录不存在时同样自动创建，格式优先由扩展名推断，无有效扩展名时回退到
 //       Composition::format。
 // ============================================================================
@@ -14,7 +14,7 @@
 
 #include "i18n/core_texts.h" // 命名模板缺省串与 {name} 回退占位名（常量层）
 #include "core/path_utf8.h" // pathFromUtf8/pathToUtf8（取代 C++23 已移除的 u8path）
-#include "engine/image_io.h"
+#include "io/image_io.h"
 
 #include <algorithm>
 #include <cctype>
@@ -49,21 +49,21 @@ std::string extensionOf(const std::string& path) {
 
 // 由扩展名推断导出格式；known 返回是否为受支持的图像格式。
 ExportFormat formatFromExt(const std::string& ext, bool& known) {
-    if (ext == ".png") { known = true; return ExportFormat::PNG; }
-    if (ext == ".jpg" || ext == ".jpeg") { known = true; return ExportFormat::JPEG; }
-    if (ext == ".bmp") { known = true; return ExportFormat::BMP; }
-    if (ext == ".webp") { known = true; return ExportFormat::WEBP; } // 由 libwebp 编码。
+    if (ext == ".png") { known = true; return ExportFormat::Png; }
+    if (ext == ".jpg" || ext == ".jpeg") { known = true; return ExportFormat::Jpeg; }
+    if (ext == ".bmp") { known = true; return ExportFormat::Bmp; }
+    if (ext == ".webp") { known = true; return ExportFormat::Webp; } // 由 libwebp 编码。
     known = false;
-    return ExportFormat::PNG;
+    return ExportFormat::Png;
 }
 
 // 格式对应的扩展名（供分离导出命名文件）。
 const char* extForFormat(const ExportFormat fmt) {
     switch (fmt) {
-        case ExportFormat::PNG:  return ".png";
-        case ExportFormat::JPEG: return ".jpg";
-        case ExportFormat::BMP:  return ".bmp";
-        case ExportFormat::WEBP: return ".webp";
+        case ExportFormat::Png:  return ".png";
+        case ExportFormat::Jpeg: return ".jpg";
+        case ExportFormat::Bmp:  return ".bmp";
+        case ExportFormat::Webp: return ".webp";
     }
     return ".png";
 }
@@ -128,7 +128,7 @@ bool exportSeparate(const Composition& composition, const core::Image& source,
         const core::Image sub =
             source.crop(p.source.left, p.source.top, p.source.right, p.source.bottom);
         const int idx = p.index >= 0 ? p.index : i; // 优先用单元序号命名。
-        if (const fs::path file = dir / core::pathFromUtf8(applyNaming(composition.naming, name, idx, p.row, p.col) + ext); !writeImageFile(core::pathToUtf8(file), sub, fmt, composition.quality, core::kTransparent))
+        if (const fs::path file = dir / core::pathFromUtf8(applyNaming(composition.naming, name, idx, p.row, p.col) + ext); !io::writeImageFile(core::pathToUtf8(file), sub, fmt, composition.quality, core::kTransparent))
             allOk = false;
         ++i;
     }
@@ -146,22 +146,22 @@ bool exportMerged(const Composition& composition, const core::Image& source,
     ExportFormat fmt = formatFromExt(extensionOf(outputPath), known);
     if (!known) fmt = composition.format; // 扩展名不明时以配置格式为准。
 
-    // RGBA 画布，以透传的 padColor 填充（重排空位 / PAD 余量在源区域裁剪后由画布底色补齐）。
-    core::Image canvas(composition.canvasWidth, composition.canvasHeight, core::ImageFormat::RGBA);
+    // RGBA 画布，以透传的 padColor 填充（重排空位 / Pad 余量在源区域裁剪后由画布底色补齐）。
+    core::Image canvas(composition.canvasWidth, composition.canvasHeight, core::ImageFormat::Rgba);
     canvas.fill(composition.padColor);
     for (const Placement& p : composition.placements) {
         const core::Image sub =
             source.crop(p.source.left, p.source.top, p.source.right, p.source.bottom);
         canvas.blit(sub, p.dest.left, p.dest.top);
     }
-    return writeImageFile(outputPath, canvas, fmt, composition.quality, composition.padColor).has_value();
+    return io::writeImageFile(outputPath, canvas, fmt, composition.quality, composition.padColor).has_value();
 }
 
 } // namespace
 
 // 把合成结果落盘（分离多图 / 合并单图）；成功返回空 expected。
-// 模式判定：compose 对 SEPARATE 置画布 0×0（outputPath 为目标文件夹，不存在则自动创建），
-//           对 MERGED 置真实画布尺寸（outputPath 为单图文件路径）。
+// 模式判定：compose 对 Separate 置画布 0×0（outputPath 为目标文件夹，不存在则自动创建），
+//           对 Merged 置真实画布尺寸（outputPath 为单图文件路径）。
 std::expected<void, core::CoreError> exportImage(const Composition& composition, const core::Image& source,
                                                  const std::string& outputPath) {
     if (composition.placements.empty()) return std::unexpected(core::CoreError{core::CoreError::Code::EmptyKeepRegion, {}}); // E-7：保留集为空，禁止导出。

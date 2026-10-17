@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：src/panels/annotation_prop_panel.cpp
+// 文件：panels/annotation_prop_panel.cpp
 // 作用：实现标注属性页的构建、取色器与模型回显（见同名头文件说明）。
 // 分块依据：QFormLayout 排布「边框颜色 / 粗细 / 填充 / 填充颜色 / 文字 / 字号 / 圆角」等行；控件变更转发为信号，
 //           取色器为纯 UI 关注点（QColorDialog）；槽内无任何几何 / 光栅化逻辑（CONTRIBUTING.md「分层纪律」）。
@@ -40,7 +40,7 @@ void applySwatch(QPushButton* btn, const QColor& c) {
                                             // 禁用态一律用 palette 令牌而非字面色：本串在 syncFromModel 每次重设，
                                             // 字面 #dcdcdc 等在深色下会成一片亮灰斑，且 re-polish 只能重解析令牌、救不了字面量。
                                             // 禁用底取 window（非 mid）：placeholderText 是专为 window/base 底配的淡字，
-                                            // 配 mid 底（浅色模式为块中浅灰）会与字色同明度而糊成一片、看不清；改回 window 底恢复对比。
+                                            // 配 mid 底（浅色模式为块中浅灰）会与字色同明度而糊成一片、看不清；故取 window 底保持对比。
                                             "QPushButton:disabled{background:palette(window);color:palette(placeholderText);"
                                             "border:1px solid palette(dark);}")
                                  .arg(bg, fg));
@@ -166,7 +166,7 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     root->addWidget(transformGroup_);
 
     // ---- 叠放次序区（仅对选中标注生效）：上移一层 / 下移一层 / 置于顶层 / 置于底层 ----
-    // 从标注菜单迁入本面板（用户诉求：层序属“选中项属性”，归位到属性页而非菜单）；无选中时整区置灰。
+    // 层序属“选中项属性”，故归位于属性页（而非菜单）；无选中时整区置灰。
     // 列表下标即 z 序（大＝顶，见 Core hitTest/burnIn），本区仅发意图、真正重排在 AnnotationBridge→Core moveAnnotation。
     stackGroup_ = new QGroupBox(this);
     i18n::bindTitle(retranslator_, stackGroup_, IDC_GT(label, kStackOrderGroupBox));
@@ -282,7 +282,7 @@ void AnnotationPropPanel::syncFromModel() {
     cornerSpin_->blockSignals(false);
 
     // 依当前形状类型的能力置灰不适用控件：无转角的类型（直线 / 圆 / 椭圆 / 文字）禁用圆角数值；
-    // 「不可填充」改由「填充」复选框置灰承载（勾选框禁用态显眼；色块按钮自带彩色背景、禁用态难辨），
+    // 「不可填充」由「填充」复选框置灰承载（勾选框禁用态显眼；色块按钮自带彩色背景、禁用态难辨），
     // 填充色按钮仍仅在可填充且已勾选时可用（其禁用态由 applySwatch 的 :disabled 样式保证可见）。
     cornerSpin_->setEnabled(model_->contextSupportsCornerRadius());
     fillCheck_->setEnabled(model_->contextSupportsFill());

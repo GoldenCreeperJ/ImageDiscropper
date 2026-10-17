@@ -6,10 +6,9 @@
 //       std::vector<ImageLayer> 承载（无 LayerStack 包装；画布恒铺透明底，无画布级背景概念）。
 // 分块依据：Core 只承载「无头侧也成立」的数据与像素能力；每层的**交互会话态**（选中/编辑/
 //       base_ 缓存编排）归 GUI 的 PreprocessSession，Core 绝不引用 GUI 类型（分层纪律）。
-// 说明：图片只有一个概念——本模块的 ImageLayer「图片图层」（可指文件 / 配方 / 空占位）；
-//       旧 generate::PatternKind::Image「贴图图案」已彻底移除。适应模式（ImageFit）与两级落位
-//       （图层框→底图 = transform，源图→图层框 = image* 内层字段）已升为**持久字段**，使 config
-//       仅凭 fileName（原始源）+ 内/外落位 + 图层框底色即可完整复现，reload 一致。
+// 说明：图片只有一个概念——本模块的 ImageLayer「图片图层」（可指文件 / 配方 / 空占位）。
+//       适应模式（ImageFit）与两级落位（图层框→底图 = transform，源图→图层框 = image* 内层字段）
+//       为**持久字段**，使 config 仅凭 fileName（原始源）+ 内/外落位 + 图层框底色即可完整复现，reload 一致。
 //       **底图（画布基座）不是图层**：它走既有输入生态位（file＝外部输入图 / recipe＝generate 段），
 //       由调用方作为 base 传入 composeCanvas，恒铺满画布、无 transform、不入 layers、不可拖拽；
 //       layers 只装「叠加其上的图片图层」。引擎仍只收一张展平画布图：composeCanvas 的产物即喂给
@@ -126,8 +125,8 @@ void applyAlpha(core::Image& image, std::uint8_t opacity);
 
 // ---------------------------------------------------------------------------
 // composeBase：把「底图」（同构 canvas::ImageLayer，钉住画布最底）展平为 width×height 像素。
-//   纯图案底图（sourceKind==Recipe 且无内层落位）：按画布(source)尺寸现算图案，与旧「generate」段
-//   口径逐字节一致（不走 materializeLayer 的 transform 尺寸，避免回归）；如有逐层预处理则同口径 applyExec。
+//   纯图案底图（sourceKind==Recipe 且无内层落位）：按画布(source)尺寸经 makePattern 现算图案
+//   （不走 materializeLayer 的 transform 尺寸，避免回归）；如有逐层预处理则同口径 applyExec。
 //   文件底图 / 带内层落位：当作单元素 layers、空底、box=画布、transform 恒等，转调 composeCanvas 复用两段合成。
 //   **不烘焙底图整体透明度**：placement 路转调 composeCanvas 前把 transform.opacity 归一 255（合成期恒不施乘），
 //   Recipe 路 makePattern 亦不施——底图整体不透明度一律由调用方在合成边界经 applyAlpha 施加（单一应用点，防双淡）。

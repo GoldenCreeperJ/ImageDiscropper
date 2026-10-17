@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：src/i18n/lang_en_detail.cpp（GUI 英文译文表 · 后半：tooltip / status / msg）
+// 文件：i18n/lang_en_detail.cpp（GUI 英文译文表 · 后半：tooltip / status / msg）
 // 作用：GUI 层 tooltip、status、msg 三个可译组的英文目录。与 menu / label 半（lang_en.cpp）分两个 TU，
 //       各自一张 constexpr 表，经 installDetailCatalog() 在 installCatalogs() 内被先后登记（同语言累加）。
 // 架构定位：GUI 顶层 i18n 基建；本半面向「运行时反馈与人读说明」（悬停 / 状态栏 / 弹窗正文），

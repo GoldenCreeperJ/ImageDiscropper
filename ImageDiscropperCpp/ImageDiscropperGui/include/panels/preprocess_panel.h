@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：panels/image_panel.h
+// 文件：panels/preprocess_panel.h
 // 作用：右侧「图像处理面板」（FR-1）——含三块相互独立的编辑区：
 //       ① 顶部「画布尺寸（Resize）」常驻独立区：对原图设定绝对/按比例目标尺寸，即时生效、清除回原尺寸；
 //          resize **不入队列**、恒最先重放（工作图 = 轻操作队列(resize(original))）。
@@ -34,12 +34,12 @@ namespace idc::gui {
 class Document;
 
 // ---------------------------------------------------------------------------
-// ImagePanel：独立画布尺寸区 + 几何 / 色彩两个独立「配置区 + 列表」。
+// PreprocessPanel：独立画布尺寸区 + 几何 / 色彩两个独立「配置区 + 列表」。
 // ---------------------------------------------------------------------------
-class ImagePanel : public QWidget {
+class PreprocessPanel : public QWidget {
     Q_OBJECT
 public:
-    explicit ImagePanel(QWidget* parent = nullptr);
+    explicit PreprocessPanel(QWidget* parent = nullptr);
 
     // 绑定会话状态源：读取当前输出尺寸（尺寸框默认值 + 比例换算基准）与队列内容。
     void setDocument(Document* doc);
@@ -95,7 +95,7 @@ private slots:
     void onResizeWidthEdited(int value) const;   // 保持宽高比时，改宽联动算高（尺寸区内）。
 
 private:
-    // 分区构建（定义在 image_panel_sections.cpp，TU 拆分）：画布尺寸区 / 几何操作区 / 色彩操作区。
+    // 分区构建（定义在 preprocess_panel_sections.cpp，TU 拆分）：画布尺寸区 / 几何操作区 / 色彩操作区。
     void buildResizeSection(QVBoxLayout* root);
     void buildGeoSection(QVBoxLayout* root);
     void buildColorSection(QVBoxLayout* root);

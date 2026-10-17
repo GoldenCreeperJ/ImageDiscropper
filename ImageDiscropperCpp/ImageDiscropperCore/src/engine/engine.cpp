@@ -20,14 +20,14 @@ namespace {
 
 // 依据切割配置与诱导网格自动推导“选择区” S 的单元序号（L1/L2 无显式选择集时用）。
 // 语义（SPEC §3.3）：
-//   RECT + KEEP    → S = 中心矩形单元；RECT + REMOVE → S = 十字带单元（行带 ∪ 列带），
+//   Rect + Keep    → S = 中心矩形单元；Rect + Remove → S = 十字带单元（行带 ∪ 列带），
 //                     剔除十字即删整行 + 整列，四角可坍缩（SPEC §4.2 / §4.4）。
-//   HORIZONTAL_LINE→ S = 横带单元（y ∈ [y1,y2)）；VERTICAL_LINE → S = 竖带单元（x ∈ [x1,x2)）。
-//   MULTI_RECT     → REMOVE：S = ⋃ 各矩形十字带（方案 A，SPEC §3.3.4）；KEEP：S = ⋃ 各矩形单元。
-//   GRID           → 无显式选择时默认全选（配合极性；L3 通常由 selectedCells 覆盖）。
+//   HorizontalLine → S = 横带单元（y ∈ [y1,y2)）；VerticalLine → S = 竖带单元（x ∈ [x1,x2)）。
+//   MultiRect      → Remove：S = ⋃ 各矩形十字带（方案 A，SPEC §3.3.4）；Keep：S = ⋃ 各矩形单元。
+//   Grid           → 无显式选择时默认全选（配合极性；L3 通常由 selectedCells 覆盖）。
 std::vector<int> deriveSelection(const CutConfig& cut, const Grid& grid) {
     std::vector<int> S;
-    const bool remove = cut.polarity == Polarity::REMOVE;
+    const bool remove = cut.polarity == Polarity::Remove;
 
     // 单元 x 跨度是否落在 [x1,x2) 内（列带判定）；y 跨度是否落在 [y1,y2) 内（行带判定）。
     const auto inColBand = [](const Cell& c, const RectRegion& r) {
@@ -38,7 +38,7 @@ std::vector<int> deriveSelection(const CutConfig& cut, const Grid& grid) {
     };
 
     switch (cut.generator) {
-        case CutGenerator::RECT: {
+        case CutGenerator::Rect: {
             const RectRegion& r = cut.rect;
             for (const Cell& c : grid.cells()) {
                 const bool col = inColBand(c, r), row = inRowBand(c, r);
@@ -47,19 +47,19 @@ std::vector<int> deriveSelection(const CutConfig& cut, const Grid& grid) {
             }
             break;
         }
-        case CutGenerator::HORIZONTAL_LINE: {
+        case CutGenerator::HorizontalLine: {
             const RectRegion& r = cut.rect;
             for (const Cell& c : grid.cells())
                 if (inRowBand(c, r)) S.push_back(c.index); // 横带。
             break;
         }
-        case CutGenerator::VERTICAL_LINE: {
+        case CutGenerator::VerticalLine: {
             const RectRegion& r = cut.rect;
             for (const Cell& c : grid.cells())
                 if (inColBand(c, r)) S.push_back(c.index); // 竖带。
             break;
         }
-        case CutGenerator::MULTI_RECT: {
+        case CutGenerator::MultiRect: {
             for (const Cell& c : grid.cells()) {
                 bool hit = false;
                 for (const RectRegion& r : cut.rects) {
@@ -71,7 +71,7 @@ std::vector<int> deriveSelection(const CutConfig& cut, const Grid& grid) {
             }
             break;
         }
-        case CutGenerator::GRID: {
+        case CutGenerator::Grid: {
             for (const Cell& c : grid.cells()) S.push_back(c.index); // 默认全选。
             break;
         }
@@ -99,17 +99,17 @@ static std::expected<EngineResult, core::CoreError> runEngineImpl(const SourceIn
     }
 
     // --- E-1：选框/矩形退化校验（贯穿全图的切割线需有效区间）。---
-    if (config.cut.generator == CutGenerator::RECT &&
+    if (config.cut.generator == CutGenerator::Rect &&
         config.cut.rect.width() <= 0 && config.cut.rect.height() <= 0) {
         return fail(core::CoreError::Code::DegenerateSelection, IDC_KTR(msg, kEngineRectDegenerate));
     }
-    if (config.cut.generator == CutGenerator::MULTI_RECT && config.cut.rects.empty()) {
+    if (config.cut.generator == CutGenerator::MultiRect && config.cut.rects.empty()) {
         return fail(core::CoreError::Code::MultiRectEmpty, IDC_KTR(msg, kEngineMultiRectEmpty));
     }
 
-    // --- ① 切割线 + ② 诱导网格。GRID 生成器走 Grid::build（可处理余量策略）。---
+    // --- ① 切割线 + ② 诱导网格。Grid 生成器走 Grid::build（可处理余量策略）。---
     Grid grid;
-    if (config.cut.generator == CutGenerator::GRID) {
+    if (config.cut.generator == CutGenerator::Grid) {
         grid.build(config.cut.grid, source.width, source.height);
     } else {
         const CutLineSet lines = generateCutLines(config.cut, source);
@@ -132,8 +132,8 @@ static std::expected<EngineResult, core::CoreError> runEngineImpl(const SourceIn
             if (idx >= 0 && idx < cellCount) selection.select(static_cast<std::size_t>(idx));
     }
 
-    // --- E-6：删除区为空（REMOVE 极性却无单元被选中剔除）。---
-    if (config.cut.polarity == Polarity::REMOVE && selection.selectedCount() == 0) {
+    // --- E-6：删除区为空（Remove 极性却无单元被选中剔除）。---
+    if (config.cut.polarity == Polarity::Remove && selection.selectedCount() == 0) {
         return fail(core::CoreError::Code::EmptyDeleteRegion, IDC_KTR(msg, kEngineDeleteSetEmpty));
     }
 
@@ -150,7 +150,7 @@ static std::expected<EngineResult, core::CoreError> runEngineImpl(const SourceIn
     result.collapsible = isCollapsible(selection, grid);
 
     Sequence sequence;
-    if (config.order.strategy == SortStrategy::CUSTOM && !config.selectedCells.empty()) {
+    if (config.order.strategy == SortStrategy::Custom && !config.selectedCells.empty()) {
         sequence.setCustom(config.selectedCells); // 自定义序：以显式选择顺序为准（FR-L3.5）。
     } else {
         sequence.build(grid.cellCount(),
@@ -161,18 +161,18 @@ static std::expected<EngineResult, core::CoreError> runEngineImpl(const SourceIn
 
     // 布局决策 +「仅 L3 可重排」限制（重排是 L3 网格的专属合成方式，SPEC §4.3）。
     CompositionParams emitParams = config.emitParams;
-    const bool isL3 = config.cut.tier == Tier::L3;
-    const bool merged = emitParams.mode == EmitMode::MERGED;
+    const bool isL3 = config.cut.tier == Tier::Grid;
+    const bool merged = emitParams.mode == EmitMode::Merged;
     // 显式选择重排但非 L3 → 直接报错（不静默改布局）。
-    if (merged && emitParams.layout == MergeLayout::REARRANGE && !isL3) {
+    if (merged && emitParams.layout == MergeLayout::Rearrange && !isL3) {
         return fail(core::CoreError::Code::RearrangeNeedsL3, IDC_KTR(msg, kEngineRearrangeNeedsL3));
     }
-    // MERGED+COLLAPSE 但不可坍缩：L3 降级为重排（SPEC §4.4 推论）；L1/L2 无重排可用 → 报错。
-    if (merged && emitParams.layout == MergeLayout::COLLAPSE && !result.collapsible) {
+    // Merged+Collapse 但不可坍缩：L3 降级为重排（SPEC §4.4 推论）；L1/L2 无重排可用 → 报错。
+    if (merged && emitParams.layout == MergeLayout::Collapse && !result.collapsible) {
         if (!isL3) {
             return fail(core::CoreError::Code::NotCollapsible, IDC_KTR(msg, kEngineNotCollapsible));
         }
-        emitParams.layout = MergeLayout::REARRANGE;
+        emitParams.layout = MergeLayout::Rearrange;
     }
 
     result.composition = compose(kept, sequence, emitParams);
@@ -208,7 +208,7 @@ std::expected<EngineResult, core::CoreError> runEngine(const core::Image& image,
         if (source.height <= 0) source.height = work.height();
     }
 
-    // split 裁剪恒以实际工作图像素尺寸为准（与历史实现 split(work, grid) 完全一致）。
+    // split 裁剪恒以实际工作图像素尺寸为准（work.width() / work.height()），不采信声明尺寸。
     return runEngineImpl(source, work.width(), work.height(), config);
 }
 

@@ -21,16 +21,16 @@ QImage toQImage(const core::Image& img) {
 
     // Core Image 为行主序、紧凑排列（无行填充），故 bytesPerLine = 宽 × 每像素字节数。
     switch (img.format()) {
-        case core::ImageFormat::RGBA: {
+        case core::ImageFormat::Rgba: {
             // 构造只引用 Core 缓冲的临时 QImage，随即 .copy() 深拷贝脱离该缓冲。
             const QImage view(bytes, w, h, w * 4, QImage::Format_RGBA8888);
             return view.copy();
         }
-        case core::ImageFormat::RGB: {
+        case core::ImageFormat::Rgb: {
             const QImage view(bytes, w, h, w * 3, QImage::Format_RGB888);
             return view.copy();
         }
-        case core::ImageFormat::GRAY: {
+        case core::ImageFormat::Gray: {
             const QImage view(bytes, w, h, w, QImage::Format_Grayscale8);
             return view.copy();
         }

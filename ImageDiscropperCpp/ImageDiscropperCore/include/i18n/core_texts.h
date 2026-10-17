@@ -18,9 +18,9 @@
 // 提取判据（与另五文件同）：键名一律提取；§7 回退默认值按「出厂默认」提取；枚举 ↔ 串的**成对映射表**
 //       内值串不提取（映射表本身即该 token 的唯一定义点，如 "row-major" / "keep-partial"，再抽常量只会增加跳转）；
 //       例外：面向人的**显示名**不属此列——generate::patternKindName 虽也是枚举分派，但它返回的中文要进 GUI
-//       下拉与提示（落盘用的是 defaults::kPatternKind* 与 gen*Token 两套无关的 token），故已提取进 msg 组。
+//       下拉与提示（落盘用的是 defaults 的 patternKind 串与 gen*Token 两套无关的 token），故已提取进 msg 组。
 //       msg 内由多段拼接而成的句子一律收为**单条整句 + %N 占位符**（如 "第 %1 个标注元素：%2"），
-//       不再拆成连接片段——拆开后译者无法重组语序；只以「'」收尾的前段仍照旧只存前段，
+//       不拆成连接片段——拆开后译者无法重组语序；只以「'」收尾的前段仍只存前段，
 //       后接的原值与尾引号由调用点拼接（那部分是数据，不是句子成分）。
 // 目录与对账：msg 的英文表住 src/i18n/lang_en.cpp，由 GUI / CLI 各自的 installCatalogs() 经
 //       installCoreCatalogs() 装配（三层共用 Core 的一张进程表，键 = `分组::常量名`）；故
@@ -65,17 +65,17 @@ inline constexpr char kFile[] = "file";               // 图层来源的相对�
 namespace config {
 inline constexpr char kSource[] = "source";           // 顶层：原图尺寸段。
 inline constexpr char kCut[] = "cut";                 // 顶层：切割段（层级 / 生成器 / 几何 / 极性）。
-inline constexpr char kSelect[] = "select";           // 顶层：L3 显式选择集（单元序号数组）。
+inline constexpr char kSelect[] = "select";           // 顶层：网格模式显式选择集（单元序号数组）。
 inline constexpr char kOrder[] = "order";             // 顶层：排序策略段。
 inline constexpr char kEmit[] = "emit";               // 顶层：输出段。
-inline constexpr char kGenerate[] = "generate";       // 顶层：底图描述段（键名历史上与 CLI 选项名同源，不可改）。
+inline constexpr char kGenerate[] = "generate";       // 顶层：底图描述段（键名与 CLI 选项名同源，属契约不可改）。
 inline constexpr char kLayers[] = "layers";           // 顶层：多层画布数组。
 inline constexpr char kAnnotations[] = "annotations"; // 顶层：标注数组。
 inline constexpr char kTier[] = "tier";               // cut.tier（"extract"/"erase"/"grid"）。
 inline constexpr char kGenerator[] = "generator";     // cut.generator。
 inline constexpr char kPolarity[] = "polarity";       // cut.polarity（keep/remove）。
 inline constexpr char kParams[] = "params";           // cut.params（随 generator 形态异构）。
-inline constexpr char kRects[] = "rects";             // cut.params.rects（MULTI_RECT）。
+inline constexpr char kRects[] = "rects";             // cut.params.rects（MultiRect）。
 inline constexpr char kStrategy[] = "strategy";       // order.strategy / emit.merge.arrange.strategy。
 inline constexpr char kReverse[] = "reverse";         // 逆序标志（两处同名字段）。
 inline constexpr char kSnake[] = "snake";             // 蛇形标志（两处同名字段）。
@@ -159,7 +159,7 @@ inline constexpr char kAdd[] = "add";                 // **旧配置迁移专用
 
 // ===========================================================================
 // defaults：不写入配置文件就看不到、写入前又有固定初值的「数据值」——相当于 §7 的缺省值总表。
-//   收拢在此的理由：这些值原本一处在结构体成员初值、一处在读取端回退，两处必须同值才能
+//   收拢在此的理由：这些值同时用于结构体成员初值与 §7 读取端回退两处，两处必须同值才能
 //   保证「没写该键」与「写默认值」得到同一张图；分开写则改动时极易漏改一处。
 //   可译性：**不可译**（是要落盘的数据，与枚举 token 表同源，翻译即破协议）。
 // ===========================================================================
@@ -176,7 +176,7 @@ inline constexpr char kNamingTemplate[] = "{name}_{index:03d}";  // 出厂模板
 inline constexpr char kRegionFallbackName[] = "region";         // {name} 取不到目标文件夹名时的回退占位名（分离导出）。
 
 // §7 缺字段时的回退 token（值域与各枚举的 token 映射表一致，改动须两边同步）。
-inline constexpr char kTierL2[] = "erase";                      // 缺 cut.tier：默认反向剔除（Tier::L2）。
+inline constexpr char kTierErase[] = "erase";                    // 缺 cut.tier：默认反向剔除（Tier::Erase）。
 inline constexpr char kGeneratorRect[] = "rect";                 // 缺 cut.generator。
 inline constexpr char kPolarityRemove[] = "remove";              // 缺 cut.polarity。
 inline constexpr char kStrategyRowMajor[] = "row-major";         // 缺 order.strategy 与 emit.merge.arrange.strategy（两处）。
@@ -208,15 +208,15 @@ inline constexpr char kAnnotationText[] = "A";                   // 缺 text 时
 // ===========================================================================
 // msg：面向人的错误与校验报因、图案显示名（Core 无日志设施，失败原因经 result.error / err / reason
 //   逐层上抛，由 GUI 弹窗与 CLI stderr 原样展示）。本组**可译**，使用点一律走 IDC_KTR / IDC_KTRF；
-//   源语言（zh-CN）下目录为空，取回的就是本文件这些中文字面量本身，故行为与接门面之前逐字节相同。
-//   注意：面向人的引擎报因不再携带 E-x / SPEC §x 等内部标记（曾泄漏进 UI，用户无从对照）；
+//   源语言（zh-CN）下目录为空，取回的就是本文件这些中文字面量本身。
+//   注意：面向人的引擎报因不携带 E-x / SPEC §x 等内部标记（用户无从对照）；
 //   字段名（points/fontSize/type）仍属内部术语，不译；
 //   以「'」收尾的片段只存前段，后接的原值与尾引号就地拼接；整句里的运行期值用 %1/%2 占位（见下）。
 // ===========================================================================
 namespace idc::core::texts::msg {
 
 // 引擎执行失败（src/engine/engine.cpp）。
-inline constexpr char kEngineSourceEmpty[] = "源图像为空，无法切割";   // 切割入口与预处理后重入两处同文。
+inline constexpr char kEngineSourceEmpty[] = "源图像为空，无法切割";   // 图像入口空图检查（runEngine）与几何主体尺寸非正检查（runEngineImpl，含仅尺寸入口）两处同文；预处理后为空另见下行专句。
 inline constexpr char kEngineRectDegenerate[] = "选框无效：矩形宽高需为正，无法生成切割线";
 inline constexpr char kEngineMultiRectEmpty[] = "多矩形为空：没有可用矩形";
 inline constexpr char kEngineNoGrid[] = "切割未产生有效网格：单元尺寸或图像尺寸需为正";
@@ -261,14 +261,14 @@ inline constexpr char kErrAnnoNoValidEntry[] = "标注 JSON 无有效条目";
 inline constexpr char kErrAnnoParseFailed[] = "标注 JSON 解析失败：";  // 后接异常 what()。
 
 // 逐条报因的裹句（整句 + 占位符：%1＝序号、%2＝上一批各条报因）。
-// 旧写法是 "第 " + 序号 + " 个标注元素：" + 原因 的字面量拼接，碎片拆开会隔断语序（英语把序号放句尾），
-// 故收为单条；IDC_KTRF 按**编号**填值，译文可自由调序，zh-CN 下替换结果与旧拼接逐字节相同。
+// 收为单条而非拼接碎片：拆开后译者无法重组语序（英语把序号放句尾）；
+// IDC_KTRF 按**编号**填值，译文可自由调序，zh-CN 下替换结果与直接字符串拼接逐字节相同。
 inline constexpr char kErrAnnoItemPrefix[] = "第 %1 个标注元素：%2";      // 配置文件的 annotations 段（逐条回传）。
 inline constexpr char kErrAnnoElementPrefix[] = "第 %1 个元素：%2";      // 标注文本入参逐条解析（与上条同构但措辞不同）。
 
 // 图案类型显示名（src/generate/pattern.cpp::patternKindName）：供 GUI「新建画布」图案下拉与
-//   错误提示现取。**与落盘 token 无关**——§7 写的是 defaults::kPatternKind* 与 gen*Token 那套小写
-//   英文串，本节名字仅供人读，故可译；默认分支复用 kPatternSolid（与旧实现的 `return "纯色"` 同义）。
+//   错误提示现取。**与落盘 token 无关**——§7 写的是 defaults 的 patternKind 串与 gen*Token 那套小写
+//   英文串，本节名字仅供人读，故可译；默认分支复用 kPatternSolid。
 inline constexpr char kPatternSolid[] = "纯色";
 inline constexpr char kPatternLinearGradient[] = "线性渐变";
 inline constexpr char kPatternRadialGradient[] = "径向渐变";

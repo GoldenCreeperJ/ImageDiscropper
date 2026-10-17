@@ -92,23 +92,23 @@ Path buildFilletPath(const std::vector<core::Point2D>& pts, const bool closed, c
 } // namespace
 
 // ---------------------------------------------------------------------------
-// shape_type.h 中的枚举转字符串
+// shape_type.h 中的枚举转字符串（返回串供日志与调试显示）
 // ---------------------------------------------------------------------------
 const char* shapeTypeName(const ShapeType t) {
     switch (t) {
-        case ShapeType::LINE: return "LINE";
-        case ShapeType::RECTANGLE: return "RECTANGLE";
-        case ShapeType::SQUARE: return "SQUARE";
-        case ShapeType::RHOMBUS: return "RHOMBUS";
-        case ShapeType::ELLIPSE: return "ELLIPSE";
-        case ShapeType::CIRCLE: return "CIRCLE";
-        case ShapeType::POLYLINE: return "POLYLINE";
-        case ShapeType::PATH: return "PATH";
-        case ShapeType::TEXT: return "TEXT";
-        case ShapeType::ISOS_TRIANGLE: return "ISOS_TRIANGLE";
-        case ShapeType::EQU_TRIANGLE: return "EQU_TRIANGLE";
-        case ShapeType::RECT_TRIANGLE: return "RECT_TRIANGLE";
-        case ShapeType::EQU_RECT_TRIANGLE: return "EQU_RECT_TRIANGLE";
+        case ShapeType::Line: return "LINE";
+        case ShapeType::Rectangle: return "RECTANGLE";
+        case ShapeType::Square: return "SQUARE";
+        case ShapeType::Rhombus: return "RHOMBUS";
+        case ShapeType::Ellipse: return "ELLIPSE";
+        case ShapeType::Circle: return "CIRCLE";
+        case ShapeType::Polyline: return "POLYLINE";
+        case ShapeType::Path: return "PATH";
+        case ShapeType::Text: return "TEXT";
+        case ShapeType::IsosTriangle: return "ISOS_TRIANGLE";
+        case ShapeType::EquTriangle: return "EQU_TRIANGLE";
+        case ShapeType::RectTriangle: return "RECT_TRIANGLE";
+        case ShapeType::EquRectTriangle: return "EQU_RECT_TRIANGLE";
     }
     return "UNKNOWN";
 }
@@ -117,7 +117,7 @@ const char* shapeTypeName(const ShapeType t) {
 // EllipseShape
 // ===========================================================================
 
-// 构造：外接矩形 + 类型（ELLIPSE 或 CIRCLE）。
+// 构造：外接矩形 + 类型（Ellipse 或 Circle）。
 EllipseShape::EllipseShape(const double x, const double y, const double w, const double h, const ShapeType type)
     : x_(x), y_(y), w_(w), h_(h), type_(type) {}
 
@@ -232,25 +232,25 @@ std::unique_ptr<Shape> PathShape::clone() const {
     return s;
 }
 
-// 平移：委托 Path::translate（逐段偏移，保留 PATH / POLYLINE 类型）。
+// 平移：委托 Path::translate（逐段偏移，保留 Path / Polyline 类型）。
 void PathShape::translate(const double dx, const double dy) { path_.translate(dx, dy); }
 
-// 控制点：抽取所有 MOVE_TO / LINE_TO 端点，曲线段取终点。
+// 控制点：抽取所有 MoveTo / LineTo 端点，曲线段取终点。
 std::vector<core::Point2D> PathShape::controlPoints() const {
     std::vector<core::Point2D> pts;
     for (const auto&[type, coords] : path_.segments()) {
         switch (type) {
-            case PathSegmentType::MOVE_TO:
-            case PathSegmentType::LINE_TO:
+            case PathSegmentType::MoveTo:
+            case PathSegmentType::LineTo:
                 pts.emplace_back(coords[0], coords[1]);
                 break;
-            case PathSegmentType::QUAD_TO:
+            case PathSegmentType::QuadTo:
                 pts.emplace_back(coords[2], coords[3]);
                 break;
-            case PathSegmentType::CUBIC_TO:
+            case PathSegmentType::CubicTo:
                 pts.emplace_back(coords[4], coords[5]);
                 break;
-            case PathSegmentType::CLOSE:
+            case PathSegmentType::Close:
                 break;
         }
     }
@@ -307,7 +307,7 @@ std::unique_ptr<Shape> TextShape::clone() const {
 // 平移：文本基线锚点偏移 (dx, dy)，保留文本内容与字号（不丢字形）。
 void TextShape::translate(const double dx, const double dy) { x_ += dx; y_ += dy; }
 
-// 控制点：仅给出文本基线起点。
+// 控制点：仅给出文本基线锚点。
 std::vector<core::Point2D> TextShape::controlPoints() const {
     return {{x_, y_}};
 }

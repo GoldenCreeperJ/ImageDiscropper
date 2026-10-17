@@ -1,18 +1,17 @@
 // ============================================================================
 // 文件：model/preprocess_session.h
 // 作用：PreprocessSession——预处理「会话态 + 域不变式」的零 Qt 内聚对象（GUI 侧），
-//       把原先散落在 Document（steps_/resize_/base_/basePath_ 四件套 + geomSig）与
-//       PreprocessController（geo→color 不变式、移动限幅、载入归一化、baseDirty 前缀比对、
-//       effectivePipeline）的预处理策略收进一处，供 Document 组合持有、Controller 驱动。
+//       集中 Document 侧（steps_/resize_/base_/basePath_ 四件套 + geomSig）与
+//       Controller 侧（geo→color 不变式、移动限幅、载入归一化、baseDirty 前缀比对、
+//       effectivePipeline）的预处理策略，供 Document 组合持有、Controller 驱动。
 // 分块依据：
-//   - 与 AnnotationEditor 同构——都是「纯 C++、零 Qt 依赖」的 GUI 会话对象，可被无头 unit_tests
-//     直编回归（块不变式/归一化/缓存失效这些此前只能靠面板手测的策略，第一次变得可直编可测）。
+//   - 与 AnnotationEditor 同构——都是零 Qt 依赖的 GUI 会话对象，可被无头 unit_tests 直编
+//     回归（块不变式/归一化/缓存失效等策略可直编测试）。
 //   - 只持声明态与派生查询，**绝不跑像素**：base_ 重放物化（EngineBridge/Core applyExec）、
 //     忙碌框、信号、选区/标注清理均留在 PreprocessController（分层纪律，与 AnnotationEditor 不持引擎同理）。
 //   - 纯策略（作用于给定管线、与实例态无关）以 **静态成员** 暴露，供 Controller 在「候选态提交前」
 //     计算 before/after 签名而不改动当前态；实例成员维护「已提交态」与 base_ 缓存。
-// 说明：语义自 preprocess_controller.cpp / document.cpp **逐字搬入**（纯内聚重构，零语义改动）。
-//       steps_ 恒守「[全部几何块][全部色彩块]」不变式、独立 resize 恒在队列之外（不进 steps_）。
+// 说明：steps_ 恒守「[全部几何块][全部色彩块]」不变式、独立 resize 恒在队列之外（不进 steps_）。
 // ============================================================================
 #pragma once
 
@@ -27,7 +26,7 @@
 namespace idc::gui {
 
 // 独立画布尺寸目标（可选，恒最先重放、从原图重采样）；非 steps_ 成员，独立于轻操作队列。
-// 自 document.h 迁入本头：使 PreprocessSession 零 Qt 可独立编译（document.h 是 QObject 头，不宜作依赖）。
+// 定义于此：使 PreprocessSession 零 Qt 可独立编译（document.h 是 QObject 头，不宜作依赖）。
 struct ResizeTarget {
     int width = 0;
     int height = 0;
@@ -54,7 +53,7 @@ public:
                                        const preprocess::PreprocessConfig& cfg);
 
     // 块内换序限幅：仅当相邻项与本项同类（同几何块或同色彩块）才上下移一格；越界/跨块则不动并返回 false。
-    //   口径逐字对齐原 preprocess_controller onStepMove（含 i==0 上移、末位下移的边界守卫）。
+    //   口径含 i==0 上移、末位下移的边界守卫。
     static bool moveWithinBlock(preprocess::PreprocessPipeline& steps, std::size_t index, bool down);
 
     // 组装「有效管线」= [resize?] + 轻操作队列——几何签名推演与 base_ 前缀、序列化的唯一真相源。
@@ -62,7 +61,7 @@ public:
         const std::optional<ResizeTarget>& resize, const preprocess::PreprocessPipeline& steps);
 
     // 载入队列归一化：把散落的 ResizeOp 抽出为独立 resize（取最后一个正尺寸，非正丢弃）、其余按类型
-    //   重排为 geo 前 color 后（各保相对顺序，任何 ResizeOp 绝不入轻队列）。语义逐字对齐原 applyLoadedQueue。
+    //   重排为 geo 前 color 后（各保相对顺序，任何 ResizeOp 绝不入轻队列）。
     static Loaded normalizeLoaded(const preprocess::PreprocessPipeline& pipeline);
 
     //====== 实例：已提交声明态访问 ======

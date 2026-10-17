@@ -1,10 +1,10 @@
 // ============================================================================
-// 文件：app/preprocess_controller_commit.cpp
+// 文件：app/controllers/preprocess_controller_commit.cpp
 // 作用：PreprocessController 的「提交链」成员实现（TU 拆分）——编辑公共提交 commitPipeline
 //       （geomSig 尺寸门 + base_ 缓存重放 + 回灌 Document）、按目标提交 commitActive
 //       （画布→commitPipeline / 选中图层→会话声明折进 layer.preprocess 交重组）与忙碌框
-//       （runInBusyDialog 单点实现 + runWithBusyDialog 成员封装）。自 preprocess_controller.cpp
-//       原封迁出（同 Document 先例：类不拆、仅分 TU 编译，公有 API 不变）。
+//       （runInBusyDialog 单点实现 + runWithBusyDialog 成员封装）。
+//       类不拆分，仅按职责分 TU 编译。
 // ============================================================================
 #include "app/controllers/preprocess_controller.h"
 
@@ -60,7 +60,7 @@ void PreprocessController::commitPipeline(const preprocess::PreprocessPipeline& 
 
     auto doWork = [this, &nextSteps, &nextResize, &prefix, geomChanged, baseDirty, okMsg] {
         // 轻队列重放基准图 baseSrc：无 resize → 指向不可变 original_（零拷贝）；有 resize → base_（按需重烤复用）。
-        // base_ 仅在「确有 resize 前缀」时维护；无 resize 不再克隆一份与 original_ 相同的全图（稳态省一份拷贝）。
+        // base_ 仅在「确有 resize 前缀」时维护；无 resize 不克隆一份与 original_ 相同的全图（稳态省一份拷贝）。
         const core::Image* baseSrc = &doc_->original();
         if (!prefix.empty()) {
             if (baseDirty) {
@@ -91,7 +91,7 @@ void PreprocessController::commitPipeline(const preprocess::PreprocessPipeline& 
         if (geomChanged) {
             // 尺寸/净旋转象限变：既有框选坐标基于旧几何失效 → 仅清框选（rect/cells）。
             // 标注/图片图层栈/色彩预处理**恒保留**（resize/rotate 口径）：标注为矢量叠加，可存在于画布外
-            //（与 setCanvasSize「只清框选」同口径，决策 3）；图层落位随重组链重放同一管线同步变换；色彩步不碰几何。
+            //（与 setCanvasSize「只清框选」同口径，SPEC §8.2）；图层落位随重组链重放同一管线同步变换；色彩步不碰几何。
             doc_->clearRect();
             doc_->clearRects();
             doc_->clearCells();
@@ -150,8 +150,8 @@ void PreprocessController::runWithBusyDialog(const QString& text, const std::fun
 
 // 提交到当前预处理目标：无选中图层（或图层定位失败）→ 走画布 commitPipeline；
 // 选中图片图层→写其会话声明后折进 layer.preprocess（= effectivePipeline），交 updateLayer 发
-// layersChanged 触发 recomposeLayerCanvas 重组展平画布（逐层预处理物化下沉到 Core materializeLayer）。
-// 图层编辑不改画布尺寸 → 无需尺寸门/清选区（决策 3），也无需 base_ 缓存（重组走 Core 全量物化）。
+// layersChanged 触发 recomposeLayerCanvas 重组展平画布（逐层预处理物化由 Core materializeLayer 承担）。
+// 图层编辑不改画布尺寸 → 无需尺寸门/清选区（SPEC §8.2），也无需 base_ 缓存（重组走 Core 全量物化）。
 void PreprocessController::commitActive(const preprocess::PreprocessPipeline& nextSteps,
                                         const std::optional<ResizeTarget>& nextResize,
                                         const QString& okMsg, const QString& busyText) {

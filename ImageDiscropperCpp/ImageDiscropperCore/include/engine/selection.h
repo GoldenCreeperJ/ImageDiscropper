@@ -23,8 +23,8 @@ namespace idc::engine {
 // Polarity：极性（SPEC §2.2 / SPEC §1 阶段④）。
 // ---------------------------------------------------------------------------
 enum class Polarity {
-    KEEP,    // 保留选择集：R = S
-    REMOVE,  // 剔除选择集：R = 全集 \ S（反向剔除，L2 内核）
+    Keep,    // 保留选择集：R = S
+    Remove,  // 剔除选择集：R = 全集 \ S（反向剔除，L2 内核）
 };
 
 // ---------------------------------------------------------------------------
@@ -67,8 +67,8 @@ public:
     const std::vector<bool>& flags() const { return selected_; }
 
     // 按当前极性解析出“最终保留”的单元序号集合：
-    //   KEEP   → 返回所有被选中的序号；
-    //   REMOVE → 返回所有未被选中的序号（补集）。
+    //   Keep   → 返回所有被选中的序号；
+    //   Remove → 返回所有未被选中的序号（补集）。
     // 实现见 src/engine/selection.cpp。
     std::vector<std::size_t> resolve() const;
 
@@ -78,7 +78,7 @@ private:
         if (index < selected_.size()) selected_[index] = value;
     }
 
-    Polarity polarity_{Polarity::KEEP};
+    Polarity polarity_{Polarity::Keep};
     std::vector<bool> selected_;
 };
 

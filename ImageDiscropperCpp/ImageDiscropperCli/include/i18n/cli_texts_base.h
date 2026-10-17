@@ -1,12 +1,11 @@
 // ============================================================================
 // 文件：include/i18n/cli_texts_base.h（CLI 常量层 · 字符串 · 前半：opt / cmd / env / msg）
-// 作用：原 cli_texts.h 拆出的两半之一——收录**不可译契约组** opt（长 / 短选项名）、cmd（子命令名）、
-//       env（语言环境变量名）与**可译组** msg（面向人的错误 / 校验报因 / 进度日志）。
-//       help 组（--help 散文）见同目录 cli_texts_help.h；cli_texts.h 已转为聚合转发头，
-//       同时 #include 本文件与 help 半，故消费方的 include 路径与常量引用形态（texts::opt::kXxx 等）不变。
+// 作用：收录**不可译契约组** opt（长 / 短选项名）、cmd（子命令名）、env（语言环境变量名）
+//       与**可译组** msg（面向人的错误 / 校验报因 / 进度日志）。help 组（--help 散文）见同目录
+//       cli_texts_help.h；两半经聚合转发头 cli_texts.h 统一 include，消费方以 texts::opt::kXxx 等形态引用。
 // 架构定位：CLI 顶层 i18n 基建（与 cli_i18n.h / cli_nums.h 同族，统一住 include/i18n）。
-// 命名 / 类型 / 提取判据：与拆分前完全一致（k + 语义驼峰；inline constexpr char[]，UTF-8 无 BOM；
-//       键名一律提取，成对映射表内值串不提取）。
+// 命名 / 类型 / 提取判据：k + 语义驼峰；inline constexpr char[]，UTF-8 无 BOM；
+//       键名一律提取，成对映射表内值串不提取。
 // 目录与对账：msg 的英文表住 src/i18n/lang_en.cpp；opt / cmd / env 不可译、永不进表
 //       （tests/test_i18n_catalog.cpp 断言拦下孤儿键 / 重复键 / 跨层撞键 / 契约组越界并打印覆盖率）。
 // ============================================================================
@@ -205,7 +204,7 @@ inline constexpr char kLogMergedTag[] = "（合并单图）";
 inline constexpr char kLogExportedCount[] = "已导出 %1 张图像到文件夹：%2";   // %1＝张数，%2＝文件夹路径（IDC_CTRF）。
 inline constexpr char kLogExportedMerged[] = "已导出合并图像：";
 inline constexpr char kLogConfigSaved[] = "已保存配置到：";
-// 尺寸括注（job.cpp 多处、commands/new.cpp）：全角括号属源语言标点，故入常量层供译；层数括注（「N 层」）已并入 kLogLayerComposed 整句。
+// 尺寸括注（job.cpp 多处、commands/new.cpp）：全角括号属源语言标点，故入常量层供译；层数括注（「N 层」）含于 kLogLayerComposed 整句。
 inline constexpr char kLogParenOpen[] = "（";   // 括注前段（接宽度 x 高度）。
 inline constexpr char kLogParenClose[] = "）\n";   // 括注尾段（含行尾换行）。
 

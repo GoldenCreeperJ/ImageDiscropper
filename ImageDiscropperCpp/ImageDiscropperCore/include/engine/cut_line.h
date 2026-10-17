@@ -18,15 +18,15 @@ namespace idc::engine {
 // CutOrientation：切割线方向。
 // ---------------------------------------------------------------------------
 enum class CutOrientation {
-    VERTICAL,    // 竖线 X = const，贯穿全高
-    HORIZONTAL,  // 横线 Y = const，贯穿全宽
+    Vertical,    // 竖线 X = const，贯穿全高
+    Horizontal,  // 横线 Y = const，贯穿全宽
 };
 
 // ---------------------------------------------------------------------------
 // CutLine：单条切割线（方向 + 位置）。
 // ---------------------------------------------------------------------------
 struct CutLine {
-    CutOrientation orientation{CutOrientation::VERTICAL};
+    CutOrientation orientation{CutOrientation::Vertical};
     int position{0};  // 竖线为 x 坐标，横线为 y 坐标
 };
 

@@ -3,7 +3,7 @@
 // 作用：右侧「参数面板」——随模式切换的 QStackedWidget：
 //       L1 形状+坐标、L2 子功能+坐标+坍缩可行性提示、L3 网格定义+选择集+排序。
 //       面板只把用户输入写回 Document（数值直接输入回车生效，NFR-5），不含几何逻辑（CONTRIBUTING.md「分层纪律」）。
-// 分块依据：每个模式一页，页内控件与该模式的一两个 Document 字段对应；坍缩提示由 MainWindow
+// 分块依据：每个模式一页，页内控件与该模式的一两个 Document 字段对应；坍缩提示由 PreviewController
 //           依 Core 的 isCollapsible 结果回灌（面板不自算可行性）。
 // 说明：坐标 spinbox 关闭 keyboardTracking，避免逐键触发预览；提交（回车/失焦/箭头）才写回。
 //       堆叠容器高度只随「当前可见页」变化（PageSizedStack 关 heightForWidth + reflowStack 钳 min=max，见 cpp）。
@@ -42,7 +42,7 @@ public:
     void syncFromDocument();
     // 切换到某模式对应的页（L1→0, L2→1, L3→2）。
     void setMode(engine::Tier tier) const;
-    // 由 MainWindow 依 Core isCollapsible 结果回灌坍缩可行性提示（L2 页）。
+    // 由 PreviewController 依 Core isCollapsible 结果回灌坍缩可行性提示（L2 页）。
     void setCollapseHint(bool collapsible, const QString& reason) const;
 
     // 语言热切换重放：重跑三页登记的静态文案闭包（标题/行标签/下拉项/按钮/提示），再重钳当前页高。
@@ -56,7 +56,7 @@ public:
     void selectRectRow(int index) const;
 
 signals:
-    // L2 多矩形：列表选中行变化（-1 = 无），供 MainWindow 高亮画布上对应选区框。
+    // L2 多矩形：列表选中行变化（-1 = 无），供 CanvasCoordinator 高亮画布上对应选区框。
     void rectSelected(int index);
 
 private slots:
@@ -64,7 +64,7 @@ private slots:
     void onL2SubChanged(int index) const;
     void onCoordEdited() const; // L1/L2 坐标变更统一入口。
     void onConvertToGrid() const; // L2「转为网格模式编辑」：把当前选区送入 L3。
-    // L2 多矩形并集（仅 MULTI_RECT）。
+    // L2 多矩形并集（仅 MultiRect）。
     void onRectListSelectionChanged(); // 列表选中项 → 把该矩形坐标载入 spinbox。
     void onRectDelClicked() const;           // 删除选中矩形。
     void onRectClearClicked() const;         // 清空矩形列表。
@@ -115,7 +115,7 @@ private:
     QLabel* collapseHint_{nullptr};
     QPushButton* l2ToGridBtn_{nullptr};  // 「转为网格模式编辑」入口
 
-    // L2 多矩形并集控件（仅 MULTI_RECT 显示）。
+    // L2 多矩形并集控件（仅 MultiRect 显示）。
     QWidget* l2MultiBox_{nullptr};         // 多矩形列表分组容器
     QListWidget* l2RectList_{nullptr};     // 矩形列表
     QPushButton* l2RectDelBtn_{nullptr};   // 删除选中

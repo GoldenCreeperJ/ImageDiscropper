@@ -9,15 +9,15 @@
 
 namespace idc::preprocess {
 
-// PreprocessType → 字符串。
+// PreprocessType → 字符串（日志 / 序列化显示名，串值固定）。
 const char* preprocessTypeName(const PreprocessType t) {
     switch (t) {
-        case PreprocessType::GRAY: return "Gray";
-        case PreprocessType::INVERT: return "Invert";
-        case PreprocessType::SPLIT: return "Split";
-        case PreprocessType::ROTATE: return "Rotate";
-        case PreprocessType::FLIP: return "Flip";
-        case PreprocessType::RESIZE: return "Resize";
+        case PreprocessType::Gray: return "Gray";
+        case PreprocessType::Invert: return "Invert";
+        case PreprocessType::Split: return "Split";
+        case PreprocessType::Rotate: return "Rotate";
+        case PreprocessType::Flip: return "Flip";
+        case PreprocessType::Resize: return "Resize";
     }
     return "Unknown";
 }
@@ -25,12 +25,12 @@ const char* preprocessTypeName(const PreprocessType t) {
 // 构造指定类型的默认参数 PreprocessConfig。
 PreprocessConfig makeDefaultConfig(const PreprocessType t) {
     switch (t) {
-        case PreprocessType::GRAY: return GrayOp{};
-        case PreprocessType::INVERT: return InvertOp{};
-        case PreprocessType::SPLIT: return SplitOp{};
-        case PreprocessType::ROTATE: return RotateOp{};
-        case PreprocessType::FLIP: return FlipOp{};
-        case PreprocessType::RESIZE: return ResizeOp{};
+        case PreprocessType::Gray: return GrayOp{};
+        case PreprocessType::Invert: return InvertOp{};
+        case PreprocessType::Split: return SplitOp{};
+        case PreprocessType::Rotate: return RotateOp{};
+        case PreprocessType::Flip: return FlipOp{};
+        case PreprocessType::Resize: return ResizeOp{};
     }
     return GrayOp{};
 }
@@ -39,26 +39,26 @@ PreprocessConfig makeDefaultConfig(const PreprocessType t) {
 PreprocessType configType(const PreprocessConfig& cfg) {
     return std::visit([]<typename T0>(const T0&) -> PreprocessType {
         using T = std::decay_t<T0>;
-        if constexpr (std::is_same_v<T, GrayOp>) return PreprocessType::GRAY;
-        else if constexpr (std::is_same_v<T, SplitOp>) return PreprocessType::SPLIT;
-        else if constexpr (std::is_same_v<T, InvertOp>) return PreprocessType::INVERT;
-        else if constexpr (std::is_same_v<T, RotateOp>) return PreprocessType::ROTATE;
-        else if constexpr (std::is_same_v<T, FlipOp>) return PreprocessType::FLIP;
-        else if constexpr (std::is_same_v<T, ResizeOp>) return PreprocessType::RESIZE;
-        else return PreprocessType::GRAY;
+        if constexpr (std::is_same_v<T, GrayOp>) return PreprocessType::Gray;
+        else if constexpr (std::is_same_v<T, SplitOp>) return PreprocessType::Split;
+        else if constexpr (std::is_same_v<T, InvertOp>) return PreprocessType::Invert;
+        else if constexpr (std::is_same_v<T, RotateOp>) return PreprocessType::Rotate;
+        else if constexpr (std::is_same_v<T, FlipOp>) return PreprocessType::Flip;
+        else if constexpr (std::is_same_v<T, ResizeOp>) return PreprocessType::Resize;
+        else return PreprocessType::Gray;
     }, cfg);
 }
 
 // 几何步分类：旋转 / 翻转（影响像素位置）。
 bool isGeometryStep(const PreprocessConfig& cfg) {
     const auto t = configType(cfg);
-    return t == PreprocessType::ROTATE || t == PreprocessType::FLIP;
+    return t == PreprocessType::Rotate || t == PreprocessType::Flip;
 }
 
 // 色彩步分类：黑白 / 分离 / 反色（不改变像素位置）。Resize 二者皆非。
 bool isColorStep(const PreprocessConfig& cfg) {
     const auto t = configType(cfg);
-    return t == PreprocessType::GRAY || t == PreprocessType::SPLIT || t == PreprocessType::INVERT;
+    return t == PreprocessType::Gray || t == PreprocessType::Split || t == PreprocessType::Invert;
 }
 
 } // namespace idc::preprocess

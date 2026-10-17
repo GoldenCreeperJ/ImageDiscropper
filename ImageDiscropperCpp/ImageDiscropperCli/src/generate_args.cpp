@@ -3,8 +3,8 @@
 // 作用：generate_args.h 的实现——读取 --size / --pattern / --orientation / --bg / --fg /
 //       --period / --line-width / --dot-radius 选项，装配 Core generate::PatternParams 并调
 //       generate::makePattern 合成画布；另提供 resolveInputImage 统一「读文件 / 生成」两种输入来源。
-//       「贴图图案」已移除：CLI 不再有 --pattern image / --pattern-image / --image-anchor /
-//       --image-scale；图片层只能经 config 的 layers 段传入。
+//       图片不是图案类型（--pattern 无 image，也无 --pattern-image / --image-anchor / --image-scale）；
+//       图片层只能经 config 的 layers 段传入。
 // 分块依据：CLI 不实现任何像素 / 图案逻辑，全部委托 Core（CONTRIBUTING.md「分层纪律」）；本文件只做
 //       「取选项 + 纯格式校验 + 调 Core + 汇总错误」。颜色解析复用 value_parser::parseColor（含 alpha）。
 // 常量层：选项名取 texts::opt（不可译）、报因文案经门面 IDC_CTR(msg, ...) 取 texts::msg；尺寸单边与总像素上限

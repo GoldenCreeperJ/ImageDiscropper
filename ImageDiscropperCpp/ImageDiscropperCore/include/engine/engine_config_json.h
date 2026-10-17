@@ -5,8 +5,8 @@
 // 分块依据：对外只暴露“配置文件存取”（saveEngineConfig / loadEngineConfig）；JSON 语法
 //       与“配置字段 ↔ JSON 键”的语义映射全部封装在实现文件内（使用 nlohmann/json），
 //       故第三方 JSON 库不经此公共头扩散到下游（依赖 PRIVATE，与 stb 一致）。
-// 说明：严格对齐 SPEC §7 schema——source / preprocess / cut / order / emit，外加 select
-//       （L3 显式选择集 selectedCells）与 annotations（标注列表，见下）。枚举以短横线小写串表示（如 "row-major"）。
+// 说明：严格对齐 SPEC §7 schema——source / opacity / preprocess / cut / select / order / emit，
+//       外加可选 generate（底图）/ layers（多层画布）/ annotations（标注列表，见下）。枚举以短横线小写串表示（如 "row-major"）。
 //       标注不经 EngineConfig 内嵌（engine 与 annotation 模块保持解耦），而是由 save/load 的
 //       可选参数传递 AnnotationSet：nullptr（默认）完全忽略 annotations 段，向后兼容。
 //       annotations 段的 JSON 实现归属 annotation 模块（见 annotation/annotation_json.h），本头只负责整档 config 存取。

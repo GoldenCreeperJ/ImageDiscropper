@@ -31,7 +31,7 @@ std::string patternKindName(const PatternKind kind) {
         case PatternKind::HueGradient:   return IDC_KTR(msg, kPatternHueGradient);
         case PatternKind::Noise:          return IDC_KTR(msg, kPatternNoise);
     }
-    // 枚举外的值（理论上不可达）：与旧实现同义兜底到「纯色」。
+    // 枚举外的值（理论上不可达）：兜底到「纯色」。
     return IDC_KTR(msg, kPatternSolid);
 }
 
@@ -69,8 +69,7 @@ std::uint32_t hash32(const std::uint32_t seed, const int x, const int y, const s
     return h;
 }
 
-// source-over 合成已抽至 core::compositeOver（include/core/composite.h），与 canvas::composeCanvas 共用同一真相源。
-//   本模块不再直接使用：「贴图图案」已移除，图片落位统一走 composeCanvas。
+// 本模块不复现 source-over 合成（其真相源为 core::compositeOver）：图片落位统一走 canvas::composeCanvas。
 
 } // namespace
 
@@ -81,7 +80,7 @@ core::Image makePattern(int width, int height, const PatternParams& params) {
         return core::Image{};
     }
 
-    core::Image img(width, height, core::ImageFormat::RGBA);
+    core::Image img(width, height, core::ImageFormat::Rgba);
     const core::Color bg = params.background;
     const core::Color fg = params.foreground;
 
@@ -163,7 +162,7 @@ core::Image makePattern(int width, int height, const PatternParams& params) {
                     const double gx = std::round(x / static_cast<double>(period)) * period;
                     const double gy = std::round(y / static_cast<double>(period)) * period;
                     const double dx = x - gx;
-                    if (const double dy = y - gy; dx * dx + dy * dy <= r2) {   // 平方距离比较，免重复开方（原 hypot×hypot）。
+                    if (const double dy = y - gy; dx * dx + dy * dy <= r2) {   // 平方距离比较，免开方。
                         img.setPixel(x, y, fg);
                     }
                 }

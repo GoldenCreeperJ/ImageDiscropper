@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：include/core/pipeline_manager.h
+// 文件：include/core/pipeline.h
 // 作用：通用「声明式有序步骤队列」模板 Pipeline<T>——把预处理流水线
 //       （PreprocessPipeline）反复用到的「按序增 / 删 / 移 / 改 + 边界钳制」这套
 //       与元素类型无关的容器语义抽成单头泛型叶子，供任意 T 复用（现消费者：preprocess）。
@@ -20,7 +20,7 @@ namespace idc::core {
 
 // ---------------------------------------------------------------------------
 // Pipeline<T>：声明式有序步骤队列（下标可编辑、可重排的轻量容器）。
-// 边界策略（消费者 PreprocessPipeline 沿用至今、逐字复刻，是其「非空壳」的核心价值）：
+// 边界策略（消费者 PreprocessPipeline 沿用）：
 //   - add(item)             : 追加到队尾。
 //   - insert(index, item)   : 在 index 处插入；index 越界（>= size）钳制为「追加到队尾」。
 //   - remove(index)         : 删除 index 处；index 越界则忽略（不抛、不动）。
@@ -28,7 +28,7 @@ namespace idc::core {
 //   - moveUp(index)         : 与上一项换序；已在首位（index==0）或越界则忽略。
 //   - moveDown(index)       : 与下一项换序；已在末位或越界则忽略。
 //   - clear()               : 清空全部条目。
-// 备注：moveUp/moveDown 只做「相邻同类无关」的单格换序，不感知任何跨元素不变式
+// 备注：moveUp/moveDown 只做「相邻两项无关」的单格换序，不感知任何跨元素不变式
 //       （geo→color 分区那类不变式属消费者 / 上层会话职责，本容器只负责机械换序）。
 // ---------------------------------------------------------------------------
 template <typename T>

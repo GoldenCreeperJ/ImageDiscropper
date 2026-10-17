@@ -172,10 +172,10 @@ bool parseColor(const std::string& s, core::Color& out, std::string& err) {
 
 bool parseFormat(const std::string& s, engine::ExportFormat& out, std::string& err) {
     const std::string f = toLower(s);
-    if (f == "png") { out = engine::ExportFormat::PNG; return true; }
-    if (f == "jpeg" || f == "jpg") { out = engine::ExportFormat::JPEG; return true; }
-    if (f == "webp") { out = engine::ExportFormat::WEBP; return true; }
-    if (f == "bmp") { out = engine::ExportFormat::BMP; return true; }
+    if (f == "png") { out = engine::ExportFormat::Png; return true; }
+    if (f == "jpeg" || f == "jpg") { out = engine::ExportFormat::Jpeg; return true; }
+    if (f == "webp") { out = engine::ExportFormat::Webp; return true; }
+    if (f == "bmp") { out = engine::ExportFormat::Bmp; return true; }
     err = IDC_CTR(msg, kErrUnknownFormat) + s + IDC_CTR(msg, kErrUnknownFormatTail);
     return false;
 }
@@ -193,26 +193,26 @@ bool parseQuality(const std::string& s, int& out, std::string& err) {
 
 bool parseSort(const std::string& s, engine::SortStrategy& out, std::string& err) {
     const std::string v = toLower(s);
-    if (v == "row-major") { out = engine::SortStrategy::ROW_MAJOR; return true; }
-    if (v == "column-major") { out = engine::SortStrategy::COLUMN_MAJOR; return true; }
-    if (v == "custom") { out = engine::SortStrategy::CUSTOM; return true; }
+    if (v == "row-major") { out = engine::SortStrategy::RowMajor; return true; }
+    if (v == "column-major") { out = engine::SortStrategy::ColumnMajor; return true; }
+    if (v == "custom") { out = engine::SortStrategy::Custom; return true; }
     err = IDC_CTR(msg, kErrUnknownSort) + s + IDC_CTR(msg, kErrUnknownSortTail);
     return false;
 }
 
 bool parseMargin(const std::string& s, engine::RemainderPolicy& out, std::string& err) {
     const std::string v = toLower(s);
-    if (v == "discard") { out = engine::RemainderPolicy::DISCARD; return true; }
-    if (v == "keep-partial") { out = engine::RemainderPolicy::KEEP_PARTIAL; return true; }
-    if (v == "pad") { out = engine::RemainderPolicy::PAD; return true; }
+    if (v == "discard") { out = engine::RemainderPolicy::Discard; return true; }
+    if (v == "keep-partial") { out = engine::RemainderPolicy::KeepPartial; return true; }
+    if (v == "pad") { out = engine::RemainderPolicy::Pad; return true; }
     err = IDC_CTR(msg, kErrUnknownMargin) + s + IDC_CTR(msg, kErrUnknownMarginTail);
     return false;
 }
 
 bool parseMerge(const std::string& s, engine::MergeLayout& out, std::string& err) {
     const std::string v = toLower(s);
-    if (v == "collapse") { out = engine::MergeLayout::COLLAPSE; return true; }
-    if (v == "rearrange") { out = engine::MergeLayout::REARRANGE; return true; }
+    if (v == "collapse") { out = engine::MergeLayout::Collapse; return true; }
+    if (v == "rearrange") { out = engine::MergeLayout::Rearrange; return true; }
     err = IDC_CTR(msg, kErrUnknownMerge) + s + IDC_CTR(msg, kErrUnknownMergeTail);
     return false;
 }

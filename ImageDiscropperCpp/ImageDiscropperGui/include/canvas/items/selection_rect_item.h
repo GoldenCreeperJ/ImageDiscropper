@@ -44,7 +44,7 @@ public:
     void setHandleSize(qreal sceneUnits);
 
     // 依 Core 切割线集合下发：哪几条边需延伸绘制为贯穿切割线（并可被直接抓取拖动）。
-    // 单矩形/十字(RECT)四边皆有；横带(HLINE)仅上/下；竖带(VLINE)仅左/右。
+    // 单矩形/十字(Cross)四边皆有；横带(Hline)仅上/下；竖带(Vline)仅左/右。
     void setCutEdges(bool left, bool right, bool top, bool bottom);
 
     // 是否启用坐标吸附（默认开启，NFR-7）。

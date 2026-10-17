@@ -61,16 +61,16 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
 
     // --- 装配固定部分：L3 恒为参数化网格生成器。---
     engine::EngineConfig config;
-    config.cut.tier = engine::Tier::L3;
-    config.cut.generator = engine::CutGenerator::GRID;
+    config.cut.tier = engine::Tier::Grid;
+    config.cut.generator = engine::CutGenerator::Grid;
 
     std::string err;
 
     // --- 第 5 步（提前解析 --sort：第 4 步的选择来源互斥判定依赖它）。---
-    auto strategy = engine::SortStrategy::ROW_MAJOR;
+    auto strategy = engine::SortStrategy::RowMajor;
     if (args.has(opts::kSort) && !parseSort(args.get(opts::kSort), strategy, err)) return argError(err);
     config.order.strategy = strategy;
-    const bool custom = strategy == engine::SortStrategy::CUSTOM;
+    const bool custom = strategy == engine::SortStrategy::Custom;
 
     // --- 第 4 步：选择来源互斥（--keep / --remove / --order 三者的合法组合）。---
     const bool hasKeep = args.has(opts::kKeep);
@@ -85,14 +85,14 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
             return argError(IDC_CTR(msg, kErrCustomNoKeepRemove), IDC_CTR(msg, kHintOrderIsSelection));
         if (args.has(opts::kDecorate))
             return argError(IDC_CTR(msg, kErrCustomNoDecorate), IDC_CTR(msg, kHintCustomNoDecorate));
-        config.cut.polarity = engine::Polarity::KEEP;
+        config.cut.polarity = engine::Polarity::Keep;
     } else {
         // 非自定义：必须恰好给出 --keep 或 --remove；--order 仅在 custom 下有效。
         if (args.has(opts::kOrder))
             return argError(IDC_CTR(msg, kErrOrderNeedsCustom), IDC_CTR(msg, kHintOrderNeedsCustom));
         if (!hasKeep && !hasRemove)
             return argError(IDC_CTR(msg, kErrNoCellChoice), IDC_CTR(msg, kHintKeepRemoveCells));
-        config.cut.polarity = hasRemove ? engine::Polarity::REMOVE : engine::Polarity::KEEP;
+        config.cut.polarity = hasRemove ? engine::Polarity::Remove : engine::Polarity::Keep;
     }
 
     // --- 第 5 步：网格几何（基准点 + 单元尺寸）与余量策略。---
@@ -126,16 +126,16 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
             return argError(IDC_CTR(msg, kErrComposeNeedsOutput), IDC_CTR(msg, kHintMergeOutputPath));
         int cols = 0, rows = 0;
         if (!parseCanvas(args.get(opts::kCanvas), cols, rows, err)) return argError(err);
-        config.emitParams.mode = engine::EmitMode::MERGED;
-        config.emitParams.layout = engine::MergeLayout::REARRANGE;
+        config.emitParams.mode = engine::EmitMode::Merged;
+        config.emitParams.layout = engine::MergeLayout::Rearrange;
         config.emitParams.cols = cols; // 画布列数（单元数，非像素）
         config.emitParams.rows = rows; // 画布行数（单元数，非像素）
         // 重排填充顺序（与选择排序 --sort 正交）：--merge-sort 行/列优先，--merge-decorate 蛇形/倒序。
         // --sort 决定「块的先后列表」，--merge-sort/--merge-decorate 决定「该列表如何铺进输出画布」。
-        auto msort = engine::SortStrategy::ROW_MAJOR;
+        auto msort = engine::SortStrategy::RowMajor;
         if (args.has(opts::kMergeSort)) {
             if (!parseSort(args.get(opts::kMergeSort), msort, err)) return argError(err);
-            if (msort == engine::SortStrategy::CUSTOM)
+            if (msort == engine::SortStrategy::Custom)
                 return argError(IDC_CTR(msg, kErrMergeSortNoCustom), IDC_CTR(msg, kHintMergeSortNoCustom));
         }
         config.emitParams.mergeOrder.strategy = msort;
@@ -148,7 +148,7 @@ int cmdGrid(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     } else { // 缺省：分离导出到文件夹（不存在会自动创建）。
         if (!args.has(opts::kOutputDir))
             return argError(IDC_CTR(msg, kErrMissingOutputDir), IDC_CTR(msg, kHintOutputDirOrCompose));
-        config.emitParams.mode = engine::EmitMode::SEPARATE;
+        config.emitParams.mode = engine::EmitMode::Separate;
     }
 
     // --- 第 5 步：填充色与公共导出选项 --format / --quality / --naming。---

@@ -1,10 +1,10 @@
 // ============================================================================
-// 文件：panels/image_panel_sections.cpp
-// 作用：ImagePanel 的三个分区构建（buildResizeSection/buildGeoSection/buildColorSection，
-//       TU 拆分）——画布尺寸独立区、几何操作区、色彩操作区。自 image_panel.cpp 构造函数
-//       原封提方法迁出（行为不变，仅「长构造函数 → 三个命名分区」；类不拆）。
+// 文件：panels/preprocess_panel_sections.cpp
+// 作用：PreprocessPanel 的三个分区构建（buildResizeSection/buildGeoSection/buildColorSection，
+//       TU 拆分）——画布尺寸独立区、几何操作区、色彩操作区。
+//       本 TU 仅按区分拆编译，类不拆。
 // ============================================================================
-#include "panels/image_panel.h"
+#include "panels/preprocess_panel.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -24,8 +24,7 @@
 namespace idc::gui {
 
 // 画布尺寸（Resize）独立区：常驻、恒最先重放、不入队列。
-void ImagePanel::buildResizeSection(QVBoxLayout* root) {
-    // ---- 画布尺寸（Resize）独立区：常驻、恒最先重放、不入队列 ----
+void PreprocessPanel::buildResizeSection(QVBoxLayout* root) {
     auto* sizeBox = sizeBox_ = new QGroupBox(this);
     i18n::bindTitle(retranslator_, sizeBox_, IDC_GT(label, kCanvasSizeBox));
     auto* sizeGrid = new QGridLayout(sizeBox);
@@ -79,8 +78,7 @@ void ImagePanel::buildResizeSection(QVBoxLayout* root) {
 }
 
 // 几何操作区（旋转 / 翻转）。
-void ImagePanel::buildGeoSection(QVBoxLayout* root) {
-    // ================= 几何操作区（旋转 / 翻转）=================
+void PreprocessPanel::buildGeoSection(QVBoxLayout* root) {
     auto* geoBox = geoBox_ = new QGroupBox(this);
     i18n::bindTitle(retranslator_, geoBox_, IDC_GT(label, kGeoSectionBox));
     auto* geoGrid = new QGridLayout(geoBox);
@@ -143,8 +141,7 @@ void ImagePanel::buildGeoSection(QVBoxLayout* root) {
 }
 
 // 色彩操作区（黑白 / 反色 / 分离）。
-void ImagePanel::buildColorSection(QVBoxLayout* root) {
-    // ================= 色彩操作区（黑白 / 反色 / 分离）=================
+void PreprocessPanel::buildColorSection(QVBoxLayout* root) {
     auto* colorBox = new QGroupBox(this);
     i18n::bindTitle(retranslator_, colorBox, IDC_GT(label, kColorSectionBox));
     auto* colorGrid = new QGridLayout(colorBox);

@@ -7,7 +7,7 @@
 //   - 部件创建/回填与连接全在本类（.cpp 内实现）；MobileShell 构造只规定装配顺序
 //     → initCore()（基类共用接线，序列不可打乱）——壳与建造者分文件，与桌面
 //     main_window.cpp / main_window_ui.cpp 的拆分纪律一致；
-//   - 桌面 7 面板类**原样复用**入抽屉（不做移动专供面板——零复刻纪律）；
+//   - 桌面 8 面板类**原样复用**入抽屉（不做移动专供面板——零复刻纪律）；
 //   - 底部工具条按钮 → MainWindow 既有私有槽 / CanvasView request*/gesture* 入口，
 //     与菜单/快捷键/右键同一信号链路（行为同构）；「更多」菜单收纳低频桌面菜单能力。
 // 说明：44pt 触控下限经本壳样式表（kTouchChromeStyle）作用于工具条按钮；
@@ -26,8 +26,8 @@ class MainWindow;
 //   - #mobileDrawer 子树：抽屉内复用的桌面面板统一放大字号/控件最小高/列表行高，
 //     选择器限定在抽屉 objectName 下，不波及画布与工具条（防误触只在面板区生效）。
 // 注：工具条按钮只设 min-height，不设 min-width——QSS 的 min-width 会被 QStyleSheetStyle
-// 当作按钮宽度上报（而非「宽度下限」），使 sizeHint 不再随文字增宽，长标签（英文 Zoom In/Out）
-// 遂被裁；44pt 触控宽度下限改由代码 setMinimumWidth 兜（真正的下限，允许 sizeHint 变宽）。
+// 当作按钮宽度上报（而非「宽度下限」），使 sizeHint 不随文字增宽，长标签（英文 Zoom In/Out）
+// 遂被裁；44pt 触控宽度下限由代码 setMinimumWidth 兜（真正的下限，允许 sizeHint 变宽）。
 inline constexpr auto kTouchChromeStyle =
     "QToolBar QToolButton { min-height: 44px; }"
     "QToolBar { spacing: 4px; padding: 2px; }"
@@ -49,7 +49,7 @@ inline constexpr auto kStripName = "mobileStrip";     // 工具条内滑动条�
 // ---------------------------------------------------------------------------
 class MobileShellUi {
 public:
-    static void buildCentral(MainWindow* w);      // scene_/view_ + 7 面板（原样复用，尚未入容器）
+    static void buildCentral(MainWindow* w);      // scene_/view_ + 8 面板（原样复用，尚未入容器）
     static void buildDrawer(MainWindow* w);       // rightTabs_（六页）入底部 QDockWidget（隐藏）
     static void buildStatus(MainWindow* w);       // StatusBar 紧凑模式（模式/块数/缩放，§8.3）
     static void buildBottomBar(MainWindow* w);    // 底部工具条 + 无键盘补偿按钮 + 「更多」低频菜单

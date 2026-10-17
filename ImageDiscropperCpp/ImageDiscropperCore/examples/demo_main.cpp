@@ -3,8 +3,8 @@
 // 作用：综合演示 ImageDiscropperCore 库的典型使用方式，覆盖以下模块：
 //       - core：Image / Color 基础操作
 //       - geometry + annotation：构造形状、光栅化到底图、合成
-//       - preprocess：PreprocessPipeline 顺序编排与像素核（旋转/翻转经 applyOne；
-//         灰度、缩放、颜色拾取核已落户 core::Image 成员）
+//       - preprocess：PreprocessPipeline 顺序编排与像素核（GrayOp / RotateOp / FlipOp；
+//         缩放与取色为 core::Image 成员）
 //       - view_transform：屏幕 ↔ 逻辑坐标换算、以指定点缩放
 //       - engine：真正跑通 Grid-Selection-Emit 流水线（L2 剔除坍缩 / L3 网格重排）并导出到磁盘
 // 分块依据：每一步聚焦一个模块或一个典型场景，便于按需拷贝到实际项目。
@@ -29,7 +29,7 @@ static void printInfo(const char* label, const idc::core::Image& img) {
     std::cout << "[" << label << "] "
               << img.width() << " x " << img.height()
               << "  format=" << (img.isGray() ? "GRAY"
-                                              : img.format() == idc::core::ImageFormat::RGBA ? "RGBA" : "RGB")
+                                              : img.format() == idc::core::ImageFormat::Rgba ? "RGBA" : "RGB")
               << "\n";
 }
 
@@ -39,7 +39,7 @@ int main() {
     // ------------------------------------------------------------------
     // 1. 构造一张 200x120 的白底 RGBA 图像，作为标注的底图
     // ------------------------------------------------------------------
-    core::Image base(200, 120, core::ImageFormat::RGBA);
+    core::Image base(200, 120, core::ImageFormat::Rgba);
     base.fill(core::kWhite);
     printInfo("base", base);
 
@@ -54,7 +54,7 @@ int main() {
         annotation::ShapeRequest req;
         req.p1 = {20, 20};
         req.p2 = {100, 80};
-        req.type = geometry::ShapeType::LINE;
+        req.type = geometry::ShapeType::Line;
         annotation::Annotation a;
         a.style.color = core::kRed;
         a.style.strokeWidth = 3;
@@ -67,7 +67,7 @@ int main() {
         annotation::ShapeRequest req;
         req.p1 = {110, 20};
         req.p2 = {180, 70};
-        req.type = geometry::ShapeType::RECTANGLE;
+        req.type = geometry::ShapeType::Rectangle;
         annotation::Annotation a;
         a.style.color = core::kBlue;
         a.style.fillColor = core::kBlue; // 会话中联动模板由 editor 负责，集合侧逐条显式填写
@@ -82,7 +82,7 @@ int main() {
         annotation::ShapeRequest req;
         req.p1 = {60, 90};
         req.p2 = {80, 90}; // 距离 = 20，作为半径
-        req.type = geometry::ShapeType::CIRCLE;
+        req.type = geometry::ShapeType::Circle;
         annotation::Annotation a;
         a.style.color = core::kGreen;
         a.style.strokeWidth = 2;
@@ -99,7 +99,7 @@ int main() {
     // ------------------------------------------------------------------
     // 3. 弹尾 / 还原演示：popBack 交还顶层标注（绿色圆形），供上层撤销/重做栈编排；
     //    再把弹出项连同剩余列表 restore 回集合（对应 GUI 重做路径）。
-    //    （会话态撤销已随拆分归 GUI AnnotationEditor，此处仅展示集合级弹尾/还原原语）
+    //    （撤销重做等会话态属 GUI AnnotationEditor，此处仅展示集合级弹尾 / 还原原语）
     // ------------------------------------------------------------------
     std::vector<annotation::Annotation> poppedItems;
     std::optional<annotation::Annotation> popped = annoSet.popBack();
@@ -147,7 +147,7 @@ int main() {
     core::Image flipped = preprocess::applyOne(rot90, preprocess::FlipOp{true});
     printInfo("flip H", flipped);
 
-    core::Image half = flipped.scaled(0.5, core::ResampleMode::BILINEAR);
+    core::Image half = flipped.scaled(0.5, core::ResampleMode::Bilinear);
     printInfo("scale 0.5x", half);
 
     // ------------------------------------------------------------------
@@ -190,12 +190,12 @@ int main() {
     {
         engine::EngineConfig cfg;
         cfg.source = engine::SourceInfo{composed.width(), composed.height()};
-        cfg.cut.tier = engine::Tier::L2;                 // 反向剔除模式
-        cfg.cut.generator = engine::CutGenerator::RECT;  // 单矩形诱导十字切割线
+        cfg.cut.tier = engine::Tier::Erase;                // 反向剔除模式
+        cfg.cut.generator = engine::CutGenerator::Rect;    // 单矩形诱导十字切割线
         cfg.cut.rect = engine::RectRegion(60, 30, 140, 90);
-        cfg.cut.polarity = engine::Polarity::REMOVE;     // 剔除十字 → 保留四角
-        cfg.emitParams.mode = engine::EmitMode::MERGED;
-        cfg.emitParams.layout = engine::MergeLayout::COLLAPSE; // 坍缩式合并（SPEC §4.2）
+        cfg.cut.polarity = engine::Polarity::Remove;       // 剔除十字 → 保留四角
+        cfg.emitParams.mode = engine::EmitMode::Merged;
+        cfg.emitParams.layout = engine::MergeLayout::Collapse; // 坍缩式合并（SPEC §4.2）
 
         const auto exp = engine::runEngine(composed, cfg);
         const bool ok = exp.has_value();
@@ -214,7 +214,7 @@ int main() {
         }
 
         // 9.2 同一作业改为分离导出 → 文件夹（四角 4 张 PNG，直接写入，不压缩）。
-        cfg.emitParams.mode = engine::EmitMode::SEPARATE;
+        cfg.emitParams.mode = engine::EmitMode::Separate;
         if (const auto rs = engine::runEngine(composed, cfg); rs.has_value()) {
             const fs::path folder = outDir / "l2_corners"; // 目标文件夹（不存在会自动创建）
             const bool w = engine::exportImage(rs->composition, composed, folder.string()).has_value();
@@ -228,7 +228,7 @@ int main() {
             const bool ok1 = engine::loadEngineConfig(jf.string(), loaded).has_value();
             std::cout << "[config json] saved -> " << jf.string() << " reload=" << ok1
                       << " polarity="
-                      << (loaded.cut.polarity == engine::Polarity::REMOVE ? "remove" : "keep") << "\n";
+                      << (loaded.cut.polarity == engine::Polarity::Remove ? "remove" : "keep") << "\n";
         }
     }
 
@@ -237,14 +237,14 @@ int main() {
     {
         engine::EngineConfig cfg;
         cfg.source = engine::SourceInfo{composed.width(), composed.height()};
-        cfg.cut.tier = engine::Tier::L3;
-        cfg.cut.generator = engine::CutGenerator::GRID;
-        cfg.cut.grid = engine::GridParams{.originX = 0, .originY = 0, .cellWidth = 50, .cellHeight = 40, .remainder = engine::RemainderPolicy::DISCARD};
-        cfg.cut.polarity = engine::Polarity::KEEP;
+        cfg.cut.tier = engine::Tier::Grid;
+        cfg.cut.generator = engine::CutGenerator::Grid;
+        cfg.cut.grid = engine::GridParams{.originX = 0, .originY = 0, .cellWidth = 50, .cellHeight = 40, .remainder = engine::RemainderPolicy::Discard};
+        cfg.cut.polarity = engine::Polarity::Keep;
         cfg.selectedCells = {0, 3, 8, 11};               // 4×3 网格的四角单元
-        cfg.order.strategy = engine::SortStrategy::ROW_MAJOR;
-        cfg.emitParams.mode = engine::EmitMode::MERGED;
-        cfg.emitParams.layout = engine::MergeLayout::REARRANGE; // 重排式合并（SPEC §4.3）
+        cfg.order.strategy = engine::SortStrategy::RowMajor;
+        cfg.emitParams.mode = engine::EmitMode::Merged;
+        cfg.emitParams.layout = engine::MergeLayout::Rearrange; // 重排式合并（SPEC §4.3）
         cfg.emitParams.cols = 2;
 
         const auto rexp = engine::runEngine(composed, cfg);

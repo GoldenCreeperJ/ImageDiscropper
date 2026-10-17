@@ -6,7 +6,7 @@
 //       几何计算或光栅化实现（CONTRIBUTING.md「分层纪律」）。
 // 分块依据：
 //   - AnnoTool         : GUI 侧标注工具枚举（选择 + 各形状 + 多线段 + 文字 + 画笔），
-//                        与 Core geometry::ShapeType 一一映射（SELECT 无对应形状）。
+//                        与 Core geometry::ShapeType 对应（Select 无对应形状）。
 //   - AnnotationBridge : 拥有 AnnotationEditor（内含 Core annotation::AnnotationSet 数据集合），
 //                        暴露绘制 / 选择 / 移动 / 删除 / 撤销重做 / 图层可见性 / 导出烧录等意图方法，
 //                        并以信号驱动画布重绘。
@@ -36,26 +36,26 @@ namespace idc::gui {
 
 // ---------------------------------------------------------------------------
 // AnnoTool：GUI 标注工具枚举。
-// 分块依据：与 Core ShapeType 对应，但额外含 SELECT（选择 / 移动，无几何形状）。
+// 分块依据：与 Core ShapeType 对应，但额外含 Select（选择 / 移动，无几何形状）。
 // ---------------------------------------------------------------------------
 enum class AnnoTool {
-    SELECT,          // 选择 / 移动（EDIT 模式）
-    RECT,            // 矩形
-    SQUARE,          // 正方形
-    RHOMBUS,         // 菱形
-    CIRCLE,          // 圆形
-    ELLIPSE,         // 椭圆
-    ISOS_TRI,        // 等腰三角形
-    EQU_TRI,         // 等边三角形
-    RECT_TRI,        // 直角三角形
-    EQU_RECT_TRI,    // 等腰直角三角形
-    LINE,            // 直线
-    POLYLINE,        // 多线段（连续追加顶点）
-    TEXT,            // 文字
-    BRUSH,           // 画笔（自由路径）
+    Select,          // 选择 / 移动（Edit 模式）
+    Rect,            // 矩形
+    Square,          // 正方形
+    Rhombus,         // 菱形
+    Circle,          // 圆形
+    Ellipse,         // 椭圆
+    IsosTri,         // 等腰三角形
+    EquTri,          // 等边三角形
+    RectTri,         // 直角三角形
+    EquRectTri,      // 等腰直角三角形
+    Line,            // 直线
+    Polyline,        // 多线段（连续追加顶点）
+    Text,            // 文字
+    Brush,           // 画笔（自由路径）
 };
 
-// 将 GUI 工具映射为 Core 形状类型；SELECT 无对应形状，返回 LINE 作占位（不会被使用）。
+// 将 GUI 工具映射为 Core 形状类型；Select 无对应形状，返回 Line 作占位（不会被使用）。
 geometry::ShapeType shapeTypeForTool(AnnoTool tool);
 
 // ---------------------------------------------------------------------------
@@ -73,7 +73,7 @@ public:
 
     // ---- 工具与属性 ----
     AnnoTool currentTool() const { return tool_; }
-    // 切换工具：SELECT→Core EDIT 模式（属性作用选中项），其余→DRAW 模式（属性作为下一次绘制默认）。
+    // 切换工具：Select→Edit 模式（属性作用选中项），其余→Draw 模式（属性作为下一次绘制默认）。
     void setTool(AnnoTool tool);
 
     core::Color currentColor() const { return editor_.currentColor(); }
@@ -84,7 +84,7 @@ public:
     double currentFontSize() const { return editor_.currentFontSize(); }
     double currentCornerRadius() const { return editor_.currentCornerRadius(); }
 
-    // 写回属性：委托 Core change*（EDIT 模式作用选中项，DRAW 模式改当前默认），随后发 changed()。
+    // 写回属性：委托 change*（Edit 模式作用选中项，Draw 模式改当前默认），随后发 changed()。
     void setColor(const core::Color& c);   // 边框 / 描边色
     void setFillColor(const core::Color& c); // 填充色（独立于边框色）
     void setStrokeWidth(int w);
@@ -94,7 +94,7 @@ public:
     void setCornerRadius(double r);   // 转角圆角半径（px，0＝直角）
 
     // ---- 两点形状绘制流程（矩形 / 圆 / 直线 / 三角 …）----
-    void beginShape(core::Point2D p);   // 按下：记起点，切 DRAW，准备预览
+    void beginShape(core::Point2D p);   // 按下：记起点，切 Draw，准备预览
     void updateShape(core::Point2D p);  // 拖拽：以当前点重建 pending 预览，发 changed()
     void commitShape();                      // 释放：把 pending 提交为一个标注，发 changed()
     void cancelPending();                    // 取消当前预览（Esc / 切换工具）
@@ -116,7 +116,7 @@ public:
     void clearSelection();                   // 取消选中
     std::optional<std::size_t> selectedIndex() const { return editor_.selectedAnnotationIndex(); }
     // 平移选中标注：委托 Core Shape::translateWorld 就地偏移形状自身参数，**保留具体类型**
-    // （不再展平重建为通用 PATH，故 TEXT 字形、参数化元数据与控制点语义均不丢失）。
+    // （不展平重建为通用 Path，故 Text 字形、参数化元数据与控制点语义均不丢失）。
     void moveSelectedBy(double dx, double dy);
     void removeSelected();                   // 删除选中标注（委托 Core removeAnnotation）
 
@@ -172,7 +172,7 @@ public:
     // 选中形状的转角圆角半径（取形状几何），否则当前默认；无选中时取 layer 当前值。
     double displayCornerRadius() const;
     // 当前上下文是否支持转角倒角 / 内部填充（供属性面板置灰不适用控件）：有选中按选中形状类型
-    // （直线 / 圆 / 椭圆 / 文字无转角；仅直线 / 文字不可填充）；绘制工具按工具类型；SELECT 无选中一律可用
+    // （直线 / 圆 / 椭圆 / 文字无转角；仅直线 / 文字不可填充）；绘制工具按工具类型；Select 无选中一律可用
     // （编辑的是下一次绘制的默认值，不受上一工具残值错禁）。
     bool contextSupportsCornerRadius() const;
     bool contextSupportsFill() const;
@@ -193,7 +193,7 @@ private:
     void rebuildPending(core::Point2D current);
 
     AnnotationEditor editor_;  // 标注编辑会话（内含 Core AnnotationSet 数据集合，唯一真相源）
-    AnnoTool tool_{AnnoTool::SELECT};
+    AnnoTool tool_{AnnoTool::Select};
 
     // 绘制预览状态（仅 GUI 侧临时，不进 Core 历史）
     core::Point2D anchor_{};                       // 两点形状起点

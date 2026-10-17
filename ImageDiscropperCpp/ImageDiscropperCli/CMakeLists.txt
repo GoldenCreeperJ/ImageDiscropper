@@ -78,7 +78,7 @@ add_executable(idc src/main.cpp)
 target_link_libraries(idc PRIVATE idc_cli_lib)
 
 # ---------------------------------------------------------------------------
-# 测试：单元（参数解析 / 值解析）+ 集成（IT-1~IT-18，进程内调用 cliMain）。
+# 测试：单元（参数解析 / 值解析）+ 集成（IT-1~IT-53，进程内调用 cliMain）。
 # 仅在 IDC_BUILD_TESTS=ON 时构建，Release 发布可关闭。
 # ---------------------------------------------------------------------------
 if(IDC_BUILD_TESTS)

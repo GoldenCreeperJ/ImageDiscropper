@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：app/controllers/doc_history.h
-// 作用：DocHistory——文档参数态撤销/重做控制器：从 MainWindow 拆出 HistoryManager<EngineConfig>
+// 作用：DocHistory——文档参数态撤销/重做控制器：持有 HistoryManager<EngineConfig>
 //       快照历史、500ms 防抖采集、还原期抑制与标注上下文判定。
 // 分块依据：
 //   - 全局撤销的「双历史」之一（标注历史在 AnnotationBridge/Core），独占一块；
@@ -36,12 +36,12 @@ public:
     void setDocument(Document* doc);
     void setAnnotationBridge(AnnotationBridge* anno);  // annotationContextActive 判定
     void setStatusBar(StatusBar* status);              // notify 提示
-    void start();                                       // 连接 Document::changed → scheduleCapture
+    void start();                                       // 连接 Document::changed + layersChanged → scheduleCapture
 
     void reset();                       // 清空历史并以当前态为唯一基线（构造/换图后调用）。
-    // 加载配置的中间步骤：先冲刷未落定的防抖变更，再抑制采集地应用新配置，最后压栈（等价原 onLoadConfig 中段）。
+    // 加载配置的中间步骤：先冲刷未落定的防抖变更，再抑制采集地应用新配置，最后压栈。
     void recordConfigLoad(const engine::EngineConfig& cfg);
-    // 标注上下文判定：标注工具激活（非 SELECT）或存在选中标注时，Ctrl+Z/Y 路由到标注撤销/重做。
+    // 标注上下文判定：标注工具激活（非 Select）或存在选中标注时，Ctrl+Z/Y 路由到标注撤销/重做。
     bool annotationContextActive() const;
 
 public slots:

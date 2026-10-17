@@ -46,8 +46,8 @@ class CanvasView;
 class LeftPanel;
 class ParamPanel;
 class ExportPanel;
-class ImagePanel;
-class ToolPanel;
+class PreprocessPanel;
+class ModeToolPanel;
 class LayerPanel;
 class LayerEditPanel;
 class AnnotationPropPanel;
@@ -139,7 +139,7 @@ private:
     // 控制器（QObject 子对象，本窗口拥有）。
     PreviewController* preview_{nullptr};         // 预览刷新状态机 + 导出预览缓存。
     PreprocessController* preprocess_{nullptr};   // 预处理 8 操作编排。
-    AnnotationCoordinator* annotation_{nullptr};  // 标注 33 槽编排 + 手势分派。
+    AnnotationCoordinator* annotation_{nullptr};  // 标注 38 槽编排 + 手势分派。
     DocHistory* history_{nullptr};                // 文档参数态撤销/重做（防抖/抑制/上下文）。
     CanvasCoordinator* canvas_{nullptr};          // 画布四态落地 + 选区/单元交互写回。
     SessionController* session_{nullptr};         // 文档会话生命周期 + 图层编辑面板接线。
@@ -154,10 +154,10 @@ private:
     LeftPanel* left_{nullptr};
     ParamPanel* param_{nullptr};
     ExportPanel* exportPanel_{nullptr};
-    ImagePanel* imagePanel_{nullptr};   // 右侧「图像」页：预处理（FR-1）。
-    ToolPanel* toolPanel_{nullptr};             // 左侧「标注工具」组（G-4）。
+    PreprocessPanel* preprocessPanel_{nullptr};   // 右侧「预处理」页（FR-1）。
+    ModeToolPanel* toolPanel_{nullptr};             // 左侧「标注工具」组（G-4）。
     LayerPanel* layerPanel_{nullptr};           // 左侧「图层」组（G-5）。
-    LayerEditPanel* layerEditPanel_{nullptr};   // 左侧「图层编辑」组：图片图层列表/落位/画布尺寸（多层画布）。
+    LayerEditPanel* layerEditPanel_{nullptr};   // 右侧「图片」页：图层序/落位/画布尺寸编辑（多层画布，无内置图层列表）。
     AnnotationPropPanel* annoPropPanel_{nullptr}; // 右侧「标注」属性页（G-4）。
     QWidget* rightTabs_{nullptr};       // 右侧多页容器：桌面＝AccordionPanel 折叠式（多节可同开+整栏滚动）/
                                         // 移动端＝QTabWidget 选择式；跨形态访问经双型分发。
@@ -221,7 +221,7 @@ private:
     QAction* aFmtBmp_{nullptr};
     QAction* aBurnAnno_{nullptr};
     QAction* aBurnLayers_{nullptr};
-    // 标注菜单「工具」子菜单动作：按 AnnoTool 枚举序索引（SELECT=0 无菜单项，由「标注选取」画布模式承担）。
+    // 标注菜单「工具」子菜单动作：按 AnnoTool 枚举序索引（Select=0 无菜单项，由「标注选取」画布模式承担）。
     std::vector<QAction*> toolActions_;
     // 标注菜单「叠放次序」（作用选中标注；无选中时置灰）与「填充」开关（勾选态随选中/默认值回同步）。
     QAction* aZRaise_{nullptr};

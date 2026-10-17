@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：include/util/gui_nums.h（GUI 常量层 · 数字）
+// 文件：util/gui_nums.h（GUI 常量层 · 数字）
 // 作用：把 GUI 里「会被人工调整」的呈现与交互数值收编为命名常量：布局尺寸与间距、控件触控下限、
 //       动画 / 节流时长、缩放步进、阈值、参数范围上下限、绘制工具与标注的出厂默认属性。
 // 分块依据：按来源模块 —— canvas（画布与图元）、panels（左侧 / 右侧各面板）、dialog（各类对话框）、
@@ -26,8 +26,7 @@
 //   · tests/ 内的期望值。
 // 与偏好的关系：已进 CanvasPrefs / AppPrefs 的值，其**范围上下限与出厂默认**在本层定义，
 //       由 prefs 类与对话框共同引用（避免对话框 setRange 与 prefs clamp 两处各写一份）。
-// 现状：P4（GUI 数字）六组已填齐；使用点已删除原字面量，改引本层。新增呈现参数时在此登记，
-//       不要回到 .cpp 里写裸数字。P6 重跑后补登了 canvas 组的场景口径兜底初值（手柄尺寸族）。
+// 登记纪律：新增呈现参数时在此登记，不要回到 .cpp 里写裸数字；各使用点只引本层命名常量。
 // ============================================================================
 #pragma once
 
@@ -37,7 +36,7 @@ namespace idc::gui::nums {
 
 // canvas：画布视图、场景与图元的呈现与交互参数（src/canvas/**）。
 namespace canvas {
-inline constexpr double kDesktopOverlayScreenPx = 8.0;  // 桌面覆盖层抓取带的屏幕基准（NFR-7）：
+inline constexpr double kDesktopOverlayScreenPx = 8.0;  // 桌面覆盖层抓取带的屏幕基准（本项目实现选择，支撑 SPEC §8.2 拖拽能力）：
                                                         // 手柄/抓边条带/点选阈值的屏幕口径。两处同值共用
                                                         // （适配器接口默认值 + 视图取不到适配器时的兜底）。
 inline constexpr double kTouchOverlayScreenPx = 12.0;   // 触控同基准（Android 逻辑 px≈dp≈pt，SPEC §8.3 精度下限）；
@@ -97,7 +96,7 @@ inline constexpr int kResizeMaxEdgePx = 20000;  // 画布尺寸改边的上限�
 inline constexpr int kResizeScaleMaxPercent = 1000; // 按比例缩放的上限（1%–1000%）。
 inline constexpr int kExportPreviewWidthPx = 200;   // 导出面板输出预览框尺寸（定宽定高，使预览缩放口径确定）。
 inline constexpr int kExportPreviewHeightPx = 160;
-// 以下三条转引 Core（出厂默认与合法区间由上游定义，GUI 不再写第二份数值）：
+// 以下三条转引 Core（出厂默认与合法区间由上游定义，GUI 不写第二份数值）：
 inline constexpr int kQualityMinPercent = core::nums::engine::kQualityMin;         // 有损格式质量下限。
 inline constexpr int kQualityMaxPercent = core::nums::engine::kQualityMax;         // 质量上限（同时是 JPEG 编码器上界）。
 inline constexpr int kQualityDefaultPercent = core::nums::engine::kDefaultQuality; // 质量出厂默认。
@@ -143,10 +142,10 @@ inline constexpr int kStripButtonHPadPx = 20;   // 条带文本按钮按文字�
 inline constexpr double kDialogMaxWidthRatio = 0.95;    // 对话框最大宽 = 可用屏宽 × 本值。
 inline constexpr double kDialogMaxHeightRatio = 0.9;    // 对话框最大高 = 可用屏高 × 本值。
 inline constexpr int kInfoDialogMinWidthPx = 320;       // 可滚动信息框（使用说明/关于）正文标签最小宽：
-                                                        // 窄屏下靠它 + word wrap 控宽，避免长行顶成竖窄条（item 4）。
+                                                        // 窄屏下靠它 + word wrap 控宽，避免长行顶成竖窄条。
 inline constexpr int kInfoDialogMinHeightPx = 240;      // 可滚动信息框滚动区最小高（保证正文有可读区、按钮不被挤没）。
 // 错误提示里长路径（content:// 内容 URI 尤甚）的显示截断宽度（app/new_canvas_dialog.cpp 源图读取失败行）：
-// 超出即按本宽用 QFontMetrics 省略号截断，防长串撑宽表单主体（item 3b）。
+// 超出即按本宽用 QFontMetrics 省略号截断，防长串撑宽表单主体。
 inline constexpr int kErrorPathMaxWidthPx = 200;
 } // namespace mobile
 

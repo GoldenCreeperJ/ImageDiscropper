@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：app/doc_history.cpp
+// 文件：app/controllers/doc_history.cpp
 // 作用：实现 DocHistory（见同名头文件说明）。
 // 分块依据：
 //   - 采集（scheduleCapture/captureNow/flush）：防抖定时器 + 抑制守卫；
@@ -54,9 +54,9 @@ void DocHistory::recordConfigLoad(const engine::EngineConfig& cfg) {
     updateEnabled();
 }
 
-// 标注上下文判定：绘制工具激活（非 SELECT）或存在选中标注时，Ctrl+Z/Y 路由到标注撤销/重做。
+// 标注上下文判定：绘制工具激活（非 Select）或存在选中标注时，Ctrl+Z/Y 路由到标注撤销/重做。
 bool DocHistory::annotationContextActive() const {
-    return anno_->currentTool() != AnnoTool::SELECT || anno_->selectedIndex().has_value();
+    return anno_->currentTool() != AnnoTool::Select || anno_->selectedIndex().has_value();
 }
 
 // 文档参数撤销：栈顶恒为当前态，需至少两态（基线 + 一次变更）才可撤销；

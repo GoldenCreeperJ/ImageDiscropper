@@ -66,23 +66,23 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     const bool separate = !hasMerge; // 缺省分离导出。
     bool explicitCollapse = false;   // 仅显式 --merge collapse 时为真（不可坍缩 → 退出码 2）。
     engine::EngineConfig config;
-    config.cut.tier = engine::Tier::L2;
-    config.cut.polarity = engine::Polarity::REMOVE;
+    config.cut.tier = engine::Tier::Erase;
+    config.cut.polarity = engine::Polarity::Remove;
 
     std::string err;
     if (hasMerge) {
-        auto layout = engine::MergeLayout::COLLAPSE;
+        auto layout = engine::MergeLayout::Collapse;
         if (!parseMerge(args.get(opts::kMerge), layout, err)) return argError(err);
         // 仅 L3 可重排（Core runEngine 硬约束）：erase 为 L2，显式 rearrange 直接拒绝。
-        if (layout == engine::MergeLayout::REARRANGE)
+        if (layout == engine::MergeLayout::Rearrange)
             return argError(IDC_CTR(msg, kErrEraseNoRearrange), IDC_CTR(msg, kHintRearrangeL3Only));
-        config.emitParams.mode = engine::EmitMode::MERGED;
+        config.emitParams.mode = engine::EmitMode::Merged;
         config.emitParams.layout = layout;
-        explicitCollapse = layout == engine::MergeLayout::COLLAPSE;
+        explicitCollapse = layout == engine::MergeLayout::Collapse;
         if (!args.has(opts::kOutput))
             return argError(IDC_CTR(msg, kErrMissingMergeOutput), IDC_CTR(msg, kHintMergeOutputPath));
     } else {
-        config.emitParams.mode = engine::EmitMode::SEPARATE;
+        config.emitParams.mode = engine::EmitMode::Separate;
         if (!args.has(opts::kOutputDir))
             return argError(IDC_CTR(msg, kErrMissingOutputDir), IDC_CTR(msg, kHintOutputDirAutoCreate));
     }
@@ -96,11 +96,11 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
             if (!parseRect(rectStrs[0], r, err)) return argError(err);
             if (r.width() <= 0 || r.height() <= 0)
                 return argError(IDC_CTR(msg, kErrRectDegenerate), IDC_CTR(msg, kHintRectOrder));
-            config.cut.generator = engine::CutGenerator::RECT;
+            config.cut.generator = engine::CutGenerator::Rect;
             config.cut.rect = r;
         } else {
             // 多矩形并集剔除（FR-L2.4）：各矩形诱导十字带，删除区为并集（始终满足坍缩条件）。
-            config.cut.generator = engine::CutGenerator::MULTI_RECT;
+            config.cut.generator = engine::CutGenerator::MultiRect;
             for (const std::string& s : rectStrs) {
                 engine::RectRegion r;
                 if (!parseRect(s, r, err)) return argError(err);
@@ -114,12 +114,12 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
         if (!parseBand(args.get(opts::kHband), bandA, bandB, err)) return argError(err);
         if (bandA >= bandB)
             return argError(IDC_CTR(msg, kErrHbandDegenerate), IDC_CTR(msg, kHintHbandOrder));
-        config.cut.generator = engine::CutGenerator::HORIZONTAL_LINE;
+        config.cut.generator = engine::CutGenerator::HorizontalLine;
     } else { // hasV
         if (!parseBand(args.get(opts::kVband), bandA, bandB, err)) return argError(err);
         if (bandA >= bandB)
             return argError(IDC_CTR(msg, kErrVbandDegenerate), IDC_CTR(msg, kHintVbandOrder));
-        config.cut.generator = engine::CutGenerator::VERTICAL_LINE;
+        config.cut.generator = engine::CutGenerator::VerticalLine;
     }
     // 公共导出选项：--format（分离时决定扩展名 / 合并时作扩展名回退）/ --quality（JPEG/WebP）/ --naming（分离命名模板）。
     if (!applyExportOptions(args, config.emitParams, err)) return argError(err);
@@ -131,9 +131,9 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
         return toInt(ec);
 
     // --- 装配切割几何：带需图像尺寸构造贯穿全图矩形；写入 source（供 --save-config 完整）。---
-    if (config.cut.generator == engine::CutGenerator::HORIZONTAL_LINE)
+    if (config.cut.generator == engine::CutGenerator::HorizontalLine)
         config.cut.rect = engine::horizontalBand(bandA, bandB, image.width());
-    else if (config.cut.generator == engine::CutGenerator::VERTICAL_LINE)
+    else if (config.cut.generator == engine::CutGenerator::VerticalLine)
         config.cut.rect = engine::verticalBand(bandA, bandB, image.height());
     config.source.width = image.width();
     config.source.height = image.height();

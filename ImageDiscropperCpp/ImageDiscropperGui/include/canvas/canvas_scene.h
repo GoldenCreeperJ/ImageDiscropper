@@ -75,8 +75,8 @@ public:
     // 依 Core 诱导网格刷新 L3 网格线（show=false 或非 L3 模式时清空）。
     // 网格线纯显示，与遮罩/选区解耦；单元区域均来自 Core Grid（CONTRIBUTING.md「分层纪律」）。
     // 同时把网格下发给单元点选图元（L3 交互）并按 show 切换其显隐。
-    // 另把各单元区域并入内容边界并回写场景矩形：仅补白(PAD)策略下 Core 保留越界单元值（残缺单元伸出图像
-    //   边界、虚拟起点可落在负坐标），那截越界需完整计入滚动范围才能被平移进视口；DISCARD / KEEP_PARTIAL
+    // 另把各单元区域并入内容边界并回写场景矩形：仅补白(Pad)策略下 Core 保留越界单元值（残缺单元伸出图像
+    //   边界、虚拟起点可落在负坐标），那截越界需完整计入滚动范围才能被平移进视口；Discard / KeepPartial
     //   的单元恒在图内 → 并集就是原图（见 applySceneExtent）。
     void updateGrid(const engine::Grid& grid, bool show);
     void clearGrid();
@@ -88,7 +88,7 @@ public:
     // 余量只是包在内容外面的一层。场景不认识缩放与视口，只接这两个已折算好的数值。
     void setScrollMargins(qreal marginXScene, qreal marginYScene);
 
-    // 内容边界 = 原图 ∪ 全部网格单元区域（无网格时即原图）。补白(PAD) 策略下残缺单元会伸出图像边界，故内容
+    // 内容边界 = 原图 ∪ 全部网格单元区域（无网格时即原图）。补白(Pad) 策略下残缺单元会伸出图像边界，故内容
     // 可比原图大；供 fitToWindow 按**内容**（而非原图）铺满视口，使边界补白块在适应窗口时也完整可见。
     QRectF contentBounds() const;
 
@@ -96,7 +96,7 @@ public:
     // 并集的诱导线，受 cutLinesVisible_ 门控；不显示 picker（picker 会 grab 鼠标、阻断画布框选追加矩形）。
     void updateMultiRectCutLines(const engine::Grid& grid, bool show);
 
-    // 依 Document 的多矩形列表刷新可交互的橙色选区框（L2 MULTI_RECT）：每个矩形一个
+    // 依 Document 的多矩形列表刷新可交互的橙色选区框（L2 MultiRect）：每个矩形一个
     // SelectionRectItem（可整体移动 / 四角缩放 / 拖边微调），与单矩形选区体验一致。
     // 增量维护（按数量增删末位图元、逐个刷新几何），拖拽中跳过对正在拖图元的回设。
     void updateMultiRects(const std::vector<engine::RectRegion>& rects);
@@ -179,7 +179,7 @@ public:
     int imageHeight() const { return imgH_; }
 
 protected:
-    // 图层拾取模式的**场景级**命中与拖拽：重叠落位框不再靠 z 序取最顶，而是同点续击沿叠放序
+    // 图层拾取模式的**场景级**命中与拖拽：重叠落位框不靠 z 序取最顶，而是同点续击沿叠放序
     //   循环切换选中层（去 z 序依赖，仿 Figma）。非拾取模式 / 拾取点无候选 → 交基类走既有图元交互。
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
     void mouseMoveEvent(QGraphicsSceneMouseEvent* event) override;
@@ -195,7 +195,7 @@ private:
 
     // 重算场景矩形 = 内容边界 + 外圈余量（余量为视图注入的视口口径值，横/纵各自一个，故左右与上下可不等量）。
     // 内容边界本身可以不对称（补白只在某一侧伸出），场景矩形随之不对称——这是正确行为：整幅场景小于视口时 Qt
-    // 按场景矩形居中，居中的是「内容」，而补白块本就是真实内容，本就该一起框进来（早先按四边等量外扩反而会把
+    // 按场景矩形居中，居中的是「内容」，而补白块本就是真实内容，本就该一起框进来（若按四边等量外扩反而会把
     // 空白一侧一并扩掉）。无越界时（非 L3 / 非补白）内容边界就是原图 → 各模式、各余量策略完全同口径。
     // setBaseImage / updateGrid / clearGrid / setScrollMargins 共用。
     void applySceneExtent();
@@ -207,10 +207,10 @@ signals:
     // 用户开始拖动任一选区框（单选区或多矩形，转发自 SelectionRectItem::dragStarted）：
     // 供上层在拖动选区边框时清除标注选中态（与空白框选 marqueeStarted 同义）。
     void selectionInteractionStarted();
-    // L3 单元点选（转发自 CellPickerItem）：单击切换 / 拖拽框选，交 MainWindow 写回 Document。
+    // L3 单元点选（转发自 CellPickerItem）：单击切换 / 拖拽框选，交 CanvasCoordinator 写回 Document。
     void cellToggled(int index);
     void cellsMarqueeSelected(const std::vector<int>& indices);
-    // L3 CUSTOM 拖拽调序（转发自 CellPickerItem）：把 fromIndex 移到 toIndex 序位。
+    // L3 Custom 拖拽调序（转发自 CellPickerItem）：把 fromIndex 移到 toIndex 序位。
     void cellReordered(int fromIndex, int toIndex);
     // L2 多矩形：某个选区框被拖动/缩放（转发自对应 SelectionRectItem），index 为其在列表中的下标。
     void multiRectEdited(int index, const QRectF& sceneRect);

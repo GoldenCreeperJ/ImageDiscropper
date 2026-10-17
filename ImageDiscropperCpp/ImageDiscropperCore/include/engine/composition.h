@@ -25,7 +25,7 @@
 #include "engine/region.h"
 #include "engine/region_set.h"
 #include "engine/selection.h"
-#include "engine/sequence.h" // SortStrategy（MergeOrder 复用其 ROW_MAJOR / COLUMN_MAJOR）
+#include "engine/sequence.h" // SortStrategy（MergeOrder 复用其 RowMajor / ColumnMajor）
 
 namespace idc::engine {
 
@@ -33,26 +33,26 @@ namespace idc::engine {
 // EmitMode：输出模式（SPEC §1 阶段⑤）。
 // ---------------------------------------------------------------------------
 enum class EmitMode {
-    SEPARATE,  // 多图分离：每个保留单元写入目标文件夹下一张图（SPEC §4.1 / FR-L3.6）
-    MERGED,    // 合并单图：坍缩或重排为一张画布（SPEC §4.2 / §4.3）
+    Separate,  // 多图分离：每个保留单元写入目标文件夹下一张图（SPEC §4.1 / FR-L3.6）
+    Merged,    // 合并单图：坍缩或重排为一张画布（SPEC §4.2 / §4.3）
 };
 
 // ---------------------------------------------------------------------------
 // MergeLayout：合并布局。
 // ---------------------------------------------------------------------------
 enum class MergeLayout {
-    COLLAPSE,   // 坍缩式：剩余块按原相对位置紧贴拼接（L1/L2 主用，SPEC §4.2）
-    REARRANGE,  // 重排式：按序列填入指定 cols × rows 画布（L3 专属，SPEC §4.3）
+    Collapse,   // 坍缩式：剩余块按原相对位置紧贴拼接（L1/L2 主用，SPEC §4.2）
+    Rearrange,  // 重排式：按序列填入指定 cols × rows 画布（L3 专属，SPEC §4.3）
 };
 
 // ---------------------------------------------------------------------------
 // MergeOrder：合并重排的「填充顺序」——决定保留块列表按什么路径铺进 cols×rows 输出画布。
 // 与 L3 选择排序（SequenceParams / Sequence）正交：后者决定「块的先后列表」（含自定义拖拽序），
 // 本结构决定「这个列表以行优先/列优先 + 蛇形? + 倒序? 的路径落入输出画布的哪些槽位」。
-// 仅 REARRANGE 使用；strategy 只取 ROW_MAJOR / COLUMN_MAJOR（CUSTOM 在 compose 中按 ROW_MAJOR 处理）。
+// 仅 Rearrange 使用；strategy 只取 RowMajor / ColumnMajor（Custom 在 compose 中按 RowMajor 处理）。
 // ---------------------------------------------------------------------------
 struct MergeOrder {
-    SortStrategy strategy{SortStrategy::ROW_MAJOR}; // 行优先 / 列优先（不含自定义）
+    SortStrategy strategy{SortStrategy::RowMajor}; // 行优先 / 列优先（不含自定义）
     bool reverse{false};  // 整体倒序：填充路径整体逆序
     bool snake{false};    // 蛇形：隔行（行优先）/ 隔列（列优先）反向
 };
@@ -61,25 +61,25 @@ struct MergeOrder {
 // ExportFormat：导出格式（SPEC §4.5）。
 // ---------------------------------------------------------------------------
 enum class ExportFormat {
-    PNG,   // 支持透明
-    JPEG,  // 须指定背景色替代透明
-    WEBP,
-    BMP,
+    Png,   // 支持透明
+    Jpeg,  // 须指定背景色替代透明
+    Webp,
+    Bmp,
 };
 
 // ---------------------------------------------------------------------------
 // CompositionParams：导出/合成参数（对应 SPEC §7 JSON 的 emit 段）。
 // ---------------------------------------------------------------------------
 struct CompositionParams {
-    EmitMode mode{EmitMode::MERGED};                 // 分离 or 合并
-    MergeLayout layout{MergeLayout::COLLAPSE};       // 坍缩 or 重排
-    MergeOrder mergeOrder;                           // 重排填充顺序（仅 REARRANGE；与 order 选择排序正交）
+    EmitMode mode{EmitMode::Merged};                 // 分离 or 合并
+    MergeLayout layout{MergeLayout::Collapse};       // 坍缩 or 重排
+    MergeOrder mergeOrder;                           // 重排填充顺序（仅 Rearrange；与 order 选择排序正交）
     std::optional<int> cols;                         // 重排画布列数（可选）
     std::optional<int> rows;                         // 重排画布行数（可选）
     std::optional<int> cellWidth;                    // 重排单元宽（可选）
     std::optional<int> cellHeight;                   // 重排单元高（可选）
     core::Color padColor{core::kTransparent};        // 空位/余量填充色（默认透明）
-    ExportFormat format{ExportFormat::PNG};          // 导出格式
+    ExportFormat format{ExportFormat::Png};          // 导出格式
     std::string naming{core::texts::defaults::kNamingTemplate};  // 分离导出命名模板（SPEC §4.1）
     int quality{core::nums::engine::kDefaultQuality};             // 有损格式质量参数
     bool keepMetadata{false};                        // 是否保留元数据（NFR-9）
@@ -104,7 +104,7 @@ struct Composition {
     int canvasHeight{0};
     std::vector<Placement> placements;
     // 导出设置（compose 从 CompositionParams 透传，供 exportImage 落盘时使用）：
-    ExportFormat format{ExportFormat::PNG};    // 导出图像格式
+    ExportFormat format{ExportFormat::Png};    // 导出图像格式
     std::string naming{core::texts::defaults::kNamingTemplate};  // 分离导出命名模板（{name}/{index}/{index:03d}/{row}/{col}）
     int quality{core::nums::engine::kDefaultQuality};             // 有损格式（JPEG/WebP）质量参数
     core::Color padColor{core::kTransparent};  // 合并画布空位/余量填充色（exportMerged 使用）

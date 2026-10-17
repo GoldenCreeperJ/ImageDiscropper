@@ -2,10 +2,10 @@
 // 文件：panels/export_panel.h
 // 作用：右侧「导出面板」——输出模式（分离/坍缩/重排）、目标目录或文件、
 //       格式、JPEG 质量、命名模板与导出按钮。坍缩不可行时禁用「合并坍缩」项并给出原因。
-//       面板把导出参数写回 Document，点击导出发 exportRequested 交 MainWindow 执行（CONTRIBUTING.md「分层纪律」）。
+//       面板把导出参数写回 Document，点击导出发 exportRequested 交 ExportController 执行（CONTRIBUTING.md「分层纪律」）。
 // 分块依据：导出参数（写 Document）与导出动作（发信号交上层调 Core）分离；路径可手动键入或经
 //           文件对话框选择，均在面板内回灌 Document，实际 runEngine+exportImage 由 EngineBridge 承担。
-// 说明：「导出前预览缩略图」已实现——MainWindow 按 Core Composition 渲染低分辨率输出缩略图，
+// 说明：「导出前预览缩略图」已实现——PreviewController 按 Core Composition 渲染低分辨率输出缩略图，
 //       经 setPreviewPixmap 回灌到本面板的 previewLabel_（与文字信息 setPreviewInfo 并存）。
 // ============================================================================
 #pragma once
@@ -41,19 +41,19 @@ public:
     void setCollapsible(bool collapsible);
     // 最近一次 Core 坍缩可行性（供菜单「导出设置·坍缩」镜像同一置灰规则）。
     bool collapsible() const { return collapsible_; }
-    // 更新导出前信息文字（画布尺寸、保留块数等；由 MainWindow 回灌）。
+    // 更新导出前信息文字（画布尺寸、保留块数等；由 PreviewController 回灌）。
     void setPreviewInfo(const QString& text) const;
-    // 显示输出图像预览缩略图（由 MainWindow 按 Core Composition 渲染后回灌）。
+    // 显示输出图像预览缩略图（由 PreviewController 按 Core Composition 渲染后回灌）。
     // 传入空 pixmap 表示当前无有效输出，标签回退到占位文案。
     void setPreviewPixmap(const QPixmap& pm) const;
-    // 回灌重排上下文（由 MainWindow 依 Core 引擎结果调用）：保留块数 + 网格单元尺寸。
+    // 回灌重排上下文（由 PreviewController 依 Core 引擎结果调用）：保留块数 + 网格单元尺寸。
     // 用于「自动 cols/rows（依格数开方）」与画布/单元尺寸不足的内联警告。
     void setRearrangeContext(int keptCount, int cellW, int cellH);
     // 当前重排参数下的警告文本（cols*rows < 保留块数，或 cw/ch < 网格单元尺寸）；无警告返回空串。
-    // MainWindow 在导出前调用，非空则弹窗二次确认。
+    // ExportController 在导出前调用，非空则弹窗二次确认。
     QString rearrangeWarning() const;
 
-    // 反向同步「导出时烧录标注」复选框（由 MainWindow 依 AnnotationBridge::burnInEnabled 回灌；blockSignals 防回环）。
+    // 反向同步「导出时烧录标注」复选框（由 AnnotationCoordinator 依 AnnotationBridge::burnInEnabled 回灌；blockSignals 防回环）。
     void setBurnInChecked(bool on) const;
     // 反向同步「导出时烧录图片图层」复选框（由 MainWindow 依 Document::layersBurnIn 回灌；blockSignals 防回环）。
     void setLayersBurnInChecked(bool on) const;
@@ -67,9 +67,9 @@ public:
     void retranslate() const { retranslator_.run(); }
 
 signals:
-    // 请求导出（MainWindow 负责路径校验与调用 EngineBridge）。
+    // 请求导出（ExportController 负责路径校验与调用 EngineBridge）。
     void exportRequested();
-    // 导出时是否烧录标注（写回 AnnotationBridge::setBurnIn；原属图层面板，现归入导出选项）。
+    // 导出时是否烧录标注（写回 AnnotationBridge::setBurnIn）。
     void burnInChanged(bool on);
     // 导出时是否烧录图片图层（写回 Document::setLayersBurnIn；仅影响导出、与图层面板「显示」仅预览正交）。
     void layersBurnInChanged(bool on);
@@ -144,7 +144,7 @@ private:
     QCheckBox* mergeReverse_{nullptr};     // 倒序填充
     QPushButton* autoGridBtn_{nullptr};    // 「按格数自动」重算 cols/rows
     QLabel* rearrangeWarn_{nullptr};       // 内联警告（红字）
-    // 重排上下文（MainWindow 回灌）：保留块数 + 网格单元尺寸（供自动 cols/rows 与警告）。
+    // 重排上下文（PreviewController 回灌）：保留块数 + 网格单元尺寸（供自动 cols/rows 与警告）。
     int keptCount_{0};
     int cellW_{0};
     int cellH_{0};

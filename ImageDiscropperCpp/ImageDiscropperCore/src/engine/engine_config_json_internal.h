@@ -1,11 +1,9 @@
 // ============================================================================
 // 文件：src/engine/engine_config_json_internal.h（Core 私有内部头，仅 engine_config_json.cpp 包含）
-// 作用：EngineConfig ↔ SPEC §7 JSON 的「枚举 ↔ 串 / 颜色 / 宽容读取」助手区（自
-//       engine_config_json.cpp 匿名命名空间原封迁出）：tierName/generatorName/
-//       remainderName/orderName 等枚举串映射 + cut/sequence/generate/preprocess 各段
-//       toJson/fromJson 小助手。原为文件内私有（匿名命名空间）、无任何其他 TU 使用——
-//       单消费者内部头（同 json_common.h 先例：仅 Core 内部 .cpp 以相对路径包含，
-//       绝不外泄公共头）。
+// 作用：EngineConfig ↔ SPEC §7 JSON 的「枚举 ↔ 串 / 颜色 / 宽容读取」助手区：
+//       tierName/generatorName/remainderName 等枚举串映射 + cut/sequence/generate/preprocess
+//       各段 toJson/fromJson 小助手。单消费者内部头（同 json_common.h 先例：仅 Core 内部 .cpp
+//       以相对路径包含，绝不外泄公共头）。
 // 常量层：本头内的 keys:: / defs:: / nums:: 三个别名是 §7 键名 / 兜底默认串 / 数字兜底的
 //       引用简写（定义见 include/i18n/core_texts.h 与 core_nums.h）；engine_config_json.cpp 经
 //       `using namespace detail` 共用同一套，故不得在 .cpp 里重复定义。
@@ -47,106 +45,107 @@ using jsonutil::jStr;
 
 // ---------------------------------------------------------------------------
 // 枚举 ↔ 短横线小写串（SPEC §7：如 "row-major" / "multi-rect"）。
+// 枚举标识符为 C++ 内部名；下列返回串是 §7 契约 token，逐字节冻结不可改。
 // ---------------------------------------------------------------------------
 inline const char* tierName(const Tier t) {
-    switch (t) { case Tier::L1: return "extract"; case Tier::L2: return "erase"; case Tier::L3: return "grid"; }
+    switch (t) { case Tier::Standard: return "extract"; case Tier::Erase: return "erase"; case Tier::Grid: return "grid"; }
     return "erase";
 }
 
 inline Tier tierFromName(const std::string& s) {
-    if (s == "extract") return Tier::L1;
-    if (s == "grid") return Tier::L3;
-    return Tier::L2;
+    if (s == "extract") return Tier::Standard;
+    if (s == "grid") return Tier::Grid;
+    return Tier::Erase;
 }
 
 inline const char* generatorName(const CutGenerator g) {
     switch (g) {
-        case CutGenerator::RECT: return "rect";
-        case CutGenerator::HORIZONTAL_LINE: return "horizontal";
-        case CutGenerator::VERTICAL_LINE: return "vertical";
-        case CutGenerator::MULTI_RECT: return "multi-rect";
-        case CutGenerator::GRID: return "grid";
+        case CutGenerator::Rect: return "rect";
+        case CutGenerator::HorizontalLine: return "horizontal";
+        case CutGenerator::VerticalLine: return "vertical";
+        case CutGenerator::MultiRect: return "multi-rect";
+        case CutGenerator::Grid: return "grid";
     }
     return "rect";
 }
 
 inline CutGenerator generatorFromName(const std::string& s) {
-    if (s == "horizontal") return CutGenerator::HORIZONTAL_LINE;
-    if (s == "vertical") return CutGenerator::VERTICAL_LINE;
-    if (s == "multi-rect") return CutGenerator::MULTI_RECT;
-    if (s == "grid") return CutGenerator::GRID;
-    return CutGenerator::RECT;
+    if (s == "horizontal") return CutGenerator::HorizontalLine;
+    if (s == "vertical") return CutGenerator::VerticalLine;
+    if (s == "multi-rect") return CutGenerator::MultiRect;
+    if (s == "grid") return CutGenerator::Grid;
+    return CutGenerator::Rect;
 }
 
 inline const char* polarityName(const Polarity p) {
-    return p == Polarity::KEEP ? "keep" : "remove";
+    return p == Polarity::Keep ? "keep" : "remove";
 }
 
 inline Polarity polarityFromName(const std::string& s) {
-    return s == "keep" ? Polarity::KEEP : Polarity::REMOVE;
+    return s == "keep" ? Polarity::Keep : Polarity::Remove;
 }
 
 inline const char* strategyName(const SortStrategy s) {
     switch (s) {
-        case SortStrategy::ROW_MAJOR: return "row-major";
-        case SortStrategy::COLUMN_MAJOR: return "column-major";
-        case SortStrategy::CUSTOM: return "custom";
+        case SortStrategy::RowMajor: return "row-major";
+        case SortStrategy::ColumnMajor: return "column-major";
+        case SortStrategy::Custom: return "custom";
     }
     return "row-major";
 }
 
 inline SortStrategy strategyFromName(const std::string& s) {
-    if (s == "column-major") return SortStrategy::COLUMN_MAJOR;
-    if (s == "custom") return SortStrategy::CUSTOM;
-    return SortStrategy::ROW_MAJOR;
+    if (s == "column-major") return SortStrategy::ColumnMajor;
+    if (s == "custom") return SortStrategy::Custom;
+    return SortStrategy::RowMajor;
 }
 
 inline const char* emitModeName(const EmitMode m) {
-    return m == EmitMode::SEPARATE ? "separate" : "merged";
+    return m == EmitMode::Separate ? "separate" : "merged";
 }
 
 inline EmitMode emitModeFromName(const std::string& s) {
-    return s == "separate" ? EmitMode::SEPARATE : EmitMode::MERGED;
+    return s == "separate" ? EmitMode::Separate : EmitMode::Merged;
 }
 
 inline const char* layoutName(const MergeLayout l) {
-    return l == MergeLayout::COLLAPSE ? "collapse" : "rearrange";
+    return l == MergeLayout::Collapse ? "collapse" : "rearrange";
 }
 
 inline MergeLayout layoutFromName(const std::string& s) {
-    return s == "rearrange" ? MergeLayout::REARRANGE : MergeLayout::COLLAPSE;
+    return s == "rearrange" ? MergeLayout::Rearrange : MergeLayout::Collapse;
 }
 
 inline const char* formatName(const ExportFormat f) {
     switch (f) {
-        case ExportFormat::PNG: return "png";
-        case ExportFormat::JPEG: return "jpeg";
-        case ExportFormat::WEBP: return "webp";
-        case ExportFormat::BMP: return "bmp";
+        case ExportFormat::Png: return "png";
+        case ExportFormat::Jpeg: return "jpeg";
+        case ExportFormat::Webp: return "webp";
+        case ExportFormat::Bmp: return "bmp";
     }
     return "png";
 }
 
 inline ExportFormat formatFromName(const std::string& s) {
-    if (s == "jpeg" || s == "jpg") return ExportFormat::JPEG;
-    if (s == "webp") return ExportFormat::WEBP;
-    if (s == "bmp") return ExportFormat::BMP;
-    return ExportFormat::PNG;
+    if (s == "jpeg" || s == "jpg") return ExportFormat::Jpeg;
+    if (s == "webp") return ExportFormat::Webp;
+    if (s == "bmp") return ExportFormat::Bmp;
+    return ExportFormat::Png;
 }
 
 inline const char* remainderName(const RemainderPolicy r) {
     switch (r) {
-        case RemainderPolicy::DISCARD: return "discard";
-        case RemainderPolicy::KEEP_PARTIAL: return "keep-partial";
-        case RemainderPolicy::PAD: return "pad";
+        case RemainderPolicy::Discard: return "discard";
+        case RemainderPolicy::KeepPartial: return "keep-partial";
+        case RemainderPolicy::Pad: return "pad";
     }
     return "discard";
 }
 
 inline RemainderPolicy remainderFromName(const std::string& s) {
-    if (s == "keep-partial") return RemainderPolicy::KEEP_PARTIAL;
-    if (s == "pad") return RemainderPolicy::PAD;
-    return RemainderPolicy::DISCARD;
+    if (s == "keep-partial") return RemainderPolicy::KeepPartial;
+    if (s == "pad") return RemainderPolicy::Pad;
+    return RemainderPolicy::Discard;
 }
 
 // 图案类型 / 方向 ↔ 短横线小写串（与 CLI `--pattern` / `--orientation` 取值同一套 token）。
@@ -199,7 +198,7 @@ inline generate::Orientation genOrientationFromToken(const std::string& s) {
     return generate::Orientation::Horizontal;
 }
 
-// 噪声配色模式   串（仅 Noise 用）。
+// 噪声配色模式 ↔ 串（仅 Noise 用）。
 inline const char* genNoiseToken(const generate::NoiseMode m) {
     switch (m) {
         case generate::NoiseMode::FullColor: return "full-color";
@@ -215,8 +214,7 @@ inline generate::NoiseMode genNoiseFromToken(const std::string& s) {
     return generate::NoiseMode::FullColor;
 }
 
-// 落位锚点 ↔ 串：图层 transform（inCanvasAnchor/layerPivot）用。「贴图图案」已移除，
-//   旧配置里的 imageAnchor/imagePivot 键因对应字段不存在而被宽容读取自然忽略。
+// 落位锚点 ↔ 串：图层 transform（inCanvasAnchor/layerPivot）用。
 inline const char* genAnchorToken(const generate::ImageAnchor a) {
     switch (a) {
         case generate::ImageAnchor::TopLeft: return "top-left";
@@ -244,7 +242,7 @@ inline generate::ImageAnchor genAnchorFromToken(const std::string& s) {
     return generate::ImageAnchor::Center;
 }
 
-// ImageFit   token（内层源图→图层框适应方式）。
+// ImageFit ↔ token（内层源图→图层框适应方式）。
 inline const char* imageFitToken(const canvas::ImageFit f) {
     switch (f) {
         case canvas::ImageFit::Crop: return "crop";
@@ -339,17 +337,17 @@ inline json preprocessToJson(const preprocess::PreprocessConfig& cfg) {
     using namespace preprocess;
     json o;
     switch (configType(cfg)) {
-        case PreprocessType::GRAY:
+        case PreprocessType::Gray:
             o[keys::pre::kOp] = "gray"; break;
-        case PreprocessType::SPLIT:
+        case PreprocessType::Split:
             o[keys::pre::kOp] = "split"; o[keys::pre::kMask] = std::get<SplitOp>(cfg).mask; break;
-        case PreprocessType::INVERT:
+        case PreprocessType::Invert:
             o[keys::pre::kOp] = "invert"; o[keys::pre::kMask] = std::get<InvertOp>(cfg).mask; break;
-        case PreprocessType::ROTATE:
+        case PreprocessType::Rotate:
             o[keys::pre::kOp] = "rotate"; o[keys::pre::kDeg] = std::get<RotateOp>(cfg).angle; break;
-        case PreprocessType::FLIP:
+        case PreprocessType::Flip:
             o[keys::pre::kOp] = "flip"; o[keys::pre::kAxis] = std::get<FlipOp>(cfg).horizontal ? "horizontal" : "vertical"; break;
-        case PreprocessType::RESIZE:
+        case PreprocessType::Resize:
             o[keys::pre::kOp] = "resize"; o[keys::common::kWidth] = std::get<ResizeOp>(cfg).width; o[keys::common::kHeight] = std::get<ResizeOp>(cfg).height; break;
     }
     return o;
@@ -357,4 +355,3 @@ inline json preprocessToJson(const preprocess::PreprocessConfig& cfg) {
 
 
 } // namespace idc::engine::detail
-

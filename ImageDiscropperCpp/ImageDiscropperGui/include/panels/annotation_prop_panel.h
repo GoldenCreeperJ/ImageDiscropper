@@ -1,8 +1,8 @@
 // ============================================================================
 // 文件：panels/annotation_prop_panel.h
 // 作用：右侧「标注」属性页——颜色选择器、描边粗细、填充开关、
-//       文字内容与字号、转角圆角半径。面板只采集属性意图并发信号，MainWindow 写回 AnnotationBridge
-//       （EDIT 模式作用选中项，DRAW 模式作为下一次绘制默认）；面板不含几何 / 光栅化（CONTRIBUTING.md「分层纪律」）。
+//       文字内容与字号、转角圆角半径。面板只采集属性意图并发信号，AnnotationCoordinator 写回 AnnotationBridge
+//       （Edit 模式作用选中项，Draw 模式作为下一次绘制默认）；面板不含几何 / 光栅化（CONTRIBUTING.md「分层纪律」）。
 // 分块依据：每个属性控件对应一个信号，参数即最小信息（QColor / int / bool / QString / double）；
 //           syncFromModel 从模型回显（选中项属性，否则当前默认），blockSignals 防回环。
 // 说明：Core Annotation 区分边框色 color 与填充色 fillColor，故面板提供两个独立取色按钮（边框 / 填充）。
@@ -57,7 +57,7 @@ signals:
     // 由变换区 spin 改动直接触发（无「应用」按钮）；翻转无面板按钮（由画布包围盒手柄拖拽越过对边实现）。
     void transformApplyRequested(double sx, double sy, double rotateDeg);
     // 叠放次序意图（仅作用于当前选中标注，由「叠放次序」区 4 按钮触发；无选中时按钮置灰）：
-    // 上移一层 / 下移一层 / 置于顶层 / 置于底层（MainWindow/协调器转交 AnnotationBridge）。
+    // 上移一层 / 下移一层 / 置于顶层 / 置于底层（AnnotationCoordinator 转交 AnnotationBridge）。
     void stackRaiseRequested();
     void stackLowerRequested();
     void stackToFrontRequested();

@@ -110,7 +110,7 @@ void UiPrefs::setConfirmRearrangeRisk(const bool on) {
     st.sync();
 }
 
-// 界面语言偏好：只落盘，不切语言（一期重启生效，生效点在 app/main.cpp）。
+// 界面语言偏好：只落盘、不切语言——语言切换由调用方（外观对话框经 setupFromPreference + 原地重放）完成，main.cpp 仅取启动初值。
 // 与其余各项同形：同值不重写盘；本对话框外无消费者，故不发 changed()。
 void UiPrefs::setLanguage(const QString& code) {
     if (code.isEmpty() || code == language_) return;

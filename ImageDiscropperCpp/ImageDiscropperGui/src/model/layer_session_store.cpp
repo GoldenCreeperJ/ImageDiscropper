@@ -7,10 +7,8 @@
 
 namespace idc::gui {
 
-// 依图层现声明算其物化签名：覆盖 materializeLayer（整层位图：组装含底色框→缩放→预处理）读取的
-// 全部输入——来源态（kind / 逐层 preprocess / 文件名 / 解码像素布局 / 配方参数）+ 目标尺寸（所有 kind）+
-// 内层落位与图层框（hasImagePlacement / box / fit / 锚点枢轴偏移 / boxBackdrop）；恒不含 transform.x/y/
-// anchor/layerPivot/opacity/zOrder——改落位或不透明度只重组、不重跑（缺口 1）。
+// 依图层现声明算其物化签名：字段口径见 LayerSig 头注（来源态 + 目标尺寸 + 内层落位/图层框；
+// 恒不含 transform 落位/不透明度——改这些只重组、不重跑）。
 LayerSig LayerSessionStore::makeSig(const canvas::ImageLayer& layer) {
     LayerSig s;
     s.kind = static_cast<int>(layer.sourceKind);

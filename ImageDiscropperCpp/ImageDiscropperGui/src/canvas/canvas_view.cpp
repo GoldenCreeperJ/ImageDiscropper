@@ -9,7 +9,7 @@
 //     时启动（借 mouseGrabberItem() 判定），从而与选区框的手柄互不冲突；
 //   - 键盘（Esc / 空格 / 方向键）是桌面专属通道，保留在本视图；移动端由补偿 UI 调同一 gesture*。
 //   - 触控：构造时按平台换装适配器（Android → TouchInputAdapter）；手势事件（pinch）
-//     在 event() 入口交适配器消费；抓取带屏幕基准（updateHandleSize）改由适配器提供。
+//     在 event() 入口交适配器消费；抓取带屏幕基准（updateHandleSize）由适配器提供。
 // 说明：所有手势都翻译成信号，视图不改任何业务状态（CONTRIBUTING.md「分层纪律」）。
 // ============================================================================
 #include "canvas/canvas_view.h"
@@ -83,7 +83,7 @@ void CanvasView::resetZoom() { resetTransform(); updateHandleSize(); }
 // 场景矩形随之再变，fitInView 一步到位不了（几何上收敛但不精确）。自算可保证该档下场景恰铺满视口
 // → 不出滚动条，且内容恒只占视口的 (1－2×百分比)（与图幅无关、随视口同比）。
 // 关系式（以横向为例）：视口宽 = 内容宽×m11 + 2×百分比×视口宽 → m11 = 视口宽×(1－2×百分比)/内容宽，横纵取小。
-// 铺满的是 contentBounds（原图 ∪ 全部网格单元）而非原图：补白(PAD) 越界块属**内容**，适应窗口时也须完整可见。
+// 铺满的是 contentBounds（原图 ∪ 全部网格单元）而非原图：补白(Pad) 越界块属**内容**，适应窗口时也须完整可见。
 void CanvasView::fitToWindow() {
     if (const QRectF content = scene_ ? scene_->contentBounds() : QRectF(); !content.isEmpty()) {
         const QSize vp = viewport()->size();
@@ -359,7 +359,7 @@ void CanvasView::gestureStepZoomAt(const QPoint& anchorViewport, const qreal fac
     updateHandleSize();                                    // 重报倍率并随新缩放换算手柄 / 余量。
 }
 
-// 右键菜单项意图代理：菜单 UI 在桌面适配器，此处仅补发既有意图信号（MainWindow 接线不变）。
+// 右键菜单项意图代理：菜单 UI 在桌面适配器，此处仅补发既有意图信号（接线住在各属主旁：清除在 CanvasCoordinator、遮罩在 PreviewController、复位视图在 MainWindow）。
 void CanvasView::requestClearCut() { emit clearCutRequested(); }
 void CanvasView::requestResetView() { emit resetViewRequested(); }
 void CanvasView::requestToggleMasks() { emit toggleMasksRequested(); }

@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：canvas/image_layer_item.cpp
+// 文件：canvas/items/image_layer_item.cpp
 // 作用：实现 ImageLayerItem（见同名头文件说明）——落位框绘制 + 拾取拖拽手势。
 // 分块依据：渲染（boundingRect/paint）与交互（press/move/release）各成一块；无任何落位几何计算
 //          （矩形来自 Core layerPlacement，经场景下发），符合「图元只渲染并拖动它」的分层纪律。

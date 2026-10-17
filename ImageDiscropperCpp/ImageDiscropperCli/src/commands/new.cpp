@@ -74,7 +74,7 @@ int cmdNew(const std::vector<std::string>& tokens, const GlobalOptions& go) {
         engine::EngineConfig config;
         config.source.width = width;
         config.source.height = height;
-        // 程序生成底图：同构 canvas::ImageLayer（Recipe 底、transform 恒等）——序列化后与旧 generate 段逐字段等价。
+        // 程序生成底图：同构 canvas::ImageLayer（Recipe 底、transform 恒等），序列化后即为配置的 generate 段。
         canvas::ImageLayer base;
         base.sourceKind = canvas::LayerSourceKind::Recipe;
         base.recipe = params;

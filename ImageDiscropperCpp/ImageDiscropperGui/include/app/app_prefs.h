@@ -18,7 +18,7 @@
 //   · lastOpenDir / lastExportDir 仅作文件对话框起始目录的跨会话种子（与 Document 内
 //     当前会话的 outputDir/outputFile 正交：后者是本次作业复用值，前者是下次对话框落点）。
 //   · confirmRearrangeRisk：导出面板「合并重排参数风险」内联红字之外的模态二次确认开关，默认开。
-//   · language：界面语言偏好（auto / 语言码），一期为重启生效，故与其余各项一样只落盘不发信号。
+//   · language：界面语言偏好（auto / 语言码）——本单例只存字符串、不切语言，切换在外观对话框完成，故与其余各项一样只落盘不发信号。
 // ============================================================================
 #pragma once
 
@@ -51,8 +51,8 @@ public:
 
     // 界面语言偏好（存的是**语言码串**，不是当前生效语言）：
     //   ident::kLangAuto（缺省，跟随系统）/ core::kSourceLanguage / core::kLangCodeEn。
-    // 本单例只存取该串，不解释它——决议与切换全在 i18n/gui_i18n.cpp（一期只在启动时走一次，
-    // 故改这里不改变本次会话的语言，对话框据此提示「重启后生效」）。
+    // 本单例只存取该串，不解释它——决议全在 i18n/gui_i18n.cpp：启动取初值一次，运行期由外观
+    // 对话框调 setupFromPreference 即时热切换并原地重放（改这里本身不切语言）。
     QString language() const { return language_; }
     void setLanguage(const QString& code);
 

@@ -25,11 +25,11 @@
 #include "engine/engine.h"            // EngineConfig / Tier / CutGenerator / Polarity / GridParams
 #include "engine/engine_config_json.h" // saveEngineConfig
 #include "engine/grid.h"              // RemainderPolicy
-#include "engine/image_io.h"          // readImageFile / writeImageFile
+#include "io/image_io.h"              // readImageFile / writeImageFile
 #include "engine/region.h"            // RectRegion
 #include "canvas/layer.h"             // ImageLayer / composeCanvas（layers 段 IT）
 #include "generate/pattern.h"         // PatternParams（配方层 recipe）
-#include "preprocess/preprocess_config.h" // 预处理步类型（仅旧 IT 历史引用，现已改走层不透明度）
+#include "preprocess/preprocess_config.h" // 底图色彩预处理步类型（IT-51 用 preprocess::InvertOp）
 
 #include "commands.h" // cliMain
 
@@ -60,7 +60,7 @@ Captured runCli(const std::vector<std::string>& args) {
 
 // 生成测试图：200×150，四象限纯色（左上红 / 右上绿 / 左下蓝 / 右下黄），每象限 100×75。
 Image makeTestImage() {
-    Image img(200, 150, idc::core::ImageFormat::RGBA);
+    Image img(200, 150, idc::core::ImageFormat::Rgba);
     constexpr Color yellow(255, 255, 0, 255);
     for (int y = 0; y < 150; ++y) {
         for (int x = 0; x < 200; ++x) {
@@ -84,7 +84,7 @@ bool isYellow(const Color& c) { return c.r > 200 && c.g > 200 && c.b < 50; }
 // 读回图像并输出其尺寸；文件不可读时返回 false。
 bool readDims(const std::string& path, int& w, int& h) {
     Image im;
-    if (!idc::engine::readImageFile(path, im)) return false;
+    if (!idc::io::readImageFile(path, im)) return false;
     w = im.width();
     h = im.height();
     return true;
@@ -105,7 +105,7 @@ void testIntegration() {
 
     const Image img = makeTestImage();
     const std::string in = (root / "input.png").string();
-    CHECK(idc::engine::writeImageFile(in, img, idc::engine::ExportFormat::PNG, 90, idc::core::kTransparent));
+    CHECK(idc::io::writeImageFile(in, img, idc::engine::ExportFormat::Png, 90, idc::core::kTransparent));
 
     // ---- IT-1：extract --rect 50,40,150,120 → 输出 100×80（保留中心矩形，坍缩单图）。----
     {
@@ -149,7 +149,7 @@ void testIntegration() {
         for (const auto& e : fs::directory_iterator(dir)) {
             if (!e.is_regular_file()) continue;
             ++count;
-            if (Image sub; idc::engine::readImageFile(e.path().string(), sub)) {
+            if (Image sub; idc::io::readImageFile(e.path().string(), sub)) {
                 if (sub.width() == 50 && sub.height() == 40) ++n5040;
                 else if (sub.width() == 50 && sub.height() == 30) ++n5030;
             }
@@ -214,7 +214,7 @@ void testIntegration() {
                                    "--compose", "--canvas", "2x1", "--output", out});
         CHECK(r.code == 0);
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         CHECK(o.width() == 200 && o.height() == 75);
         CHECK(isRed(o.getPixel(50, 37)));    // 左格 = cell0（红）
         CHECK(isYellow(o.getPixel(150, 37))); // 右格 = cell3（黄）
@@ -230,7 +230,7 @@ void testIntegration() {
                                    "--compose", "--canvas", "2x2", "--output", out});
         CHECK(r.code == 0);
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         CHECK(o.width() == 200 && o.height() == 150);
         CHECK(isRed(o.getPixel(50, 37)));     // slot0 = cell0（红）
         CHECK(isBlue(o.getPixel(150, 37)));   // slot1 = cell2（蓝）
@@ -247,7 +247,7 @@ void testIntegration() {
                                    "--compose", "--canvas", "2x1", "--output", out});
         CHECK(r.code == 0);
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         CHECK(o.width() == 200 && o.height() == 75);
         CHECK(isYellow(o.getPixel(50, 37))); // 左格 = cell3（黄）
         CHECK(isRed(o.getPixel(150, 37)));   // 右格 = cell0（红）
@@ -256,12 +256,12 @@ void testIntegration() {
     // ---- IT-12：config --load 执行（配置等价于 IT-5）→ 100×70，参数全部生效。----
     {
         EngineConfig cfg;
-        cfg.cut.tier = idc::engine::Tier::L2;
-        cfg.cut.generator = idc::engine::CutGenerator::RECT;
-        cfg.cut.polarity = idc::engine::Polarity::REMOVE;
+        cfg.cut.tier = idc::engine::Tier::Erase;
+        cfg.cut.generator = idc::engine::CutGenerator::Rect;
+        cfg.cut.polarity = idc::engine::Polarity::Remove;
         cfg.cut.rect = idc::engine::RectRegion(50, 40, 150, 120);
-        cfg.emitParams.mode = idc::engine::EmitMode::MERGED;
-        cfg.emitParams.layout = idc::engine::MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
+        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
         cfg.source.width = 200;
         cfg.source.height = 150;
         const std::string cfgPath = (root / "it12.json").string();
@@ -291,10 +291,11 @@ void testIntegration() {
         CHECK(r.out.find("extract") != std::string::npos);
         CHECK(r.out.find("erase") != std::string::npos);
         CHECK(r.out.find("grid") != std::string::npos);
+        CHECK(r.out.find("new") != std::string::npos);
         CHECK(r.out.find("config") != std::string::npos);
     }
 
-    // ---- IT-15：缺少必填（extract 无几何参数）→ 退出码 1，stderr 有 `idc: error:` 错误前缀。----
+    // ---- IT-15：extract 缺几何参数（--rect/--hband/--vband 三选一未给）→ 退出码 1，stderr 有 `idc: error:` 错误前缀。----
     {
         const std::string out = (root / "it15.png").string();
         const Captured r = runCli({"extract", "--input", in, "--output", out});
@@ -325,17 +326,17 @@ void testIntegration() {
     // 手写配置：L3 网格 2×2、REMOVE 选中 cell0（孤立单元，非整行/整列）+ MERGED COLLAPSE。
     {
         EngineConfig cfg;
-        cfg.cut.tier = idc::engine::Tier::L3;
-        cfg.cut.generator = idc::engine::CutGenerator::GRID;
-        cfg.cut.polarity = idc::engine::Polarity::REMOVE;
+        cfg.cut.tier = idc::engine::Tier::Grid;
+        cfg.cut.generator = idc::engine::CutGenerator::Grid;
+        cfg.cut.polarity = idc::engine::Polarity::Remove;
         cfg.cut.grid.originX = 0;
         cfg.cut.grid.originY = 0;
         cfg.cut.grid.cellWidth = 100;
         cfg.cut.grid.cellHeight = 75;
-        cfg.cut.grid.remainder = idc::engine::RemainderPolicy::DISCARD;
+        cfg.cut.grid.remainder = idc::engine::RemainderPolicy::Discard;
         cfg.selectedCells.push_back(0); // 仅删 cell0 → 保留 {1,2,3} 不构成整行/整列补集
-        cfg.emitParams.mode = idc::engine::EmitMode::MERGED;
-        cfg.emitParams.layout = idc::engine::MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
+        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
         cfg.source.width = 200;
         cfg.source.height = 150;
         const std::string cfgPath = (root / "it18.json").string();
@@ -359,7 +360,7 @@ void testIntegration() {
                                    "--output", out});
         CHECK(r.code == 0);
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         CHECK(o.width() == 200 && o.height() == 150);
         CHECK(isRed(o.getPixel(50, 37)));      // TL = 块0（红）
         CHECK(isBlue(o.getPixel(150, 37)));    // TR = 块2（蓝）
@@ -377,7 +378,7 @@ void testIntegration() {
                                    "--output", out});
         CHECK(r.code == 0);
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         CHECK(isYellow(o.getPixel(50, 37)));   // TL = 块3（黄）
         CHECK(isBlue(o.getPixel(150, 37)));    // TR = 块2（蓝）
         CHECK(isGreen(o.getPixel(50, 112)));   // BL = 块1（绿）
@@ -405,7 +406,7 @@ void testIntegration() {
                                    "--output", out});
         CHECK(r.code == 0);
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         CHECK(o.width() == 200 && o.height() == 150);
         CHECK(isGreen(o.getPixel(20, 20))); // 标注内部被填充
         CHECK(isRed(o.getPixel(60, 60)));   // 未被标注覆盖，仍为原红
@@ -423,7 +424,7 @@ void testIntegration() {
                                    "--annotations", annoFile, "--output", out});
         CHECK(r.code == 0);
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         CHECK(isGreen(o.getPixel(20, 20)));   // 第一条：绿
         CHECK(isBlue(o.getPixel(170, 120)));  // 第二条：蓝（右下黄区被覆盖）
     }
@@ -460,7 +461,7 @@ void testIntegration() {
                                    "--bg", "#FFFF0000", "--output", out});
         CHECK(r.code == 0);
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         CHECK(o.width() == 64 && o.height() == 48);
         CHECK(isRed(o.getPixel(10, 10)));
         CHECK(isRed(o.getPixel(63, 47)));
@@ -472,7 +473,7 @@ void testIntegration() {
         const Captured r = runCli({"new", "--size", "8x8", "--bg", "#00FFFFFF", "--output", out});
         CHECK(r.code == 0);
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         CHECK(o.getPixel(4, 4).a == 0);
     }
 
@@ -487,7 +488,7 @@ void testIntegration() {
         CHECK(readDims(out, w, h));
         CHECK(w == 100 && h == 80);
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         CHECK(isRed(o.getPixel(50, 40)));
     }
 
@@ -548,7 +549,7 @@ void testIntegration() {
                                    "--format", "jpeg", "--pad-color", "#FF0000FF", "--output", out});
         CHECK(r.code == 0);
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         CHECK(isBlue(o.getPixel(8, 8))); // alpha=0 全透明 → 完全落到 padColor（蓝）。
     }
 
@@ -599,7 +600,7 @@ void testIntegration() {
         CHECK(readDims(out, w, h));
         CHECK(w == 100 && h == 80);
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         CHECK(isRed(o.getPixel(50, 40)));
     }
 
@@ -611,7 +612,7 @@ void testIntegration() {
         CHECK(r.err.find("总像素") != std::string::npos);
     }
 
-    // ---- IT-39：图案 new 冒烟——stripes/concentric/hue-gradient/noise 各产合法非空图（斜纹/同心方框已合进前两者）。----
+    // ---- IT-39：图案 new 冒烟——stripes/concentric/hue-gradient/noise 各产合法非空图（斜向经 stripes --orientation、方环经 concentric --orientation 表达）。----
     {
         for (const std::vector<std::string> kinds = {"stripes", "concentric", "hue-gradient", "noise"}; const std::string& k : kinds) {
             const std::string out = (root / ("it39_" + k + ".png")).string();
@@ -651,30 +652,30 @@ void testIntegration() {
         CHECK(r.err.find("噪声模式") != std::string::npos);
     }
 
-    // ---- IT-42：旧「贴图图案 image」已彻底移除——--pattern image 一律拒绝（退出码 1）；
-    //      图片层只能经 config 的 layers 段传入（见 IT-44/45）。----
+    // ---- IT-42：图片不是图案类型——--pattern image 一律拒绝（退出码 1）；
+    //      位图只能作为 config 的 layers 段图层传入（见 IT-44/45）。----
     {
         const std::string out = (root / "it42.png").string();
         const Captured r = runCli({"new", "--size", "16x16", "--pattern", "image", "--output", out});
         CHECK(r.code == 1);
         CHECK(r.err.find("不支持的图案类型") != std::string::npos);
-        // 旧图片参数不再受理：--pattern image 被拒（即使搭配 --pattern-image/--image-anchor/--image-scale 亦同）。
+        // --pattern-image / --image-anchor / --image-scale 亦不受理（搭配 --pattern image 仍退出码 1）。
         CHECK(runCli({"new", "--size", "16x16", "--pattern", "image", "--pattern-image", out,
                       "--image-anchor", "center", "--image-scale", "original", "--output", out}).code == 1);
     }
 
-    // ---- IT-43：旧 token 拒绝 + 斜向并入条纹。----
+    // ---- IT-43：无效图案 token 拒绝 + 斜向/方环经 --orientation 表达。----
     {
         const std::string out = (root / "it43.png").string();
-        // 已删除的旧图案 token 一律退出码 1。
+        // diagonal-stripes / rect-rings 非有效图案 token → 退出码 1。
         CHECK(runCli({"new", "--size", "16x16", "--pattern", "diagonal-stripes", "--output", out}).code == 1);
         CHECK(runCli({"new", "--size", "16x16", "--pattern", "rect-rings", "--output", out}).code == 1);
-        // 斜向已归入条纹 --orientation：diagonal-down/diagonal-up 合法、产非空图。
+        // 斜向经 stripes --orientation 表达：diagonal-down/diagonal-up 合法、产非空图。
         CHECK(runCli({"new", "--size", "64x48", "--pattern", "stripes", "--orientation", "diagonal-down",
                       "--fg", "#FF000000", "--output", out}).code == 0);
         CHECK(runCli({"new", "--size", "64x48", "--pattern", "stripes", "--orientation", "diagonal-up",
                       "--fg", "#FF000000", "--output", out}).code == 0);
-        // 同心方框归入同心环 --orientation vertical（方环）。
+        // 同心方框经 concentric --orientation vertical 表达（方环）。
         CHECK(runCli({"new", "--size", "64x48", "--pattern", "concentric", "--orientation", "vertical",
                       "--fg", "#FF000000", "--output", out}).code == 0);
     }
@@ -695,12 +696,12 @@ void testIntegration() {
         st = {l};
         cfg.layers = st;
         cfg.cut = idc::engine::CutConfig{};
-        cfg.cut.tier = idc::engine::Tier::L1;
-        cfg.cut.generator = idc::engine::CutGenerator::RECT;
-        cfg.cut.polarity = idc::engine::Polarity::KEEP;
+        cfg.cut.tier = idc::engine::Tier::Standard;
+        cfg.cut.generator = idc::engine::CutGenerator::Rect;
+        cfg.cut.polarity = idc::engine::Polarity::Keep;
         cfg.cut.rect = idc::engine::RectRegion(0, 0, 40, 40);
-        cfg.emitParams.mode = idc::engine::EmitMode::MERGED;
-        cfg.emitParams.layout = idc::engine::MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
+        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
         const std::string cfgPath = (root / "it44.json").string();
         CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
         const std::string out = (root / "it44.png").string();
@@ -710,17 +711,17 @@ void testIntegration() {
         CHECK(readDims(out, w, h));
         CHECK(w == 40 && h == 40);
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         CHECK(isRed(o.getPixel(20, 20)));
     }
 
     // ---- IT-45：File 图层解码 + --bundle-assets 复制——源图写盘后由 config 目录相对名解析；打包进 <配置名>.assets/。----
     {
         fs::create_directories(root / "sub", ec);
-        Image a(20, 20, idc::core::ImageFormat::RGBA);
+        Image a(20, 20, idc::core::ImageFormat::Rgba);
         a.fill(Color(0, 0, 255, 255));
         const std::string asset = (root / "sub" / "a.png").string();
-        CHECK(idc::engine::writeImageFile(asset, a, idc::engine::ExportFormat::PNG, 90, idc::core::kTransparent));
+        CHECK(idc::io::writeImageFile(asset, a, idc::engine::ExportFormat::Png, 90, idc::core::kTransparent));
 
         EngineConfig cfg;
         cfg.source = idc::engine::SourceInfo{40, 40};
@@ -732,12 +733,12 @@ void testIntegration() {
         st = {l};
         cfg.layers = st;
         cfg.cut = idc::engine::CutConfig{};
-        cfg.cut.tier = idc::engine::Tier::L1;
-        cfg.cut.generator = idc::engine::CutGenerator::RECT;
-        cfg.cut.polarity = idc::engine::Polarity::KEEP;
+        cfg.cut.tier = idc::engine::Tier::Standard;
+        cfg.cut.generator = idc::engine::CutGenerator::Rect;
+        cfg.cut.polarity = idc::engine::Polarity::Keep;
         cfg.cut.rect = idc::engine::RectRegion(0, 0, 40, 40);
-        cfg.emitParams.mode = idc::engine::EmitMode::MERGED;
-        cfg.emitParams.layout = idc::engine::MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
+        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
         const std::string cfgPath = (root / "it45.json").string();
         CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
 
@@ -749,7 +750,7 @@ void testIntegration() {
         CHECK(readDims(out, w, h));
         CHECK(w == 40 && h == 40);
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         CHECK(isBlue(o.getPixel(20, 20)));
         CHECK(o.getPixel(0, 0).a == 0);
 
@@ -772,12 +773,12 @@ void testIntegration() {
         st = {l};
         cfg.layers = st;
         cfg.cut = idc::engine::CutConfig{};
-        cfg.cut.tier = idc::engine::Tier::L1;
-        cfg.cut.generator = idc::engine::CutGenerator::RECT;
-        cfg.cut.polarity = idc::engine::Polarity::KEEP;
+        cfg.cut.tier = idc::engine::Tier::Standard;
+        cfg.cut.generator = idc::engine::CutGenerator::Rect;
+        cfg.cut.polarity = idc::engine::Polarity::Keep;
         cfg.cut.rect = idc::engine::RectRegion(0, 0, 40, 40);
-        cfg.emitParams.mode = idc::engine::EmitMode::MERGED;
-        cfg.emitParams.layout = idc::engine::MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
+        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
         const std::string cfgPath = (root / "it46.json").string();
         CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
         const std::string out = (root / "it46.png").string();
@@ -802,12 +803,12 @@ void testIntegration() {
         st = {l};
         cfg.layers = st;
         cfg.cut = idc::engine::CutConfig{};
-        cfg.cut.tier = idc::engine::Tier::L1;
-        cfg.cut.generator = idc::engine::CutGenerator::RECT;
-        cfg.cut.polarity = idc::engine::Polarity::KEEP;
+        cfg.cut.tier = idc::engine::Tier::Standard;
+        cfg.cut.generator = idc::engine::CutGenerator::Rect;
+        cfg.cut.polarity = idc::engine::Polarity::Keep;
         cfg.cut.rect = idc::engine::RectRegion(0, 0, 20, 20);
-        cfg.emitParams.mode = idc::engine::EmitMode::MERGED;
-        cfg.emitParams.layout = idc::engine::MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
+        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
         const std::string cfgPath = (root / "it47.json").string();
         CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
         const std::string out = (root / "it47.png").string();
@@ -816,7 +817,7 @@ void testIntegration() {
         CHECK(readDims(out, w, h));
         CHECK(w == 20 && h == 20); // 不撑大
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         CHECK(isGreen(o.getPixel(10, 10)));
     }
 
@@ -836,28 +837,28 @@ void testIntegration() {
         st = {l};
         cfg.layers = st;
         cfg.cut = idc::engine::CutConfig{};
-        cfg.cut.tier = idc::engine::Tier::L1;
-        cfg.cut.generator = idc::engine::CutGenerator::RECT;
-        cfg.cut.polarity = idc::engine::Polarity::KEEP;
+        cfg.cut.tier = idc::engine::Tier::Standard;
+        cfg.cut.generator = idc::engine::CutGenerator::Rect;
+        cfg.cut.polarity = idc::engine::Polarity::Keep;
         cfg.cut.rect = idc::engine::RectRegion(0, 0, 40, 40);
-        cfg.emitParams.mode = idc::engine::EmitMode::MERGED;
-        cfg.emitParams.layout = idc::engine::MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
+        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
         const std::string cfgPath = (root / "it48.json").string();
         CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
         const std::string out = (root / "it48.png").string();
         CHECK(runCli({"config", "--load", cfgPath, "--output", out}).code == 0);
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         CHECK(o.getPixel(20, 20).a == 90); // PNG 留 alpha
     }
 
     // ---- IT-49：底图同构 base（落位声明 + boxBackdrop）端到端——config 载入 + --input 供位图按落位摆入、--save-config 回写 generate 段仅落位（不存路径）。----
     {
         fs::create_directories(root / "sub49", ec);
-        Image src(20, 20, idc::core::ImageFormat::RGBA);
+        Image src(20, 20, idc::core::ImageFormat::Rgba);
         src.fill(Color(0, 0, 255, 255));   // 蓝色源图（底图所附图片）
         const std::string asset = (root / "sub49" / "base.png").string();
-        CHECK(idc::engine::writeImageFile(asset, src, idc::engine::ExportFormat::PNG, 90, idc::core::kTransparent));
+        CHECK(idc::io::writeImageFile(asset, src, idc::engine::ExportFormat::Png, 90, idc::core::kTransparent));
 
         EngineConfig cfg;
         cfg.source = idc::engine::SourceInfo{40, 40};
@@ -875,12 +876,12 @@ void testIntegration() {
         base.boxBackdrop = bd;
         cfg.base = base;
         cfg.cut = idc::engine::CutConfig{};
-        cfg.cut.tier = idc::engine::Tier::L1;
-        cfg.cut.generator = idc::engine::CutGenerator::RECT;
-        cfg.cut.polarity = idc::engine::Polarity::KEEP;
+        cfg.cut.tier = idc::engine::Tier::Standard;
+        cfg.cut.generator = idc::engine::CutGenerator::Rect;
+        cfg.cut.polarity = idc::engine::Polarity::Keep;
         cfg.cut.rect = idc::engine::RectRegion(0, 0, 40, 40);
-        cfg.emitParams.mode = idc::engine::EmitMode::MERGED;
-        cfg.emitParams.layout = idc::engine::MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
+        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
         const std::string cfgPath = (root / "it49.json").string();
         CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
 
@@ -892,7 +893,7 @@ void testIntegration() {
         CHECK(readDims(out, w, h));
         CHECK(w == 40 && h == 40);
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         CHECK(isBlue(o.getPixel(5, 5)));     // 源图左上区
         CHECK(isGreen(o.getPixel(30, 30)));  // 越源区露出图层框底色
 
@@ -923,18 +924,18 @@ void testIntegration() {
         base.transform.opacity = 64;             // 底图整体不透明度（合成期 alpha 乘子）
         cfg.base = base;
         cfg.cut = idc::engine::CutConfig{};
-        cfg.cut.tier = idc::engine::Tier::L1;
-        cfg.cut.generator = idc::engine::CutGenerator::RECT;
-        cfg.cut.polarity = idc::engine::Polarity::KEEP;
+        cfg.cut.tier = idc::engine::Tier::Standard;
+        cfg.cut.generator = idc::engine::CutGenerator::Rect;
+        cfg.cut.polarity = idc::engine::Polarity::Keep;
         cfg.cut.rect = idc::engine::RectRegion(0, 0, 40, 40);
-        cfg.emitParams.mode = idc::engine::EmitMode::MERGED;
-        cfg.emitParams.layout = idc::engine::MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
+        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
         const std::string cfgPath = (root / "it50.json").string();
         CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
         const std::string out = (root / "it50.png").string();
         CHECK(runCli({"config", "--load", cfgPath, "--output", out}).code == 0);
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         CHECK(isBlue(o.getPixel(20, 20)));        // 颜色不变（淡出只乘 alpha）
         CHECK(o.getPixel(20, 20).a == 64);        // 255·64/255 四舍五入≈64（单一应用点，非双淡）
     }
@@ -956,12 +957,12 @@ void testIntegration() {
         cfg.base = base;
         cfg.canvasOpacity = 200;                 // 画布级整体不透明度
         cfg.cut = idc::engine::CutConfig{};
-        cfg.cut.tier = idc::engine::Tier::L1;
-        cfg.cut.generator = idc::engine::CutGenerator::RECT;
-        cfg.cut.polarity = idc::engine::Polarity::KEEP;
+        cfg.cut.tier = idc::engine::Tier::Standard;
+        cfg.cut.generator = idc::engine::CutGenerator::Rect;
+        cfg.cut.polarity = idc::engine::Polarity::Keep;
         cfg.cut.rect = idc::engine::RectRegion(0, 0, 40, 40);
-        cfg.emitParams.mode = idc::engine::EmitMode::MERGED;
-        cfg.emitParams.layout = idc::engine::MergeLayout::COLLAPSE;
+        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
+        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
         const std::string cfgPath = (root / "it51.json").string();
         CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
         // 回写检查：底图色彩预处理与顶层 / generate 段 opacity 均入档。
@@ -974,7 +975,7 @@ void testIntegration() {
         const std::string out = (root / "it51.png").string();
         CHECK(runCli({"config", "--load", cfgPath, "--output", out}).code == 0);
         Image o;
-        CHECK(idc::engine::readImageFile(out, o));
+        CHECK(idc::io::readImageFile(out, o));
         const Color px = o.getPixel(20, 20);
         CHECK(px.r < 50 && px.g > 200 && px.b > 200);   // invert 生效：红→青（色相变）
         // 两边界各乘一次：255→(·180)→180→(·200)→(180·200+127)/255=141（单一应用点、非任一边界双淡）。
@@ -993,8 +994,8 @@ void testIntegration() {
         const Captured ok = runCli({"--lang=en", "--help"});
         CHECK(ok.code == 0);
         CHECK(ok.out.find("--lang <code>") != std::string::npos);   // 用法行恒在（选项名与占位符不译）
-        // 注：CLI 英文表仅收录示范条目（语言码相关报因 + 全局选项描述），其余帮助散文
-        //   缺译→逐字节回退常量层中文，故不断言英文串（覆盖率由 test_i18n_catalog 报表跟踪）。
+        // 注：CLI 英文表已全量覆盖 msg / help 两组（孤儿/重复/覆盖率由 test_i18n_catalog 断言兜住）；
+        //   本用例仍只断言不可译契约串——英文散文属非契约文本，改译不该掀翻测试。
 
         const Captured cmd = runCli({"--lang", "en", "bogus"});
         CHECK(cmd.code == 1);
@@ -1005,7 +1006,7 @@ void testIntegration() {
         CHECK(runCli({"--lang", "zh-CN", "bogus"}).code == 1);
     }
 
-    // ---- IT-53：config --load 标注段非法——详情逐条透传 Core 报因（不再压成通用 schema 提示），----
+    // ---- IT-53：config --load 标注段非法——详情逐条透传 Core 报因（不压成通用 schema 提示），----
     //      且与“JSON 本身语法错误”分支区分开（后者仍给通用 schema 详情与提示）。
     {
         const std::string cfg = (root / "it53.json").string();
@@ -1025,7 +1026,7 @@ void testIntegration() {
         CHECK(r.err.find("第 1 个标注元素") != std::string::npos);          // 逐条定位信息未丢
         CHECK(r.err.find("缺少 type 字段") != std::string::npos);
         CHECK(r.err.find("无法按配置 JSON schema 解析") == std::string::npos); // 未退化为通用详情
-        CHECK(r.err.find("标注须为 SPEC §7") != std::string::npos);       // 提示随之改为标注语法
+        CHECK(r.err.find("标注须为 SPEC §7") != std::string::npos);       // 提示取标注语法
 
         // 对照：纯语法错误（json::parse 直接抛，根本没走到标注段校验）→ annoErr 为空，
         //   仍走通用 schema 详情与提示。

@@ -15,19 +15,19 @@ QPainterPath toQPainterPath(const geometry::Path& path) {
     for (const auto&[type, coords] : path.segments()) {
         const std::vector<double>& c = coords;
         switch (type) {
-            case PathSegmentType::MOVE_TO:
+            case PathSegmentType::MoveTo:
                 if (c.size() >= 2) qp.moveTo(c[0], c[1]);
                 break;
-            case PathSegmentType::LINE_TO:
+            case PathSegmentType::LineTo:
                 if (c.size() >= 2) qp.lineTo(c[0], c[1]);
                 break;
-            case PathSegmentType::QUAD_TO:
+            case PathSegmentType::QuadTo:
                 if (c.size() >= 4) qp.quadTo(c[0], c[1], c[2], c[3]);
                 break;
-            case PathSegmentType::CUBIC_TO:
+            case PathSegmentType::CubicTo:
                 if (c.size() >= 6) qp.cubicTo(c[0], c[1], c[2], c[3], c[4], c[5]);
                 break;
-            case PathSegmentType::CLOSE:
+            case PathSegmentType::Close:
                 qp.closeSubpath();
                 break;
         }

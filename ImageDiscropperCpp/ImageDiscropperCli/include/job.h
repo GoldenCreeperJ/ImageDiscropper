@@ -8,7 +8,7 @@
 //     命令层只负责「解析参数 + 装配 EngineConfig」，不重复执行逻辑（CONTRIBUTING.md「分层纪律」）。
 //   - 本模块只调用 Core 公开 API（readImageFile / runEngine / exportImage /
 //     save/loadEngineConfig），不含任何切割 / 合成 / 编码实现。
-// 说明：坍缩不可行的处理对齐 Cli README「合并重排」——用户显式 --merge collapse 而 Core 判定
+// 说明：坍缩不可行的处理对齐 SPEC §8.1 CLI 行为契约（可行性口径见 §4.4）——用户显式 --merge collapse 而 Core 判定
 //       不可坍缩时返回退出码 2 并提示改用 rearrange（仅 L3 时 Core 会自动改用重排，CLI 仍须显式报错）。
 // ============================================================================
 #pragma once
@@ -68,7 +68,7 @@ ExitCode buildLayerCanvas(const engine::EngineConfig& config, const std::string&
                           const core::Image& base, core::Image& out, const JobOptions& opt);
 
 // 底图展平（SPEC §7 generate 段，同构 canvas::ImageLayer）：config.base 非空时交 Core canvas::composeBase 展平
-//  为 config.source 尺寸写入 out（纯图案底＝按 source 尺寸现算、与旧 generate 段等价）。
+//  为 config.source 尺寸写入 out（纯图案底＝按 source 尺寸现算）。
 //  底图不外传文件：若配置带内层落位（hasImagePlacement）却未提供外部源图（无 --input），无法展平落位 → InputError(3)。
 //  composeBase 产空图（尺寸非法）→ RuntimeError(2)。仅在 config.base 有值且未给 --input/--size 时由命令层调用。
 ExitCode buildBaseCanvas(const engine::EngineConfig& config, core::Image& out, const JobOptions& opt);

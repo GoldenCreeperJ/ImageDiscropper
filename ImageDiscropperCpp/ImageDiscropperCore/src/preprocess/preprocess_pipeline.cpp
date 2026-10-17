@@ -51,7 +51,7 @@ char maskXor(const char a, const char b) { return a != b ? '1' : '0'; }
 //   ExecGrayInvert —— 灰度态整幅取反（字节 XOR，奇偶累积；GRAY 输入时跨块持续）；
 //   ExecD4         —— 整块几何步单趟重排（remapD4 融合核，折掉任意 Rotate/Flip 序列，含跨 gray 合并）；
 //   ResizeOp       —— 块界，原样透传（复用 applyOne 单步语义，含非正尺寸空操作）。
-// 不透明度不再是预处理步（已上移为图层合成期参数 canvas::ImageTransform.opacity），故本计划不再携带 alpha 仿射。
+// 不透明度不属本管线（由 canvas::ImageTransform.opacity 在合成期承载），本计划不携带 alpha 仿射。
 // 可交换性依据：逐像素位映射 / 灰度字节计算与 D4 精确置换互为可交换，故同块内色彩与几何可各自独立融合
 //   （几何无损前提：copyPixel 的 GRAY 单字节直拷）；resize 双线性取整与两者均不可交换 → 唯一块界。
 // 输出步序：同块内按 map → gray → 灰度反色 → D4 规范序发射（可交换故与声明序逐像素等价）。

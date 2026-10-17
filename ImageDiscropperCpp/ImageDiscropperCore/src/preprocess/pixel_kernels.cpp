@@ -1,8 +1,7 @@
 // ============================================================================
 // 文件：src/preprocess/pixel_kernels.cpp
 // 作用：实现 src/preprocess/pixel_kernels.h 声明的私有像素核。
-//       几何/色彩基础核自原 pixel_ops 模块（geometric_ops.cpp / color_ops.cpp）搬入，
-//       语义零改动；色彩多通道路径已收敛到融合核 channelMap（split/invert 降为特例适配器），
+//       色彩多通道路径收敛到融合核 channelMap（split/invert 为其特例适配器），
 //       几何单趟融合核 remapD4 供 execPlan 使用（rotate/flip 保留作逐步 oracle）。
 //       对应 SPEC §3.1 FR-1.1 旋转、FR-1.2 翻转、FR-1.4 黑白 / 反色 / 色道分离。
 // ============================================================================
@@ -135,12 +134,12 @@ core::Image remapD4(const core::Image& src, int quad, const bool flipH) {
 
 // 融合位映射核：逐通道 f(v) = (v & K[c]) ^ J[c]，一步覆盖 直通/反色/强制0/强制255 四态。
 // 归一口径与 split/invert 完全一致：k 长度非 3 → "111"（AND 恒等）；**j 长度非 3 → "000"（XOR 恒等）**，
-// 切勿照搬 normMask3 把 J 也归成 "111"（会凭空翻转语义）。alpha 字节原样拷贝（不透明度已不再是预处理步）；
+// 切勿照搬 normMask3 把 J 也归成 "111"（会凭空翻转语义）。alpha 字节原样拷贝（不透明度由 canvas 合成期承载）；
 // GRAY/空图防御性返回副本。性能：单遍「拷贝 + 变换」，每通道 AND/XOR 常量在循环外折好，循环体直写、无内层循环。
 core::Image channelMap(const core::Image& src, const std::string& k, const std::string& j) {
     if (src.empty() || src.isGray()) return src.clone();
     core::Image out(src.width(), src.height(), src.format());
-    // 源 / 目标字节缓冲以 std::span 视图承载（非拥有 + 自带长度），取代裸指针 + sizeInBytes 对。
+    // 源 / 目标字节缓冲以 std::span 视图承载（非拥有 + 自带长度）。
     const std::span s(src.data(), src.sizeInBytes());
     const std::span d(out.data(), src.sizeInBytes());
 

@@ -2,7 +2,7 @@
 // 文件：app/new_canvas_dialog.cpp
 // 作用：实现 NewCanvasDialog（见同名头文件说明）——尺寸/附加图片/两级落位采参控件装配、
 //       小尺寸代理实时预览，以及 accept() 时的全尺寸两段合成（图片→图层框→叠到图案底图）。
-//       图案采参表单（底色/前景/类型/方向/参数/噪声）已拆至 panels/PatternFormWidget。
+//       图案采参表单（底色/前景/类型/方向/参数/噪声）位于 app/forms/PatternFormWidget（pattern_form.h）。
 // 分块依据：装配（构造）/ 联动（updateControlAvailability：落位显隐 + 尺寸锁定）/
 //           两段合成（buildAttachedLayer 内层 + composeResult 预览便捷）/ 预览（refreshPreview，走桥接）/
 //           定稿（accept，走桥接）各成一块。
@@ -58,7 +58,7 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
 
     auto* root = new QVBoxLayout(this);
     // 主体（表单 + 预览）装进纵向可滑外壳：小屏 / 横屏超高时内部滚动，配合底部固定按钮行 + 屏幕尺寸护栏，
-    // 根治「显示不全 / 无法关闭」；勾选附加图片增删的行也落在滚动内容里，外层窗口不再被撑大（item 7/9）。
+    // 根治「显示不全 / 无法关闭」；勾选附加图片增删的行也落在滚动内容里，外层窗口不被撑大。
     // 按钮行留滚动区外恒可关闭；预览并入滚动内容（用户滚到底即可看到）。
     auto* body = new QWidget(this);
     auto* grid = new QGridLayout(body);
@@ -81,13 +81,13 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     grid->addWidget(heightSpin_, row, 3);
     ++row;
 
-    // ---- 图案参数表单（底色/前景/类型/方向/周期/线宽/点半径/噪声；整表单占一行四列，内部布局与旧版逐行一致）----
+    // ---- 图案参数表单（底色/前景/类型/方向/周期/线宽/点半径/噪声；整表单占一行四列）----
     patternForm_ = new PatternFormWidget(this);
     grid->addWidget(patternForm_, row, 0, 1, 4);
     ++row;
 
-    // ---- 两级落位（panels/placement_row）：图层落位（图层 相对 底图）与图片落位（图片 相对 图层）
-    //      各为「锚点/枢轴/偏移」三行一组的独立组件，整组占对话框一行四列，内部布局与旧版逐行一致。----
+    // ---- 两级落位（app/forms/placement_row）：图层落位（图层 相对 底图）与图片落位（图片 相对 图层）
+    //      各为「锚点/枢轴/偏移」三行一组的独立组件，整组占对话框一行四列。----
     layerPlaceRow_ = new PlacementRow(IDC_GTR(label, kLayerPlaceBox), this);
     layerPlaceRow_->setToolTip(IDC_GTR(tooltip, kLayerPlaceRowTip));
     imagePlaceRow_ = new PlacementRow(IDC_GTR(label, kImagePlaceBox), this);
@@ -168,7 +168,7 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
 
     // 屏幕尺寸护栏：按可用几何钳最大宽 / 高（比例见 nums::mobile::kDialogMax*），首次显示收到
     // 「表单+预览自然尺寸 + 按钮行」与可用几何的较小者；小屏 / 横屏超出即内部滚动、按钮常驻，
-    // 勾选附加图片增删的行落在滚动内容里、外层窗口不再被撑大（item 7/9）；桌面大屏下钳值远超内容、等效无约束。
+    // 勾选附加图片增删的行落在滚动内容里、外层窗口不被撑大；桌面大屏下钳值远超内容、等效无约束。
     const QSize formHint = body->sizeHint();   // 含预览（已在 body 内）
     limitDialogToScreen(this, QSize(
         qMax(formHint.width(), nums::dialog::kNewCanvasPreviewMinWidthPx),
@@ -203,7 +203,7 @@ void NewCanvasDialog::onPickImage() {
     if (path.isEmpty()) return;
     core::Image img;
     if (QString err; !EngineBridge::loadImage(path, img, err)) {
-        // 长错误串（含 content:// 内容 URI）按宽省略号截断，避免撑宽表单主体（item 3b）；完整文转入 tooltip。
+        // 长错误串（含 content:// 内容 URI）按宽省略号截断，避免撑宽表单主体；完整文转入 tooltip。
         const QString msg = IDC_GTR(label, kReadSourceFailedFmt).arg(err);
         imagePathLabel_->setText(QFontMetrics(imagePathLabel_->font())
                                     .elidedText(msg, Qt::ElideMiddle, nums::mobile::kErrorPathMaxWidthPx));
@@ -211,6 +211,7 @@ void NewCanvasDialog::onPickImage() {
         return;
     }
     imageSource_ = std::move(img);
+    imageSourceOriginalPath_ = path;   // 留存原始选取路径（持久化前）：供 SessionController::onNew 接入 MRU 并据此跳过 content://。
     // content:// 不可重开、且 QFileInfo(content://).fileName() 只是数字 doc id：持久化到应用私有
     // 目录取稳定真实路径作 provenance（缓存物化会被回收，故另走 persistForProvenance）。
     // 非 content://（桌面）原样返回，行为不变；持久失败则回退原始路径作显示。
@@ -251,12 +252,12 @@ void NewCanvasDialog::setAddLayerMode(const int canvasW, const int canvasH) {
         widthSpin_->setValue(canvasW);
         heightSpin_->setValue(canvasH);
     }
-    attachImageCheck_->setChecked(true);   // 添加图层语境必带图（旧语义：选「图片」图案才产图层）。
+    attachImageCheck_->setChecked(true);   // 添加图层语境必带图（此语境恒产图层，故默认勾选）。
 }
 
 // 组装一个可序列化的附加图片 File 图层：原始源（factor≠1 先等比预缩作预览代理）+ 两级落位（内层源图→
 //   图层框 imgPlace/fit，外层图层框→画布 layerPlace）+ 图层框底色 boxBackdrop（即顶部图案参数）。
-//   图层框尺寸 = boxW×boxH（顶部宽高）；外层 transform 的宽高留 0（用框原生尺寸，不再缩放）。
+//   图层框尺寸 = boxW×boxH（顶部宽高）；外层 transform 的宽高留 0（用框原生尺寸，不缩放）。
 canvas::ImageLayer NewCanvasDialog::buildAttachedLayer(const double factor, const canvas::ImageTransform& layerPlace,
                                                        const generate::PatternParams& boxBackdrop, const int boxW, const int boxH,
                                                        const canvas::ImageTransform& imgPlace, const ImageFit fit) const {
@@ -367,7 +368,7 @@ void NewCanvasDialog::accept() {
         imgPlace.y = imagePlaceRow_->offsetY();
     }
     core::Image flat;   // 新建画布扁平整幅（亦作 add-layer 的合法性/预览像素）。
-    // 总像素≥ 2M 才弹忙碌框（逐像素/重采样在此量级以上开始可感）。全屏标志由 MainWindow 依
+    // 总像素≥ 2M 才弹忙碌框（逐像素/重采样在此量级以上开始可感）。全屏标志由 SessionController 依
     // busyOverlayMode() 下发（busyOverlay_）：MobileShell 下为 true 铺满屏幕作全屏遮罩（SPEC §8.2），
     // 桌面为 false 居中小框；两者模态阻断语义一致。
     const auto generate = [&] {
@@ -409,7 +410,7 @@ void NewCanvasDialog::accept() {
             base.imageY = imgPlace.y;
             base.boxBackdrop = p;   // 图层框底色/图案（Core 内层先铺底再叠源）。
         } else {
-            // 纯图案底：Recipe 源 + 恒等 transform、无落位（序列化后与旧 generate 段逐字段等价）。
+            // 纯图案底：Recipe 源 + 恒等 transform、无落位（序列化为纯 recipe 形态的 generate 段）。
             base.sourceKind = canvas::LayerSourceKind::Recipe;
             base.recipe = p;
         }
@@ -418,7 +419,7 @@ void NewCanvasDialog::accept() {
     summary_ = IDC_GTR(label, kSummaryBaseFmt)
                    .arg(w)
                    .arg(h)
-                   .arg(QString::fromUtf8(generate::patternKindName(p.kind).c_str()))   // 显示名按当前语言现取（Qt5 需 c_str）
+                   .arg(QString::fromUtf8(generate::patternKindName(p.kind).c_str()))   // 显示名按当前语言现取（经 c_str() 走 fromUtf8 的 const char* 重载）
                    .arg(p.background.r).arg(p.background.g).arg(p.background.b).arg(p.background.a);
     // 非纯色时前景色（含 alpha）参与图案，一并回显。
     if (p.kind != generate::PatternKind::Solid)

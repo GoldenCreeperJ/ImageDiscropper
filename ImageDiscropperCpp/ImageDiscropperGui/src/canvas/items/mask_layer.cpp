@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：canvas/mask_layer.cpp
+// 文件：canvas/items/mask_layer.cpp
 // 作用：实现单一遮罩图元的绘制（保留/删除合成于一层）与遮罩图层的重建、显隐、清理（见同名头文件说明）。
 // 分块依据：颜色常量集中定义；rebuild 只做「按 Core 结果生成保留块矩形并交单一图元绘制」，无几何运算。
 // ============================================================================
@@ -26,7 +26,7 @@ void MaskLayerItem::setGeometry(const int width, const int height, std::vector<Q
     width_ = width;
     height_ = height;
     keeps_ = std::move(keeps);
-    // 包围盒需并上全部保留块：L3 的 PAD 余量策略下 Core 保留块区域可越出图像边界（导出时补白），
+    // 包围盒需并上全部保留块：L3 的 Pad 余量策略下 Core 保留块区域可越出图像边界（导出时补白），
     //   仅按原图尺寸算 boundingRect 会把那部分排除在重绘区域之外。
     bounds_ = QRectF(0.0, 0.0, width, height);
     for (const QRectF& r : keeps_) bounds_ = bounds_.united(r);

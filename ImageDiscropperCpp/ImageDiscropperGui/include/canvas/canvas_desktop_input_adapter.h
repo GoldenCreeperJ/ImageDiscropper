@@ -4,7 +4,7 @@
 //       ICanvasInputAdapter 的桌面实现（触控单指合成序列亦复用本类作路由）。
 // 分块依据：桌面设备语义（按键角色、滚轮刻度、QMenu 右键菜单 UI）全部收拢在本类，
 //           使 CanvasView 的事件入口退化为一行转发；手势状态机与信号仍在 CanvasView。
-// 说明：手势映射表（与迁移前 canvas_view.cpp 行为逐条一致，零行为变化）：
+// 说明：手势映射表（桌面键鼠事件 → CanvasView 业务手势）：
 //         中键 / 空格+左键按下      → gesturePanBegin            （平移）
 //         左键按下（绘制态）        → gestureStrokeBegin         （标注绘制起笔）
 //         左键按下（普通）          → dispatchScenePress；无图元接管 → gestureMarqueeBegin（框选）

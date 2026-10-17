@@ -33,20 +33,20 @@ int virtualStart(const int origin, const int cell) {
 // 依据基准点、单元尺寸、图像边界与余量策略，铺出单轴上全部被保留的单元区间。
 // 自虚拟起点 (-cell,0] 起，以 cell 为周期向右/下推进，直到起点越过图像边界为止，
 // 从而双向铺满整幅图像（切割线贯穿全图，SPEC §3.4.3）；跨越边界的残缺单元按
-// remainder 处理：DISCARD 丢弃 / KEEP_PARTIAL 裁剪到图像内 / PAD 保留完整尺寸（越界）。
+// remainder 处理：Discard 丢弃 / KeepPartial 裁剪到图像内 / Pad 保留完整尺寸（越界）。
 std::vector<AxisCell> layoutAxis(const int origin, const int cell, const int limit,
                                  const RemainderPolicy remainder) {
     std::vector<AxisCell> out;
     for (int lo = virtualStart(origin, cell); lo < limit; lo += cell) {
         const int hi = lo + cell;
         const bool partial = lo < 0 || hi > limit; // 跨越左/上或右/下边界。
-        if (partial && remainder == RemainderPolicy::DISCARD) continue; // 丢弃跨界残缺单元。
+        if (partial && remainder == RemainderPolicy::Discard) continue; // 丢弃跨界残缺单元。
         int keepLo = lo, keepHi = hi;
-        if (partial && remainder == RemainderPolicy::KEEP_PARTIAL) {    // 裁剪到图像内。
+        if (partial && remainder == RemainderPolicy::KeepPartial) {    // 裁剪到图像内。
             keepLo = std::max(lo, 0);
             keepHi = std::min(hi, limit);
         }
-        // PAD：保留完整尺寸（keepLo/keepHi 维持越界值），导出时以填充色补齐。
+        // Pad：保留完整尺寸（keepLo/keepHi 维持越界值），导出时以填充色补齐。
         out.push_back(AxisCell{keepLo, keepHi, partial});
     }
     return out;
@@ -64,7 +64,7 @@ void Grid::build(const GridParams& params, const int imageWidth, const int image
     cols_ = 0;
     rows_ = 0;
 
-    // 防御：单元尺寸或图像尺寸非法 → 不铺任何单元（避免取模 0 / 死循环，对应 E-5）。
+    // 防御：单元尺寸或图像尺寸非法 → 不铺任何单元（避免取模 0 / 死循环）；下游据 cellCount()==0 报 NoGrid。
     if (params.cellWidth <= 0 || params.cellHeight <= 0 || imageWidth <= 0 || imageHeight <= 0) {
         return;
     }

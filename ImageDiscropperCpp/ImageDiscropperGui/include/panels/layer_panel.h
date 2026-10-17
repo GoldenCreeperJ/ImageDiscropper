@@ -1,14 +1,13 @@
 // ============================================================================
 // 文件：panels/layer_panel.h
 // 作用：左侧「图层」面板——集中管理画布各图层的显示/隐藏（按画布 z 序排列）：
-//       底图 / 标注 / 遮罩（保留删除预览）/ 网格线 / 切割线 / 选取边框 / 单元编号。
-//       面板只采集意图并发信号，真正的图层可见性落地由 MainWindow 分派到 CanvasScene
+//       底图 / 图片图层 / 标注 / 遮罩（保留删除预览）/ 网格线 / 切割线 / 选取边框 / 单元编号（共 8 项）。
+//       面板只采集意图并发信号，真正的图层可见性落地由 AnnotationCoordinator（多数图层）与 SessionController（图片图层整体）分派到 CanvasScene
 //       与 AnnotationBridge（CONTRIBUTING.md「分层纪律」）。
 // 分块依据：每层一行「名称 + 显示开关」；信号一一对应各类意图，参数即最小信息（bool）。
 //           syncFromModel 从模型反向同步标注可见态（防回环）。
-// 说明：遮罩开关已从工具栏/视图菜单迁入本面板（成为正式图层项）；视图菜单/右键仍可切换，
-//       切换后由 MainWindow 调 setMaskVisible 反向同步本面板复选框。标注「导出时烧录」开关
-//       已迁至导出面板（见 export_panel）。各图层的隐藏仅影响画布预览，不影响导出。
+// 说明：遮罩开关是本面板的正式图层项；视图菜单/右键仍可切换，
+//       切换后由 MainWindowUi（视图菜单）与 PreviewController（画布右键）调 setMaskVisible 反向同步本面板复选框。标注「导出时烧录」开关在导出面板（见 export_panel）。各图层的隐藏仅影响画布预览，不影响导出。
 // ============================================================================
 #pragma once
 
@@ -59,7 +58,7 @@ public:
     void retranslate() const { retranslator_.run(); }
 
 signals:
-    // 底图图层显示/隐藏（MainWindow 切换画布 base 图元可见性）。
+    // 底图图层显示/隐藏（AnnotationCoordinator 切换画布 base 图元可见性）。
     void baseVisibilityChanged(bool visible);
     // 遮罩（保留/删除预览）图层显示/隐藏。
     void maskVisibilityChanged(bool visible);
@@ -69,11 +68,11 @@ signals:
     void cutLineVisibilityChanged(bool visible);
     // 选取边框图层显示/隐藏。
     void selectionVisibilityChanged(bool visible);
-    // 单元编号角标图层显示/隐藏（L3 CUSTOM 序的单元序号角标）。
+    // 单元编号角标图层显示/隐藏（L3 Custom 序的单元序号角标）。
     void numberVisibilityChanged(bool visible);
     // 标注图层显示/隐藏。
     void annotationVisibilityChanged(bool visible);
-    // 图片图层整体显隐切换（一个开关控所有图片图层，仅影响预览；MainWindow → Document::setImageLayersVisible → layersChanged 重组预览）。
+    // 图片图层整体显隐切换（一个开关控所有图片图层，仅影响预览；SessionController → Document::setImageLayersVisible → layersChanged 重组预览）。
     void imageLayerVisibilityChanged(bool visible);
 
 private:

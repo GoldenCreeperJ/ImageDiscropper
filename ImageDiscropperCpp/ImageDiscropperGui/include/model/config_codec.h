@@ -1,10 +1,10 @@
 // ============================================================================
 // 文件：model/config_codec.h
 // 作用：ConfigCodec——Document ↔ EngineConfig 的字段映射（buildEngineConfig /
-//       buildSerializableConfig / applyEngineConfig），自 Document 拆出（原三个成员函数）。
-//       与 Document 深度互操作（直接读写私有状态），故为 Document 的 friend（同 MainWindowUi 先例）。
-// 分块依据：配置组装/还原是「纯字段搬运 + 枚举映射 + 不变式守卫」，无状态；从状态聚合器 Document
-//       拆出后，Document 只保留三个一行转发（公有 API 形状不变），减轻上帝文件（CONTRIBUTING.md「分层纪律」）。
+//       buildSerializableConfig / applyEngineConfig）。与 Document 深度互操作（直接读写
+//       私有状态），故为 Document 的 friend。
+// 分块依据：配置组装/还原是「纯字段搬运 + 枚举映射 + 不变式守卫」，无状态；Document
+//       仅保留三行转发，避免状态聚合器职责膨胀（CONTRIBUTING.md「分层纪律」）。
 // ============================================================================
 #pragma once
 

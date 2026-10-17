@@ -1,10 +1,10 @@
 // ============================================================================
 // 文件：app/controllers/preview_controller.h
-// 作用：PreviewController——切割预览与导出前输出预览的编排控制器：从 MainWindow 拆出
+// 作用：PreviewController——切割预览与导出前输出预览的编排控制器：承担
 //       refreshPreview 五分支状态机、预览底图重建与导出预览缓存/按需渲染（A/B 规则）。
 // 分块依据：
-//   - 「跑 Core 预览 → 刷画布/状态栏/面板」是应用主数据流的核心，独占一块（原 refreshPreview 143 行）；
-//   - 导出预览缓存（lastComposition_/脏标志/小源图）只服务于本块，随迁。
+//   - 「跑 Core 预览 → 刷画布/状态栏/面板」是应用主数据流的核心，独占一块；
+//   - 导出预览缓存（lastComposition_/脏标志/小源图）只服务于本块。
 // 说明：无信号输出，只被 MainWindow（重建/刷新）与 AnnotationCoordinator（B 规则重渲染、显隐槽刷新）调用；
 //       Core 调用仍经 EngineBridge/AnnotationBridge（分层纪律）。
 // ============================================================================

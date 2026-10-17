@@ -96,9 +96,8 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     // 移动端禁用「浏览…」（SPEC §8.3 形态差异）：SAF 自定义目录真机不可靠——文件管理器
     // 建的目录 other 无权限、华为 Downloads 提供者拒绝 open/delete/查询，自定义路径无法
     // 保证写入（详见 mobile/android_media_store 与 src/mobile README「移动端实现状态与
-    // 遗留事项」）；移动端统一导出到相册公共目录（MainWindow::onExport 编排），留空即可。
-    // 目录选择的 SAF 适配代码已整体移除（打开图像的 content:// 入缓存分支不受影响），
-    // 将来若恢复需同时补回本块。
+    // 遗留事项」）；移动端统一导出到相册公共目录（ExportController::onExport 编排），留空即可。
+    // 目录选择无 SAF 适配（打开图像的 content:// 入缓存分支不受影响）。
     // 输入框仍可手输绝对路径（应用可写目录）作为高级用法。
 #ifdef Q_OS_ANDROID
     dirBtn_->setEnabled(false);
@@ -185,7 +184,7 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
 
     root->addWidget(box);
 
-    // 输出图像预览（导出前预览）：固定尺寸的缩略图标签，由 MainWindow 按 Core Composition 回灌。
+    // 输出图像预览（导出前预览）：固定尺寸的缩略图标签，由 PreviewController 按 Core Composition 回灌。
     // 固定尺寸使 setPreviewPixmap 能依确定的框内缩放（不随布局时序变化），且不撑宽右侧面板。
     auto* outPreviewLbl = new QLabel(this);
     i18n::bindText(retranslator_, outPreviewLbl, IDC_GT(label, kOutputPreviewLabel));
@@ -205,7 +204,7 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     infoLabel_->setWordWrap(true);
     root->addWidget(infoLabel_);
 
-    // 导出时烧录标注（原属图层面板，现归入导出选项）：勾选后导出把标注合成进像素（随像素一起被切割）。
+    // 导出时烧录标注：勾选后导出把标注合成进像素（随像素一起被切割）。
     burnIn_ = new QCheckBox(this);
     i18n::bindButton(retranslator_, burnIn_, IDC_GT(label, kBurnInCheck));
     burnIn_->setChecked(false);
@@ -265,10 +264,10 @@ void ExportPanel::setDocument(Document* doc) {
 void ExportPanel::syncFromDocument() {
     if (!doc_) return;
 
-    // 输出模式：SEPARATE→0；MERGED+COLLAPSE→1；MERGED+REARRANGE→2。
+    // 输出模式：Separate→0；Merged+Collapse→1；Merged+Rearrange→2。
     int idx = 0;
-    if (doc_->emitMode() == engine::EmitMode::MERGED) {
-        idx = doc_->layout() == engine::MergeLayout::COLLAPSE ? 1 : 2;
+    if (doc_->emitMode() == engine::EmitMode::Merged) {
+        idx = doc_->layout() == engine::MergeLayout::Collapse ? 1 : 2;
     }
     modeCombo_->blockSignals(true);
     modeCombo_->setCurrentIndex(idx);
@@ -301,7 +300,7 @@ void ExportPanel::syncFromDocument() {
 
     // 重排填充顺序回填（MergeOrder；blockSignals 防回环）。
     mergeSortCombo_->blockSignals(true);
-    mergeSortCombo_->setCurrentIndex(doc_->mergeOrder().strategy == engine::SortStrategy::COLUMN_MAJOR ? 1 : 0);
+    mergeSortCombo_->setCurrentIndex(doc_->mergeOrder().strategy == engine::SortStrategy::ColumnMajor ? 1 : 0);
     mergeSortCombo_->blockSignals(false);
     mergeSnake_->blockSignals(true);
     mergeSnake_->setChecked(doc_->mergeOrder().snake);
@@ -313,8 +312,8 @@ void ExportPanel::syncFromDocument() {
     updateFieldVisibility();
     refreshModeItemStates();   // 依模式(L3?)/坍缩可行性刷新各输出模式项可用性。
     updateRearrangeWarning();  // 重算内联警告。
-    const bool lossy = doc_->format() == engine::ExportFormat::JPEG ||
-                       doc_->format() == engine::ExportFormat::WEBP;
+    const bool lossy = doc_->format() == engine::ExportFormat::Jpeg ||
+                       doc_->format() == engine::ExportFormat::Webp;
     qualityLabel_->setVisible(lossy);
     quality_->setVisible(lossy);
 }
@@ -327,7 +326,7 @@ void ExportPanel::setCollapsible(const bool collapsible) {
     refreshModeItemStates();
     // 当前选中「坍缩」但不可坍缩：回退到重排（仅 L3 可用），否则退回分离导出。
     if (!collapsible && modeCombo_->currentIndex() == 1) {
-        const bool isL3 = doc_ && doc_->mode() == engine::Tier::L3;
+        const bool isL3 = doc_ && doc_->mode() == engine::Tier::Grid;
         modeCombo_->setCurrentIndex(isL3 ? 2 : 0); // 触发 onModeChanged → 写回 Document。
     }
 }
@@ -357,7 +356,7 @@ void ExportPanel::setPreviewPixmap(const QPixmap& pm) const {
     previewLabel_->setPixmap(shown);
 }
 
-// 反向同步「导出时烧录标注」复选框（MainWindow 依 AnnotationBridge::burnInEnabled 回灌）。
+// 反向同步「导出时烧录标注」复选框（AnnotationCoordinator 依 AnnotationBridge::burnInEnabled 回灌）。
 // blockSignals 防止回灌时再触发 burnInChanged 造成回环。
 void ExportPanel::setBurnInChecked(const bool on) const {
     if (!burnIn_) return;
@@ -391,9 +390,9 @@ void ExportPanel::selectFormat(const int index) const {
 void ExportPanel::onModeChanged(const int index) {
     if (!doc_) return;
     switch (index) {
-        case 0: doc_->setEmit(engine::EmitMode::SEPARATE, engine::MergeLayout::COLLAPSE); break;
-        case 1: doc_->setEmit(engine::EmitMode::MERGED, engine::MergeLayout::COLLAPSE); break;
-        case 2: doc_->setEmit(engine::EmitMode::MERGED, engine::MergeLayout::REARRANGE); break;
+        case 0: doc_->setEmit(engine::EmitMode::Separate, engine::MergeLayout::Collapse); break;
+        case 1: doc_->setEmit(engine::EmitMode::Merged, engine::MergeLayout::Collapse); break;
+        case 2: doc_->setEmit(engine::EmitMode::Merged, engine::MergeLayout::Rearrange); break;
         default: break;
     }
     // 进入重排：若用户未手动指定 cols/rows，依保留块数开方自动填入具体值。
@@ -405,16 +404,16 @@ void ExportPanel::onModeChanged(const int index) {
 // 格式变更 → 写回 Document + 质量字段显隐。
 void ExportPanel::onFormatChanged(const int index) const {
     if (!doc_) return;
-    auto f = engine::ExportFormat::PNG;
+    auto f = engine::ExportFormat::Png;
     switch (index) {
-        case 0: f = engine::ExportFormat::PNG; break;
-        case 1: f = engine::ExportFormat::JPEG; break;
-        case 2: f = engine::ExportFormat::WEBP; break;
-        case 3: f = engine::ExportFormat::BMP; break;
+        case 0: f = engine::ExportFormat::Png; break;
+        case 1: f = engine::ExportFormat::Jpeg; break;
+        case 2: f = engine::ExportFormat::Webp; break;
+        case 3: f = engine::ExportFormat::Bmp; break;
         default: break;
     }
     doc_->setFormat(f);
-    const bool lossy = f == engine::ExportFormat::JPEG || f == engine::ExportFormat::WEBP;
+    const bool lossy = f == engine::ExportFormat::Jpeg || f == engine::ExportFormat::Webp;
     qualityLabel_->setVisible(lossy);
     quality_->setVisible(lossy);
 }
@@ -459,8 +458,6 @@ void ExportPanel::onBrowseFile() {
     }
 }
 
-// 重排列数/行数变更 → 标记手动 + 写回 Document（0=自动，交 Core 推导）+ 重算警告。
-
 // 依当前输出模式切换目录/文件/命名/重排行显隐。
 void ExportPanel::updateFieldVisibility() const {
     const int idx = modeCombo_->currentIndex();
@@ -481,10 +478,10 @@ void ExportPanel::updateFieldVisibility() const {
 QString ExportPanel::saveFilter() const {
     if (!doc_) return IDC_GTR(label, kFilterAll);
     switch (doc_->format()) {
-        case engine::ExportFormat::PNG:  return IDC_GTR(label, kFilterSavePng);
-        case engine::ExportFormat::JPEG: return IDC_GTR(label, kFilterSaveJpeg);
-        case engine::ExportFormat::WEBP: return IDC_GTR(label, kFilterSaveWebp);
-        case engine::ExportFormat::BMP:  return IDC_GTR(label, kFilterSaveBmp);
+        case engine::ExportFormat::Png:  return IDC_GTR(label, kFilterSavePng);
+        case engine::ExportFormat::Jpeg: return IDC_GTR(label, kFilterSaveJpeg);
+        case engine::ExportFormat::Webp: return IDC_GTR(label, kFilterSaveWebp);
+        case engine::ExportFormat::Bmp:  return IDC_GTR(label, kFilterSaveBmp);
     }
     return IDC_GTR(label, kFilterAll);
 }
@@ -494,7 +491,7 @@ QString ExportPanel::saveFilter() const {
 void ExportPanel::refreshModeItemStates() const {
     const auto* m = qobject_cast<QStandardItemModel*>(modeCombo_->model());
     if (!m) return;
-    const bool isL3 = doc_ && doc_->mode() == engine::Tier::L3;
+    const bool isL3 = doc_ && doc_->mode() == engine::Tier::Grid;
     if (QStandardItem* it = m->item(1)) it->setEnabled(collapsible_);
     if (QStandardItem* it = m->item(2)) it->setEnabled(isL3);
 }

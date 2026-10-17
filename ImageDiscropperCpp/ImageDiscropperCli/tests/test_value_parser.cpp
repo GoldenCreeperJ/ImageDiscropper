@@ -109,11 +109,11 @@ void testValueParser() {
     // ---- parseFormat：png / jpeg(jpg) / webp / bmp。----
     {
         idc::engine::ExportFormat f;
-        CHECK(parseFormat("png", f, err) && f == idc::engine::ExportFormat::PNG);
-        CHECK(parseFormat("JPEG", f, err) && f == idc::engine::ExportFormat::JPEG); // 大写
-        CHECK(parseFormat("jpg", f, err) && f == idc::engine::ExportFormat::JPEG);
-        CHECK(parseFormat("webp", f, err) && f == idc::engine::ExportFormat::WEBP);
-        CHECK(parseFormat("bmp", f, err) && f == idc::engine::ExportFormat::BMP);
+        CHECK(parseFormat("png", f, err) && f == idc::engine::ExportFormat::Png);
+        CHECK(parseFormat("JPEG", f, err) && f == idc::engine::ExportFormat::Jpeg); // 大写
+        CHECK(parseFormat("jpg", f, err) && f == idc::engine::ExportFormat::Jpeg);
+        CHECK(parseFormat("webp", f, err) && f == idc::engine::ExportFormat::Webp);
+        CHECK(parseFormat("bmp", f, err) && f == idc::engine::ExportFormat::Bmp);
         CHECK(!parseFormat("tiff", f, err) && !err.empty());       // 不支持
     }
 
@@ -131,26 +131,26 @@ void testValueParser() {
     // ---- parseSort：row-major / column-major / custom。----
     {
         idc::engine::SortStrategy s;
-        CHECK(parseSort("row-major", s, err) && s == idc::engine::SortStrategy::ROW_MAJOR);
-        CHECK(parseSort("column-major", s, err) && s == idc::engine::SortStrategy::COLUMN_MAJOR);
-        CHECK(parseSort("custom", s, err) && s == idc::engine::SortStrategy::CUSTOM);
+        CHECK(parseSort("row-major", s, err) && s == idc::engine::SortStrategy::RowMajor);
+        CHECK(parseSort("column-major", s, err) && s == idc::engine::SortStrategy::ColumnMajor);
+        CHECK(parseSort("custom", s, err) && s == idc::engine::SortStrategy::Custom);
         CHECK(!parseSort("diagonal", s, err) && !err.empty());     // 不支持
     }
 
     // ---- parseMargin：discard / keep-partial / pad。----
     {
         idc::engine::RemainderPolicy m;
-        CHECK(parseMargin("discard", m, err) && m == idc::engine::RemainderPolicy::DISCARD);
-        CHECK(parseMargin("keep-partial", m, err) && m == idc::engine::RemainderPolicy::KEEP_PARTIAL);
-        CHECK(parseMargin("pad", m, err) && m == idc::engine::RemainderPolicy::PAD);
+        CHECK(parseMargin("discard", m, err) && m == idc::engine::RemainderPolicy::Discard);
+        CHECK(parseMargin("keep-partial", m, err) && m == idc::engine::RemainderPolicy::KeepPartial);
+        CHECK(parseMargin("pad", m, err) && m == idc::engine::RemainderPolicy::Pad);
         CHECK(!parseMargin("shrink", m, err) && !err.empty());     // 不支持
     }
 
     // ---- parseMerge：collapse / rearrange。----
     {
         idc::engine::MergeLayout m;
-        CHECK(parseMerge("collapse", m, err) && m == idc::engine::MergeLayout::COLLAPSE);
-        CHECK(parseMerge("rearrange", m, err) && m == idc::engine::MergeLayout::REARRANGE);
+        CHECK(parseMerge("collapse", m, err) && m == idc::engine::MergeLayout::Collapse);
+        CHECK(parseMerge("rearrange", m, err) && m == idc::engine::MergeLayout::Rearrange);
         CHECK(!parseMerge("stack", m, err) && !err.empty());       // 不支持
     }
 

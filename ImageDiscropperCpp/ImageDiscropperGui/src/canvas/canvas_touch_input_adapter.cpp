@@ -35,7 +35,7 @@ void TouchInputAdapter::onPress(CanvasView& view, QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
         const QPoint vp = event->pos();
         // 双击第二击：距上一有效轻点足够近且足够快 → 适应窗口；吞掉本序列后续事件，
-        // 不再进入框选/图元路由（桌面双击无绑定语义，移动端 SPEC 映射为适应窗口）。
+        // 不进入框选/图元路由（桌面双击无绑定语义，移动端 SPEC 映射为适应窗口）。
         if (tapClock_.isValid() && tapClock_.elapsed() <= nums::canvas::kDoubleTapGapMs
             && (vp - lastTapPos_).manhattanLength() <= nums::canvas::kDoubleTapPosScreenPx) {
             swallowing_ = true;

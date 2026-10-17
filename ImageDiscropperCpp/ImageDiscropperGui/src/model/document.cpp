@@ -14,7 +14,7 @@
 
 namespace idc::gui {
 
-// 构造：无图像、默认 L1 + KEEP。
+// 构造：无图像、默认 L1 + Keep。
 Document::Document(QObject* parent) : QObject(parent) {}
 // 切换模式：L1/L2 由极性定义（L1≡keep、L2≡remove），切到二者时套用对应极性；
 // L3（网格）极性独立于模式，切入 L3 时**保留当前极性不变**（从 L2 进 L3 应沿用 remove）。发变更信号。
@@ -23,14 +23,14 @@ void Document::setMode(const engine::Tier t) {
     mode_ = t;
     // L1≡保留框内(keep)、L2≡删除框内(remove)：切到 L1/L2 时套用其定义极性；
     // 切到 L3 不动极性——L3 极性独立，用户从 L2(remove) 进 L3 时期望极性保持 remove。
-    if (t == engine::Tier::L1)
-        polarity_ = engine::Polarity::KEEP;
-    else if (t == engine::Tier::L2)
-        polarity_ = engine::Polarity::REMOVE;
+    if (t == engine::Tier::Standard)
+        polarity_ = engine::Polarity::Keep;
+    else if (t == engine::Tier::Erase)
+        polarity_ = engine::Polarity::Remove;
     // 合并重排为 L3 专属（Core runEngine 硬约束）：离开 L3 时若仍是重排，复位为坍缩，
     // 在模型层维持不变式，避免导出面板/引擎拿到非法的「非 L3 + 重排」组合。
-    if (t != engine::Tier::L3 && layout_ == engine::MergeLayout::REARRANGE)
-        layout_ = engine::MergeLayout::COLLAPSE;
+    if (t != engine::Tier::Grid && layout_ == engine::MergeLayout::Rearrange)
+        layout_ = engine::MergeLayout::Collapse;
     emit changed();
     emit modeOrPolarityChanged();
 }
@@ -43,9 +43,9 @@ void Document::setPolarity(const engine::Polarity p) {
     if (polarity_ == p) return;
     polarity_ = p;
     // L1/L2 与极性一一对应：切换极性即切换模式；L3 极性独立，模式保持不变。
-    if (mode_ == engine::Tier::L1 || mode_ == engine::Tier::L2) {
-        mode_ = p == engine::Polarity::REMOVE ? engine::Tier::L2
-                                                     : engine::Tier::L1;
+    if (mode_ == engine::Tier::Standard || mode_ == engine::Tier::Erase) {
+        mode_ = p == engine::Polarity::Remove ? engine::Tier::Erase
+                                                     : engine::Tier::Standard;
     }
     emit changed();
     emit modeOrPolarityChanged();
@@ -83,7 +83,7 @@ void Document::clearRect() {
     emit changed();
 }
 
-// 追加一个多矩形（L2 MULTI_RECT）。校验同 setRect：拒绝退化矩形，避免 Core 切割/诱导网格异常。
+// 追加一个多矩形（L2 MultiRect）。校验同 setRect：拒绝退化矩形，避免 Core 切割/诱导网格异常。
 void Document::addRect(const engine::RectRegion& r) {
     if (r.width() <= 0 || r.height() <= 0) return;
     rects_.push_back(r);
@@ -153,7 +153,7 @@ void Document::setDerivedGridSize(const int rows, const int cols) {
 // 说明：L3 网格是「基准点 + 单元尺寸」的周期铺满（SPEC §3.4.3），无法逐条复刻单矩形诱导的非均匀
 // 3×3 线；此映射为纯字段搬运（不含几何计算，CONTRIBUTING.md「分层纪律」），保留矩形边界作为网格相位锚，视觉连续。
 void Document::convertRectToGrid() {
-    // 源矩形：优先用单选区 rect_；若无有效单选区但多矩形列表非空（MULTI_RECT），
+    // 源矩形：优先用单选区 rect_；若无有效单选区但多矩形列表非空（MultiRect），
     // 则取全部矩形的包围盒（min 左上 / max 右下）作为网格单元基准（纯字段派生，非切割几何）。
     engine::RectRegion src = rect_;
     if ((!hasRect_ || src.width() <= 0 || src.height() <= 0) && !rects_.empty()) {
@@ -172,13 +172,13 @@ void Document::convertRectToGrid() {
     grid_.cellWidth = src.width();
     grid_.cellHeight = src.height();
     selectedCells_.clear();                        // 进入 L3 后由用户重新点选。
-    mode_ = engine::Tier::L3;
+    mode_ = engine::Tier::Grid;
     // L3 默认保留选中；空选择集在 Core 会推导为全选，故 keep 下保留全图（避免 remove+全选→剔除全部报 E-7）。
-    polarity_ = engine::Polarity::KEEP;
+    polarity_ = engine::Polarity::Keep;
     emit changed();
 }
 
-// 覆盖 L3 选择集（CUSTOM 排序下其顺序即自定义序列）。
+// 覆盖 L3 选择集（Custom 排序下其顺序即自定义序列）。
 void Document::setSelectedCells(std::vector<int> cells) {
     if (selectedCells_ == cells) return;
     selectedCells_ = std::move(cells);
@@ -218,7 +218,7 @@ void Document::clearCells() {
     emit changed();
 }
 
-// 单击切换某单元：已选则移除、未选则追加到末尾（CUSTOM 下追加顺序即自定义序，FR-L3.5）。
+// 单击切换某单元：已选则移除、未选则追加到末尾（Custom 下追加顺序即自定义序，FR-L3.5）。
 void Document::toggleCell(const int index) {
     if (index < 0) return;
     // 选择集内序号唯一，std::erase 按值删除并返回命中数：0 表示原本未选 → 追加。
@@ -226,7 +226,7 @@ void Document::toggleCell(const int index) {
     emit changed();
 }
 
-// 并入框选命中的单元（去重，保持首次纳入顺序；CUSTOM 下即点选先后）。
+// 并入框选命中的单元（去重，保持首次纳入顺序；Custom 下即点选先后）。
 void Document::addCells(const std::vector<int>& indices) {
     // 局部标志改名 modified：避免遮蔽 Document::changed() 信号（否则 emit changed() 会被当成调用该 bool → C2064）。
     bool modified = false;
@@ -240,7 +240,7 @@ void Document::addCells(const std::vector<int>& indices) {
     if (modified) emit changed();
 }
 
-// CUSTOM 拖拽调序（FR-L3.5）：把 from 单元移到 to 单元当前所在的序位。
+// Custom 拖拽调序（FR-L3.5）：把 from 单元移到 to 单元当前所在的序位。
 // selectedCells_ 的顺序即 Core 自定义输出序，故调序只是把 from 元素搬到 to 元素的原位次：
 // 先记录 to 的位次（须在移除 from 之前，否则位次会漂移），移除 from 后在该位次插入 from。
 void Document::moveCellOrder(const int from, const int to) {
@@ -344,7 +344,7 @@ void Document::setPadColor(const core::Color c) {
     emit changed();
 }
 
-// 设置重排填充策略（仅行/列优先；CUSTOM 无意义，Core compose 按行优先处理）。
+// 设置重排填充策略（仅行/列优先；Custom 无意义，Core compose 按行优先处理）。
 void Document::setMergeOrderStrategy(const engine::SortStrategy s) {
     if (mergeOrder_.strategy == s) return;
     mergeOrder_.strategy = s;
@@ -372,29 +372,29 @@ engine::CutConfig Document::buildCutConfig() const {
     c.polarity = polarity_;
     c.rect = rect_;
 
-    // 生成器映射：L1 形状 / L2 子功能 → Core CutGenerator；L3 → GRID。
+    // 生成器映射：L1 形状 / L2 子功能 → Core CutGenerator；L3 → Grid。
     switch (mode_) {
-        case engine::Tier::L1:
+        case engine::Tier::Standard:
             switch (l1Shape_) {
-                case L1Shape::RECT:  c.generator = engine::CutGenerator::RECT; break;
-                case L1Shape::HBAND: c.generator = engine::CutGenerator::HORIZONTAL_LINE; break;
-                case L1Shape::VBAND: c.generator = engine::CutGenerator::VERTICAL_LINE; break;
+                case L1Shape::Rect:  c.generator = engine::CutGenerator::Rect; break;
+                case L1Shape::Hband: c.generator = engine::CutGenerator::HorizontalLine; break;
+                case L1Shape::Vband: c.generator = engine::CutGenerator::VerticalLine; break;
             }
             break;
-        case engine::Tier::L2:
+        case engine::Tier::Erase:
             switch (l2Sub_) {
-                case L2Sub::CROSS: c.generator = engine::CutGenerator::RECT; break;
-                case L2Sub::HLINE: c.generator = engine::CutGenerator::HORIZONTAL_LINE; break;
-                case L2Sub::VLINE: c.generator = engine::CutGenerator::VERTICAL_LINE; break;
-                case L2Sub::MULTI_RECT:
-                    // 多矩形并集：搬运矩形列表，Core 对每个矩形诱导十字带后取并集（方案 A）。
-                    c.generator = engine::CutGenerator::MULTI_RECT;
+                case L2Sub::Cross: c.generator = engine::CutGenerator::Rect; break;
+                case L2Sub::Hline: c.generator = engine::CutGenerator::HorizontalLine; break;
+                case L2Sub::Vline: c.generator = engine::CutGenerator::VerticalLine; break;
+                case L2Sub::MultiRect:
+                    // 多矩形并集：搬运矩形列表，Core 对每个矩形诱导十字带后取并集。
+                    c.generator = engine::CutGenerator::MultiRect;
                     c.rects = rects_;
                     break;
             }
             break;
-        case engine::Tier::L3:
-            c.generator = engine::CutGenerator::GRID;
+        case engine::Tier::Grid:
+            c.generator = engine::CutGenerator::Grid;
             c.grid = grid_;   // 网格参数（基准点 + 单元尺寸 + 余量策略）。
             break;
     }
@@ -402,7 +402,7 @@ engine::CutConfig Document::buildCutConfig() const {
 }
 
 
-// 配置组装/还原：实现已拆至 ConfigCodec（model/config_codec），此处为保持公有 API 形状的一行转发。
+// 配置组装/还原：实现在 ConfigCodec（model/config_codec），此处仅为转发包装。
 engine::EngineConfig Document::buildEngineConfig() const {
     return ConfigCodec::buildEngineConfig(*this);
 }

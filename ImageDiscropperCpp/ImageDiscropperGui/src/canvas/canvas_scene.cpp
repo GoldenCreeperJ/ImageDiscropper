@@ -69,7 +69,7 @@ void CanvasScene::setBaseImage(const QPixmap& preview, const double scaleX, cons
         addItem(selItem_);
         selItem_->setZValue(zorder::kSelection);
         selItem_->setVisible(false);
-        // 选区框的编辑事件转发为场景信号，供 MainWindow 写回 Document（视图/场景不认识 Document）。
+        // 选区框的编辑事件转发为场景信号，供 CanvasCoordinator 写回 Document（视图/场景不认识 Document）。
         connect(selItem_, &SelectionRectItem::rectChanged, this, &CanvasScene::selectionEdited);
         // 拖动选区边框开始：转发为场景交互信号，供上层清除标注选中（标注 OBB 手柄随选区拖动消失）。
         connect(selItem_, &SelectionRectItem::dragStarted, this, &CanvasScene::selectionInteractionStarted);
@@ -80,7 +80,7 @@ void CanvasScene::setBaseImage(const QPixmap& preview, const double scaleX, cons
     selItem_->setImageBounds(fullW, fullH);
 
     // 单元点选图元：惰性创建（L3 交互）；仅 L3 显示（updateGrid 时切换）。
-    // 其点选/框选事件同样转发为场景信号，供 MainWindow 写回 Document。
+    // 其点选/框选事件同样转发为场景信号，供 CanvasCoordinator 写回 Document。
     if (!pickerItem_) {
         pickerItem_ = new CellPickerItem();
         addItem(pickerItem_);
@@ -120,7 +120,7 @@ void CanvasScene::setMasksVisible(const bool visible) {
 
 // 依 Core 切割线集合，判定选区四条边各自是否有「内部贯穿切割线」，把结果下发给选区框：
 // 选区框据此把这些边延伸绘制为橙色贯穿线，并允许直接抓取拖动（拖动该边＝移动切割线）。
-// 单矩形/十字(RECT)四边皆有；横带(HLINE)仅上/下；竖带(VLINE)仅左/右；落在图像边界(0/W/H)
+// 单矩形/十字(Cross)四边皆有；横带(Hline)仅上/下；竖带(Vline)仅左/右；落在图像边界(0/W/H)
 // 的线不算「内部切割线」（此时选区边即图像边，内部无切割可言），对应边不延伸。
 void CanvasScene::updateCutLines(const engine::CutLineSet& lines, const engine::RectRegion& rect) const {
     if (!selItem_ || imgW_ <= 0 || imgH_ <= 0) { clearCutLines(); return; }
@@ -149,7 +149,7 @@ QRectF CanvasScene::contentBounds() const {
 
 // 场景矩形 = 内容边界 + 外圈余量（余量由视图按「视口各边百分比 / 当前缩放」折算为场景单位注入，视口口径、与图幅
 //   无关，见 CanvasView::updateScrollMargins）：横向按视口宽、纵向按视口高，故左右与上下可不等量。内容边界由
-//   updateGrid 按 Core 单元并入：补白(PAD) 的残缺单元伸出原图时必须**完整**进滚动范围（夹住它 → 放大后可滚进来的
+//   updateGrid 按 Core 单元并入：补白(Pad) 的残缺单元伸出原图时必须**完整**进滚动范围（夹住它 → 放大后可滚进来的
 //   部分越来越小、边界块永远看不全），余量再包在这层内容外面。
 // 无图（尺寸 0）时不改场景矩形：空矩形会让 QGraphicsScene 退回 itemsBoundingRect 自动口径。
 void CanvasScene::applySceneExtent() {
@@ -180,10 +180,10 @@ void CanvasScene::updateGrid(const engine::Grid& grid, const bool show) {
         pickerItem_->setVisible(show && selectionVisible_);
     }
 
-    // 内容边界 = 各单元区域的并集（场景坐标）。补白(PAD) 策略下 Core 会保留越界单元值（`layoutAxis` 不夹取
+    // 内容边界 = 各单元区域的并集（场景坐标）。补白(Pad) 策略下 Core 会保留越界单元值（`layoutAxis` 不夹取
     //   partial 单元，虚拟起点还可落在负坐标），那截越界必须**完整**进滚动范围，否则放大后可滚进来的部分
-    //   越来越小、边界块永远看不全。余量策略不传进场景（三种策略共用同一套相位 `virtualStart`）：DISCARD
-    //   （跳过残缺单元）/ KEEP_PARTIAL（已夹回图内）的单元恒在原图内 → 并集就是原图，与其余模式同口径。
+    //   越来越小、边界块永远看不全。余量策略不传进场景（三种策略共用同一套相位 `virtualStart`）：Discard
+    //   （跳过残缺单元）/ KeepPartial（已夹回图内）的单元恒在原图内 → 并集就是原图，与其余模式同口径。
     QRectF bounds;
     if (show) {
         for (const engine::Cell& c : grid.cells())
@@ -257,7 +257,7 @@ void CanvasScene::setBaseVisible(const bool on) const {
 
 // 网格线图层显隐：仅置位门控标志（不直接切 gridLayer_ 可见性）。
 // 说明：GridLayer 被 L3 灰色网格与 L2 橙色切割线共用，直接 setVisible 会与 cutLinesVisible_ 相互覆盖；
-// 故只置标志，由 MainWindow 切换后调 refreshPreview 重建落地（updateGrid/updateMultiRectCutLines 依各自门控）。
+// 故只置标志，由 AnnotationCoordinator 切换后调 PreviewController::refreshPreview 重建落地（updateGrid/updateMultiRectCutLines 依各自门控）。
 void CanvasScene::setGridVisible(const bool on) {
     gridVisible_ = on;
 }
@@ -318,7 +318,7 @@ void CanvasScene::updateImageLayers(const std::vector<canvas::ImageLayer>& layer
         if (!it) {
             it = new ImageLayerItem();
             it->setLayerId(l.id);
-            // 拾取按下 / 拖拽平移转发为场景信号，交 MainWindow 写回 Document（场景不认识 Document）。
+            // 拾取按下 / 拖拽平移转发为场景信号，交 CanvasCoordinator 写回 Document（场景不认识 Document）。
             connect(it, &ImageLayerItem::pressed, this, &CanvasScene::imageLayerPressed);
             connect(it, &ImageLayerItem::moved, this, &CanvasScene::imageLayerMoved);
             // 新图元交互态：拾取模式开即为循环选层候选；z 恒用常规落位层序（拾取不靠抬层）。
@@ -349,7 +349,7 @@ void CanvasScene::setImageLayerSelection(const std::optional<int> selectedId) {
     }
 }
 
-// 图层拾取模式：切换全部落位框的可拾取标志（不再动 z 序——拾取纯由四态模式 + 场景级循环选层，与叠放先后无关）。
+// 图层拾取模式：切换全部落位框的可拾取标志（不动 z 序——拾取纯由四态模式 + 场景级循环选层，与叠放先后无关）。
 // 开→落位框登记为拾取候选（点选由本场景 mousePressEvent 循环路由，非 z 序自动抓取）；
 // 关→全部退出候选（仅示意），并放弃进行中的场景级拖拽、复位循环态（重入从最顶层重新开始）。
 void CanvasScene::setImagePickMode(const bool on) {

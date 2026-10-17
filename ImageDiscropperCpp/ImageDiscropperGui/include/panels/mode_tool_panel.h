@@ -1,9 +1,9 @@
 // ============================================================================
-// 文件：panels/tool_panel.h
+// 文件：panels/mode_tool_panel.h
 // 作用：左侧「交互模式」面板——顶部为画布四态互斥单选（框选 / 图片拾取 / 标注选取 / 标注绘制），
 //       仅「标注绘制」态在下方展开各形状 + 多线段 + 文字 + 画笔的子行按钮组。面板只采集用户意图
-//       并发 modeChanged(CanvasMode) / toolSelected(AnnoTool)，真正的模式落地 / 切工具由 MainWindow
-//       写回 CanvasView / CanvasScene / AnnotationBridge（CONTRIBUTING.md「分层纪律」：面板不含几何 / 光栅化）。
+//       并发 modeChanged(CanvasMode) / toolSelected(AnnoTool)，真正的模式落地由 CanvasCoordinator 写回
+//       CanvasView / CanvasScene、切工具由 AnnotationCoordinator 写回 AnnotationBridge（CONTRIBUTING.md「分层纪律」：面板不含几何 / 光栅化）。
 // 分块依据：modeGroup_ 与 toolGroup_ 两个互斥 QButtonGroup 分别承载「模式」与「形状工具」，
 //           模式 id = CanvasMode 整数值、工具 id = AnnoTool 整数值，避免额外映射表；
 //           shapeArea_ 依当前模式显隐；syncFromModel 从标注模型反向同步形状选中态（blockSignals 防回环）。
@@ -22,12 +22,12 @@ class QWidget;
 namespace idc::gui {
 
 // ---------------------------------------------------------------------------
-// ToolPanel：交互模式（四态互斥）+ 标注绘制形状子行。
+// ModeToolPanel：交互模式（四态互斥）+ 标注绘制形状子行。
 // ---------------------------------------------------------------------------
-class ToolPanel : public QWidget {
+class ModeToolPanel : public QWidget {
     Q_OBJECT
 public:
-    explicit ToolPanel(QWidget* parent = nullptr);
+    explicit ModeToolPanel(QWidget* parent = nullptr);
 
     // 绑定标注模型（仅用于反向同步当前形状工具选中态）。
     void setModel(AnnotationBridge* model);

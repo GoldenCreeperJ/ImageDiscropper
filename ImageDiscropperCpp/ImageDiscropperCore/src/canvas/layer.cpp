@@ -60,7 +60,7 @@ core::Image composeIntoBox(const ImageLayer& layer, const core::Image& src);
 
 // 物化单层「整层位图」（已组装·已缩放·已预处理·未落位）：先取源（配方按 transform 目标尺寸现算 / 文件用注入的解码像素 / 空→空），
 // 启用两级落位时把源合成进带 boxBackdrop 底色的图层框，再按 transform 缩放到目标尺寸，**最后**对整层跑 preprocess。
-//   preprocess 置于组装/缩放之后是其语义关键：色彩连图层框底色一起变、几何（旋转/翻转/resize）改变最终落位足迹（不再被 scaleToTarget 拉回旧框）。
+//   preprocess 置于组装/缩放之后是其语义关键：色彩连图层框底色一起变、几何（旋转/翻转/resize）改变最终落位足迹（不被 scaleToTarget 拉回旧框）。
 core::Image materializeLayer(const ImageLayer& layer) {
     core::Image raw;
     switch (layer.sourceKind) {
@@ -111,7 +111,7 @@ core::Image composeIntoBox(const ImageLayer& layer, const core::Image& src) {
     if (bw <= 0 || bh <= 0 || bw > generate::kMaxDimension || bh > generate::kMaxDimension) return src;
     core::Image box = layer.boxBackdrop ? generate::makePattern(bw, bh, *layer.boxBackdrop) : core::Image{};
     if (box.empty()) {
-        box = core::Image(bw, bh, core::ImageFormat::RGBA);
+        box = core::Image(bw, bh, core::ImageFormat::Rgba);
         box.fill(core::Color(0, 0, 0, 0));   // 无底色图案（或 makePattern 失败）→ 透明底
     }
     if (src.empty()) return box;
@@ -136,7 +136,7 @@ core::Image composeIntoBox(const ImageLayer& layer, const core::Image& src) {
     return box;
 }
 
-// 逐像素 alpha 乘子：a' = (a·opacity + 127) / 255（整数四舍五入，与旧 OpacityOp 乘算同口径）。
+// 逐像素 alpha 乘子：a' = (a·opacity + 127) / 255（整数四舍五入，与 composeCanvas 逐层不透明度同口径）。
 core::Color scaleAlpha(const core::Color& c, const int opacity) {
     return core::Color(c.r, c.g, c.b, static_cast<std::uint8_t>((c.a * opacity + 127) / 255));
 }
@@ -147,7 +147,7 @@ core::Color scaleAlpha(const core::Color& c, const int opacity) {
 //   供合成边界（GUI fadedCanvasBase、CLI 底图解出后）施加底图整体不透明度，与 composeCanvas 逐层不透明度同口径。
 void applyAlpha(core::Image& image, const std::uint8_t opacity) {
     if (image.empty() || opacity >= 255) return;
-    if (image.format() != core::ImageFormat::RGBA) return;   // 无 alpha 通道→不改（避免灰度/彩色底格式漂移）
+    if (image.format() != core::ImageFormat::Rgba) return;   // 无 alpha 通道→不改（避免灰度/彩色底格式漂移）
     for (int y = 0; y < image.height(); ++y)
         for (int x = 0; x < image.width(); ++x)
             image.setPixel(x, y, scaleAlpha(image.getPixel(x, y), opacity));
@@ -162,7 +162,7 @@ core::Image composeCanvas(const std::vector<ImageLayer>& layers, const int width
     }
 
     // Image 构造即 data_.assign(...,0) 全零缓冲，RGBA 全零字节 == Color(0,0,0,0)：画布无级背景天然成立，无需再 fill 一遍。
-    core::Image canvas(width, height, core::ImageFormat::RGBA);
+    core::Image canvas(width, height, core::ImageFormat::Rgba);
 
     // 底图（画布基座，input 生态位）：非空则 source-over 铺于 (0,0)，按 w×h 自然裁剪 / 留空。
     // 无 transform、不缩放——它是画布本身，恒在所有叠加层之下。
@@ -241,7 +241,7 @@ core::Image composeCanvas(const std::vector<ImageLayer>& layers, const int width
 
 core::Image composeBase(const ImageLayer& base, const int width, const int height,
                         const std::unordered_map<int, core::Image>* materialized) {
-    // 纯图案底图（Recipe 且无内层落位）：按画布(source)尺寸现算图案，与旧「generate」段口径逐字节一致。
+    // 纯图案底图（Recipe 且无内层落位）：按画布(source)尺寸经 makePattern 现算图案。
     //   不走 materializeLayer（其 Recipe 分支用 transform.width/height 现算，恒等 transform 尺寸为 0 会得空图）。
     if (base.sourceKind == LayerSourceKind::Recipe && base.recipe && !base.hasImagePlacement) {
         core::Image pat = generate::makePattern(width, height, *base.recipe);

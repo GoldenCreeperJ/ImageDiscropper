@@ -1,9 +1,8 @@
 // ============================================================================
 // 文件：include/geometry/shapes.h
 // 作用：定义具体形状类型（EllipseShape / PolygonShape / PathShape / TextShape），
-//       提供统一的 Shape 抽象接口。
-//       直线 / 折线 / 矩形类（含原圆角矩形 / 圆角正方形）均已并入 PolygonShape，
-//       靠 cornerRadius 统一表达转角圆角；PathShape 仅承载画笔自由路径。
+//       提供统一的 Shape 抽象接口。直线 / 折线 / 矩形类统一由 PolygonShape
+//       承载，靠 cornerRadius 统一表达转角圆角；PathShape 仅承载画笔自由路径。
 // ============================================================================
 #pragma once
 
@@ -34,7 +33,7 @@ public:
     // 计算包围盒。
     virtual BoundingBox bounds() const = 0;
 
-    // 判断点是否位于形状内部（对开放形状如 LINE 返回 false）。
+    // 判断点是否位于形状内部（对开放形状如 Line 返回 false）。
     virtual bool contains(const core::Point2D& p) const = 0;
 
     // 深拷贝。
@@ -44,7 +43,7 @@ public:
     virtual std::vector<core::Point2D> controlPoints() const = 0;
 
     // 就地平移形状：各子类偏移自身存储的参数（而非「展平为 Path 再重建」），
-    // 从而**保留具体类型与参数化身份**——避免标注移动后类型退化为通用 PATH
+    // 从而**保留具体类型与参数化身份**——避免标注移动后类型退化为通用 Path
     // （退化会导致 TEXT 丢失字形渲染、参数化元数据与控制点语义丢失）。
     virtual void translate(double dx, double dy) = 0;
 
@@ -130,7 +129,7 @@ public:
     // 配置还原专用：整体恢复此前序列化出的变换状态（矩阵 + 累积 OBB 参数）。
     // 为什么不用 applyObbTransform 重放：变换途中若发生过 translateWorld（平移只改几何、不动矩阵），
     // 单一 (sx,sy,deg) 无法复现原复合矩阵的平移分量；故保存时连同矩阵一起存、加载时一次性写回，
-    // 四个成员同进同出、不破坏「obb 参数与矩阵同步」不变式（仅供 engine_config_json 加载路径调用）。
+    // 四个成员同进同出、不破坏「obb 参数与矩阵同步」不变式（仅供 annotations 段加载路径 annotation_json 调用）。
     void restoreTransformState(const AffineTransform& matrix, const double sx, const double sy, const double deg) {
         xform_ = matrix;
         obbScaleX_ = sx;
@@ -162,7 +161,7 @@ protected:
 class EllipseShape : public Shape {
 public:
     EllipseShape(double x, double y, double w, double h,
-                 ShapeType type = ShapeType::ELLIPSE);
+                 ShapeType type = ShapeType::Ellipse);
 
     ShapeType type() const override { return type_; }
     Path toPath() const override; // 使用四段三次贝塞尔近似
@@ -184,8 +183,8 @@ private:
 
 // ---------------------------------------------------------------------------
 // PolygonShape：任意多边形 / 折线 / 直线
-// 用途：RECTANGLE / SQUARE / RHOMBUS / 各类三角形 / POLYLINE / LINE 等由顶点列表描述的形状。
-//       直线＝2 顶点开放多边形，折线＝多顶点开放多边形，闭合与否由 closed_ 决定。
+// 用途：Rectangle / Square / Rhombus / 各类三角形 / Polyline / Line 等由顶点列表
+//       描述的形状。直线＝2 顶点开放多边形，折线＝多顶点开放多边形，闭合与否由 closed_ 决定。
 // ---------------------------------------------------------------------------
 class PolygonShape : public Shape {
 public:
@@ -218,7 +217,7 @@ private:
 // ---------------------------------------------------------------------------
 // PathShape：自由路径（仅画笔）
 //           直接持有一条 Path（对应 FR-1.3 的画笔 / 自由路径标注）。
-//           直线 / 折线已改由 PolygonShape 表达，本类无转角倒角概念。
+//           直线 / 折线由 PolygonShape 表达，本类无转角倒角概念。
 // ---------------------------------------------------------------------------
 class PathShape : public Shape {
 public:
@@ -250,7 +249,7 @@ class TextShape : public Shape {
 public:
     TextShape(std::string text, double x, double y, double fontSize);
 
-    ShapeType type() const override { return ShapeType::TEXT; }
+    ShapeType type() const override { return ShapeType::Text; }
     Path toPath() const override; // 返回矩形边界路径
     BoundingBox bounds() const override;
     bool contains(const core::Point2D& p) const override;
@@ -260,7 +259,7 @@ public:
 
     const std::string& text() const { return text_; }
     double fontSize() const { return fontSize_; }
-    // 左上锚点坐标（与构造入参一致）：供配置序列化（SPEC §7 annotations 段）读取文字位置。
+    // 左下锚点坐标（文本基线起点，与构造入参一致）：供配置序列化（SPEC §7 annotations 段）读取文字位置。
     double x() const { return x_; }
     double y() const { return y_; }
 

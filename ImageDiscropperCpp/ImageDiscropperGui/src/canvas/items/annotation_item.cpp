@@ -1,9 +1,9 @@
 // ============================================================================
-// 文件：src/canvas/items/annotation_item.cpp
+// 文件：canvas/items/annotation_item.cpp
 // 作用：实现单个标注的矢量渲染与拖动平移（见同名头文件说明）。
 // 分块依据：
 //   1. 几何重建    setAnnotation / rebuildPath —— 由 Core Shape::worldPath 经适配器翻译为 QPainterPath
-//   2. 绘制        boundingRect / shape / paint —— 描边 + 可选填充；TEXT 直接绘字形；选中叠加 OBB 与手柄
+//   2. 绘制        boundingRect / shape / paint —— 描边 + 可选填充；Text 直接绘字形；选中叠加 OBB 与手柄
 //   3. 拖动平移    mousePress/Move/Release —— setPos 实时反馈，释放先复位再发 moveRequested（拖拽安全）
 //   4. 手柄变换    computeObb / hitHandle / begin|updateHandleDrag —— 定向包围盒 8 手柄缩放 + 旋转手柄，
 //                  拖拽中仅本地矢量预览（Core obbPreviewTransform），释放发 transformRequested（拖拽安全）
@@ -82,7 +82,7 @@ QRectF AnnotationItem::boundingRect() const { return bounds_; }
 QPainterPath AnnotationItem::shape() const {
     QPainterPath s;
     if (!path_.isEmpty()) {
-        if (ann_.style.fill && ann_.shape->type() != geometry::ShapeType::LINE) {
+        if (ann_.style.fill && ann_.shape->type() != geometry::ShapeType::Line) {
             s = path_;
         } else {
             QPainterPathStroker stroker;
@@ -106,7 +106,7 @@ QPainterPath AnnotationItem::shape() const {
 std::optional<core::Color> AnnotationItem::colorAtScene(const QPointF& scenePos) const {
     if (!ann_.shape) return std::nullopt;
     const QPointF local = mapFromScene(scenePos);
-    if (ann_.shape->type() == geometry::ShapeType::TEXT)
+    if (ann_.shape->type() == geometry::ShapeType::Text)
         return !path_.isEmpty() && path_.boundingRect().contains(local)
                    ? std::optional(ann_.style.color) : std::nullopt;
     if (path_.isEmpty()) return std::nullopt;
@@ -120,7 +120,7 @@ std::optional<core::Color> AnnotationItem::colorAtScene(const QPointF& scenePos)
 }
 
 void AnnotationItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) {
-    const bool isText = ann_.shape && ann_.shape->type() == geometry::ShapeType::TEXT;
+    const bool isText = ann_.shape && ann_.shape->type() == geometry::ShapeType::Text;
     if (path_.isEmpty() && !isText) return;
     painter->setRenderHint(QPainter::Antialiasing, true);
 
@@ -236,7 +236,7 @@ void AnnotationItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     event->accept();
 }
 
-// 释放：手柄拖拽——复位预览态后发 transformRequested（拖拽安全：此后不再触碰 this，上层改 Core 后回灌）；
+// 释放：手柄拖拽——复位预览态后发 transformRequested（拖拽安全：此后不触碰 this，上层改 Core 后回灌）；
 // 平移——先复位 pos（几何由模型重建后回灌）再发 moveRequested。
 void AnnotationItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
     if (!dragging_) { event->ignore(); return; }

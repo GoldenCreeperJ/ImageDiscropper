@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：app/key_router.cpp
+// 文件：app/controllers/key_router.cpp
 // 作用：实现 KeyRouter 的键表分派与焦点守卫（见同名头文件说明）。
 // ============================================================================
 #include "app/controllers/key_router.h"
@@ -26,13 +26,13 @@ bool KeyRouter::focusInTextInput() {
 }
 
 // 单键快捷键（见 src/app/README.md「快捷键」）：1/2/3 切模式、K/R 切极性、Delete/Backspace 删除
-// 选中标注、Esc 清除选区。这些命令不注册为 QAction 快捷键（曾与画布绘制态「Esc 收笔」在快捷键表互相
-// 抢占——窗口级快捷键先于焦点控件 keyPressEvent 消费按键，收笔恒不生效）；改在此分派：绘制态下
+// 选中标注、Esc 清除选区。这些命令不注册为 QAction 快捷键（若注册为窗口级快捷键会先于焦点控件
+// keyPressEvent 消费按键，导致绘制态「Esc 收笔」恒不生效）；改在此分派：绘制态下
 // 按键先落画布视口（CanvasView::keyPressEvent 收笔并消费），普通态才冒泡到此处清选区，两条语义互不遮蔽。
-// 键值不再硬编码：把事件键序（key|modifiers）交给 KeyBinding 表匹配 Route 类命令的生效序列，
-// 命中回 id——用户可重绑（含改裸键/加修饰），默认下与旧 case 逐条等价；守卫与 Esc 上游收笔顺序完全不动。
+// 键值经 KeyBinding 表分派：把事件键序（key|modifiers）交给表匹配 Route 类命令的生效序列，
+// 命中回 id——用户可重绑（含改裸键/加修饰），默认下逐条等价；守卫与 Esc 上游收笔顺序完全不动。
 bool KeyRouter::handleKeyPress(MainWindow* w, QKeyEvent* event) {
-    if (focusInTextInput()) return false;   // 焦点在数值/文本输入控件：放行单键（NFR-5）。
+    if (focusInTextInput()) return false;   // 焦点在数值/文本输入控件：放行单键（SPEC §8.2「焦点守卫」）。
     const auto id = KeyBindings::instance().matchRoute(event->key(), event->modifiers());
     if (!id) return false;
     switch (*id) {

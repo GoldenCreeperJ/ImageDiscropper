@@ -12,8 +12,8 @@
 |------------------------------------|------------------------------------------------------------------|
 | `canvas_coordinator.cpp`           | 画布四态落地 `applyCanvasMode` 与选区/单元交互写回编排                            |
 | `session_controller.cpp`           | 会话生命周期编排与图层编辑面板接线（打开/新建/加层/清空/重置）                                |
-| `export_controller.cpp`            | 导出编排（自 `MainWindow::onExport` 迁出）：烧录源组装 → 路径解析 → Core 执行         |
-| `config_controller.cpp`            | 配置存取编排（自 `MainWindow` 迁出）：§7 schema JSON 保存 / 加载复原               |
+| `export_controller.cpp`            | 导出编排：烧录源组装 → 路径解析 → Core 执行                                      |
+| `config_controller.cpp`            | 配置存取编排：§7 schema JSON 保存 / 加载复原                                  |
 | `preprocess_controller.cpp`        | 预处理编排薄壳：独立 resize + 声明式轻操作队列的调度                                  |
 | `preprocess_controller_canvas.cpp` | `PreprocessController` 的**多层画布域**（TU 拆分）：图层会话物化缓存刷新等             |
 | `preprocess_controller_commit.cpp` | `PreprocessController` 的**提交链域**（TU 拆分）：`commitPipeline` 等编辑公共提交 |

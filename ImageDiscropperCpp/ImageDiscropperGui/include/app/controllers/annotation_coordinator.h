@@ -1,12 +1,12 @@
 // ============================================================================
 // 文件：app/controllers/annotation_coordinator.h
-// 作用：AnnotationCoordinator——标注域编排控制器：从 MainWindow 拆出 33 个标注槽
+// 作用：AnnotationCoordinator——标注域编排控制器：承担 38 个标注槽
 //       （面板/画布意图 → AnnotationBridge → 画布/属性面板回显）与绘制手势分派状态机。
 // 分块依据：
-//   - 标注（G-4/G-5）自成一条数据流（工具/手势/属性/图层/烧录），独占一块；
+//   - 标注（SPEC §8.2 标注绘制与编辑）自成一条数据流（工具/手势/属性/图层/烧录），独占一块；
 //   - 只做编排：把意图转交 AnnotationBridge（内部调 Core annotation/geometry），不含几何/光栅化（分层纪律）。
-// 说明：撤销/重做启用态不再由本控制器触碰——MainWindow 把 annoBridge 的 changed/selectionChanged/toolChanged
-//       同源连接到 DocHistory::updateEnabled，替代原三处 updateUndoRedoEnabled() 调用。
+// 说明：撤销/重做启用态由 MainWindow 将 annoBridge 的 changed/selectionChanged/toolChanged
+//       同源连接到 DocHistory::updateEnabled 统一处理，本控制器不触碰。
 // ============================================================================
 #pragma once
 
@@ -22,7 +22,7 @@ namespace idc::gui {
 
 class CanvasScene;
 class CanvasView;
-class ToolPanel;
+class ModeToolPanel;
 class LayerPanel;
 class AnnotationPropPanel;
 class ExportPanel;
@@ -40,7 +40,7 @@ public:
     void setAnnotationBridge(AnnotationBridge* anno);
     void setScene(CanvasScene* scene);
     void setView(CanvasView* view);
-    void setToolPanel(ToolPanel* panel);
+    void setToolPanel(ModeToolPanel* panel);
     void setLayerPanel(LayerPanel* panel);
     void setAnnoPropPanel(AnnotationPropPanel* panel);
     void setExportPanel(ExportPanel* panel);               // burnInChanged + 初始 setBurnInChecked
@@ -58,9 +58,9 @@ public slots:
     void onAnnoDragMove(const QPointF& scenePos) const;    // 画布绘制手势拖拽（两点形状预览/画笔追点/折线橡皮筋）。
     void onAnnoDragEnd(const QPointF& scenePos) const;     // 画布绘制手势释放（提交两点形状/画笔）。
     void onAnnoHover(const QPointF& scenePos) const;       // 绘制态悬停（未按键）：折线实时预览落点与连线。
-    void onAnnoFinish() const;                             // 绘制态右键：收笔折线（提交）或取消当前预览。
-    void onAnnoEscape() const;                             // 绘制态 Esc：收笔折线或取消当前预览。
-    void onAnnotationSelect(const QPointF& scenePos) const;// SELECT 工具下点中标注图元：Core hitTest 选中。
+    void onAnnoFinish() const;                             // 绘制态右键：收笔折线/画笔草稿（提交）或取消当前两点预览。
+    void onAnnoEscape() const;                             // 绘制态 Esc：收笔折线/画笔草稿或取消当前两点预览。
+    void onAnnotationSelect(const QPointF& scenePos) const;// Select 工具下点中标注图元：Core hitTest 选中。
     void onAnnotationMoved(int index, double dx, double dy) const; // 拖动选中标注：Core 平移几何。
     void onAnnotationTransformed(int index, double sx, double sy, double rotateDeg) const; // 拖定向包围盒手柄：Core 缩放/旋转。
     void onAnnotationTransformPreview(int index, double sx, double sy, double rotateDeg) const; // 手柄拖拽中：预览值实时回显到属性面板。
@@ -92,7 +92,7 @@ private:
     AnnotationBridge* anno_{nullptr};
     CanvasScene* scene_{nullptr};
     CanvasView* view_{nullptr};
-    ToolPanel* toolPanel_{nullptr};
+    ModeToolPanel* toolPanel_{nullptr};
     LayerPanel* layerPanel_{nullptr};
     AnnotationPropPanel* annoPropPanel_{nullptr};
     ExportPanel* exportPanel_{nullptr};

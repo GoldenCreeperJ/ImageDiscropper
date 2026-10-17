@@ -20,7 +20,7 @@
 namespace idc::gui {
 
 // 将 Core 的 geometry::Path 逐段翻译为 QPainterPath：
-// MOVE_TO→moveTo、LINE_TO→lineTo、QUAD_TO→quadTo、CUBIC_TO→cubicTo、CLOSE→closeSubpath。
+// MoveTo→moveTo、LineTo→lineTo、QuadTo→quadTo、CubicTo→cubicTo、Close→closeSubpath。
 QPainterPath toQPainterPath(const geometry::Path& path);
 
 // core::Color（RGBA 8 位）→ QColor。

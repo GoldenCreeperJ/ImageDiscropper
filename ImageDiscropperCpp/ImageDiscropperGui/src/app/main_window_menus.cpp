@@ -1,9 +1,9 @@
 // ============================================================================
 // 文件：app/main_window_menus.cpp
-// 作用：实现 MainWindowUi::buildMenus（自 main_window_ui.cpp 拆出独立翻译单元）。
-//       菜单栏装配：文件 / 编辑 / 模式 / 图像 / 图层 / 标注 / 视图 / 帮助（含帮助/关于正文）。
-// 分块依据：buildMenus 独占约 400 行且与中央区/工具栏/状态栏装配及 syncUi 无共享状态，
-//           独立成件使 main_window_ui.cpp 保持「装配 + 同步」的单一关注点（CONTRIBUTING.md「分层纪律」）。
+// 作用：实现 MainWindowUi::buildMenus（独立翻译单元，与 main_window_ui.cpp 分离）。
+//       菜单栏装配：文件 / 编辑 / 模式 / 预处理 / 图片 / 标注 / 视图 / 帮助（含帮助/关于正文）。
+// 分块依据：菜单装配（buildMenus 及其 8 个域 helper）占本 TU ~560 行，与中央区/工具栏/状态栏装配及 syncUi 无共享状态，
+//           独立成件使 main_window_ui.cpp 保持「装配 + 同步」的单一关注点（CONTRIBUTING.md「分层纪律）。
 // 说明：所有 connect 的接收者/上下文均为 w（friend 权限连接私有槽/控制器成员）；lambda 捕获 w 而非 this。
 // ============================================================================
 #include "app/main_window_ui.h"
@@ -33,8 +33,8 @@
 #include "generate/pattern.h"
 #include "panels/export_panel.h"
 #include "panels/layer_panel.h"
-#include "panels/tool_panel.h"
-#include "util/scrollable_dialog.h"   // showScrollableMessage：使用说明 / 关于长文本改可滚动信息框（item 4）
+#include "panels/mode_tool_panel.h"
+#include "util/scrollable_dialog.h"   // showScrollableMessage：使用说明 / 关于长文本改可滚动信息框
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 #include "i18n/retranslate.h"
@@ -74,7 +74,7 @@ QMenu* bindAddMenu(i18n::Retranslator& r, QMenuBar* parent, const i18n::TextRef&
 }
 } // namespace
 
-// 装配菜单栏：文件 / 编辑 / 模式 / 图像 / 图层 / 标注 / 视图 / 帮助。
+// 装配菜单栏：文件 / 编辑 / 模式 / 预处理 / 图片 / 标注 / 视图 / 帮助。
 // 菜单项文字、悬停说明与帮助正文均取 i18n/gui_texts.h（texts::menu / texts::tooltip / texts::msg）——
 // 桌面菜单与移动「更多」菜单同源，改一条即两处同时变。
 
@@ -184,7 +184,7 @@ void MainWindowUi::buildEditMenu(MainWindow* w, QMenuBar* bar) {
     i18n::bindToolTip(w->retranslator_, w->aRedo_, IDC_GT(tooltip, kRedo));
     QObject::connect(w->aRedo_, &QAction::triggered, w, &MainWindow::onRedo);
     mEdit->addSeparator();
-    // Esc 不注册为动作快捷键（会与画布绘制态「Esc 收笔」在快捷键表互相抢占），改由 MainWindow::keyPressEvent 分派。
+    // Esc 不注册为动作快捷键（会与画布绘制态「Esc 收笔」在快捷键表互相抢占），由 MainWindow::keyPressEvent 分派。
     QAction* aClear = bindAddAction(w->retranslator_, mEdit, IDC_GT(menu, kEditClearSel));
     i18n::bindToolTip(w->retranslator_, aClear, IDC_GT(tooltip, kClearSelection));
     QObject::connect(aClear, &QAction::triggered, w, [w] { w->canvas_->onClearCut(); });
@@ -271,9 +271,9 @@ void MainWindowUi::buildModeMenu(MainWindow* w, QMenuBar* bar) {
         a->setCheckable(true);
         mL1->addAction(a);
     }
-    QObject::connect(w->aL1Rect_, &QAction::triggered, w, [w] { w->doc_.setL1Shape(L1Shape::RECT); });
-    QObject::connect(w->aL1HBand_, &QAction::triggered, w, [w] { w->doc_.setL1Shape(L1Shape::HBAND); });
-    QObject::connect(w->aL1VBand_, &QAction::triggered, w, [w] { w->doc_.setL1Shape(L1Shape::VBAND); });
+    QObject::connect(w->aL1Rect_, &QAction::triggered, w, [w] { w->doc_.setL1Shape(L1Shape::Rect); });
+    QObject::connect(w->aL1HBand_, &QAction::triggered, w, [w] { w->doc_.setL1Shape(L1Shape::Hband); });
+    QObject::connect(w->aL1VBand_, &QAction::triggered, w, [w] { w->doc_.setL1Shape(L1Shape::Vband); });
     QMenu* mL2 = bindAddMenu(w->retranslator_, mMode, IDC_GT(menu, kL2MethodSub));
     w->mL2Sub_ = mL2;
     auto* l2Group = new QActionGroup(w);
@@ -286,10 +286,10 @@ void MainWindowUi::buildModeMenu(MainWindow* w, QMenuBar* bar) {
         a->setCheckable(true);
         mL2->addAction(a);
     }
-    QObject::connect(w->aL2Cross_, &QAction::triggered, w, [w] { w->doc_.setL2Sub(L2Sub::CROSS); });
-    QObject::connect(w->aL2HLine_, &QAction::triggered, w, [w] { w->doc_.setL2Sub(L2Sub::HLINE); });
-    QObject::connect(w->aL2VLine_, &QAction::triggered, w, [w] { w->doc_.setL2Sub(L2Sub::VLINE); });
-    QObject::connect(w->aL2Multi_, &QAction::triggered, w, [w] { w->doc_.setL2Sub(L2Sub::MULTI_RECT); });
+    QObject::connect(w->aL2Cross_, &QAction::triggered, w, [w] { w->doc_.setL2Sub(L2Sub::Cross); });
+    QObject::connect(w->aL2HLine_, &QAction::triggered, w, [w] { w->doc_.setL2Sub(L2Sub::Hline); });
+    QObject::connect(w->aL2VLine_, &QAction::triggered, w, [w] { w->doc_.setL2Sub(L2Sub::Vline); });
+    QObject::connect(w->aL2Multi_, &QAction::triggered, w, [w] { w->doc_.setL2Sub(L2Sub::MultiRect); });
     QMenu* mSort = bindAddMenu(w->retranslator_, mMode, IDC_GT(menu, kL3SortSub));
     w->mSort_ = mSort;
     auto* sortGroup = new QActionGroup(w);
@@ -301,9 +301,9 @@ void MainWindowUi::buildModeMenu(MainWindow* w, QMenuBar* bar) {
         a->setCheckable(true);
         mSort->addAction(a);
     }
-    QObject::connect(w->aSortRow_, &QAction::triggered, w, [w] { w->doc_.setSortStrategy(engine::SortStrategy::ROW_MAJOR); });
-    QObject::connect(w->aSortCol_, &QAction::triggered, w, [w] { w->doc_.setSortStrategy(engine::SortStrategy::COLUMN_MAJOR); });
-    QObject::connect(w->aSortCustom_, &QAction::triggered, w, [w] { w->doc_.setSortStrategy(engine::SortStrategy::CUSTOM); });
+    QObject::connect(w->aSortRow_, &QAction::triggered, w, [w] { w->doc_.setSortStrategy(engine::SortStrategy::RowMajor); });
+    QObject::connect(w->aSortCol_, &QAction::triggered, w, [w] { w->doc_.setSortStrategy(engine::SortStrategy::ColumnMajor); });
+    QObject::connect(w->aSortCustom_, &QAction::triggered, w, [w] { w->doc_.setSortStrategy(engine::SortStrategy::Custom); });
     mSort->addSeparator();
     w->aSortReverse_ = bindAddAction(w->retranslator_, mSort, IDC_GT(menu, kSortReverse));
     w->aSortReverse_->setCheckable(true);
@@ -319,9 +319,9 @@ void MainWindowUi::buildModeMenu(MainWindow* w, QMenuBar* bar) {
     auto* remGroup = new QActionGroup(w);
     remGroup->setExclusive(true);
     const struct { engine::RemainderPolicy policy{}; i18n::TextRef label; } kRems[] = {
-        { engine::RemainderPolicy::DISCARD, IDC_GT(menu, kRemainderDiscard) },
-        { engine::RemainderPolicy::KEEP_PARTIAL, IDC_GT(menu, kRemainderKeep) },
-        { engine::RemainderPolicy::PAD, IDC_GT(menu, kRemainderPad) },
+        { engine::RemainderPolicy::Discard, IDC_GT(menu, kRemainderDiscard) },
+        { engine::RemainderPolicy::KeepPartial, IDC_GT(menu, kRemainderKeep) },
+        { engine::RemainderPolicy::Pad, IDC_GT(menu, kRemainderPad) },
     };
     w->remainderActions_.resize(3, nullptr);
     for (const auto&[policy, label] : kRems) {
@@ -334,27 +334,27 @@ void MainWindowUi::buildModeMenu(MainWindow* w, QMenuBar* bar) {
 
 }
 
-void MainWindowUi::buildImageMenu(MainWindow* w, QMenuBar* bar) {
-    // ---- 图像（预处理 FR-1：旋转/翻转/黑白/反色/重置；完整控件见右侧「预处理」页）----
-    QMenu* mImage = bindAddMenu(w->retranslator_, bar, IDC_GT(menu, kMenuPreprocess));
-    QAction* aRotL = bindAddAction(w->retranslator_, mImage, IDC_GT(menu, kRotLeft90));
+void MainWindowUi::buildPreprocessMenu(MainWindow* w, QMenuBar* bar) {
+    // ---- 预处理（FR-1：旋转/翻转/黑白/反色/重置；完整控件见右侧「预处理」节）----
+    QMenu* mPreprocess = bindAddMenu(w->retranslator_, bar, IDC_GT(menu, kMenuPreprocess));
+    QAction* aRotL = bindAddAction(w->retranslator_, mPreprocess, IDC_GT(menu, kRotLeft90));
     QObject::connect(aRotL, &QAction::triggered, w, [w] { w->preprocess_->onRotate(-90); });
-    QAction* aRotR = bindAddAction(w->retranslator_, mImage, IDC_GT(menu, kRotRight90));
+    QAction* aRotR = bindAddAction(w->retranslator_, mPreprocess, IDC_GT(menu, kRotRight90));
     QObject::connect(aRotR, &QAction::triggered, w, [w] { w->preprocess_->onRotate(90); });
-    QAction* aRot180 = bindAddAction(w->retranslator_, mImage, IDC_GT(menu, kRot180));
+    QAction* aRot180 = bindAddAction(w->retranslator_, mPreprocess, IDC_GT(menu, kRot180));
     QObject::connect(aRot180, &QAction::triggered, w, [w] { w->preprocess_->onRotate(180); });
-    mImage->addSeparator();
-    QAction* aFlipH = bindAddAction(w->retranslator_, mImage, IDC_GT(menu, kFlipHorizontal));
+    mPreprocess->addSeparator();
+    QAction* aFlipH = bindAddAction(w->retranslator_, mPreprocess, IDC_GT(menu, kFlipHorizontal));
     QObject::connect(aFlipH, &QAction::triggered, w, [w] { w->preprocess_->onFlip(true); });
-    QAction* aFlipV = bindAddAction(w->retranslator_, mImage, IDC_GT(menu, kFlipVertical));
+    QAction* aFlipV = bindAddAction(w->retranslator_, mPreprocess, IDC_GT(menu, kFlipVertical));
     QObject::connect(aFlipV, &QAction::triggered, w, [w] { w->preprocess_->onFlip(false); });
-    mImage->addSeparator();
-    w->aGrayMenu_ = bindAddAction(w->retranslator_, mImage, IDC_GT(menu, kGray));
+    mPreprocess->addSeparator();
+    w->aGrayMenu_ = bindAddAction(w->retranslator_, mPreprocess, IDC_GT(menu, kGray));
     QObject::connect(w->aGrayMenu_, &QAction::triggered, w, [w] { w->preprocess_->onGray(); });
     // 按通道反色（7 种常用组合入菜单，任意组合去「预处理」面板复选框）：子菜单项随 preprocessActions_
     // 按有无图像逐项置灰，入口本身另存 mInvert_ 由 syncPanels 整入口置灰（与「色道分离」同款；
     // 灰度图仍可反色，不受灰度智能约束）。
-    QMenu* mInvert = bindAddMenu(w->retranslator_, mImage, IDC_GT(menu, kInvert));
+    QMenu* mInvert = bindAddMenu(w->retranslator_, mPreprocess, IDC_GT(menu, kInvert));
     w->mInvert_ = mInvert;
     struct InvertEntry { i18n::TextRef label; bool r, g, b; };
     const InvertEntry kInverts[] = {
@@ -373,7 +373,7 @@ void MainWindowUi::buildImageMenu(MainWindow* w, QMenuBar* bar) {
     }
     // 色道分离（保留掩码 '1' 保留 / '0' 置零）：常用组合入菜单，任意通道组合去「预处理」面板复选框；
     // 与「黑白」同源置灰（syncPanels：当前预处理目标会话已产出灰度→灰度图无通道可分）。
-    QMenu* mSplit = bindAddMenu(w->retranslator_, mImage, IDC_GT(menu, kChannelSplit));
+    QMenu* mSplit = bindAddMenu(w->retranslator_, mPreprocess, IDC_GT(menu, kChannelSplit));
     w->mSplit_ = mSplit;
     struct SplitEntry { i18n::TextRef label; bool r, g, b; };
     const SplitEntry kSplits[] = {
@@ -389,8 +389,8 @@ void MainWindowUi::buildImageMenu(MainWindow* w, QMenuBar* bar) {
         QObject::connect(a, &QAction::triggered, w, [w, s] { w->preprocess_->onSplit(s.r, s.g, s.b); });
         w->preprocessActions_.push_back(a);
     }
-    mImage->addSeparator();
-    QAction* aResetPre = bindAddAction(w->retranslator_, mImage, IDC_GT(menu, kResetPreprocess));
+    mPreprocess->addSeparator();
+    QAction* aResetPre = bindAddAction(w->retranslator_, mPreprocess, IDC_GT(menu, kResetPreprocess));
     QObject::connect(aResetPre, &QAction::triggered, w, [w] { w->preprocess_->onResetPreprocess(); });
     // 预处理动作集合：无图像时统一置灰（syncPanels 逐项同步；反色/分离子菜单项已逐项入列，
     // 两子菜单入口另由 mInvert_/mSplit_ 整入口置灰；「黑白」「色道分离」另有灰度智能置灰）。
@@ -399,7 +399,7 @@ void MainWindowUi::buildImageMenu(MainWindow* w, QMenuBar* bar) {
 }
 
 void MainWindowUi::buildLayerMenu(MainWindow* w, QMenuBar* bar) {
-    // ---- 图层（多层画布，与预处理拆分——图层栈 CRUD 独立成菜单；显隐开关在视图菜单）----
+    // ---- 图片（多层画布；图层栈 CRUD 独立成菜单；显隐开关在视图菜单）----
     QMenu* mLayers = bindAddMenu(w->retranslator_, bar, IDC_GT(menu, kMenuImage));
     QAction* aAddImageLayer = bindAddAction(w->retranslator_, mLayers, IDC_GT(menu, kAddImageLayer));
     i18n::bindToolTip(w->retranslator_, aAddImageLayer, IDC_GT(tooltip, kAddImageLayer));
@@ -490,7 +490,7 @@ void MainWindowUi::buildLayerMenu(MainWindow* w, QMenuBar* bar) {
 void MainWindowUi::buildAnnoMenu(MainWindow* w, QMenuBar* bar) {
     // ---- 标注：撤销/重做/删除选中/清除全部/属性定位 ----
     // 标注撤销/重做复用 AnnotationEditor 内建条目级会话态；快捷键 Ctrl+Z/Y 已统一交给编辑菜单
-    // （上下文路由：标注上下文时自动转发到此处），故本菜单项不再绑定快捷键，避免冲突。
+    //（上下文路由：标注上下文时自动转发到此处），故本菜单项不绑定快捷键，避免冲突。
     QMenu* mAnno = bindAddMenu(w->retranslator_, bar, IDC_GT(menu, kMenuAnnotation));
     const QAction* aAnnoUndo = bindAddAction(w->retranslator_, mAnno, IDC_GT(menu, kAnnoUndo));
     QObject::connect(aAnnoUndo, &QAction::triggered, w, [w] { w->annotation_->onAnnoUndo(); });
@@ -524,21 +524,21 @@ void MainWindowUi::buildAnnoMenu(MainWindow* w, QMenuBar* bar) {
     QMenu* mTools = bindAddMenu(w->retranslator_, mAnno, IDC_GT(menu, kAnnoTools));
     struct MenuToolEntry { AnnoTool tool{}; i18n::TextRef label; };
     const MenuToolEntry kMenuTools[] = {
-        { AnnoTool::RECT, IDC_GT(label, kToolRect) },
-        { AnnoTool::SQUARE, IDC_GT(label, kToolSquare) },
-        { AnnoTool::RHOMBUS, IDC_GT(label, kToolRhombus) },
-        { AnnoTool::CIRCLE, IDC_GT(label, kToolCircle) },
-        { AnnoTool::ELLIPSE, IDC_GT(label, kToolEllipse) },
-        { AnnoTool::ISOS_TRI, IDC_GT(label, kToolIsoTriangle) },
-        { AnnoTool::EQU_TRI, IDC_GT(label, kToolEquTriangle) },
-        { AnnoTool::RECT_TRI, IDC_GT(label, kToolRightTriangle) },
-        { AnnoTool::EQU_RECT_TRI, IDC_GT(label, kToolIsoRightTri) },
-        { AnnoTool::LINE, IDC_GT(label, kToolLine) },
-        { AnnoTool::POLYLINE, IDC_GT(label, kToolPolyline) },
-        { AnnoTool::TEXT, IDC_GT(label, kToolText) },
-        { AnnoTool::BRUSH, IDC_GT(label, kToolBrush) },
+        { AnnoTool::Rect, IDC_GT(label, kToolRect) },
+        { AnnoTool::Square, IDC_GT(label, kToolSquare) },
+        { AnnoTool::Rhombus, IDC_GT(label, kToolRhombus) },
+        { AnnoTool::Circle, IDC_GT(label, kToolCircle) },
+        { AnnoTool::Ellipse, IDC_GT(label, kToolEllipse) },
+        { AnnoTool::IsosTri, IDC_GT(label, kToolIsoTriangle) },
+        { AnnoTool::EquTri, IDC_GT(label, kToolEquTriangle) },
+        { AnnoTool::RectTri, IDC_GT(label, kToolRightTriangle) },
+        { AnnoTool::EquRectTri, IDC_GT(label, kToolIsoRightTri) },
+        { AnnoTool::Line, IDC_GT(label, kToolLine) },
+        { AnnoTool::Polyline, IDC_GT(label, kToolPolyline) },
+        { AnnoTool::Text, IDC_GT(label, kToolText) },
+        { AnnoTool::Brush, IDC_GT(label, kToolBrush) },
     };
-    w->toolActions_.resize(14, nullptr);   // 按 AnnoTool 枚举序索引（SELECT=0 无菜单项）。
+    w->toolActions_.resize(14, nullptr);   // 按 AnnoTool 枚举序索引（Select=0 无菜单项）。
     auto* toolGroup = new QActionGroup(w);
     toolGroup->setExclusive(true);
     for (const auto&[tool, label] : kMenuTools) {
@@ -599,7 +599,8 @@ void MainWindowUi::buildViewMenu(MainWindow* w, QMenuBar* bar) {
     aSnap->setChecked(CanvasPrefs::instance().snapEnabled());
     i18n::bindToolTip(w->retranslator_, aSnap, IDC_GT(tooltip, kSnap));
     QObject::connect(aSnap, &QAction::toggled, w, [](const bool on) { CanvasPrefs::instance().setSnapEnabled(on); });
-    // 外观/交互：上区六项核心语义色与填充 alpha（Palette 单例），下区画布交互偏好（手柄/边缘余量/缩放/新建默认，CanvasPrefs）；
+    // 外观/交互：QTabWidget 多页采参——配色页（六色 + 三 alpha 写 Palette，含深浅色主题写 UiPrefs）、其他页
+    // （画布交互写 CanvasPrefs + 应用语言 + 默认输出文件夹写 UiPrefs）、快捷键页（KeyBindings，桌面方开）；
     // 均 QSettings 应用级持久化，改动即时生效（选区吸附不在此——上面已作可勾选运行时开关）。
     QAction* aAppearance = bindAddAction(w->retranslator_, mView, IDC_GT(menu, kAppearance));
     i18n::bindToolTip(w->retranslator_, aAppearance, IDC_GT(tooltip, kAppearance));
@@ -642,7 +643,7 @@ void MainWindowUi::buildMenus(MainWindow* w) {
     buildFileMenu(w, bar);
     buildEditMenu(w, bar);
     buildModeMenu(w, bar);
-    buildImageMenu(w, bar);
+    buildPreprocessMenu(w, bar);
     buildLayerMenu(w, bar);
     buildAnnoMenu(w, bar);
     buildViewMenu(w, bar);

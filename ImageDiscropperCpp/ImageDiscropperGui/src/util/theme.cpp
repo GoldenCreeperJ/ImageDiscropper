@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：src/util/theme.cpp
+// 文件：util/theme.cpp
 // 作用：theme 命名空间纯函数集实现——Mode ↔ 串互转、深浅解析、QPalette 构造、Fusion 强制 + 灌
 //       palette + 递归 re-polish 应用（见同名头说明）。
 // 分块依据：fromString/toString 是纯映射；resolveDark 是唯一读平台/全局状态的查询；
@@ -102,8 +102,8 @@ QPalette buildPalette(const bool dark) {
         p.setColor(QPalette::Disabled, QPalette::Highlight, shade(highlight, -30));
         p.setColor(QPalette::Disabled, QPalette::HighlightedText, midText);
     } else {
-        // Window 回到标准浅灰 #f0f0f0（浅色 chrome 基线）。菜单复选框的可辨度不再靠压深 Window 来拾高——
-        // 那会连带把整片面板染灰且对菜单无效（菜单底色走 Base）。改由下方 CheckboxOutlineStyle 在风格层接管描边。
+        // Window 取标准浅灰 #f0f0f0（浅色 chrome 基线）。菜单复选框的可辨度不靠压深 Window 来拾高——
+        // 那会连带把整片面板染灰且对菜单无效（菜单底色走 Base），而由下方 CheckboxOutlineStyle 在风格层接管描边。
         constexpr QColor window(0xf0, 0xf0, 0xf0);
         constexpr QColor base(0xff, 0xff, 0xff);
         constexpr QColor text(0x00, 0x00, 0x00);
@@ -183,7 +183,7 @@ void repolishWidget(QWidget* w) {
 
 void apply(const Mode mode) {
     if (const auto* app = qobject_cast<QApplication*>(QCoreApplication::instance()); !app) return;   // 无 QApplication（纯 CLI / 尚未构造）：静默跳过，不触全局状态。
-    // 强制 Fusion 仅首次（包一层 CheckboxOutlineStyle 专治菜单复选框描边）：之后换调色板不再重建风格
+    // 强制 Fusion 仅首次（包一层 CheckboxOutlineStyle 专治菜单复选框描边）：换调色板不重建风格
     // （重抛光由下方递归完成）。QProxyStyle 接管传入的 Fusion 实例所有权，setStyle 再接管 proxy 所有权。
     static bool s_fusionApplied = false;
     if (!s_fusionApplied) {

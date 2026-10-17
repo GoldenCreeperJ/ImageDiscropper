@@ -18,10 +18,10 @@
 1. **已构建 `idc`**：在仓库根用 CLion（或 `cmake -S . -B build && cmake --build build`）构建后，
    可执行文件位于 `build/bin/idc`（Windows 为 `idc.exe`）。脚本会自动在常见构建输出目录中查找；
    也可用环境变量显式指定：`IDC=/path/to/idc bash l1_extract.sh`。
-2. **示例图片 `examples/sample.png`**：脚本硬编码以本目录下的 `sample.png` 为输入。
-   仓库当前**未提交**该图片，运行前请自备一张放到 `examples/sample.png`：
+2. **示例图片 `assets/sample.png`**：脚本以 `${SCRIPT_DIR}/../../../assets/sample.png`
+   （examples 上溯三级目录的 `assets/`）为输入；图片缺失时脚本以退出码 3 报错：
    - 建议尺寸 **640×480**（脚本内坐标按此设计；更小可能触发坐标越界 → 退出码 1/2）。
-   - 任意来源的 PNG 均可；也可用 Core 的 `demo` 可执行程序生成一张测试图后重命名为 `sample.png`。
+   - 任意来源的 PNG 均可；也可用 Core 的 `demo` 可执行程序生成一张测试图后放到该路径。
 
 ## 运行方式（Git Bash / Linux / macOS）
 

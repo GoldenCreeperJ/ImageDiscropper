@@ -20,16 +20,16 @@ namespace idc::engine {
 // SortStrategy：排序策略（FR-L3.5）。
 // ---------------------------------------------------------------------------
 enum class SortStrategy {
-    ROW_MAJOR,     // 横优先：逐行编号
-    COLUMN_MAJOR,  // 竖优先：逐列编号
-    CUSTOM,        // 自定义：点选顺序即序号，支持拖拽调序
+    RowMajor,     // 横优先：逐行编号
+    ColumnMajor,  // 竖优先：逐列编号
+    Custom,       // 自定义：点选顺序即序号，支持拖拽调序
 };
 
 // ---------------------------------------------------------------------------
-// SequenceParams：排序参数。reverse / snake 可叠加在 ROW_MAJOR / COLUMN_MAJOR 上。
+// SequenceParams：排序参数。reverse / snake 可叠加在 RowMajor / ColumnMajor 上。
 // ---------------------------------------------------------------------------
 struct SequenceParams {
-    SortStrategy strategy{SortStrategy::ROW_MAJOR};
+    SortStrategy strategy{SortStrategy::RowMajor};
     bool reverse{false};  // 是否整体逆序
     bool snake{false};    // 是否蛇形（隔行/隔列反向）
 };
@@ -44,7 +44,7 @@ public:
     void build(std::size_t cellCount, std::size_t cols,
                std::size_t rows, const SequenceParams& params);
 
-    // 直接设置自定义序列（CUSTOM 策略 / 拖拽调序结果）。
+    // 直接设置自定义序列（Custom 策略 / 拖拽调序结果）。
     void setCustom(std::vector<int> order) { order_ = std::move(order); }
 
     // 只读访问序列。

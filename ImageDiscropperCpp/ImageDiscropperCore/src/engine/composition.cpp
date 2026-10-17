@@ -120,7 +120,7 @@ bool isCollapsible(const Selection& selection, const Grid& grid) {
 }
 
 // 依据序列与布局把保留块合成为输出描述（阶段⑤）。
-// 三种输出：SEPARATE（多图分离）/ MERGED+COLLAPSE（坍缩）/ MERGED+REARRANGE（重排）。
+// 三种输出：Separate（多图分离）/ Merged+Collapse（坍缩）/ Merged+Rearrange（重排）。
 Composition compose(const RegionSet& kept, const Sequence& sequence,
                     const CompositionParams& params) {
     Composition comp;
@@ -134,7 +134,7 @@ Composition compose(const RegionSet& kept, const Sequence& sequence,
 
     // ---- 分离模式：每块独立成图，dest 从各自 (0,0) 起，无统一画布。----
     // 按 sequence 排序，落盘顺序即排序结果。
-    if (params.mode == EmitMode::SEPARATE) {
+    if (params.mode == EmitMode::Separate) {
         comp.canvasWidth = 0;
         comp.canvasHeight = 0;
         const std::vector<const Fragment*> ordered = orderBySequence(frags, sequence);
@@ -152,7 +152,7 @@ Composition compose(const RegionSet& kept, const Sequence& sequence,
     }
 
     // ---- 坍缩合并（SPEC §4.2）：由 kept 区域的 x/y 投影并集推导保留列/行区间。----
-    if (params.layout == MergeLayout::COLLAPSE) {
+    if (params.layout == MergeLayout::Collapse) {
         std::vector<std::pair<int, int>> xs, ys;
         xs.reserve(frags.size());
         ys.reserve(frags.size());
@@ -207,10 +207,10 @@ Composition compose(const RegionSet& kept, const Sequence& sequence,
     const std::vector<const Fragment*> ordered = orderBySequence(frags, sequence);
 
     // 输出画布填充路径：由 mergeOrder（行/列优先 + 蛇形 + 倒序）在 cols×rows 上生成「槽位访问序」。
-    // 复用 Sequence::build 的同一套 row/column-major + snake + reverse 逻辑（CUSTOM 无意义，按 ROW_MAJOR）。
+    // 复用 Sequence::build 的同一套 row/column-major + snake + reverse 逻辑（Custom 无意义，按 RowMajor）。
     // slots[k] = 第 k 个被访问的输出槽线性序号（r*cols+c）；第 k 个块落入 slots[k]。
     const SortStrategy fillStrategy =
-        params.mergeOrder.strategy == SortStrategy::CUSTOM ? SortStrategy::ROW_MAJOR
+        params.mergeOrder.strategy == SortStrategy::Custom ? SortStrategy::RowMajor
                                                              : params.mergeOrder.strategy;
     Sequence fill;
     fill.build(static_cast<std::size_t>(cols) * static_cast<std::size_t>(rows),

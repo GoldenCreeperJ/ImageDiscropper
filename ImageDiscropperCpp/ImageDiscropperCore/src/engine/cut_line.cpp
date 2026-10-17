@@ -34,7 +34,7 @@ CutLineSet generateCutLines(const CutConfig& cut, const SourceInfo& source) {
     const int H = source.height;
 
     switch (cut.generator) {
-        case CutGenerator::RECT: {
+        case CutGenerator::Rect: {
             // 单矩形诱导十字切割线：X={0,x1,x2,W}, Y={0,y1,y2,H}（SPEC §3.2/§3.3.2）。
             const RectRegion& r = cut.rect;
             // E-3：x1==x2 退化 → 不产竖线，降级为横线切割；E-1：x1>x2 非法 → 不产竖切割。
@@ -42,17 +42,17 @@ CutLineSet generateCutLines(const CutConfig& cut, const SourceInfo& source) {
             if (r.top < r.bottom) { lines.ys.push_back(r.top); lines.ys.push_back(r.bottom); }
             break;
         }
-        case CutGenerator::HORIZONTAL_LINE: {
+        case CutGenerator::HorizontalLine: {
             // 仅两条横线（横带保留/剔除）：Y={0,y1,y2,H}，X 保持 {0,W}（SPEC §3.2 横线）。
             if (const RectRegion& r = cut.rect; r.top < r.bottom) { lines.ys.push_back(r.top); lines.ys.push_back(r.bottom); }
             break;
         }
-        case CutGenerator::VERTICAL_LINE: {
+        case CutGenerator::VerticalLine: {
             // 仅两条竖线（竖带保留/剔除）：X={0,x1,x2,W}，Y 保持 {0,H}（SPEC §3.2 竖线）。
             if (const RectRegion& r = cut.rect; r.left < r.right) { lines.xs.push_back(r.left); lines.xs.push_back(r.right); }
             break;
         }
-        case CutGenerator::MULTI_RECT: {
+        case CutGenerator::MultiRect: {
             // 方案 A（SPEC §3.3.4）：k 个矩形各取 x1/x2、y1/y2 汇入线集，删除区为十字带并集，
             // 与单矩形严格同构，保持“按线切割”公理。
             for (const RectRegion& r : cut.rects) {
@@ -61,11 +61,11 @@ CutLineSet generateCutLines(const CutConfig& cut, const SourceInfo& source) {
             }
             break;
         }
-        case CutGenerator::GRID: {
+        case CutGenerator::Grid: {
             // 参数化网格（L3 / SPEC §3.4.3）：以基准点为相位锚、单元尺寸为周期，双向生成
             // 贯穿全图的切割线。切割线是“贯穿全图的直线”，故只产线位置（不产单元区间、无间距）；
             // 虚拟起点由 originX % cellWidth 倒推到 (-cw,0]，负值经 normalizeCutLines 裁剪到 0。
-            // 注：runEngine 对 GRID 直接走 Grid::build（处理余量策略），此处产线供
+            // 注：runEngine 对 Grid 直接走 Grid::build（处理余量策略），此处产线供
             //     UI 显示切割线或一致性校验之用。
             const GridParams& g = cut.grid;
             if (g.cellWidth > 0) {

@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：src/panels/layer_panel.cpp
+// 文件：panels/layer_panel.cpp
 // 作用：实现图层面板的构建与模型反向同步（见同名头文件说明）。
 // 分块依据：一个「图层」分组内按画布 z 序排列各图层显示开关（底图 / 图片图层 / 标注 / 遮罩 /
 //           网格线 / 切割线 / 选取边框 / 单元编号），一行一开关；复选框 toggled 直接转发为面板信号，
@@ -44,13 +44,13 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     baseVisible_ = addToggle(IDC_GT(label, kShowBaseCheck), IDC_GT(tooltip, kLayerShowBase));
 
     // 图片图层：所有图片合成的单一层，一个「显示」开关整体控制其显隐；行位于底图与标注之间（z 序：底图 < 图片图层 < 标注）。
-    // 常驻显示：无论有无图层该行总在面板中且始终可用（不再依 hasLayers 置灰；无图层时切换无副作用）。
+    // 常驻显示：无论有无图层该行总在面板中且始终可用（不依 hasLayers 置灰；无图层时切换无副作用）。
     imageVisible_ = addToggle(IDC_GT(label, kShowImageCheck), IDC_GT(tooltip, kLayerShowImage));
 
     // 标注层：显示/隐藏（隐藏后标注不可拖动/选中，与选取边框一致）。
     annoVisible_ = addToggle(IDC_GT(label, kShowAnnoCheck), IDC_GT(tooltip, kLayerShowAnno));
 
-    // 遮罩层：保留(绿)/删除(红)预览遮罩（从工具栏/视图菜单迁入，成为正式图层项）。
+    // 遮罩层：保留(绿)/删除(红)预览遮罩（正式图层项）。
     maskVisible_ = addToggle(IDC_GT(label, kShowMaskCheck), IDC_GT(tooltip, kLayerShowMask));
 
     // 网格线层：L3 / L2 多矩形的 Core 诱导网格灰色虚线。
@@ -62,14 +62,14 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     // 选取边框层：橙色选区矩形描边/填充/手柄（含 L2 多矩形轮廓）与 L3 单元选择高亮。
     selectionVisible_ = addToggle(IDC_GT(label, kShowSelectionCheck), IDC_GT(tooltip, kLayerShowSelection));
 
-    // 单元编号层：L3 CUSTOM 序下每个已选单元左上角的序号角标（CellPickerItem 的角标子图层）。
+    // 单元编号层：L3 Custom 序下每个已选单元左上角的序号角标（CellPickerItem 的角标子图层）。
     numberVisible_ = addToggle(IDC_GT(label, kShowNumberCheck), IDC_GT(tooltip, kLayerShowNumber));
 
     root->addWidget(box);
 
     root->addStretch(1);
 
-    // 复选框状态直接转发为面板意图信号（MainWindow 分派到 Scene / Model）。
+    // 复选框状态直接转发为面板意图信号（AnnotationCoordinator / SessionController 分派到 Scene / Model）。
     connect(baseVisible_, &QCheckBox::toggled, this, &LayerPanel::baseVisibilityChanged);
     connect(imageVisible_, &QCheckBox::toggled, this, &LayerPanel::imageLayerVisibilityChanged);
     connect(annoVisible_, &QCheckBox::toggled, this, &LayerPanel::annotationVisibilityChanged);
@@ -90,7 +90,7 @@ void LayerPanel::setDocument(Document* doc) {
     syncFromDocument();
 }
 
-// 从 Document 反向同步「图片图层」整体开关：仅同步勾选态（取整体可见态，blockSignals 防回环）；行常驻可用，不再切换 enabled。
+// 从 Document 反向同步「图片图层」整体开关：仅同步勾选态（取整体可见态，blockSignals 防回环）；行常驻可用，不切换 enabled。
 void LayerPanel::syncFromDocument() const {
     if (!imageVisible_) return;
     const bool visible = !doc_ || doc_->imageLayersVisible();

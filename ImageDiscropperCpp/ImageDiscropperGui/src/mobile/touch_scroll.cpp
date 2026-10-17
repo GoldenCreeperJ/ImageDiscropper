@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：mobile/touch_scroll.cpp
-// 作用：实现移动端滚动接管（见同名头文件说明）；自 mobile_shell_ui.cpp 原封迁出。
+// 作用：实现移动端滚动接管（见同名头文件说明）。
 // ============================================================================
 #include "mobile/touch_scroll.h"
 
@@ -156,10 +156,10 @@ private:
     QPointF total_;
 };
 
-// 移动端全部滚动区（抽屉页/分组/底部条带）统一换装上述过滤器；
-// 桌面预览保持 QScroller 鼠标协调器模式（无触摸事件，不受影响）。
 } // namespace
 
+// 移动端全部滚动区（抽屉页/分组/底部条带）统一换装上述过滤器；
+// 桌面预览保持 QScroller 鼠标协调器模式（无触摸事件，不受影响）。
 void installTouchScroll(QScrollArea* area) {
 #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
     new TouchScrollFilter(area, area); // 父对象持有生命周期，随滚动区销毁。

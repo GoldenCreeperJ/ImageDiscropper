@@ -9,7 +9,7 @@
 //       并返回 ok=true、collapsible=false（L1/L2 直接报错，见 SPEC §4.3）；CLI 据
 //       opt.explicitCollapse 判定是否应显式报错（用户显式要 collapse → 退出码 2 并提示 rearrange）。
 // 常量层：错误 brief / detail / hint 与进度日志一律经门面 IDC_CTR(msg, ...) 取 texts::msg
-//       （include/i18n/cli_texts.h），本文件不再直接写常量名也不写字面量——键由预处理器拼出，
+//       （include/i18n/cli_texts.h），本层不直接写常量名，也不写字面量——键由预处理器拼出，
 //       常量改名即未声明标识符，编译期按落点直接报回（zh-CN 下表为空，输出与改写前逐字相同）。
 //       未提取项：后缀 L".assets"（宽字面量，与 char[] 类型不符；GUI 侧同契约读的是
 //       gui_texts.h ident::kAssetsDirSuffix，两处必须同字）、比较用的 ".."、以及语言中性的
@@ -22,7 +22,7 @@
 #include <optional>
 
 #include "engine/engine_config_json.h" // saveEngineConfig
-#include "engine/image_io.h"           // readImageFile
+#include "io/image_io.h"              // readImageFile
 #include "engine/export.h"             // exportImage（new 命令复用同一落盘通道）
 #include "engine/composition.h"        // Composition / Placement / CompositionParams
 #include "engine/region.h"             // RectRegion（全画布源/目标区域）
@@ -80,8 +80,8 @@ ExitCode loadInputImage(const std::string& path, core::Image& out, const JobOpti
                               "", IDC_CTR(msg, kHintUseInputFile)));
         return ExitCode::ArgError;
     }
-    // Core 解码：支持 PNG/JPEG/BMP/WebP 等；文件不存在 / 非图像 / 不可读均返回 false。
-    if (!engine::readImageFile(path, out)) {
+    // Core 解码：支持 PNG/JPEG/BMP/WebP 等；文件不存在 / 非图像 / 不可读均返回失败（CoreError，operator bool 判假）。
+    if (!io::readImageFile(path, out)) {
         reportError(makeError(ExitCode::InputError, IDC_CTR(msg, kErrReadInput),
                               IDC_CTR(msg, kDetPath) + path,
                               IDC_CTR(msg, kHintInputReadable)));
@@ -159,7 +159,7 @@ ExitCode buildLayerCanvas(const engine::EngineConfig& config, const std::string&
             continue; // 缺文件 → decodedPixels 保持空，composeCanvas 按占位（空图）处理。
         }
         core::Image px;
-        if (!engine::readImageFile(core::pathToUtf8(resolved), px)) {
+        if (!io::readImageFile(core::pathToUtf8(resolved), px)) {
             reportError(makeError(ExitCode::InputError, IDC_CTR(msg, kErrAssetDecode),
                                   IDC_CTR(msg, kDetPath) + core::pathToUtf8(resolved),
                                   IDC_CTR(msg, kHintInputReadable)));
@@ -286,7 +286,7 @@ ExitCode executeJob(engine::EngineConfig& config, const core::Image& image,
     //   几何流水线（runEngine）与落盘（exportImage）必须共用同一张 work——runEngine 内部会按预处理
     //   产出尺寸（rotate ±90 宽高互换 / resize 改尺寸）计算裁剪区域，若仍拿未预处理的原图落盘，
     //   裁剪矩形会套在尺寸/像素都不符的原图上，导致裁错内容或越界。物化后清空 config.preprocess，
-    //   令 runEngine 不再二次应用（与 GUI「引擎收已预处理图 + 空 preprocess」同一约定）。
+    //   令 runEngine 不会二次应用（与 GUI「引擎收已预处理图 + 空 preprocess」同一约定）。
     //   NFR-8：按需物化——无 preprocess 且无标注（最常见用法）时 work 直指入参图，**不做整图深拷贝**。
     std::optional<core::Image> buffer;              // 物化产物缓冲（函数期内存活；重新赋值前须确保旧指向已消费完）。
     const core::Image* work = &image;

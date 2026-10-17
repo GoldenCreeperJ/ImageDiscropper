@@ -18,21 +18,21 @@ namespace idc::engine {
 // 分块依据：一个枚举值 = 一种由切割线诱导出的区域形态。
 // ---------------------------------------------------------------------------
 enum class RegionKind {
-    RECT,             // 中心矩形 Rect(x1, y1, x2, y2)
-    HORIZONTAL_BAND,  // 水平带 HBand(y1, y2) = Rect(0, y1, W, y2)
-    VERTICAL_BAND,    // 垂直带 VBand(x1, x2) = Rect(x1, 0, x2, H)
-    CROSS,            // 十字区域 Cross = HBand ∪ VBand
-    CORNERS,          // 四角区域 I \ Cross
+    Rect,             // 中心矩形 Rect(x1, y1, x2, y2)
+    HorizontalBand,   // 水平带 HBand(y1, y2) = Rect(0, y1, W, y2)
+    VerticalBand,     // 垂直带 VBand(x1, x2) = Rect(x1, 0, x2, H)
+    Cross,            // 十字区域 Cross = HBand ∪ VBand
+    Corners,          // 四角区域 I \ Cross
 };
 
-// 将区域种类转换为可读字符串，便于日志与调试。
+// 将区域种类转换为可读字符串，便于日志与调试（串值固定）。
 inline const char* regionKindName(const RegionKind k) {
     switch (k) {
-        case RegionKind::RECT: return "RECT";
-        case RegionKind::HORIZONTAL_BAND: return "HORIZONTAL_BAND";
-        case RegionKind::VERTICAL_BAND: return "VERTICAL_BAND";
-        case RegionKind::CROSS: return "CROSS";
-        case RegionKind::CORNERS: return "CORNERS";
+        case RegionKind::Rect: return "RECT";
+        case RegionKind::HorizontalBand: return "HORIZONTAL_BAND";
+        case RegionKind::VerticalBand: return "VERTICAL_BAND";
+        case RegionKind::Cross: return "CROSS";
+        case RegionKind::Corners: return "CORNERS";
     }
     return "UNKNOWN";
 }

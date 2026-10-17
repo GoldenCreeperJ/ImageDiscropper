@@ -11,8 +11,8 @@
 // 说明（退出码判定）：
 //   - --load 缺失 / 无值 → 1；文件不存在 / 不可访问 → 3；文件存在但 JSON 解析失败 → 1
 //     （配置内容即“参数”，其格式错误归参数错误；文件层面的缺失 / 不可读归输入文件错误）。
-//     · 标注段非法（含字段缺失 / 类型不符）时，Core 已逐条拼好报因串，本命令原样透传为详情，
-//       不再压成一条通用「无法按配置 JSON schema 解析」；提示相应改为标注语法（kHintAnnoSyntax）。
+//     · 标注段非法（含字段缺失 / 类型不符）时，Core 已逐条拼好报因串，本命令原样透传为详情
+//       （而非压成一条通用「无法按配置 JSON schema 解析」），提示相应取标注语法（kHintAnnoSyntax）。
 //   - 执行时缺 --input 或缺对应输出（分离 --output-dir / 合并 --output）→ 1。
 //   - 读图失败 → 3；引擎业务失败（E-6/E-7 等）或显式坍缩不可行 → 2；导出失败 → 4（均由 job 映射）。
 //   - --save-config 写盘失败 → 4。
@@ -121,24 +121,24 @@ int cmdConfig(const std::vector<std::string>& tokens, const GlobalOptions& go) {
 
     // --- 重排前置校验（与 grid --compose 的 --canvas 强制一致）：仅 L3 可重排，且必须显式给定 cols/rows。---
     //     手写/转换来的配置若违反，直接判参数错误（退出码 1），不交 Core 用默认值兜底。
-    if (config.emitParams.mode == engine::EmitMode::MERGED &&
-        config.emitParams.layout == engine::MergeLayout::REARRANGE) {
-        if (config.cut.tier != engine::Tier::L3)
+    if (config.emitParams.mode == engine::EmitMode::Merged &&
+        config.emitParams.layout == engine::MergeLayout::Rearrange) {
+        if (config.cut.tier != engine::Tier::Grid)
             return argError(IDC_CTR(msg, kErrRearrangeNeedsL3), IDC_CTR(msg, kHintRearrangeTier));
         if (!config.emitParams.cols.has_value() || !config.emitParams.rows.has_value())
             return argError(IDC_CTR(msg, kErrRearrangeNeedsDims), IDC_CTR(msg, kHintRearrangeColsRows));
     }
 
     // 输出目标由 emit.mode 决定：分离 → --output-dir（文件夹）；合并 → --output（单图）。
-    const bool separate = config.emitParams.mode == engine::EmitMode::SEPARATE;
+    const bool separate = config.emitParams.mode == engine::EmitMode::Separate;
     const std::string outKey = separate ? opts::kOutputDir : opts::kOutput;
     if (!args.has(outKey))
         return argError(IDC_CTR(msg, kErrConfigNeedsOutKey) + outKey,
                         separate ? IDC_CTR(msg, kHintConfigSeparate) : IDC_CTR(msg, kHintConfigMerged));
 
     // 显式坍缩：仅 MERGED+COLLAPSE 时为真——不可坍缩则 job 返回退出码 2（IT-18 触发路径）。
-    const bool explicitCollapse = config.emitParams.mode == engine::EmitMode::MERGED &&
-                                  config.emitParams.layout == engine::MergeLayout::COLLAPSE;
+    const bool explicitCollapse = config.emitParams.mode == engine::EmitMode::Merged &&
+                                  config.emitParams.layout == engine::MergeLayout::Collapse;
     const JobOptions opt = makeJobOptions(go, explicitCollapse);
 
     // --- 第 6 步：先解**底图 base**（--input 读文件失败 3 / --size 生成参数非法 1 / 配置 generate 段现算 / 皆无＝空底图），
@@ -155,7 +155,7 @@ int cmdConfig(const std::vector<std::string>& tokens, const GlobalOptions& go) {
                 return toInt(pec);
         }
     } else if (configHasBase) {
-        // 无外部输入：仅纯图案底图（Recipe）可按 source 尺寸现算（与旧 generate 段等价）；
+        // 无外部输入：仅纯图案底图（Recipe）可按 source 尺寸现算；
         //   带落位声明者需 --input 提供源图，buildBaseCanvas 内部报因（退出码 3）。
         if (const ExitCode ec = buildBaseCanvas(config, base, opt); ec != ExitCode::Ok)
             return toInt(ec);
@@ -174,7 +174,8 @@ int cmdConfig(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     }
 
     // 画布级整体不透明度（§7 顶层 opacity 键）：与 GUI 产出边界同口径——底图/图层解出、合成后，进 executeJob
-    //   前对整幅工作图统一施加一次淡出（缺省 255 时 applyAlpha 恒等；executeJob 内 preprocess/标注烧录不再涉及 alpha）。
+    //   前对整幅工作图统一施加一次淡出（缺省 255 时 applyAlpha 恒等；executeJob 内的 preprocess 与标注烧录
+    //   均不再做整体淡出——通道映射/split/invert 不动 alpha，rotate/flip 原样搬运，resize 仅随双线性插值、不另施乘）。
     canvas::applyAlpha(image, static_cast<std::uint8_t>(std::clamp(config.canvasOpacity, 0, 255)));
 
     // --- 第 7 步：执行（runEngine → 坍缩校验 → exportImage，退出码由 job 映射）。---

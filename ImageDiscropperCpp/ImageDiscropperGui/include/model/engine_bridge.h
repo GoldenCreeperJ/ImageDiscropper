@@ -4,7 +4,7 @@
 //       切割/预处理相关 GUI 代码只与 EngineBridge 交互、不直接 include 引擎实现细节；标注域由
 //       AnnotationBridge 驱动、坐标/图像转换由 util 适配器承担（详见 model/README.md，CONTRIBUTING.md「分层纪律」）。
 // 分块依据：
-//   - loadImage    委托 Core engine::readImageFile（解码）。
+//   - loadImage    委托 Core io::readImageFile（解码）。
 //   - runPreviewGeometry 委托 Core engine::runEngineGeometry（仅按已预处理输出尺寸算区域，不碰像素，供实时预览）。
 //   - cutLines     委托 Core engine::generateCutLines（取得贯穿全图的切割线供渲染）。
 //   - buildGrid    委托 Core Grid::build / induceGrid（取得诱导网格供 L3 画网格线与单元）。
@@ -46,7 +46,7 @@ public:
 
     // 源图持久化（供 File 层 provenance）：content:// 内容 URI 的字节拷到应用私有可写目录(AppDataLocation)
     // 的稳定真实文件并返回其路径（缓存物化会被系统回收，故持久路径另立、可跨会话引用）；非 content:// 原样返回。
-    // 使「添加图层」的 File 层不再以不可重开的 content:// 作源名，改用真实文件名 provenance。
+    // 使「添加图层」的 File 层以真实文件名（而非不可重开的 content:// 源名）作 provenance。
     static QString persistForProvenance(const QString& path);
 
     // 仅尺寸预览（委托 Core runEngineGeometry）：给定已预处理输出尺寸直接跑几何流水线，
@@ -61,7 +61,7 @@ public:
                                        const engine::SourceInfo& src);
 
     // 依切割配置产出诱导网格（供 L3 画网格线与单元选择）。与 runEngine 内部一致：
-    // GRID 生成器走 Grid::build（处理余量策略），其余生成器走切割线诱导 induceGrid。
+    // Grid 生成器走 Grid::build（处理余量策略），其余生成器走切割线诱导 induceGrid。
     // GUI 不自算网格几何——只把 Core 产出的 Grid 交给画布渲染（CONTRIBUTING.md「分层纪律」）。
     static engine::Grid buildGrid(const engine::CutConfig& cut,
                                   const engine::SourceInfo& src);
@@ -75,12 +75,12 @@ public:
     // ---- 配置文件存取（FR-L3.8 / NFR-4；委托 Core，GUI 不自实现 JSON，CONTRIBUTING.md「分层纪律」）----
     // 保存：把一次作业配置序列化为 SPEC §7 schema 的 JSON 文件（缩进美化）。
     // annotations 非空时附带标注段（SPEC §7 annotations，往返不丢）。
-    // path 为空或写盘失败（Core E-8）返回 false 并给出中文错误 err。
+    // path 为空或 Core 写盘失败返回 false 并给出中文错误 err（配置序列化不属 SPEC §5 引擎边界项，无对应 E 码）。
     static bool saveConfig(const QString& path, const engine::EngineConfig& cfg, QString& err,
                            const annotation::AnnotationSet* annotations = nullptr);
     // 加载：从 JSON 文件还原配置（SPEC §7 schema）。path 为空、读盘失败或 JSON 解析失败返回 false
     // 并给出中文错误 err；成功返回 true 并填充 out（由上层 Document::applyEngineConfig 反向映射）。
-    // annotations 非空时一并还原标注段到该层（缺段＝清空；调用方决定何时并入真实层，见 MainWindow::onLoadConfig）。
+    // annotations 非空时一并还原标注段到该层（缺段＝清空；调用方决定何时并入真实层，见 ConfigController::onLoadConfig）。
     static bool loadConfig(const QString& path, engine::EngineConfig& out, QString& err,
                            annotation::AnnotationSet* annotations = nullptr);
 
@@ -109,7 +109,7 @@ public:
     static core::Image materializeLayer(const canvas::ImageLayer& layer);
 
     // 底图展平（委托 Core canvas::composeBase）：把同构的底图 canvas::ImageLayer 展平为 width×height 像素。
-    //   纯图案底图按 source 尺寸现算（与旧 generate 段口径一致）；文件底图依赖 decodedPixels 已注入（本桥不解盘）。
+    //   纯图案底图按 source 尺寸现算（与 generate 段图案口径一致）；文件底图依赖 decodedPixels 已注入（本桥不解盘）。
     static core::Image composeBase(const canvas::ImageLayer& base, int width, int height);
 };
 

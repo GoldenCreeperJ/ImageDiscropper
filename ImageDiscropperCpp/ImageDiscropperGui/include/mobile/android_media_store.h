@@ -4,7 +4,7 @@
 //       （Pictures/ImageDiscropper，相册/文件管理器可见）。
 // 分块依据：
 //   - 本层只做「本地文件 → 媒体行」的插入与字节搬运，不含导出业务语义
-//     （临时目录编排、失败兜底、状态栏通知归 MainWindow::onExport）；
+//     （临时目录编排、失败兜底、状态栏通知归 ExportController::onExport）；
 //   - 头文件平台中立（仅 QString）：mobile/ 源同样编入桌面 idc_gui_mobile 目标，
 //     而桌面 Qt 构建无 JNI 头——QJniObject 依赖全部隔离在 .cpp 的
 //     #if defined(Q_OS_ANDROID) 内；本层函数无桌面调用者，非 Android 编译单元

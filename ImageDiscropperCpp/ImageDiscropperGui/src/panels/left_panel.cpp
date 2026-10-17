@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：panels/left_panel.cpp
 // 作用：实现左侧面板的构建与 Document 双向同步（见同名头文件说明）。
-// 分块依据：build 中用 QGroupBox 分区（模式 / 极性）；工具 / 图层已迁出为独立面板；
+// 分块依据：build 中用 QGroupBox 分区（模式 / 极性）；
 //           槽函数只把用户选择写回 Document，不触碰任何引擎逻辑（CONTRIBUTING.md「分层纪律」）。
 // ============================================================================
 #include "panels/left_panel.h"
@@ -22,8 +22,7 @@
 namespace idc::gui {
 namespace {
 
-// 模式按钮的强调样式：未选态底/字/边框走 palette(...) 令牌（随深/浅主题自动给正确字色，
-// 无需再显式给未选态深色文字——旧「【深色模式】硬编码浅底配深字」的临时 hack 已删）；
+// 模式按钮的强调样式：未选态底/字/边框走 palette(...) 令牌（随深/浅主题自动给正确字色）；
 // 选中态品牌强调色（蓝 #3b7ddd / 橙 #e67e22）原样保留（均配白字，两主题皆可读）。
 // 注：QSS palette() 角色名按 QPalette 枚举名大小写不敏感匹配、**不带连字符**（buttontext/windowtext/midtext）。
 auto kModeStyle =
@@ -113,7 +112,7 @@ LeftPanel::LeftPanel(QWidget* parent) : QWidget(parent) {
     connect(polarityGroup_, &QButtonGroup::idToggled, this, &LeftPanel::onPolarityToggled);
     root->addWidget(polBox);
 
-    // 工具 / 图层分组已迁出为独立的 ToolPanel / LayerPanel，由主窗口左侧容器统一装配，
+    // 工具 / 图层分组分属独立的 ModeToolPanel / LayerPanel，由主窗口左侧容器统一装配；
     // 本面板只放模式切换与保留/删除开关。
 
     root->addStretch(1); // 底部弹性，使分组靠上。
@@ -143,16 +142,16 @@ void LeftPanel::syncFromDocument() const {
     // 模式：Tier → 按钮 id（L1=1, L2=2, L3=3）。
     int modeId = 1;
     switch (doc_->mode()) {
-        case engine::Tier::L1: modeId = 1; break;
-        case engine::Tier::L2: modeId = 2; break;
-        case engine::Tier::L3: modeId = 3; break;
+        case engine::Tier::Standard: modeId = 1; break;
+        case engine::Tier::Erase: modeId = 2; break;
+        case engine::Tier::Grid: modeId = 3; break;
     }
     modeGroup_->blockSignals(true);
     if (auto* b = modeGroup_->button(modeId)) b->setChecked(true);
     modeGroup_->blockSignals(false);
 
-    // 极性：KEEP=0, REMOVE=1。
-    const int polId = doc_->polarity() == engine::Polarity::REMOVE ? 1 : 0;
+    // 极性：Keep=0, Remove=1。
+    const int polId = doc_->polarity() == engine::Polarity::Remove ? 1 : 0;
     polarityGroup_->blockSignals(true);
     if (auto* b = polarityGroup_->button(polId)) b->setChecked(true);
     polarityGroup_->blockSignals(false);
@@ -162,9 +161,9 @@ void LeftPanel::syncFromDocument() const {
 void LeftPanel::onModeToggled(const int id, const bool checked) const {
     if (!checked || !doc_) return;
     switch (id) {
-        case 1: doc_->setMode(engine::Tier::L1); break;
-        case 2: doc_->setMode(engine::Tier::L2); break;
-        case 3: doc_->setMode(engine::Tier::L3); break;
+        case 1: doc_->setMode(engine::Tier::Standard); break;
+        case 2: doc_->setMode(engine::Tier::Erase); break;
+        case 3: doc_->setMode(engine::Tier::Grid); break;
         default: break;
     }
 }
@@ -172,8 +171,8 @@ void LeftPanel::onModeToggled(const int id, const bool checked) const {
 // 极性按钮切换 → 写回 Document，实时刷新遮罩（NFR-6）。
 void LeftPanel::onPolarityToggled(const int id, const bool checked) const {
     if (!checked || !doc_) return;
-    if (id == 1) doc_->setPolarity(engine::Polarity::REMOVE);
-    else if (id == 0) doc_->setPolarity(engine::Polarity::KEEP);
+    if (id == 1) doc_->setPolarity(engine::Polarity::Remove);
+    else if (id == 0) doc_->setPolarity(engine::Polarity::Keep);
 }
 
 } // namespace idc::gui

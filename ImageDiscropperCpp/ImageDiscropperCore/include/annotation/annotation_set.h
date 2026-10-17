@@ -3,8 +3,7 @@
 // 作用：标注集合 AnnotationSet——**纯数据**标注列表 + zOrder 恒等下标不变式 +
 //       命中检测（hitTest）+ 光栅合成（burnIn），并作为 SPEC §7 config `annotations`
 //       段的读写容器（engine save/load、CLI 消费）。
-// 分块依据：自原 AnnotationLayer 会话状态机拆分而来（annotation_layer.h 已删除）——
-//       本头只承载「无头侧也成立」的数据与合成能力；编辑模式 / 选中 / 属性模板 /
+// 分块依据：本头只承载「无头侧也成立」的数据与合成能力；编辑模式 / 选中 / 属性模板 /
 //       撤销重做等**交互会话态**归 GUI 层 AnnotationEditor（app 层），不进 Core。
 //   - Annotation : 一次提交的标注记录（几何 + 样式），拷贝语义为深拷贝 shape。
 //   - AnnotationSet : 拥有标注列表；结构操作（add/removeAt/moveItem/restore/clear）
@@ -27,7 +26,7 @@
 namespace idc::annotation {
 
 // ---------------------------------------------------------------------------
-// Annotation：一个已提交的形状记录（几何 + 样式）；类型由多态 shape->type() 唯一决定，不再冗余存份。
+// Annotation：一个已提交的形状记录（几何 + 样式）；类型由多态 shape->type() 唯一决定，不冗余存副本。
 // ---------------------------------------------------------------------------
 struct Annotation {
     std::unique_ptr<geometry::Shape> shape;  // 几何数据（多态；兼作形状类型真相源 shape->type()）
@@ -81,7 +80,7 @@ public:
     // 重写每条标注的 zOrder ＝ 当前下标（不变式收口，结构操作内部已自动调用）。
     void canonicalizeZOrder();
 
-    // ------ 查询与合成（口径与原 AnnotationLayer 完全一致）------
+    // ------ 查询与合成 ------
     // 命中检测：从顶层开始返回第一个命中的索引（填充形状优先判内部，其余按轮廓邻近判定），未命中 nullopt。
     std::optional<std::size_t> hitTest(const core::Point2D& p) const;
     // 以传入底图为基准逐条光栅化全部标注（后入列表者覆盖先入者），返回新 RGBA 图像；

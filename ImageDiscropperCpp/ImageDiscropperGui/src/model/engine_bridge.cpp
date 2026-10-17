@@ -12,7 +12,7 @@
 #include <QFile>
 #include <QStandardPaths>
 
-#include "engine/image_io.h" // readImageFile（loadImage 委托 Core 解码）。
+#include "io/image_io.h" // io::readImageFile（loadImage 委托 Core 解码）。
 #include "annotation/annotation_set.h" // AnnotationSet（save/load 可选标注集合透传，配置为真相源）。
 #include "engine/engine_config_json.h" // saveEngineConfig/loadEngineConfig（配置文件存取）。
 #include "generate/pattern.h" // makePattern（generatePattern 委托 Core 程序化生成）。
@@ -76,7 +76,7 @@ bool EngineBridge::loadImage(const QString& path, core::Image& out, QString& err
         return false;
     }
     // Core 统一把常见格式解码为 RGBA；失败（不存在/不可读/格式不支持）返回 false。
-    if (!engine::readImageFile(resolved.toStdString(), out)) {
+    if (!io::readImageFile(resolved.toStdString(), out)) {
         err = IDC_GTR(msg, kBridgeReadImageFailed).arg(path);
         return false;
     }
@@ -96,11 +96,11 @@ engine::CutLineSet EngineBridge::cutLines(const engine::CutConfig& cut,
     return idc::engine::generateCutLines(cut, src);
 }
 
-// 依切割配置产出诱导网格（镜像 runEngine 的网格产出：GRID 走 Grid::build、其余走线诱导）。
+// 依切割配置产出诱导网格（镜像 runEngine 的网格产出：Grid 走 Grid::build、其余走线诱导）。
 engine::Grid EngineBridge::buildGrid(const engine::CutConfig& cut,
                                           const engine::SourceInfo& src) {
     engine::Grid grid;
-    if (cut.generator == engine::CutGenerator::GRID) {
+    if (cut.generator == engine::CutGenerator::Grid) {
         grid.build(cut.grid, src.width, src.height);  // 参数化网格，含余量策略。
     } else {
         grid = idc::engine::induceGrid(idc::engine::generateCutLines(cut, src), src);

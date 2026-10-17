@@ -2,9 +2,9 @@
 // 文件：model/document_canvas.cpp
 // 作用：Document 的「画布/图层/预处理会话」状态域成员实现（TU 拆分）——图像载入/换底图/
 //       工作图与预处理会话声明/预处理目标路由/图层栈 CRUD/画布尺寸/底图与画布不透明度。
-//       自 document.cpp 原封迁出（同 MainWindowUi::buildMenus 先例：类不拆、仅分 TU 编译）。
-// 分块依据：本域与「切割/选择/排序/导出参数 + 配置组装」域互不调用，独立成件使 document.cpp
-//       不再逼近千行（CONTRIBUTING.md「分层纪律」；状态聚合器本身不拆类——公有 API 不变）。
+//       本 TU 与 document.cpp 同属 Document 类（类不拆、仅分 TU 编译）。
+// 分块依据：本域与「切割/选择/排序/导出参数 + 配置组装」域互不调用，各自独立成 TU
+//       （CONTRIBUTING.md「分层纪律」；状态聚合器不拆类）。
 // ============================================================================
 #include "model/document.h"
 
@@ -63,7 +63,7 @@ void Document::setImage(core::Image img, QString path) {
 
 // 新建语义（**非破坏性**）：以新扁平底图替换画布基座、保留图层栈与色彩预处理（详见头文件）。
 //   与 setImage 的关键差异：不清图层/不取消标注会话、仅剥除会改变尺寸的 resize+几何预处理，
-//   从而“新建同尺寸画布”不会清空图层/标注/预处理。标注捕获回填与单图态色彩预处理重放均由调用方（MainWindow）掌控。
+//   从而“新建同尺寸画布”不会清空图层/标注/预处理。标注捕获回填与单图态色彩预处理重放均由调用方（SessionController）掌控。
 void Document::resetBaseWith(core::Image flat, std::optional<canvas::ImageLayer> baseLayer) {
     const int newW = flat.width();
     const int newH = flat.height();
@@ -98,7 +98,7 @@ void Document::resetBaseWith(core::Image flat, std::optional<canvas::ImageLayer>
         working_ = std::move(flat);      // 先置为无预处理工作图；调用方随后经 replayCanvasPreprocess 补算色彩预处理。
     }
 
-    if (sizeChanged) {                  // 尺寸变→旧框选坐标失效；同尺寸→保留框选（决策：仅尺寸不变时留框选）。
+    if (sizeChanged) {                  // 尺寸变→旧框选坐标失效；同尺寸→保留框选（仅尺寸不变时留框选）。
         hasRect_ = false;
         rect_ = engine::RectRegion{};
         rects_.clear();
@@ -161,9 +161,9 @@ bool Document::preprocessProducesGray() const {
     return preprocess_.producesGray();
 }
 
-// ============================ 多层画布（Phase 3-4）============================
+// ============================ 多层画布 ============================
 // 说明：Document 只维护图层「声明态」（栈/尺寸/选中/每层会话），绝不跑像素、不读盘——
-// composeCanvas（物化）与 File 层解码均由 PreprocessController / MainWindow 经 EngineBridge 承担
+// composeCanvas（物化）与 File 层解码均由 PreprocessController / SessionController 经 EngineBridge 承担
 //（CONTRIBUTING.md「分层纪律」）。CRUD 仅改声明态后发 layersChanged()，控制器接此信号重组。
 
 // 设当前拾取的图片图层：切换预处理当前目标（图层↔底图/画布）；发 changed 驱动面板/状态栏刷新。
@@ -323,7 +323,7 @@ bool Document::clearAllLayersToBase() {
     return hadBase;
 }
 
-// 声明画布尺寸：更新尺寸 + 仅清框选（矩形/多矩形/单元），保留图层与标注（决策 3）；发 layersChanged 交控制器重组。
+// 声明画布尺寸：更新尺寸 + 仅清框选（矩形/多矩形/单元），保留图层与标注；发 layersChanged 交控制器重组。
 void Document::setCanvasSize(const int width, const int height) {
     if (width <= 0 || height <= 0) return;
     if (canvasWidth_ == width && canvasHeight_ == height) return;
@@ -387,7 +387,7 @@ const core::Image& Document::fadedCanvasBase() const {
 }
 
 // 设画布级整体不透明度（0..255）：三元目标 Canvas 的透明度，与图层 transform.opacity、底图 baseOpacity 正交。
-//   值未变早退；否则置值后发 changed()（刷新面板 / 历史采集）。重算 working_ 交调用方（MainWindow）随后走
+//   值未变早退；否则置值后发 changed()（刷新面板 / 历史采集）。重算 working_ 交调用方（SessionController）随后走
 //   replayCanvasPreprocess——透明度恒在产出边界（commitPipeline）逐像素施加一次、不烘焙缓存位图。
 void Document::setCanvasOpacity(const int opacity) {
     const int v = std::clamp(opacity, 0, 255);

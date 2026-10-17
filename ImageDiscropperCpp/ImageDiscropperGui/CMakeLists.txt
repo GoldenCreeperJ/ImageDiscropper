@@ -4,7 +4,7 @@
 #       并链接 Core 静态库 image_discropper_core。
 # 架构定位：GUI 是 Core 的纯消费者——只采集交互、翻译为
 #           Core 参数、调用 Core、渲染结果；切割/几何/排序/极性/导出逻辑全在 Core。
-# 分块依据：源文件按职责分组（app / model / canvas / panels / util），与本目录
+# 分块依据：源文件按职责分组（i18n / util / model / canvas / panels / app / mobile），与本目录
 #           的子目录一一对应，避免上帝文件。
 # 说明：
 #   · Qt 6 由 vcpkg 的 qtbase 提供，仅链接 Widgets / Gui / Core 三个组件；
@@ -171,14 +171,14 @@ set(IDC_GUI_CANVAS_SRC
         src/canvas/items/image_layer_item.cpp
 )
 
-# panels：左侧模式/极性面板与标注工具/图层面板、右侧参数/导出/图像/标注属性面板。
+# panels：左侧导航与模式/极性面板（accordion/left）、模式工具面板（mode_tool：交互四态 + 标注工具）、图层/图层编辑面板，右侧参数/导出/预处理/标注属性面板。
 set(IDC_GUI_PANELS_SRC
         include/panels/accordion_panel.h
         include/panels/left_panel.h
         include/panels/param_panel.h
         include/panels/export_panel.h
-        include/panels/image_panel.h
-        include/panels/tool_panel.h
+        include/panels/preprocess_panel.h
+        include/panels/mode_tool_panel.h
         include/panels/layer_panel.h
         include/panels/layer_edit_panel.h
         include/panels/annotation_prop_panel.h
@@ -188,15 +188,15 @@ set(IDC_GUI_PANELS_SRC
         src/panels/param_panel_pages.cpp
         src/panels/export_panel.cpp
         src/panels/export_panel_merge.cpp
-        src/panels/image_panel.cpp
-        src/panels/image_panel_sections.cpp
-        src/panels/tool_panel.cpp
+        src/panels/preprocess_panel.cpp
+        src/panels/preprocess_panel_sections.cpp
+        src/panels/mode_tool_panel.cpp
         src/panels/layer_panel.cpp
         src/panels/layer_edit_panel.cpp
         src/panels/annotation_prop_panel.cpp
 )
 
-# app：主窗口装配壳 + 四个控制器（预览/预处理/标注/历史）+ 状态栏 + 装配建造者；
+# app：主窗口装配壳 + 八个控制器 + 状态栏 + 装配建造者；
 #      程序入口 main.cpp 不入 common（两产物各自编译一份，按宏选壳）。
 set(IDC_GUI_APP_SRC
         include/app/controllers/annotation_coordinator.h

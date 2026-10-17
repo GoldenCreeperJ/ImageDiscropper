@@ -1,8 +1,7 @@
 // ============================================================================
-// 文件：src/model/preprocess_session.cpp
+// 文件：model/preprocess_session.cpp
 // 作用：实现 model/preprocess_session.h——预处理会话态的域不变式 / 归一化 / 签名推演 / base_ 缓存维护。
-// 分块依据：静态纯策略（作用于给定管线）与实例态维护分列；语义逐字自 preprocess_controller.cpp、
-//           document.cpp 搬入（纯内聚重构，零语义改动）。
+// 分块依据：静态纯策略（作用于给定管线）与实例态维护分列。
 // ============================================================================
 #include "model/preprocess_session.h"
 
@@ -14,7 +13,7 @@
 namespace idc::gui {
 
 namespace {
-// 几何步判定统一委托 Core preprocess::isGeometryStep（与面板 / 折叠 / 原控制器同源，口径不漂移）。
+// 几何步判定统一委托 Core preprocess::isGeometryStep（与面板 / 折叠同源，口径不漂移）。
 bool isGeo(const preprocess::PreprocessConfig& cfg) { return preprocess::isGeometryStep(cfg); }
 } // namespace
 
@@ -35,7 +34,7 @@ void PreprocessSession::appendKeepingInvariant(preprocess::PreprocessPipeline& s
     else steps.add(cfg);                                     // 色彩步恒在队尾
 }
 
-// 块内换序限幅：仅相邻同类才移一格；越界/跨块不动并返回 false。口径逐字对齐原 onStepMove。
+// 块内换序限幅：仅相邻同类才移一格；越界/跨块不动并返回 false。
 bool PreprocessSession::moveWithinBlock(preprocess::PreprocessPipeline& steps,
                                         const std::size_t index, const bool down) {
     const auto& items = steps.items();
@@ -60,7 +59,7 @@ preprocess::PreprocessPipeline PreprocessSession::makeEffective(
 }
 
 // 载入归一化：散落 ResizeOp 抽出为独立 resize（取最后一个正尺寸、非正丢弃），其余按序归位 geo 前 color 后。
-// 「多个 resize 取最后一个」是刻意归一（resize 恒从原图重烤、不叠加），并非等价重放——语义逐字对齐原 applyLoadedQueue。
+// 「多个 resize 取最后一个」是刻意归一（resize 恒从原图重烤、不叠加），并非等价重放。
 PreprocessSession::Loaded PreprocessSession::normalizeLoaded(
     const preprocess::PreprocessPipeline& pipeline) {
     Loaded out;

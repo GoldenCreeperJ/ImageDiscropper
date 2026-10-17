@@ -29,10 +29,10 @@ RegionSet splitSize(const int width, const int height, const Grid& grid) {
         const int r = std::min(cell.area.right, width);
         if (const int b = std::min(cell.area.bottom, height); r <= l || b <= t) continue; // 实际像素为空 → 跳过空块（E-4）。
 
-        // 保留原始 cell.area：PAD 余量策略下 area 可能超出图像边界，
+        // 保留原始 cell.area：Pad 余量策略下 area 可能超出图像边界，
         // 导出时 Image::crop 会自动裁剪、画布以 padColor 补白，从而天然实现“补白至完整单元”。
         // 同时记录行列号，供分离导出的 {row}/{col} 命名模板使用。
-        out.add(cell.area, cell.index, RegionKind::RECT, cell.row, cell.col);
+        out.add(cell.area, cell.index, RegionKind::Rect, cell.row, cell.col);
     }
     return out;
 }

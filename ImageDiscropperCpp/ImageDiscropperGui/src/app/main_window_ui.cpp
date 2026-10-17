@@ -1,12 +1,12 @@
 // ============================================================================
 // 文件：app/main_window_ui.cpp
 // 作用：实现 MainWindowUi 的中央区/工具栏/状态栏装配与 UI 状态回同步（见同名头文件说明；
-//       菜单栏装配 buildMenus 已拆至同目录 main_window_menus.cpp）。
+//       菜单栏装配 buildMenus 位于同目录 main_window_menus.cpp）。
 // 分块依据：
-//   - buildCentral：部件创建 + 注入 + 布局（左滚动容器 | 画布 | 右选项卡）；
+//   - buildCentral：部件创建 + 注入 + 布局（左滚动容器 | 画布 | 右折叠栏）；
 //   - buildToolbar：动作创建 + 连接（常用功能快速入口，动作触发连接到控制器槽）；
 //   - buildStatus：StatusBar 创建 + 初始模式名；
-//   - syncUi/3 个勾选态同步：面板与菜单/工具栏动作 ← Document/标注桥（原 MainWindow::syncPanels 全体）。
+//   - syncUi/3 个勾选态同步：面板与菜单/工具栏动作 ← Document/标注桥（MainWindow::syncPanels 转发至此）。
 // 说明：所有 connect 的接收者/上下文均为 w（friend 权限连接私有槽）；lambda 捕获 w 而非 this。
 // ============================================================================
 #include "app/main_window_ui.h"
@@ -32,12 +32,12 @@
 #include "panels/accordion_panel.h"
 #include "panels/annotation_prop_panel.h"
 #include "panels/export_panel.h"
-#include "panels/image_panel.h"
+#include "panels/preprocess_panel.h"
 #include "panels/layer_panel.h"
 #include "panels/layer_edit_panel.h"
 #include "panels/left_panel.h"
 #include "panels/param_panel.h"
-#include "panels/tool_panel.h"
+#include "panels/mode_tool_panel.h"
 #include "util/gui_nums.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
@@ -45,7 +45,7 @@
 
 namespace idc::gui {
 
-// 装配中央区：左面板 | 画布 | 右侧折叠面板（预处理 / 图片 / 标注 / 参数 / 导出）。
+// 装配中央区：左面板 | 画布 | 右侧折叠面板（图片 / 预处理 / 标注 / 参数 / 导出）。
 void MainWindowUi::buildCentral(MainWindow* w) {
     w->scene_ = new CanvasScene(w);
     w->view_ = new CanvasView(w->scene_, w);
@@ -53,15 +53,15 @@ void MainWindowUi::buildCentral(MainWindow* w) {
     w->left_ = new LeftPanel(w);
     w->param_ = new ParamPanel(w);
     w->exportPanel_ = new ExportPanel(w);
-    w->imagePanel_ = new ImagePanel(w);
-    w->toolPanel_ = new ToolPanel(w);
+    w->preprocessPanel_ = new PreprocessPanel(w);
+    w->toolPanel_ = new ModeToolPanel(w);
     w->layerPanel_ = new LayerPanel(w);
     w->layerEditPanel_ = new LayerEditPanel(w);
     w->annoPropPanel_ = new AnnotationPropPanel(w);
     w->left_->setDocument(&w->doc_);
     w->param_->setDocument(&w->doc_);
     w->exportPanel_->setDocument(&w->doc_);
-    w->imagePanel_->setDocument(&w->doc_);
+    w->preprocessPanel_->setDocument(&w->doc_);
     w->layerEditPanel_->setDocument(&w->doc_);
     w->toolPanel_->setModel(&w->annoBridge_);
     w->layerPanel_->setModel(&w->annoBridge_);
@@ -69,7 +69,7 @@ void MainWindowUi::buildCentral(MainWindow* w) {
 
     // 右侧 AccordionPanel 折叠式：多节**可同时展开**，整栏外套 QScrollArea 滚动触达；
     // 页面即面板本体（栏内布局自适应宽度，横向不出滚动条）。
-    // 移动端抽屉另用 QTabWidget 选择式（见 mobile/mobile_shell.cpp）。
+    // 移动端抽屉另用 QStackedWidget 页区 + 横向按钮条选择式（见 mobile/mobile_shell.cpp）。
     auto* accordion = new AccordionPanel(w);
     // 折叠节标题：初次按当前语言 addSection，并登记按新语言 retitle 的重放闭包（只换文字、不动展开态）。
     const auto addI18nSection = [w, accordion](QWidget* content, const i18n::TextRef& ref) {
@@ -77,7 +77,7 @@ void MainWindowUi::buildCentral(MainWindow* w) {
         w->retranslator_.add([accordion, content, ref] { accordion->retitle(content, i18n::qs(ref)); });
     };
     addI18nSection(w->layerEditPanel_, IDC_GT(label, kSecImage));
-    addI18nSection(w->imagePanel_, IDC_GT(label, kSecPreprocess));
+    addI18nSection(w->preprocessPanel_, IDC_GT(label, kSecPreprocess));
     addI18nSection(w->annoPropPanel_, IDC_GT(label, kSecAnnotation));
     addI18nSection(w->param_, IDC_GT(label, kSecParam));
     addI18nSection(w->exportPanel_, IDC_GT(label, kExportBoxTitle));
@@ -90,8 +90,8 @@ void MainWindowUi::buildCentral(MainWindow* w) {
     rightScroll->setWidget(accordion);
     w->rightScroll_ = rightScroll;
 
-    // 左侧容器：模式/极性(LeftPanel) + 标注工具(ToolPanel) + 图层(LayerPanel) 竖排，可滚动避免拥挤。
-    // （图层编辑已移到右侧折叠栏「图片」节。）
+    // 左侧容器：模式/极性(LeftPanel) + 标注工具(ModeToolPanel) + 图层(LayerPanel) 竖排，可滚动避免拥挤。
+    //（图层编辑面板位于右侧折叠栏「图片」节。）
     auto* leftContainer = new QWidget(w);
     w->leftContainer_ = leftContainer;   // 左栏内容容器（其 sizeHint 驱动左滚动区最小宽）。
     auto* leftLayout = new QVBoxLayout(leftContainer);
@@ -126,8 +126,8 @@ void MainWindowUi::buildCentral(MainWindow* w) {
     w->applyPanelMinWidths();
 }
 
-// 装配工具栏：新建/打开/导出、加载/保存配置、撤销/重做、缩放、模式切换、重置全部
-// （常用功能快速入口；遮罩等图层显隐开关已迁入左侧「图层」面板，视图菜单与画布右键仍保留快捷切换）。
+// 装配工具栏：新建/打开/导出、加载/保存配置、撤销/重做、缩放、重置全部
+// （常用功能快速入口；遮罩等图层显隐开关位于左侧「图层」面板，视图菜单与画布右键亦保留快捷切换）。
 void MainWindowUi::buildToolbar(MainWindow* w) {
     QToolBar* tb = w->addToolBar(i18n::qs(IDC_GT(label, kMainToolBarTitle)));
     tb->setMovable(false);
@@ -175,55 +175,55 @@ void MainWindowUi::buildStatus(MainWindow* w) {
     w->setStatusBar(w->status_);
 }
 
-// ============================ UI 状态回同步（自 MainWindow::syncPanels 全体迁入）============================
+// ============================ UI 状态回同步（MainWindowUi 实现，MainWindow::syncPanels 转发至此）============================
 
-// 全量同步：左侧面板与右侧「参数/导出/图像」页 + 工具栏/菜单动作到 Document（原 MainWindow::syncPanels）。
+// 全量同步：左侧面板与右侧「图片/预处理/参数/导出」各页 + 工具栏/菜单动作到 Document。
 // const 引用入参：成员均为指针，改动直达所指对象（QAction 勾选/启停、面板回填）。
 void MainWindowUi::syncUi(const MainWindow& w) {
     w.left_->syncFromDocument();
     w.param_->syncFromDocument();
     w.exportPanel_->syncFromDocument();
-    w.imagePanel_->syncFromDocument();
+    w.preprocessPanel_->syncFromDocument();
     w.layerEditPanel_->syncFromDocument();
     w.layerPanel_->syncFromDocument();   // 图片图层行：随图层栈增删 / 逐层 visible 回同步（blockSignals 防回环）。
     const bool has = w.doc_.hasImage();
-    // 图像菜单预处理动作：无图像时统一置灰（原仅「黑白」置灰，其余静默无操作）。
+    // 预处理菜单动作：无图像时统一置灰（预处理动作均依赖已有图像）。
     for (QAction* a : w.preprocessActions_) a->setEnabled(has);
     // 灰度启停智能：**当前预处理目标**会话已产出灰度时置灰「黑白」与「色道分离」
-    //（与预处理面板 activeSession().producesGray() 判定同源；选中图层/底图时按对应会话判定，不再只看画布会话）。
+    //（与预处理面板 activeSession().producesGray() 判定同源；选中图层/底图时按对应会话判定）。
     const bool grayBlocked = has && w.doc_.activeSession().producesGray();
     if (w.aGrayMenu_) w.aGrayMenu_->setEnabled(has && !grayBlocked);
     if (w.mSplit_) w.mSplit_->setEnabled(has && !grayBlocked);
     // 「反色」子菜单入口：仅随有无图像整入口置灰（灰度图仍可反色，不吃灰度智能门；与 mSplit_ 同款补齐）。
     if (w.mInvert_) w.mInvert_->setEnabled(has);
     // 模式/极性动作选中态（setChecked 不触发 triggered，无回环）。
-    if (w.modeActionL1_) w.modeActionL1_->setChecked(w.doc_.mode() == engine::Tier::L1);
-    if (w.modeActionL2_) w.modeActionL2_->setChecked(w.doc_.mode() == engine::Tier::L2);
-    if (w.modeActionL3_) w.modeActionL3_->setChecked(w.doc_.mode() == engine::Tier::L3);
-    if (w.aPolKeep_) w.aPolKeep_->setChecked(w.doc_.polarity() == engine::Polarity::KEEP);
-    if (w.aPolRemove_) w.aPolRemove_->setChecked(w.doc_.polarity() == engine::Polarity::REMOVE);
+    if (w.modeActionL1_) w.modeActionL1_->setChecked(w.doc_.mode() == engine::Tier::Standard);
+    if (w.modeActionL2_) w.modeActionL2_->setChecked(w.doc_.mode() == engine::Tier::Erase);
+    if (w.modeActionL3_) w.modeActionL3_->setChecked(w.doc_.mode() == engine::Tier::Grid);
+    if (w.aPolKeep_) w.aPolKeep_->setChecked(w.doc_.polarity() == engine::Polarity::Keep);
+    if (w.aPolRemove_) w.aPolRemove_->setChecked(w.doc_.polarity() == engine::Polarity::Remove);
     // 画布四态与标注工具/叠放/填充菜单勾选态（另有变更信号即时回同步；此处兜底初始与 doc 变化）。
     syncCanvasModeActions(w);
     syncToolActions(w);
     syncAnnoSelActions(w);
     // 切割参数：子菜单按当前切割模式启停 + 勾选态回同步。
-    const bool l1 = has && w.doc_.mode() == engine::Tier::L1;
-    const bool l2 = has && w.doc_.mode() == engine::Tier::L2;
-    const bool l3 = has && w.doc_.mode() == engine::Tier::L3;
+    const bool l1 = has && w.doc_.mode() == engine::Tier::Standard;
+    const bool l2 = has && w.doc_.mode() == engine::Tier::Erase;
+    const bool l3 = has && w.doc_.mode() == engine::Tier::Grid;
     if (w.mL1Shape_) w.mL1Shape_->setEnabled(l1);
-    if (w.aL1Rect_) w.aL1Rect_->setChecked(w.doc_.l1Shape() == L1Shape::RECT);
-    if (w.aL1HBand_) w.aL1HBand_->setChecked(w.doc_.l1Shape() == L1Shape::HBAND);
-    if (w.aL1VBand_) w.aL1VBand_->setChecked(w.doc_.l1Shape() == L1Shape::VBAND);
+    if (w.aL1Rect_) w.aL1Rect_->setChecked(w.doc_.l1Shape() == L1Shape::Rect);
+    if (w.aL1HBand_) w.aL1HBand_->setChecked(w.doc_.l1Shape() == L1Shape::Hband);
+    if (w.aL1VBand_) w.aL1VBand_->setChecked(w.doc_.l1Shape() == L1Shape::Vband);
     if (w.mL2Sub_) w.mL2Sub_->setEnabled(l2);
-    if (w.aL2Cross_) w.aL2Cross_->setChecked(w.doc_.l2Sub() == L2Sub::CROSS);
-    if (w.aL2HLine_) w.aL2HLine_->setChecked(w.doc_.l2Sub() == L2Sub::HLINE);
-    if (w.aL2VLine_) w.aL2VLine_->setChecked(w.doc_.l2Sub() == L2Sub::VLINE);
-    if (w.aL2Multi_) w.aL2Multi_->setChecked(w.doc_.l2Sub() == L2Sub::MULTI_RECT);
+    if (w.aL2Cross_) w.aL2Cross_->setChecked(w.doc_.l2Sub() == L2Sub::Cross);
+    if (w.aL2HLine_) w.aL2HLine_->setChecked(w.doc_.l2Sub() == L2Sub::Hline);
+    if (w.aL2VLine_) w.aL2VLine_->setChecked(w.doc_.l2Sub() == L2Sub::Vline);
+    if (w.aL2Multi_) w.aL2Multi_->setChecked(w.doc_.l2Sub() == L2Sub::MultiRect);
     if (w.aToGrid_) w.aToGrid_->setEnabled(l2 && (w.doc_.hasRect() || !w.doc_.rects().empty()));
     if (w.mSort_) w.mSort_->setEnabled(l3);
-    if (w.aSortRow_) w.aSortRow_->setChecked(w.doc_.order().strategy == engine::SortStrategy::ROW_MAJOR);
-    if (w.aSortCol_) w.aSortCol_->setChecked(w.doc_.order().strategy == engine::SortStrategy::COLUMN_MAJOR);
-    if (w.aSortCustom_) w.aSortCustom_->setChecked(w.doc_.order().strategy == engine::SortStrategy::CUSTOM);
+    if (w.aSortRow_) w.aSortRow_->setChecked(w.doc_.order().strategy == engine::SortStrategy::RowMajor);
+    if (w.aSortCol_) w.aSortCol_->setChecked(w.doc_.order().strategy == engine::SortStrategy::ColumnMajor);
+    if (w.aSortCustom_) w.aSortCustom_->setChecked(w.doc_.order().strategy == engine::SortStrategy::Custom);
     if (w.aSortReverse_) w.aSortReverse_->setChecked(w.doc_.order().reverse);
     if (w.aSortSnake_) w.aSortSnake_->setChecked(w.doc_.order().snake);
     // L3 余量策略：仅 L3 启用 + 勾选态回同步（「参数」页余量下拉为真相源，菜单仅镜像）。
@@ -234,24 +234,24 @@ void MainWindowUi::syncUi(const MainWindow& w) {
                 static_cast<int>(i) == static_cast<int>(w.doc_.gridParams().remainder));
     // 导出设置：输出方式/格式/烧录开关勾选态（面板为真相源，菜单仅镜像）。
     // 置灰规则与导出面板 refreshModeItemStates 一致：坍缩依 Core 坍缩可行性，重排仅 L3（Core 硬约束）。
-    if (w.aEmitSep_) w.aEmitSep_->setChecked(w.doc_.emitMode() == engine::EmitMode::SEPARATE);
+    if (w.aEmitSep_) w.aEmitSep_->setChecked(w.doc_.emitMode() == engine::EmitMode::Separate);
     if (w.aEmitCol_) {
-        w.aEmitCol_->setChecked(w.doc_.emitMode() == engine::EmitMode::MERGED
-                                && w.doc_.layout() == engine::MergeLayout::COLLAPSE);
+        w.aEmitCol_->setChecked(w.doc_.emitMode() == engine::EmitMode::Merged
+                                && w.doc_.layout() == engine::MergeLayout::Collapse);
         w.aEmitCol_->setEnabled(w.exportPanel_->collapsible());
     }
     if (w.aEmitRear_) {
-        w.aEmitRear_->setChecked(w.doc_.emitMode() == engine::EmitMode::MERGED
-                                 && w.doc_.layout() == engine::MergeLayout::REARRANGE);
-        w.aEmitRear_->setEnabled(w.doc_.mode() == engine::Tier::L3);
+        w.aEmitRear_->setChecked(w.doc_.emitMode() == engine::EmitMode::Merged
+                                 && w.doc_.layout() == engine::MergeLayout::Rearrange);
+        w.aEmitRear_->setEnabled(w.doc_.mode() == engine::Tier::Grid);
     }
-    if (w.aFmtPng_) w.aFmtPng_->setChecked(w.doc_.format() == engine::ExportFormat::PNG);
-    if (w.aFmtJpg_) w.aFmtJpg_->setChecked(w.doc_.format() == engine::ExportFormat::JPEG);
-    if (w.aFmtWebp_) w.aFmtWebp_->setChecked(w.doc_.format() == engine::ExportFormat::WEBP);
-    if (w.aFmtBmp_) w.aFmtBmp_->setChecked(w.doc_.format() == engine::ExportFormat::BMP);
+    if (w.aFmtPng_) w.aFmtPng_->setChecked(w.doc_.format() == engine::ExportFormat::Png);
+    if (w.aFmtJpg_) w.aFmtJpg_->setChecked(w.doc_.format() == engine::ExportFormat::Jpeg);
+    if (w.aFmtWebp_) w.aFmtWebp_->setChecked(w.doc_.format() == engine::ExportFormat::Webp);
+    if (w.aFmtBmp_) w.aFmtBmp_->setChecked(w.doc_.format() == engine::ExportFormat::Bmp);
     if (w.aBurnAnno_) w.aBurnAnno_->setChecked(w.annoBridge_.burnInEnabled());
     if (w.aBurnLayers_) w.aBurnLayers_->setChecked(w.doc_.layersBurnIn());
-    // 图层菜单动作：作用画布当前拾取层，无拾取层时置灰。
+    // 图片菜单动作：作用画布当前拾取层，无拾取层时置灰。
     const bool layerSel = w.doc_.selectedLayerId().has_value();
     if (w.aLayerUp_) w.aLayerUp_->setEnabled(layerSel);
     if (w.aLayerDown_) w.aLayerDown_->setEnabled(layerSel);

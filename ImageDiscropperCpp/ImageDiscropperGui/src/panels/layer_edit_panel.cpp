@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：src/panels/layer_edit_panel.cpp
+// 文件：panels/layer_edit_panel.cpp
 // 作用：实现「图层编辑」面板的构建与模型反向同步（见同名头文件说明）。
 // 分块依据：三块分组——① 图层列表 + 增删序按钮；② 落位变换区（锚点/枢轴/偏移/宽高）；
 //           ③ 画布尺寸区。控件回调只发意图信号，无任何图层 / 合成 / 像素逻辑
@@ -221,7 +221,7 @@ void LayerEditPanel::loadTransformIntoControls(const canvas::ImageTransform& t) 
 }
 
 void LayerEditPanel::setControlsEnabled(const bool hasLayerCanvas, const bool hasSelection) const {
-    // 「添加图片」入口：只要有图即可用（单图态下经 ensureLayerCanvas 自动起图层画布），不再要求已是图层画布。
+    // 「添加图片」入口：只要有图即可用（单图态下经 ensureLayerCanvas 自动起图层画布），无需已是图层画布。
     addImageBtn_->setEnabled(doc_ != nullptr && doc_->hasImage());
     clearLayersBtn_->setEnabled(hasLayerCanvas);   // 仅图层画布态可清空全部图层。
     canvasWSpin_->setEnabled(hasLayerCanvas);

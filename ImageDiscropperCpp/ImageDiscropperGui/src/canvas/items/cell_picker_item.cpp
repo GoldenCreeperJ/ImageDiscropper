@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：canvas/cell_picker_item.cpp
+// 文件：canvas/items/cell_picker_item.cpp
 // 作用：实现 L3 单元点选/框选交互图元（见同名头文件说明）。
 // 分块依据：命中测试只用 Core 单元的 area（contains / 矩形重叠），不含任何网格几何推导；
 //           手势（单击 vs 拖拽）以 overlayScale_ 为阈值区分，释放时才发一次信号（避免逐帧
@@ -27,7 +27,7 @@ constexpr QColor kSelBorder(0, 150, 255, 210);
 constexpr QColor kHoverBorder(255, 255, 255, 190);
 constexpr QColor kMarqueeFill(0, 150, 255, 32);
 constexpr QColor kMarqueeBorder(0, 150, 255, 230);
-// CUSTOM 角标：深色底 + 白字（保证在任意底图/遮罩上可读）。
+// Custom 角标：深色底 + 白字（保证在任意底图/遮罩上可读）。
 constexpr QColor kBadgeBg(0, 0, 0, 175);
 constexpr QColor kBadgeFg(255, 255, 255);
 // 调序反馈：被拖单元橙色粗边框、目标单元黄色虚线边框。
@@ -74,7 +74,7 @@ void CellPickerItem::setGrid(const engine::Grid& grid, const int width, const in
     cells_ = grid.cells();
     imgW_ = width;
     imgH_ = height;
-    // 包围盒 = 原图 ∪ 全部单元区域：PAD 余量策略下残缺单元会伸出图像边界（layoutAxis 保留越界值，
+    // 包围盒 = 原图 ∪ 全部单元区域：Pad 余量策略下残缺单元会伸出图像边界（layoutAxis 保留越界值，
     //   虚拟起点还可能落在负坐标），不并进来则那部分不算本图元的重绘区域、exposedRect 也取不到，
     //   边界块选中后画布外的覆盖要等到缩放触发全量重绘才显示。
     bounds_ = QRectF(0.0, 0.0, width, height);
@@ -105,7 +105,7 @@ void CellPickerItem::setBadgesVisible(const bool visible) const {
     if (numberLayer_) numberLayer_->setVisible(visible);
 }
 
-// 场景矩形 = 原图 ∪ 全部单元区域（setGrid 预算的 bounds_，含 PAD 越界残缺单元）。
+// 场景矩形 = 原图 ∪ 全部单元区域（setGrid 预算的 bounds_，含 Pad 越界残缺单元）。
 QRectF CellPickerItem::boundingRect() const {
     return bounds_;
 }
@@ -150,7 +150,7 @@ void CellPickerItem::updateCell(const int index) {
     update(r);
 }
 
-// 左键按下：记录起点与命中单元，进入待判定态（单击 / 框选 / CUSTOM 调序）。
+// 左键按下：记录起点与命中单元，进入待判定态（单击 / 框选 / Custom 调序）。
 void CellPickerItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     if (event->button() != Qt::LeftButton) { event->ignore(); return; }
     pressing_ = true;
@@ -163,17 +163,17 @@ void CellPickerItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     event->accept();
 }
 
-// 左键移动：CUSTOM 下按在已选单元上拖动→调序；否则超阈值→框选并实时重绘。
+// 左键移动：Custom 下按在已选单元上拖动→调序；否则超阈值→框选并实时重绘。
 void CellPickerItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     if (!pressing_) { event->ignore(); return; }
     curPos_ = event->scenePos();
     const bool moved = (curPos_ - pressPos_).manhattanLength() > overlayScale_;
 
-    // CUSTOM 下按在已选单元上拖动 → 拖拽调序（优先于框选）。
+    // Custom 下按在已选单元上拖动 → 拖拽调序（优先于框选）。
     const bool pressSelected =
         pressIndex_ >= 0 && static_cast<std::size_t>(pressIndex_) < selFlag_.size() &&
         selFlag_[static_cast<std::size_t>(pressIndex_)];
-    if (strategy_ == engine::SortStrategy::CUSTOM && pressSelected && moved) {
+    if (strategy_ == engine::SortStrategy::Custom && pressSelected && moved) {
         reorderDrag_ = true;
         reorderTarget_ = cellIndexAt(curPos_);
         update();
@@ -304,10 +304,10 @@ QRectF CellPickerItem::CellNumberLayer::boundingRect() const {
     return owner_->boundingRect();
 }
 
-// 绘制 CUSTOM 序的单元编号角标（1-based）：每个已选单元左上角，深色圆角底 + 白字。
+// 绘制 Custom 序的单元编号角标（1-based）：每个已选单元左上角，深色圆角底 + 白字。
 // 以设备像素绘制（字号恒定屏幕大小），避免高倍缩放下场景单位字号取整为 0。
 void CellPickerItem::CellNumberLayer::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget*) {
-    if (owner_->strategy_ != engine::SortStrategy::CUSTOM || owner_->selPos_.empty()) return;
+    if (owner_->strategy_ != engine::SortStrategy::Custom || owner_->selPos_.empty()) return;
     const QRectF exposed = option ? option->exposedRect : boundingRect();
     painter->save();
     const QTransform wt = painter->worldTransform();

@@ -52,6 +52,6 @@ std::string availableLanguageCodes();
 
 // 带占位符的整句：先取译文，再按编号填 %N（复用 Core i18n::formatPattern，与 IDC_KTRF 同构）。
 // 用于句中夹运行期值的句子（尺寸 / 计数 / 量词），避免拆成 lead/mid/tail 多段使译者无法重组语序。
-// 用法：IDC_CTRF(msg, kLogBurnIn, std::to_string(n))；源语言下替换结果与旧字符串拼接逐字节相同。
+// 用法：IDC_CTRF(msg, kLogBurnIn, std::to_string(n))；源语言下替换结果与直接字符串拼接逐字节相同。
 #define IDC_CTRF(group, name, ...) \
     ::idc::core::i18n::formatPattern(IDC_CTR(group, name), {__VA_ARGS__})

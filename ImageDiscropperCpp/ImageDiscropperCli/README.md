@@ -91,24 +91,24 @@ idc extract --input photo.jpg --rect 100,100,300,250 --annotations annos.json \
 
 与 GUI「新建」对话框一一对应，图案生成本体委托 Core 的 `generate::makePattern`（CLI 不实现任何像素 / 图案逻辑）。
 
-| 选项                  | 取值                                                                                                                                                                                                                                                | 默认                |
-|---------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------|
-| `--size WxH`        | 像素尺寸（正整数；单边 ≤ 65535 且 宽×高 ≤ 64,000,000≈256MB）                                                                                                                                                                                                     | new 必填；作生成源时必填    |
-| `--pattern <kind>`  | `solid` / `linear-gradient` / `radial-gradient` / `checkerboard` / `stripes` / `grid-lines` / `dot-grid` / `concentric` / `radial-rays` / `hue-gradient` / `noise`（斜纹已并入 `stripes`、同心方框已并入 `concentric`，均由 `--orientation` 选形状；旧 `image` 图案已彻底移除） | `solid`（纯色）       |
-| `--orientation <d>` | `horizontal` / `vertical` / `diagonal-down`(↘) / `diagonal-up`(↗)（线性渐变轴 / 条纹 4 向含斜纹 / 同心 `vertical`＝方环否则圆环 / 色相渐变扫描轴；接受缩写 h/v）                                                                                                                    | `horizontal`      |
-| `--bg <hex>`        | 底色 `#RRGGBB` / `#AARRGGBB`（**alpha 生效**，`00` 全透~`FF` 全不透）                                                                                                                                                                                         | `#FFFFFFFF`（不透明白） |
-| `--fg <hex>`        | 前景 / 图案色（渐变终点色）                                                                                                                                                                                                                                   | `#FF000000`（黑）    |
-| `--period <n>`      | 周期 / 格子边长 / 环间距 / 条纹（含斜纹）带间距 / 色相波长（px）                                                                                                                                                                                                           | 32                |
-| `--line-width <n>`  | 网格线 / 同心环（圆环·方环）线宽（px）                                                                                                                                                                                                                            | 1                 |
-| `--dot-radius <n>`  | 点阵点半径（px）                                                                                                                                                                                                                                         | 2                 |
-| `--seed <n>`        | 噪声种子（非负整数；同种子 + 同尺寸恒同图，供确定性复现 / C++ Rust 对拍）                                                                                                                                                                                                      | 0                 |
-| `--noise <mode>`    | 噪声配色：`full-color`（全彩）/ `grayscale`（灰度）/ `two-color`（双色 bg fg）                                                                                                                                                                                     | `full-color`      |
+| 选项                  | 取值                                                                                                                                                                                                                                                            | 默认                |
+|---------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------|
+| `--size WxH`        | 像素尺寸（正整数；单边 ≤ 65535 且 宽×高 ≤ 64,000,000≈256MB）                                                                                                                                                                                                                 | new 必填；作生成源时必填    |
+| `--pattern <kind>`  | `solid` / `linear-gradient` / `radial-gradient` / `checkerboard` / `stripes` / `grid-lines` / `dot-grid` / `concentric` / `radial-rays` / `hue-gradient` / `noise`（斜向条纹由 `stripes` + `--orientation` 表达、方环由 `concentric` + `--orientation` 表达；`image` 不是图案类型） | `solid`（纯色）       |
+| `--orientation <d>` | `horizontal` / `vertical` / `diagonal-down`(↘) / `diagonal-up`(↗)（线性渐变轴 / 条纹 4 向含斜纹 / 同心 `vertical`＝方环否则圆环 / 色相渐变扫描轴；接受缩写 h/v）                                                                                                                                | `horizontal`      |
+| `--bg <hex>`        | 底色 `#RRGGBB` / `#AARRGGBB`（**alpha 生效**，`00` 全透~`FF` 全不透）                                                                                                                                                                                                     | `#FFFFFFFF`（不透明白） |
+| `--fg <hex>`        | 前景 / 图案色（渐变终点色）                                                                                                                                                                                                                                               | `#FF000000`（黑）    |
+| `--period <n>`      | 周期 / 格子边长 / 环间距 / 条纹（含斜纹）带间距 / 色相波长（px）                                                                                                                                                                                                                       | 32                |
+| `--line-width <n>`  | 网格线 / 同心环（圆环·方环）线宽（px）                                                                                                                                                                                                                                        | 1                 |
+| `--dot-radius <n>`  | 点阵点半径（px）                                                                                                                                                                                                                                                     | 2                 |
+| `--seed <n>`        | 噪声种子（非负整数；同种子 + 同尺寸恒同图，供确定性复现 / C++ Rust 对拍）                                                                                                                                                                                                                  | 0                 |
+| `--noise <mode>`    | 噪声配色：`full-color`（全彩）/ `grayscale`（灰度）/ `two-color`（双色 bg fg）                                                                                                                                                                                                 | `full-color`      |
 
-> 上表选项仅对应图案生效（如 `solid` 只看 `--bg`、`--orientation` 只对 `linear-gradient`/`stripes`(含斜纹 4 向)/`concentric`(vertical＝方环)/`hue-gradient` 有效、`--line-width` 只对 `grid-lines`/`concentric` 有效、`--dot-radius` 只对 `dot-grid` 有效、`--seed`/`--noise` 只对 `noise` 有效）；完整「图案×参数适用矩阵」见 `idc new --help`。图片已从图案中拆出：CLI 侧仅保留**底图直挂**路径（`--input` 读文件 / `--size` 生成纯色等图案），带图的叠加层只能经配置 `layers` 段（§7）传入，不新增命令行挂图参数（旧 `--pattern-image`/`--image-anchor`/`--image-scale` 已移除）。
+> 上表选项仅对应图案生效（如 `solid` 只看 `--bg`、`--orientation` 只对 `linear-gradient`/`stripes`(含斜纹 4 向)/`concentric`(vertical＝方环)/`hue-gradient` 有效、`--line-width` 只对 `grid-lines`/`concentric` 有效、`--dot-radius` 只对 `dot-grid` 有效、`--seed`/`--noise` 只对 `noise` 有效）；完整「图案×参数适用矩阵」见 `idc new --help`。图片不作为图案类型：CLI 侧图像输入仅 `--input`（读文件）与 `--size`（生成图案）两条路径，带图的叠加层只能经配置 `layers` 段（§7）传入，命令行无挂图参数。
 > `new` 另支持 `--output`（非 dry-run 时必填）/ `--format`（缺省由扩展名推断）/ `--quality <0~100>`（有损质量，默认 90，仅 JPEG/WebP 生效）/ `--pad-color <hex>`（有损格式压平透明像素所用背景色，透写 `emit.padColor`，默认透明→黑底）；生成图作为切割命令的输入时，走同一 `--input` 读图之后的标准流程。
 > `new --save-config <file>` 为 dry-run：不落像素，而把本次生成配方（`source` 尺寸 + SPEC §7 `generate` 段 + `emit`）序列化进配置，供 `config --load` 据其复现画布（此路径不要求 `--output`）。
 > `--quality` 为通用导出选项：`extract` / `erase` / `grid` / `new` 均可传入（经 `applyExportOptions` 透写 `emit.quality`，`config` 则由 JSON 的 `emit.quality` 决定）。
-> 尺寸非法（<=0 / 单边超 65535 / 宽×高超 64,000,000）、图案名 / 颜色 / 方向 / 周期 / 种子 / 噪声模式非法均退出码 1（早于生成，分配前短路不至 OOM）；`--input` 与 `--size` 同时出现→退出码 1；`--quality` 非 0~100 整数→退出码 1；`--pattern image` 已不识别（旧图片图案已彻底移除），传入一律报「不支持的图案类型」退出码 1。
+> 尺寸非法（<=0 / 单边超 65535 / 宽×高超 64,000,000）、图案名 / 颜色 / 方向 / 周期 / 种子 / 噪声模式非法均退出码 1（早于生成，分配前短路不至 OOM）；`--input` 与 `--size` 同时出现→退出码 1；`--quality` 非 0~100 整数→退出码 1；`--pattern image` 非法（图片不作为图案类型），传入报「不支持的图案类型」退出码 1。
 
 > **标注入口**：四层命令（`extract` / `erase` / `grid` / `config`）均支持命令行标注输入——`--annotation '<内联 JSON 对象>'`
 > （一条 SPEC §7 `annotations` 元素，可重复）与 `--annotations <file.json>`（文件根为标注数组，可重复）；两者可混用、累积追加。
@@ -127,7 +127,7 @@ idc extract --input photo.jpg --rect 100,100,300,250 --annotations annos.json \
 
 - **叠加层构成**：`layers` = 叠加 `ImageLayer` **数组**（不含底图）；画布**无级背景**（`composeCanvas` 恒铺全透明底）；每层携
   `source`（`recipe` 配方，与 `generate` 同源不留文件名 | `file` 相对文件名 | 无源→空占位）、
-  `transform`（画布锚点 + 图片枢轴 + 自由 `x,y` + 目标宽高 + **不透明度 `opacity`**——合成期 alpha 乘子 `a'=(a·opacity+127)/255`，缺省 255＝不透明、灰度层亦生效）、`zOrder`（叠放序）、逐层 `preprocess`（**不含 `opacity`**——不透明度已上移为 `transform.opacity`，旧图层 preprocess 内的 `opacity` 步载入时自动迁移到该字段）。
+  `transform`（画布锚点 + 图片枢轴 + 自由 `x,y` + 目标宽高 + **不透明度 `opacity`**——合成期 alpha 乘子 `a'=(a·opacity+127)/255`，缺省 255＝不透明、灰度层亦生效）、`zOrder`（叠放序）、逐层 `preprocess`（**不含 `opacity`**——不透明度由 `transform.opacity` 承载，旧图层 preprocess 内的 `opacity` 步载入时自动转到该字段）。
 - **执行链**（`buildLayerCanvas`）：逐层解码 `file` 源图（先「配置目录 / 相对名」后「`<配置名>.assets / 相对名」）注入像素
   → `canvas::composeCanvas(layers, w, h, base)` 依底图 base→叠加层展平（画布无级背景、恒铺全透明底；base 由 `--input`/`--size`/`generate` 得来、非空则先铺 (0,0)），叠加层按 z 序逐层物化（已含缩放与逐层预处理）→按 `transform.opacity` 逐像素乘 alpha→source-over 落位、越界自然裁剪 → 得展平画布图 → 交 `runEngine`（引擎零改动）；
   **缺文件降级为空占位**（合成时跳过），不报错。
@@ -198,8 +198,8 @@ idc config --load base.json --annotation '{"type":"text","x":10,"y":10,"text":"h
 > 建议改用 `--annotations <file>` 文件入口，或经 `cmd` / 脚本封装传参。示例见
 > [`examples/l_annotate.sh`](examples/l_annotate.sh)。
 
-> **行为契约**（参数规则 / 全局选项 / 退出码 / 错误输出格式）已收编至
-> [`SPEC.md`](../../SPEC.md) §8.1，本文件不再重复维护。
+> **行为契约**（参数规则 / 全局选项 / 退出码 / 错误输出格式）见
+> [`SPEC.md`](../../SPEC.md) §8.1。
 
 ## 使用的 Core API（接口确认清单）
 
@@ -210,7 +210,7 @@ idc config --load base.json --annotation '{"type":"text","x":10,"y":10,"text":"h
 - 多层画布合成：`canvas::composeCanvas(layers, w, h, base)`（`config --load` 带 `layers` 时由 `job::buildLayerCanvas` 以已解析底图 base 为基、逐层解码叠加 `file` 源图注入后展平为工作图）；资源打包由 `job::bundleLayerAssets` 完成（`--bundle-assets`）
 - 标注文本解析：`engine::parseAnnotationsFromJsonText`（内联对象 / 根数组 → `vector<Annotation>`，供 `--annotation` / `--annotations` 复用；CLI 不引 nlohmann/json）
 - 标注烧录：`annotation::AnnotationSet::burnIn(base)` / `restore` / `annotations()`（把命令行 / 配置标注烧进工作图）
-- 图像 I/O：`engine::readImageFile`（解码）/ `writeImageFile`（示例 / 测试造图）——路径按 **UTF-8** 解析（`pathFromUtf8`），支持中文 / 非 ASCII 路径
+- 图像 I/O：`io::readImageFile`（解码）/ `io::writeImageFile`（示例 / 测试造图）——路径按 **UTF-8** 解析（`pathFromUtf8`），支持中文 / 非 ASCII 路径
 - 导出落盘：`engine::exportImage`（`new` 经 `job::writeGeneratedImage` 构造全画布单片段 Composition 复用同一落盘通道：扩展名推断格式 / 自动建父目录 / JPEG 压平）
 - 图案生成：`generate::makePattern(w, h, PatternParams)`（`new` 与生成源均委托；尺寸 / 图案名 / 颜色等参数装配见 `src/generate_args.cpp`，CLI 不实现像素逻辑）
 - 基础类型：`core::Image` / `core::Color` / `kTransparent`
@@ -219,13 +219,6 @@ idc config --load base.json --annotation '{"type":"text","x":10,"y":10,"text":"h
 
 1. **合并导出的 JPEG/BMP 透明压平**：不支持透明的格式会把 alpha 压平到 `padColor`；
    `new` 可用 `--pad-color <hex>` 显式指定压平底色；未指定时 `emit.padColor` 缺省为透明黑，转 JPEG 后表现为黑色背景（属格式固有特性，非缺陷；透明画布导出 JPEG 时建议给 `--pad-color`）。
-
-> 此前记录的 4 项 Core 限制（`--pad-color` 不生效 / `{row}`·`{col}` 不支持 / 分离忽略 `--sort` /
-> 合并不建父目录）**均已在 Core 层修复**，见 `ImageDiscropperCore` 的 `composition.*` 与 `export.cpp`。
-
-## 待 Core 补充接口
-
-- 暂无阻塞项。原 3 项 TODO（padColor 透传 / `{row}`·`{col}` 命名 / SEPARATE 尊重 Sequence）已落地。
 
 ## 许可
 

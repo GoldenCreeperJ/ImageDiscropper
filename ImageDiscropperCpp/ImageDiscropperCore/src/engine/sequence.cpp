@@ -16,8 +16,8 @@ namespace idc::engine {
 // 叠加 reverse（整体逆序）与 snake（隔行/隔列反向）；custom 由 setCustom 提供。
 void Sequence::build(const std::size_t cellCount, const std::size_t cols,
                      const std::size_t rows, const SequenceParams& params) {
-    // CUSTOM：序号由 setCustom 显式提供（点选顺序 / 拖拽调序），build 不覆盖。
-    if (params.strategy == SortStrategy::CUSTOM) {
+    // Custom：序号由 setCustom 显式提供（点选顺序 / 拖拽调序），build 不覆盖。
+    if (params.strategy == SortStrategy::Custom) {
         return;
     }
 
@@ -25,7 +25,7 @@ void Sequence::build(const std::size_t cellCount, const std::size_t cols,
     if (cellCount == 0 || cols == 0 || rows == 0) return;
     order_.reserve(cellCount);
 
-    if (params.strategy == SortStrategy::ROW_MAJOR) {
+    if (params.strategy == SortStrategy::RowMajor) {
         // 横优先：逐行输出；snake 时奇数行行内反向。
         for (std::size_t r = 0; r < rows; ++r) {
             const bool reverseRow = params.snake && r % 2 == 1;
@@ -35,7 +35,7 @@ void Sequence::build(const std::size_t cellCount, const std::size_t cols,
             }
         }
     } else {
-        // 竖优先（COLUMN_MAJOR）：逐列输出；snake 时奇数列列内反向。
+        // 竖优先（ColumnMajor）：逐列输出；snake 时奇数列列内反向。
         for (std::size_t c = 0; c < cols; ++c) {
             const bool reverseCol = params.snake && c % 2 == 1;
             for (std::size_t r = 0; r < rows; ++r) {

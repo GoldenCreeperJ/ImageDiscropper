@@ -2,7 +2,6 @@
 // 文件：app/controllers/config_controller.h
 // 作用：ConfigController——配置存取编排（FR-L3.8）：保存（§7 schema JSON，含标注与图层段）/
 //       加载（底图像素重生 + 资产解码 + 历史压栈可撤销 + 预处理队列重放 + 标注还原）。
-//       从 MainWindow 拆出（原 onSaveConfig/onLoadConfig）。
 // 分块依据：配置存取是独立关注点（依赖 Document/AnnotationBridge/PreprocessController/
 //       DocHistory/EngineBridge），与装配壳无耦合（CONTRIBUTING.md「分层纪律」）。
 // ============================================================================
@@ -34,7 +33,7 @@ public:
     void setPreprocessController(PreprocessController* preprocess);
     void setHistory(DocHistory* history);        // recordConfigLoad（载入压栈可撤销）
     void setStatusBar(StatusBar* status);
-    void setDialogParent(QWidget* parent);       // Android 加载列表选择框父窗口
+    void setDialogParent(QWidget* parent);       // 配置对话框父窗口（桌面 QFileDialog / 移动端 QInputDialog 列表选择框）
 
 public slots:
     void onSaveConfig();   // 保存配置：当前作业配置写为 §7 schema JSON（委托 EngineBridge → Core）。

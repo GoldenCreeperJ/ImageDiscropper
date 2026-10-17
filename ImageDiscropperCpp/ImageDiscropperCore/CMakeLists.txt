@@ -2,12 +2,9 @@
 # 文件：CMakeLists.txt
 # 作用：ImageDiscropperCore 工程顶层构建脚本。定义 C++ 标准、Core 静态库目标、
 #       演示可执行程序与极简自测程序。
-# 架构定位：Core 层（纯逻辑、无 GUI 依赖），
-#           供上层 CLI / GUI 以静态库方式引用。
-# 分块依据：源文件按功能模块分组（core / geometry / annotation / preprocess /
-#           engine），与 include、src 目录一一对应。
-#           （原 pixel_ops 模块已拆分：通用原语入 core::Image，色彩/几何核内化为 preprocess 私有 pixel_kernels；
-#            原 history 模块并入 core，HistoryManager<T> 现为 idc::core 成员。）
+# 架构定位：Core 层（纯逻辑、无 GUI 依赖），供上层 CLI / GUI 以静态库方式引用。
+# 分块依据：源文件按功能模块分组（core / io / i18n / geometry / annotation /
+#           preprocess / generate / canvas / engine），与 include、src 目录一一对应。
 # ============================================================================
 cmake_minimum_required(VERSION 3.28)
 
@@ -30,9 +27,10 @@ endif()
 
 # ---------------------------------------------------------------------------
 # 第三方依赖（均由 vcpkg 提供，且全部以 PRIVATE 方式接入——不经公共头暴露给下游）：
-#   · stb           header-only 图像编码库，仅 image_io.cpp 内含 <stb_image_write.h> 并定义实现宏。
-#   · libwebp       WebP 编码库，仅 image_io.cpp 内含 <webp/encode.h>/<webp/decode.h>（补齐 stb 不支持的 WebP）。
-#   · nlohmann_json 单头 JSON 库，仅 engine_config_json.cpp 与 annotation/annotation_json.cpp 内含 <nlohmann/json.hpp>（配置整档 / 标注段 JSON，二者经私有内部头 src/json_common.h 共用助手与片段交换）。
+#   · stb           header-only 图像编码库，仅 src/io/image_io.cpp 内含 <stb_image_write.h> 并定义实现宏。
+#   · libwebp       WebP 编码库，仅 src/io/image_io.cpp 内含 <webp/encode.h>/<webp/decode.h>（补齐 stb 不支持的 WebP）。
+#   · nlohmann_json 单头 JSON 库，仅 engine_config_json.cpp 与 annotation/annotation_json.cpp 内含 <nlohmann/json.hpp>
+#                   （配置整档 / 标注段 JSON，二者经私有内部头 src/json_common.h 共用助手与片段交换）。
 # 三者均只在各自 .cpp 内部使用，公共头不出现其类型，故对下游零依赖扩散（依赖单向）。
 # ---------------------------------------------------------------------------
 find_package(Stb REQUIRED)
@@ -42,12 +40,16 @@ find_package(nlohmann_json CONFIG REQUIRED)
 # ---------------------------------------------------------------------------
 # 收集所有源文件（按目录分组，便于阅读与后续维护）
 # ---------------------------------------------------------------------------
-# core：基础数据类型（Color / Point / Image）+ 泛型撤销 / 重做栈（原 history 模块并入）
+# core：基础数据类型（Color / Point / Image）
 set(IDC_CORE_SRC
         src/core/color.cpp
         src/core/point.cpp
         src/core/image.cpp
-        src/core/history_manager.cpp
+)
+
+# io：图像编解码（stb + libwebp），与 path_utf8 平级的基础 IO 能力
+set(IDC_IO_SRC
+        src/io/image_io.cpp
 )
 
 # i18n：三层共用的进程级语言状态内核（零 Qt）+ Core 自己的英文表
@@ -65,7 +67,8 @@ set(IDC_GEOMETRY_SRC
         src/geometry/path.cpp
 )
 
-# annotation：标注集合（FR-1.3，纯数据 + zOrder + 光栅合成；会话态已拆至 GUI AnnotationEditor）+ 标注 ↔ JSON 序列化（SPEC §7 annotations 段，自 engine 内聚收口至此）
+# annotation：标注集合（FR-1.3，纯数据 + zOrder + 光栅合成；编辑会话态属 GUI AnnotationEditor）
+#             + 标注 ↔ JSON 序列化（SPEC §7 annotations 段）
 set(IDC_ANNOTATION_SRC
         src/annotation/shape_factory.cpp
         src/annotation/rasterizer.cpp
@@ -92,7 +95,7 @@ set(IDC_CANVAS_SRC
 )
 
 # engine：Grid-Selection-Emit 统一引擎（SPEC §1）——切割线 / 网格 / 切分 /
-#         选择极性 / 排序 / 合成 / 导出 / 图像编码(stb+libwebp) / JSON 配置(nlohmann) / 顶层编排。
+#         选择极性 / 排序 / 合成 / 导出 / JSON 配置 / 顶层编排。
 set(IDC_ENGINE_SRC
         src/engine/cut_line.cpp
         src/engine/grid.cpp
@@ -101,13 +104,13 @@ set(IDC_ENGINE_SRC
         src/engine/sequence.cpp
         src/engine/composition.cpp
         src/engine/export.cpp
-        src/engine/image_io.cpp
         src/engine/engine_config_json.cpp
         src/engine/engine.cpp
 )
 
 add_library(image_discropper_core STATIC
     ${IDC_CORE_SRC}
+    ${IDC_IO_SRC}
     ${IDC_CORE_I18N_SRC}
     ${IDC_GEOMETRY_SRC}
     ${IDC_ANNOTATION_SRC}

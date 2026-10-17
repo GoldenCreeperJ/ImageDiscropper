@@ -1,9 +1,8 @@
 // ============================================================================
-// 文件：app/preprocess_controller_canvas.cpp
+// 文件：app/controllers/preprocess_controller_canvas.cpp
 // 作用：PreprocessController 的「多层画布」成员实现（TU 拆分）——图层会话物化缓存刷新
 //       syncLayerMaterialCache、展平重组 recomposeLayerCanvas、导出侧现算
-//       composeLayerCanvasForExport。自 preprocess_controller.cpp 原封迁出
-//       （同 Document 先例：类不拆、仅分 TU 编译，公有 API 不变）。
+//       composeLayerCanvasForExport——类不拆分，仅按职责分 TU 编译。
 // ============================================================================
 #include "app/controllers/preprocess_controller.h"
 
@@ -45,10 +44,10 @@ void PreprocessController::recomposeLayerCanvas() {
     if (const int w = doc_->canvasWidth(), h = doc_->canvasHeight(); w <= 0 || h <= 0) return;
     // 以当前声明栈为准（各层已含 transform/zOrder/preprocess）；底图作 base 铺于叠加层之下。
     const std::vector<canvas::ImageLayer>& layers = doc_->layerStack();
-    // 先按签名刷新逐层物化缓存（缺口 1）：仅签名（来源/图层框/底色/预处理/目标尺寸）变化的层重跑 materializeLayer，改落位/不透明度（transform.x/y/锚点/opacity）复用缓存整层位图。
+    // 先按签名刷新逐层物化缓存：仅签名（来源/图层框/底色/预处理/目标尺寸）变化的层重跑 materializeLayer，改落位/不透明度（transform.x/y/锚点/opacity）复用缓存整层位图。
     //   无论显隐都刷全层（切回可见时免重跑）。
     syncLayerMaterialCache(layers);
-    // 预览显隐关（doc_->imageLayersVisible()==false）→ 传空 layers（仅落底图），与导出侧同口径；Core 不再持显隐态。
+    // 预览显隐关（doc_->imageLayersVisible()==false）→ 传空 layers（仅落底图），与导出侧同口径；Core 不持显隐态。
     static const std::vector<canvas::ImageLayer> kNoLayers;
     const std::vector<canvas::ImageLayer>& toCompose = doc_->imageLayersVisible() ? layers : kNoLayers;
     core::Image composed = EngineBridge::composeCanvas(toCompose, doc_->canvasWidth(), doc_->canvasHeight(), doc_->fadedCanvasBase(),
@@ -73,7 +72,7 @@ core::Image PreprocessController::composeLayerCanvasForExport(const bool include
     if (includeOverlays == doc_->imageLayersVisible()) return doc_->working();
     const int w = doc_->canvasWidth(), h = doc_->canvasHeight();
     if (w <= 0 || h <= 0) return doc_->working();
-    // includeOverlays 决定叠全层还是传空（仅底图）：Core 不持显隐态，显隐下沉到调用方传参。
+    // includeOverlays 决定叠全层还是传空（仅底图）：Core 不持显隐态，显隐由调用方传参决定。
     static const std::vector<canvas::ImageLayer> kNoLayers;
     const std::vector<canvas::ImageLayer>& layers = includeOverlays ? doc_->layerStack() : kNoLayers;
     // 复用已按签名刷新的物化缓存（图层层内容/preprocess 与预览态一致）：命中直取、未命中 Core 回退现算。

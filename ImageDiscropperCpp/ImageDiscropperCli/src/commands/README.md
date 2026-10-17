@@ -21,8 +21,8 @@
 - 单元 `r,c` → `index` 的映射**必须**经 Core 的 `Grid`（行列数由图像边界自动推导），CLI 不自算几何。
 - `new.cpp` 不走 `EngineConfig`/`runEngine`：它是「创建而非切割」，仅委托 Core `generate::makePattern` 生成画布
   并经 `job::writeGeneratedImage` 落盘。
-- **输入来源统一（`generate_args.resolveInputImage`）**：extract/erase/grid/config 取图不再直调 `loadInputImage`，
-  而是由 `--input`（读文件，失败退出码 3）或 `--size`(+`--pattern`…)（生成画布，参数非法退出码 1）二选一；二者同时出现→退出码 1。
+- **输入来源统一（`generate_args.resolveInputImage`）**：extract/erase/grid/config 取图均由
+  `--input`（读文件，失败退出码 3）或 `--size`(+`--pattern`…)（生成画布，参数非法退出码 1）二选一；二者同时出现→退出码 1。
   生成画布与读文件产出的图后续走完全相同的切割流程（带 / 网格按 `image.width()/height()` 装配）。
 - **公共导出选项 `--format`/`--quality`/`--naming`（`command_support.applyExportOptions`）**：extract/erase/grid 统一经此 inline 助手解析并写入 `emitParams`（`--quality` 经 `value_parser::parseQuality` 校验 0~100，仅 JPEG/WebP 生效）；`config` 不走此助手（质量由加载 JSON 的 `emit.quality` 决定）；`new` 单独解析 `--format`/`--quality`（无切割/命名）。
 - `config.cpp` 的 `explicitCollapse` 由加载配置的 `emit.mode==MERGED && emit.layout==COLLAPSE` 推导，

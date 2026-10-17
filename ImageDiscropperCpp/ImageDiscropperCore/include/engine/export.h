@@ -1,10 +1,10 @@
 // ============================================================================
 // 文件：include/engine/export.h
 // 作用：声明导出阶段 exportImage——把合成结果 Composition 落盘（SPEC §4.1/§4.2/§4.5）。
-// 分块依据：export 是独立的流水线阶段，声明从 engine.h facade 下沉至此，使 export.cpp 只
-//       依赖本阶段头（Composition + core::Image）与 image_io，不再全量 include engine.h（解耦）。
-// 说明：分离模式（SEPARATE）把各片段写入目标文件夹（不存在则自动创建，E-8）；合并模式
-//       （MERGED）构建画布 blit 后写单图。像素搬运在此发生。定义见 src/engine/export.cpp。
+// 分块依据：export 是独立的流水线阶段，声明位于本头（非 engine.h facade），使 export.cpp 只
+//       依赖本阶段头（Composition + core::Image）与 image_io，不全量 include engine.h（解耦）。
+// 说明：分离模式（Separate）把各片段写入目标文件夹（不存在则自动创建，E-8）；合并模式
+//       （Merged）构建画布 blit 后写单图。像素搬运在此发生。定义见 src/engine/export.cpp。
 // ============================================================================
 #pragma once
 
@@ -18,8 +18,8 @@
 namespace idc::engine {
 
 // 把合成结果落盘（分离多图 / 合并单图）；成功返回空 expected。
-// SEPARATE：outputPath 为目标文件夹（不存在则自动创建，含多级父目录；创建失败返回 CoreError，E-8）。
-// MERGED：outputPath 为单图文件路径，格式优先由扩展名推断，无有效扩展名时回退 Composition::format。
+// Separate：outputPath 为目标文件夹（不存在则自动创建，含多级父目录；创建失败返回 CoreError，E-8）。
+// Merged：outputPath 为单图文件路径，格式优先由扩展名推断，无有效扩展名时回退 Composition::format。
 std::expected<void, core::CoreError> exportImage(const Composition& composition, const core::Image& source,
                                                  const std::string& outputPath);
 

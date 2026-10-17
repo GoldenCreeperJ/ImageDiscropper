@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：src/model/annotation_bridge.cpp
+// 文件：model/annotation_bridge.cpp
 // 作用：实现 AnnotationBridge——把画布手势 / 面板意图翻译成对 Core 标注 API 的调用。
 // 分块依据：
 //   1. 工具→形状映射    shapeTypeForTool
@@ -26,30 +26,30 @@ namespace idc::gui {
 geometry::ShapeType shapeTypeForTool(const AnnoTool tool) {
     using geometry::ShapeType;
     switch (tool) {
-        case AnnoTool::RECT:          return ShapeType::RECTANGLE;
-        case AnnoTool::SQUARE:        return ShapeType::SQUARE;
-        case AnnoTool::RHOMBUS:       return ShapeType::RHOMBUS;
-        case AnnoTool::CIRCLE:        return ShapeType::CIRCLE;
-        case AnnoTool::ELLIPSE:       return ShapeType::ELLIPSE;
-        case AnnoTool::ISOS_TRI:      return ShapeType::ISOS_TRIANGLE;
-        case AnnoTool::EQU_TRI:       return ShapeType::EQU_TRIANGLE;
-        case AnnoTool::RECT_TRI:      return ShapeType::RECT_TRIANGLE;
-        case AnnoTool::EQU_RECT_TRI:  return ShapeType::EQU_RECT_TRIANGLE;
-        case AnnoTool::LINE:          return ShapeType::LINE;
-        case AnnoTool::POLYLINE:      return ShapeType::POLYLINE;
-        case AnnoTool::BRUSH:         return ShapeType::PATH;
-        case AnnoTool::TEXT:          return ShapeType::TEXT;
-        case AnnoTool::SELECT:        return ShapeType::LINE; // 占位，SELECT 不构造形状
+        case AnnoTool::Rect:       return ShapeType::Rectangle;
+        case AnnoTool::Square:     return ShapeType::Square;
+        case AnnoTool::Rhombus:    return ShapeType::Rhombus;
+        case AnnoTool::Circle:     return ShapeType::Circle;
+        case AnnoTool::Ellipse:    return ShapeType::Ellipse;
+        case AnnoTool::IsosTri:    return ShapeType::IsosTriangle;
+        case AnnoTool::EquTri:     return ShapeType::EquTriangle;
+        case AnnoTool::RectTri:    return ShapeType::RectTriangle;
+        case AnnoTool::EquRectTri: return ShapeType::EquRectTriangle;
+        case AnnoTool::Line:       return ShapeType::Line;
+        case AnnoTool::Polyline:   return ShapeType::Polyline;
+        case AnnoTool::Brush:      return ShapeType::Path;
+        case AnnoTool::Text:       return ShapeType::Text;
+        case AnnoTool::Select:     return ShapeType::Line; // 占位，Select 不构造形状
     }
-    return ShapeType::LINE;
+    return ShapeType::Line;
 }
 
 // ===========================================================================
 // 2. 构造与底图 / 工具
 // ===========================================================================
 AnnotationBridge::AnnotationBridge(QObject* parent) : QObject(parent) {
-    // 默认工具为 SELECT，与编辑会话的 EDIT 模式对齐（属性写回作用到选中项）。
-    editor_.setEditType(EditType::EDIT);
+    // 默认工具为 Select，与编辑会话的 Edit 模式对齐（属性写回作用到选中项）。
+    editor_.setEditType(EditType::Edit);
 }
 
 void AnnotationBridge::setBaseImage(const core::Image& base) {
@@ -65,10 +65,10 @@ void AnnotationBridge::setTool(const AnnoTool tool) {
     if (tool_ == tool) return;
     cancelPending();               // 切换工具前放弃未提交的预览 / 路径草稿
     tool_ = tool;
-    if (tool_ == AnnoTool::SELECT) {
-        editor_.setEditType(EditType::EDIT);
+    if (tool_ == AnnoTool::Select) {
+        editor_.setEditType(EditType::Edit);
     } else {
-        editor_.setEditType(EditType::DRAW);
+        editor_.setEditType(EditType::Draw);
         editor_.setCurrentType(shapeTypeForTool(tool_));
     }
     emit toolChanged();
@@ -76,7 +76,7 @@ void AnnotationBridge::setTool(const AnnoTool tool) {
 }
 
 // ===========================================================================
-// 3. 属性写回（委托 Core change*；EDIT 作用选中项，DRAW 改当前默认）
+// 3. 属性写回（委托 Core change*；Edit 作用选中项，Draw 改当前默认）
 // ===========================================================================
 void AnnotationBridge::setColor(const core::Color& c) { editor_.changeColor(c); emit changed(); }
 void AnnotationBridge::setFillColor(const core::Color& c) { editor_.changeFillColor(c); emit changed(); }
@@ -102,7 +102,7 @@ void AnnotationBridge::moveSelectedBy(const double dx, const double dy) {
     const annotation::Annotation* a = editor_.selectedAnnotation();
     if (!a || !a->shape) return;
     // 复用 Core 几何：世界系平移形状（内部把世界位移换算到局部系后偏移自身参数），保留具体类型与参数化身份
-    // ——不再展平为通用 PATH，故 TEXT 字形、矩形/圆等元数据与控制点语义均不丢失（shapeType 保持不变）；
+    // ——不展平为通用 Path，故 Text 字形、矩形/圆等元数据与控制点语义均不丢失（shapeType 保持不变）；
     // 且形状经旋转/缩放后拖动方向仍跟随光标（translateWorld 而非 translate）。
     a->shape->translateWorld(dx, dy);
     emit changed();
@@ -193,7 +193,7 @@ void AnnotationBridge::setBurnIn(const bool on) {
 
 core::Image AnnotationBridge::burnIn(const core::Image& base) const {
     // 以传入的当前工作图为底（而非会话内部可能陈旧的底图）委托合成：
-    // AnnotationEditor::burnIn(base) 内转 Core AnnotationSet::burnIn（空 base → 1×1 口径与历史一致）。
+    // AnnotationEditor::burnIn(base) 内转 Core AnnotationSet::burnIn（空 base 退化为 1×1 透明图，见该处实现）。
     return editor_.burnIn(base);
 }
 
@@ -201,7 +201,7 @@ core::Image AnnotationBridge::burnIn(const core::Image& base) const {
 // 7. 属性回显（供右侧标注属性页）
 // ===========================================================================
 
-// 有选中项则取其属性，否则取当前工具默认（与 Core change* 的 EDIT/DRAW 分支一致）。
+// 有选中项则取其属性，否则取当前工具默认（与 Core change* 的 Edit/Draw 分支一致）。
 core::Color AnnotationBridge::displayColor() const {
     const annotation::Annotation* a = editor_.selectedAnnotation();
     return a ? a->style.color : editor_.currentColor();
@@ -235,18 +235,18 @@ double AnnotationBridge::displayCornerRadius() const {
 namespace {
 bool supportsFillFor(const geometry::ShapeType t) {
     // 直线无内部、文字为字形（填充色不参与），其余形状（含开放折线 / 画笔）均可填充。
-    return t != geometry::ShapeType::LINE && t != geometry::ShapeType::TEXT;
+    return t != geometry::ShapeType::Line && t != geometry::ShapeType::Text;
 }
 bool supportsCornerRadiusFor(const geometry::ShapeType t) {
     switch (t) {
-        case geometry::ShapeType::RECTANGLE:
-        case geometry::ShapeType::SQUARE:
-        case geometry::ShapeType::RHOMBUS:
-        case geometry::ShapeType::POLYLINE:
-        case geometry::ShapeType::ISOS_TRIANGLE:
-        case geometry::ShapeType::EQU_TRIANGLE:
-        case geometry::ShapeType::RECT_TRIANGLE:
-        case geometry::ShapeType::EQU_RECT_TRIANGLE:
+        case geometry::ShapeType::Rectangle:
+        case geometry::ShapeType::Square:
+        case geometry::ShapeType::Rhombus:
+        case geometry::ShapeType::Polyline:
+        case geometry::ShapeType::IsosTriangle:
+        case geometry::ShapeType::EquTriangle:
+        case geometry::ShapeType::RectTriangle:
+        case geometry::ShapeType::EquRectTriangle:
             return true;
         default:
             return false;
@@ -255,17 +255,17 @@ bool supportsCornerRadiusFor(const geometry::ShapeType t) {
 } // namespace
 
 // 上下文判定：有选中 → 按选中形状类型；绘制工具激活 → 按当前工具类型；
-// SELECT 且无选中 → 不做限制（一律可用）。此时面板编辑的是「下一次绘制」的默认值，而 currentType_
-// 是上一绘制工具的残值（Core 仅在切到非 SELECT 工具时更新）；若据残值置灰，会出现
+// Select 且无选中 → 不做限制（一律可用）。此时面板编辑的是「下一次绘制」的默认值，而 currentType_
+// 是上一绘制工具的残值（Core 仅在切到非 Select 工具时更新）；若据残值置灰，会出现
 // 「用直线后切回选择/移动，填充/圆角控件莫名点不了」的错禁问题。
 bool AnnotationBridge::contextSupportsFill() const {
     if (const annotation::Annotation* a = editor_.selectedAnnotation()) return supportsFillFor(a->shape->type());
-    if (tool_ == AnnoTool::SELECT) return true;
+    if (tool_ == AnnoTool::Select) return true;
     return supportsFillFor(editor_.currentType());
 }
 bool AnnotationBridge::contextSupportsCornerRadius() const {
     if (const annotation::Annotation* a = editor_.selectedAnnotation()) return supportsCornerRadiusFor(a->shape->type());
-    if (tool_ == AnnoTool::SELECT) return true;
+    if (tool_ == AnnoTool::Select) return true;
     return supportsCornerRadiusFor(editor_.currentType());
 }
 

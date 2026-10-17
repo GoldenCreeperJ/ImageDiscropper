@@ -1,7 +1,7 @@
 // ============================================================================
-// 文件：src/i18n/lang_en.cpp（GUI 英文译文表 · 前半：menu / label）
+// 文件：i18n/lang_en.cpp（GUI 英文译文表 · 前半：menu / label）
 // 作用：GUI 层 menu、label 两个可译组的英文目录——一行一条「键 → 文本」，并在 installCatalogs() 里登记给 Core 内核。
-//       tooltip / status / msg 三组体量大，拆到同目录 lang_en_detail.cpp（kEntriesEnDetail），
+//       tooltip / status / msg 三组体量大，另置于同目录 lang_en_detail.cpp（kEntriesEnDetail），
 //       由其 installDetailCatalog() 装配；installLanguage 对同一语言**累加**，两半落到同一进程目录（见 core_i18n.h）。
 // 架构定位：GUI 顶层 i18n 基建（与 gui_texts.h / gui_i18n.h / retranslate.h 同族，统一住 i18n）。表**住在本层**而非 Core：
 //       GUI 的菜单/标签译文不该进纯逻辑静态库（CLI 与 demo 都不需要它，进了就是无谓膨胀）。
@@ -469,7 +469,7 @@ namespace i18n {
 void installDetailCatalog();
 
 void installCatalogs() {
-    // Core 报因与图案名的表住在 Core 自己那份（src/i18n/lang_en.cpp），此处顺带装配：
+    // Core 报因与图案名的表住在 Core 工程自己那份（ImageDiscropperCore/src/i18n/lang_en.cpp），此处顺带装配：
     // 弹窗里显示的引擎 / 标注校验失败原因由 Core 门面现取，本层不该替它存译文。
     core::i18n::installCoreCatalogs();
     core::i18n::installLanguage(core::kLangCodeEn, core::makeI18nTable(kEntriesEn));

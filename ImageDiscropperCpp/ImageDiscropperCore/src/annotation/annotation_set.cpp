@@ -2,8 +2,7 @@
 // 文件：src/annotation/annotation_set.cpp
 // 作用：实现 include/annotation/annotation_set.h——Annotation 拷贝语义与 AnnotationSet
 //       的结构操作 / zOrder 不变式 / 命中检测 / 光栅合成。
-// 分块依据：自原 annotation_layer.cpp 逐段搬入（纯拆分：算法与口径零改动）——
-//       会话态（编辑模式 / 选中 / 属性模板 / 撤销重做）已随拆分离开 Core，归 GUI AnnotationEditor。
+// 分块依据：只承载数据与合成能力；会话态（编辑模式 / 选中 / 属性模板 / 撤销重做）归 GUI AnnotationEditor。
 // ============================================================================
 #include "annotation/annotation_set.h"
 
@@ -93,7 +92,7 @@ void AnnotationSet::clear() { items_.clear(); }
 
 // 整体替换（配置还原专用）：按调用方给定的顺序逐条收编（不在此排序：多来源合并时 zOrder
 // 可能重叠，顺序由调用方负责，如配置文件载入前已按 zOrder 稳定排序）。每条收编后其下标即层位，
-// 末尾统一规范化 zOrder ＝ 下标；跳过无几何的残缺条目（与原 restoreAnnotations 守卫一致）。
+// 末尾统一规范化 zOrder ＝ 下标；跳过无几何的残缺条目。
 void AnnotationSet::restore(std::vector<Annotation> items) {
     items_.clear();
     for (Annotation& a : items) {
@@ -117,7 +116,7 @@ std::optional<std::size_t> AnnotationSet::hitTest(const core::Point2D& p) const 
         const geometry::Path path = ps.shape->worldPath();
 
         // 填充且非直线：优先按内部判定
-        if (ps.style.fill && ps.shape->type() != geometry::ShapeType::LINE) {
+        if (ps.style.fill && ps.shape->type() != geometry::ShapeType::Line) {
             if (path.contains(p.x, p.y)) return i;
         }
         // 其余情况按轮廓距离判定
@@ -128,16 +127,16 @@ std::optional<std::size_t> AnnotationSet::hitTest(const core::Point2D& p) const 
 }
 
 // 合成（指定底图）：以传入底图为基准逐条光栅化，后入列表者覆盖先入者；
-// 底图为空时退化为 1×1 透明图（与原 AnnotationLayer::burnIn(base) 行为一致）。
+// 底图为空时退化为 1×1 透明图。
 core::Image AnnotationSet::burnIn(const core::Image& base) const {
     core::Image out = base.empty()
-        ? core::Image(1, 1, core::ImageFormat::RGBA)
+        ? core::Image(1, 1, core::ImageFormat::Rgba)
         : base.toRGBA();
 
     for (const Annotation& ps : items_) {
         if (!ps.shape) continue;
         PaintStyle style = ps.style;   // 样式快照直接来自内嵌的 PaintStyle
-        style.antialias = true;        // 合成路径固定抗锯齿（与逐条光栅化既有口径一致）
+        style.antialias = true;        // 合成路径统一开启抗锯齿
         rasterize(out, *ps.shape, style);
     }
     return out;

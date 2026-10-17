@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：src/util/annotation_qt_painter.cpp
+// 文件：util/annotation_qt_painter.cpp
 // 作用：实现 paintAnnotation——把一条 Core Annotation 以矢量方式绘到 QPainter（见同名头说明）。
 //       此为画布图元 AnnotationItem::paint 与导出预览标注烘焙（output_preview_renderer）的公共实现，
 //       两处渲染外观因此保持一致（同一描边/填充/字形规则）。
@@ -26,7 +26,7 @@ void paintAnnotation(QPainter& painter,
     const QColor fillColor = toQColor(ann.style.fillColor);  // 填充色（仅 style.fill 为真时作刷）
 
     // 文字：Core TextShape 的 toPath 仅给矩形边界，这里直接绘真实字形（渲染关注点）。
-    if (ann.shape->type() == geometry::ShapeType::TEXT) {
+    if (ann.shape->type() == geometry::ShapeType::Text) {
         const auto* ts = dynamic_cast<const geometry::TextShape*>(ann.shape.get());
         if (!ts) return;
         painter.save();

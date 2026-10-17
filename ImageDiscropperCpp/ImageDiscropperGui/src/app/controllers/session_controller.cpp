@@ -1,7 +1,7 @@
 // ============================================================================
-// 文件：app/session_controller.cpp
+// 文件：app/controllers/session_controller.cpp
 // 作用：实现 SessionController 的会话生命周期编排与图层编辑面板接线（见同名头文件说明）；
-//       自 MainWindow 原封迁出，仅提示改 status_->notify、父窗口改 dialogParent_。
+//       提示经 status_->notify 发出、对话框父窗口取 dialogParent_。
 // ============================================================================
 #include "app/controllers/session_controller.h"
 
@@ -21,7 +21,7 @@
 #include "model/engine_bridge.h"
 #include "panels/layer_edit_panel.h"
 #include "panels/layer_panel.h"
-#include "panels/tool_panel.h"
+#include "panels/mode_tool_panel.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 
@@ -34,7 +34,7 @@ void SessionController::setAnnotationBridge(AnnotationBridge* anno) { anno_ = an
 void SessionController::setPreprocessController(PreprocessController* preprocess) { preprocess_ = preprocess; }
 void SessionController::setHistory(DocHistory* history) { history_ = history; }
 void SessionController::setStatusBar(StatusBar* status) { status_ = status; }
-void SessionController::setToolPanel(ToolPanel* toolPanel) { toolPanel_ = toolPanel; }
+void SessionController::setToolPanel(ModeToolPanel* toolPanel) { toolPanel_ = toolPanel; }
 void SessionController::setLayerEditPanel(LayerEditPanel* panel) { layerEditPanel_ = panel; }
 void SessionController::setLayerPanel(LayerPanel* panel) { layerPanel_ = panel; }
 void SessionController::setDialogParent(QWidget* parent) { dialogParent_ = parent; }
@@ -85,7 +85,7 @@ void SessionController::onOpen() const {
 }
 
 // 新建：**非破坏性**——以对话框生成的扁平画布为新底图（input 生态位），保留现有图层/标注/色彩预处理，
-//   仅剥除会改变尺寸的 resize+几何预处理（防重放改变新底图尺寸）。同尺寸新建不再清空图层/标注/预处理。
+//   仅剥除会改变尺寸的 resize+几何预处理（防重放改变新底图尺寸）。同尺寸新建不清空图层/标注/预处理。
 //   注入链路：捕获标注 → Document::resetBaseWith（换底图/剥 resize+几何/尺寸变则清框选）→ 单图态补重放色彩预处理
 //   → 复位标注会话到新工作图 → 回填原标注（始终保留）→ 换撤销会话。新建图无文件路径，imagePath_ 置空。
 void SessionController::onNew() const {
@@ -102,10 +102,19 @@ void SessionController::onNew() const {
     anno_->setBaseImage(doc_->working());                 // 复位标注会话到新工作图（会清空集合）。
     if (!captured.empty()) anno_->replaceAnnotations(std::move(captured));   // 回填原标注（始终保留，尺寸变亦留）。
     history_->reset();                        // 换底图开新撤销会话。
+    // 附加图片底（新建画布内选源图）也接入 MRU：与「打开图像」同口径——仅本地可再开路径登记、跳过 content://
+    //（Android SAF 原始 URI 不可复用，provenance 另存的私有副本亦不入最近列表）。
+    if (const auto& base = dlg.resultBaseLayer(); base && base->sourceKind == canvas::LayerSourceKind::File) {
+        const QString& src = dlg.imageSourceOriginalPath();
+        if (!src.isEmpty() && !src.startsWith(QString::fromUtf8(texts::ident::kContentUriScheme))) {
+            UiPrefs::instance().addRecentFile(src);
+            UiPrefs::instance().setLastOpenDir(QFileInfo(src).absolutePath());
+        }
+    }
     status_->notify(IDC_GTR(status, kSessionNewOk).arg(dlg.summary()), false);
 }
 
-// 图层编辑「添加图片」：复用「新建画布」对话框采参，往现有画布追加一个图片图层（决策 4：不撑大，
+// 图层编辑「添加图片」：复用「新建画布」对话框采参，往现有画布追加一个图片图层（SPEC §8.2：不撑大，
 // 超出画布部分合成时自然裁剪）。无图层画布但已有单图时先起图层画布（ensureLayerCanvas）。
 //   · 勾选附加图片 路 → File 层：携「适应 + 图片相对图层」内层落位烘进图层框的像素（图层内容）+ 外层「图层相对底图」落位作 transform，另携源图相对名 provenance（位图不入配置、无法由配方复现）。
 //   · 未勾选（纯图案）路 → Recipe 层：携 PatternParams，合成时按 transform 尺寸经 makePattern 现算（配方入 config、可导出、可复现）。

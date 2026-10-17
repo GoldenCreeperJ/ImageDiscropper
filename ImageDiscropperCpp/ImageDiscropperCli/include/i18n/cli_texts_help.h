@@ -1,10 +1,10 @@
 // ============================================================================
 // 文件：include/i18n/cli_texts_help.h（CLI 常量层 · 字符串 · 后半：help）
-// 作用：原 cli_texts.h 拆出的两半之一——收录 **help 组**（--help 输出的散文层）：
+// 作用：收录 **help 组**（--help 输出的散文层）：
 //       · kUse*  —— optionRow 的「用法列」（选项名 + 占位符），前半必须与 texts::opt 逐字一致，属脚本契约**不译**；
 //       · kDesc* / kLead* —— 「描述列」与小节 lead（纯面向人，**可译**）；
-//       · kText* —— 原 raw string（R"IDCH(...)"）散文块，**逐字搬移**（换行 / 缩进 / 空行都是输出的一部分）。
-//       opt / cmd / env / msg 见同目录 cli_texts_base.h；cli_texts.h 已转为聚合转发头。
+//       · kText* —— raw string（R"IDCH(...)"）散文块，逐字保留（换行 / 缩进 / 空行都是输出的一部分）。
+//       opt / cmd / env / msg 见同目录 cli_texts_base.h；两半经聚合转发头 cli_texts.h 统一 include。
 // 架构定位：CLI 顶层 i18n 基建；help 散文长而独立，单列一文件以免 cli_texts 基座过长。
 // 目录与对账：help 的英文表住 src/i18n/lang_en_help.cpp（与 msg 分两 TU 装配，installCatalogs 内先后登记）；
 //       kUse* 不进表（脚本契约）。tests/test_i18n_catalog.cpp 逐文件对账本层全部可译组。
@@ -16,9 +16,9 @@
 // help：--help 输出散文（可译）：落点见 src/help.cpp。
 //   三组同在一个命名空间里，但形态不同：
 //     · kUse*  —— optionRow 的「用法列」（选项名 + 占位符）；前半必须与 texts::opt 逐字一致，
-//       改名时两组同改（P6 用 grep 核对），后半占位符不译；
+//       改名时两组同改，后半占位符不译；
 //     · kDesc* / kLead* —— optionRow 的「描述列」与小节 lead（纯面向人，可译）；
-//     · kText* —— 原 raw string 散文块，**逐字搬移**（含换行、缩进与空行），本轮不改任何措辞。
+//     · kText* —— raw string 散文块，逐字保留（含换行、缩进与空行），措辞与 --help 输出一一对应。
 //   同值且语义相同的只留一条，行尾标 ×N（×N 指帮助里的出现次数）。
 // ===========================================================================
 namespace idc::cli::texts::help {
@@ -206,7 +206,7 @@ inline constexpr char kTextAnnoFields[] = R"IDCH(  字段按 type 分派几何�
     transform（GUI 的缩放/旋转快照）命令行一般省略，几何字段始终写局部坐标
   校验与退出码（强制校验、逐条报因）：
     · 任一条标注非法即整段 --annotation/--annotations 失败（退出码 1，stderr 逐条列出「第 N 个元素：原因」），不静默丢弃。
-    · type 缺失或未知字符串一律报错（不再默认按 line 处理）。
+    · type 缺失或未知字符串一律报错（不默认按 line 处理）。
     · 锚点退化即报「锚点退化」：矩形/菱形需 |Δx|>0 且 |Δy|>0；正方形/等腰直角需 max(|Δx|,|Δy|)>0；等腰/等边需半底与高、直角需两直角边非退化；圆需半径 >0、椭圆需两半轴均 >0。
     · 自由图元：line 点数须恰为 2；text 的 fontSize 若给出须 >0；path 须有非空且有效的 segments。
     · color/fillColor 须为合法 #RRGGBB 或 #AARRGGBB；strokeWidth / zOrder 须为整数（zOrder 为小数/字符串即报错；负数合法）。JSON 语法错误、根非对象/数组同样退出码 1。
@@ -233,8 +233,8 @@ inline constexpr char kTextPatternMatrix[] = R"IDCH(
     hue-gradient     全色相彩虹沿 --orientation 扫描（H 0→1、全饱和全明度不透明），--period＝一道彩虹的像素宽；忽略 --bg/--fg/--line-width/--dot-radius
     noise            确定性伪随机噪声：--seed 定种（同 seed+同尺寸恒同图，供逐像素对拍）、--noise 选配色 full-color(默认)/grayscale/two-color；two-color 于 --bg --fg 间随机取色，其余忽略 --bg/--fg/--orientation/--period/--line-width/--dot-radius
   alpha：--bg/--fg 的 #AARRGGBB alpha 参与插值并写盘；PNG/WebP 保留透明，JPEG/BMP 导出时按填充色压平。
-  注：旧「贴图图案 image」已从图案类型中彻底移除（--pattern image / --pattern-image / --image-anchor / --image-scale 不再受理）；
-      图片作为「附加图层」只能经配置文件的 layers 段（source.kind="file"）传入，由 config --load 合成进画布。
+  注：图案类型不含「贴图 image」，--pattern image / --pattern-image / --image-anchor / --image-scale 均为非受理选项；
+      图片只能作为「附加图层」经配置文件的 layers 段（source.kind="file"）传入，由 config --load 合成进画布。
 )IDCH";
 inline constexpr char kTextGenHead[] = R"IDCH(
 生成源（可选）：不给 --input 时，用 --size（可配 --pattern 等）程序生成一张画布作为输入；--input 与 --size 互斥、择一。
@@ -374,12 +374,12 @@ inline constexpr char kTextConfigLayers[] = R"IDCH(
       越出画布的像素在写入时自然裁剪（导出即舍弃）。
 
 底图（generate 段，可选）：底图＝与图层同构的一条图层记录，仅角色为钉住最底、不可拖 / 不可改落位。
-      除图案字段（kind/background/foreground/… 与旧 generate 逐字段等价）外，新建画布所附图片底图可额外携
+      除图案字段（kind/background/foreground/…，与 generate 段图案参数同构）外，新建画布所附图片底图可额外携
       fit + boxWidth/boxHeight + imageAnchor/imagePivot + x/y + backdrop（图层框衬底图案）落位键，使底图落位随配置往返、可复现
       （**配置只存落位、不存文件路径**，底图位图恒由运行时 --input 供给，故同一配置可对不同输入批处理复用）。
-      --input / 打开图＝无落位、画布尺寸＝图片尺寸的恒等底图，外部用法不变。
+      --input / 打开图＝无落位、画布尺寸＝图片尺寸的恒等底图，外部用法一致。
 
-预处理（preprocess 数组，可选）：gray/split/invert/rotate/flip/resize 六类步（不透明度不再是预处理步，改由层合成参数承载）。
+预处理（preprocess 数组，可选）：gray/split/invert/rotate/flip/resize 六类步（不透明度不经预处理步，由层合成参数承载）。
 
 层不透明度（transform.opacity，可选）：整层淡出程度（0..255，缺省 255＝完全不透明、0＝完全透明）。
       该参数在导出合成时按不透明度比例作用于整层、不改动像素本身，故灰度图同样生效；旧配置里写在 preprocess 的 opacity 步骤会在载入时自动转成该层的 transform.opacity。
@@ -411,10 +411,10 @@ inline constexpr char kTextNewTail[] = R"IDCH(
   idc new --size 800x600 --bg "#FFFFFFFF" --output white.png
   idc new --size 1024x1024 --pattern checkerboard --bg "#FFFFFFFF" --fg "#FF000000" --period 64 --output board.png
   idc new --size 1920x1080 --pattern radial-gradient --bg "#FF000000" --fg "#FFFFFFFF" --output glow.png
-  # 斜纹（已合进条纹：--orientation 选 diagonal-down ↘ / diagonal-up ↗）与全色相彩虹
+  # 斜纹（--orientation 选 diagonal-down ↘ / diagonal-up ↗）与全色相彩虹
   idc new --size 512x512 --pattern stripes --orientation diagonal-down --fg "#FF000000" --period 24 --output diag.png
   idc new --size 512x256 --pattern hue-gradient --period 128 --output rainbow.png
-  # 同心方框（已合进同心环：--orientation vertical = 方环回字纹）
+  # 同心方框（--orientation vertical = 方环回字纹）
   idc new --size 512x512 --pattern concentric --orientation vertical --fg "#FF000000" --period 32 --line-width 2 --output rings.png
   # 确定性噪声（同 --seed 恒同图，供逐像素对拍）
   idc new --size 256x256 --pattern noise --seed 1234 --noise full-color --output noise.png

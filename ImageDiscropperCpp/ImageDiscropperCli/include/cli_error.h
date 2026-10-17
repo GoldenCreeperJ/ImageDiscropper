@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：include/cli_error.h
-// 作用：定义 CLI 的错误载体 CliError 与统一的错误输出 reportError（错误格式见 Cli README）。
+// 作用：定义 CLI 的错误载体 CliError 与统一的错误输出 reportError（错误格式见 SPEC §8.1）。
 //       把「退出码 + 简短描述 + 详情 + 提示」打包为一处，确保所有错误以同一格式写 stderr，
 //       stdout 只留正常结果与进度（CONTRIBUTING.md「分层纪律」）。
 // 分块依据：错误「数据结构 + 格式化输出」是横切关注点，独立于参数解析与命令实现；
@@ -34,7 +34,7 @@ inline CliError makeError(const ExitCode code, std::string brief,
     return CliError{code, std::move(brief), std::move(detail), std::move(hint)};
 }
 
-// 按 Cli README「错误格式」把错误写到 stderr：
+// 按 SPEC §8.1「错误格式」把错误写到 stderr：
 //   idc: error: <brief>
 //     详情: <detail>      （detail 非空时才输出）
 //     提示: <hint>        （hint 非空时才输出）

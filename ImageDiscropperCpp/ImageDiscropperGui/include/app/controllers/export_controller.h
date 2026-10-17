@@ -1,8 +1,8 @@
 // ============================================================================
 // 文件：app/controllers/export_controller.h
 // 作用：ExportController——导出编排：烧录源组装（图片图层/标注）→ 路径解析（桌面对话框 /
-//       Android 相册发布）→ EngineBridge 导出 → 结果提示。从 MainWindow 拆出（原 onExport，
-//       含 Q_OS_ANDROID 发布分支；平台发布子编排在 mobile/android_export_publish）。
+//       Android 相册发布）→ EngineBridge 导出 → 结果提示。含 Q_OS_ANDROID 发布分支；
+//       平台发布子编排在 mobile/android_export_publish。
 // 分块依据：导出是独立关注点（依赖 Document/AnnotationBridge/PreprocessController/ExportPanel），
 //       与装配壳无耦合（CONTRIBUTING.md「分层纪律」）。
 // ============================================================================
@@ -34,7 +34,7 @@ public:
     void setPreprocessController(PreprocessController* preprocess);
     void setExportPanel(ExportPanel* panel);
     void setStatusBar(StatusBar* status);
-    void setDialogParent(QWidget* parent);   // 重排警告确认框父窗口（MainWindow）
+    void setDialogParent(QWidget* parent);   // 对话框父窗口（重排风险确认框 + 桌面导出文件/目录选择器）
     void connectSignals();                   // exportPanel_->exportRequested → onExport
 
 public slots:

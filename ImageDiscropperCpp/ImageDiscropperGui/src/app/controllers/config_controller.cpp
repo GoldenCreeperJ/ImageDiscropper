@@ -1,8 +1,7 @@
 // ============================================================================
-// 文件：app/config_controller.cpp
-// 作用：实现 ConfigController 的配置存取编排（见同名头文件说明）；自
-//       MainWindow::onSaveConfig/onLoadConfig 原封迁出，仅父窗口改 dialogParent_、
-//       提示改 status_->notify。
+// 文件：app/controllers/config_controller.cpp
+// 作用：实现 ConfigController 的配置存取编排（见同名头文件说明）——保存/载入作业配置，
+//       对话框父窗口取 dialogParent_、提示经 status_->notify 发出。
 // ============================================================================
 #include "app/controllers/config_controller.h"
 
@@ -80,7 +79,7 @@ void ConfigController::onLoadConfig() {
     // 标注先收进临时集合：若直接灌真实层，随后的 applyLoadedQueue 尺寸门（维度变→清标注）会误清刚载入的标注。
     annotation::AnnotationSet loadedAnno;
     if (QString err; !EngineBridge::loadConfig(path, cfg, err, &loadedAnno)) { status_->notify(IDC_GTR(status, kConfigLoadFailed).arg(err), true); return; }
-    // 文件层解码注入（Phase 2/4）：配置的 layers 只存相对文件名、位图不入配置，
+    // 文件层解码注入：配置的 layers 只存相对文件名、位图不入配置，
     // 按 <配置名>.assets/<相对名> 现解码填充 decodedPixels，须在 recordConfigLoad 前完成
     //（applyEngineConfig 内 emit layersChanged → 控制器立即 composeCanvas 用上解码像素）。
     // 越界防护：仅接受 assets 目录内的直接相对名；缺文件/越界 → 保持空像素（Core 合成降级占位），不阻断载入。
@@ -97,9 +96,9 @@ void ConfigController::onLoadConfig() {
         }
     }
     // ---- 底图（input 生态位）像素重生：applyEngineConfig 只还原 baseLayer_＝cfg.base、不碰 baseImage_，像素重生尽在于此。
-    //      Recipe 底：composeBase 按 source 尺寸现生成图案（逐像素复现，与旧 generate 段等价）；
+    //      Recipe 底：composeBase 按 source 尺寸现生成图案（逐像素复现 generate 段配方）；
     //      File 底：按 cfg.base.file 相对名从 <config>.assets 解码注入 decodedPixels 后 composeBase 展平（缺文件降级）；
-    //      cfg.base 缺省：外部打开图＝恒等底图（layers 态复用当前原图、单图态走 original_），外部用法不变。----
+    //      cfg.base 缺省：外部打开图＝恒等底图（layers 态复用当前原图、单图态走 original_），与外部载入图语义一致。----
     auto rebuildBase = [&](core::Image& flat) -> bool {
         if (!cfg.base.has_value()) return false;
         canvas::ImageLayer base = *cfg.base;
@@ -112,7 +111,7 @@ void ConfigController::onLoadConfig() {
                     base.decodedPixels = std::move(px);   // 缺文件/越界→保持空像素，composeBase 降级为底色。
             }
         }
-        base.preprocess.clear();   // 底图色彩预处理不烘焙 baseImage_：改由 fadedCanvasBase 边界施加（applyEngineConfig 已提入 baseSession_），杜绝双应用。
+        base.preprocess.clear();   // 底图色彩预处理不烘焙 baseImage_：由 fadedCanvasBase 边界施加（applyEngineConfig 提入 baseSession_），杜绝双应用。
         flat = EngineBridge::composeBase(base, cfg.source.width, cfg.source.height);
         return !flat.empty();
     };

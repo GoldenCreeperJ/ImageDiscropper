@@ -8,9 +8,8 @@
 // 说明：所有生成恒输出 RGBA；非法尺寸（宽或高 <= 0，或超 kMaxDimension，或总像素超 kMaxTotalPixels）
 //       返回空图（0×0），调用方据此判失败。护栏在分配像素前短路，绝不至 bad_alloc。
 //       底色 alpha 直接写入像素，alpha<255 即得透明/半透明画布。
-//       「贴图图案」已彻底移除：图片不再是一种程序化图案，而是「图片图层」
-//       （canvas::ImageLayer，见 include/canvas/layer.h）——由 GUI 附加层入口经两段合成
-//       （图片→图层框→底图，composeCanvas）落入画布，Core 生成侧无图片像素逻辑。
+//       图片不作为程序化图案类型：它是 canvas::ImageLayer「图片图层」（见 include/canvas/layer.h），
+//       由 GUI 附加层入口经两段合成（图片→图层框→底图，composeCanvas）落入画布，本模块无图片像素逻辑。
 // ============================================================================
 #pragma once
 
@@ -74,8 +73,8 @@ enum class NoiseMode {
     TwoColor,     // 每像素在 foreground / background 两色间随机选一（双色雪点）
 };
 
-// 落位锚点（3×3 = 居中 + 8 靠边）：供 canvas::ImageTransform 的画布锚点/图片枢轴与 §7 序列化使用，
-//   不再服务任何图案类型（「贴图图案」已移除）。
+// 落位锚点（3×3 = 居中 + 8 靠边）：供 canvas::ImageTransform 的画布锚点/图片枢轴与 §7 序列化使用
+//   （图案本身无落位语义，图片落位归 canvas 模块）。
 enum class ImageAnchor {
     TopLeft, TopCenter, TopRight,
     MiddleLeft, Center, MiddleRight,

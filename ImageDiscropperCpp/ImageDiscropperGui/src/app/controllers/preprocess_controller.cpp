@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：app/preprocess_controller.cpp
+// 文件：app/controllers/preprocess_controller.cpp
 // 作用：实现 PreprocessController——独立 resize + 声明式轻操作队列的编排（见同名头文件说明）。
 // 分块依据：
 //   - commitPipeline：编辑公共提交（结果态 = 新轻队列 + 新 resize → geomSig 尺寸门 → base_ 缓存重放物化 → 回灌）；
@@ -37,7 +37,7 @@
 #include "model/engine_bridge.h"
 #include "model/layer_session_store.h"
 #include "model/preprocess_session.h"
-#include "panels/image_panel.h"
+#include "panels/preprocess_panel.h"
 #include "preprocess/preprocess_config.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
@@ -48,25 +48,24 @@ namespace idc::gui {
 PreprocessController::PreprocessController(QObject* parent) : QObject(parent) {}
 
 void PreprocessController::setDocument(Document* doc) { doc_ = doc; }
-void PreprocessController::setAnnotationBridge(AnnotationBridge* anno) { anno_ = anno; }
 void PreprocessController::setStatusBar(StatusBar* status) { status_ = status; }
 void PreprocessController::setDialogParent(QWidget* parent) { dialogParent_ = parent; }
 
 // 忙碌全屏遮罩模式：仅 MobileShell 开启（SPEC §8.2 行为同构的唯一例外之一，形态适配）。
 void PreprocessController::setBusyOverlayMode(const bool overlay) { busyOverlay_ = overlay; }
-void PreprocessController::setImagePanel(ImagePanel* panel) { imagePanel_ = panel; }
+void PreprocessController::setPreprocessPanel(PreprocessPanel* panel) { preprocessPanel_ = panel; }
 
-// 图像处理面板：轻队列意图信号 + 独立 resize 信号 → 对应槽（经 EngineBridge 物化）。
+// 预处理面板：轻队列意图信号 + 独立 resize 信号 → 对应槽（经 EngineBridge 物化）。
 void PreprocessController::connectSignals() {
-    connect(imagePanel_, &ImagePanel::stepAppendRequested, this, &PreprocessController::onStepAppend);
-    connect(imagePanel_, &ImagePanel::stepReplaceRequested, this, &PreprocessController::onStepReplace);
-    connect(imagePanel_, &ImagePanel::stepRemoveRequested, this, &PreprocessController::onStepRemove);
-    connect(imagePanel_, &ImagePanel::stepMoveRequested, this, &PreprocessController::onStepMove);
-    connect(imagePanel_, &ImagePanel::resetRequested, this, &PreprocessController::onResetPreprocess);
+    connect(preprocessPanel_, &PreprocessPanel::stepAppendRequested, this, &PreprocessController::onStepAppend);
+    connect(preprocessPanel_, &PreprocessPanel::stepReplaceRequested, this, &PreprocessController::onStepReplace);
+    connect(preprocessPanel_, &PreprocessPanel::stepRemoveRequested, this, &PreprocessController::onStepRemove);
+    connect(preprocessPanel_, &PreprocessPanel::stepMoveRequested, this, &PreprocessController::onStepMove);
+    connect(preprocessPanel_, &PreprocessPanel::resetRequested, this, &PreprocessController::onResetPreprocess);
     // 独立「画布尺寸」区：应用绝对尺寸 / 按比例缩放 / 清除。
-    connect(imagePanel_, &ImagePanel::resizeAppliedRequested, this, &PreprocessController::onSetResizeTarget);
-    connect(imagePanel_, &ImagePanel::resizeScaleRequested, this, &PreprocessController::onScaleResize);
-    connect(imagePanel_, &ImagePanel::resizeClearedRequested, this, &PreprocessController::onClearResize);
+    connect(preprocessPanel_, &PreprocessPanel::resizeAppliedRequested, this, &PreprocessController::onSetResizeTarget);
+    connect(preprocessPanel_, &PreprocessPanel::resizeScaleRequested, this, &PreprocessController::onScaleResize);
+    connect(preprocessPanel_, &PreprocessPanel::resizeClearedRequested, this, &PreprocessController::onClearResize);
 }
 void PreprocessController::applyLoadedQueue(const preprocess::PreprocessPipeline& pipeline) {
     if (!doc_->hasImage()) return;
@@ -124,7 +123,7 @@ void PreprocessController::onStepMove(const int index, const bool down) {
 // 重置预处理：清空 resize 与轻队列、工作图恢复原图（Document 内部处理，无需重放）。
 // 失效门与 commitPipeline 同标准的完整签名（宽高 + 净旋转象限）：与恒等签名 {原宽,原高,0} 不等即清框选；
 // 只看宽高会让 [rotate180]/[rotate90×2] 重置（内容转回 180°、象限 2→0）时漏清基于旧几何的框选。
-// 标注/图层恒不清（矢量叠加可存在于画布外，决策 3）。
+// 标注/图层恒不清（矢量叠加可存在于画布外，SPEC §8.2）。
 void PreprocessController::onResetPreprocess() const {
     if (!doc_->hasImage()) return;
     // 底图目标（Base）：清空 baseSession_ 色彩预处理声明 → updateBasePreprocess(空) 发 layersChanged 重组预览。

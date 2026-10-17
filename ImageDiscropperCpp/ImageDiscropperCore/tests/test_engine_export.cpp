@@ -4,7 +4,7 @@
 //       坍缩不可行降级重排、PNG/BMP/JPEG/WebP 四格式写盘成功。
 // 分块依据：本文件是唯一“落盘”的测试段，写入系统临时目录并在结束时清理；
 //       计算路径见 test_engine_pipeline.cpp，边界异常见 test_engine_boundary.cpp。
-// 说明：分离导出不再打包 ZIP，而是把每张图直接写入指定文件夹；此处校验文件夹
+// 说明：分离导出把每张图直接写入指定文件夹（不打包为 ZIP）；此处校验文件夹
 //       被自动创建、其中的 PNG 文件数量与命名符合模板。
 // ============================================================================
 #include "test_harness.h"
@@ -22,8 +22,8 @@ namespace fs = std::filesystem;
 
 namespace {
 
-// 测试适配：把 runEngine 的 std::expected<EngineResult, CoreError> 摊平为沿用旧断言写法
-//（r.ok / r.kept / r.composition / r.collapsible）的结构体；失败时值成员取默认。
+// 测试适配：把 runEngine 的 std::expected<EngineResult, CoreError> 摊平为 {ok / kept / composition /
+// collapsible} 结构体以简化断言；失败时值成员取默认。
 struct TestResult {
     bool ok;
     idc::engine::RegionSet kept;
@@ -38,7 +38,7 @@ TestResult toTest(std::expected<idc::engine::EngineResult, idc::core::CoreError>
 
 // 构造带渐变的 RGBA 图。
 idc::core::Image makeImage(const int w, const int h) {
-    idc::core::Image img(w, h, idc::core::ImageFormat::RGBA);
+    idc::core::Image img(w, h, idc::core::ImageFormat::Rgba);
     for (int y = 0; y < h; ++y)
         for (int x = 0; x < w; ++x)
             img.setPixel(x, y, idc::core::Color(static_cast<std::uint8_t>(x * 5 % 256),
@@ -73,11 +73,11 @@ void testEngineExport() {
     // ---- L2 十字剔除 → 分离导出到文件夹（四角 4 张 PNG，不压缩）。----
     EngineConfig cfg;
     cfg.source = SourceInfo{100, 80};
-    cfg.cut.tier = Tier::L2;
-    cfg.cut.generator = CutGenerator::RECT;
+    cfg.cut.tier = Tier::Erase;
+    cfg.cut.generator = CutGenerator::Rect;
     cfg.cut.rect = RectRegion(30, 20, 70, 60);
-    cfg.cut.polarity = Polarity::REMOVE;
-    cfg.emitParams.mode = EmitMode::SEPARATE; // 分离
+    cfg.cut.polarity = Polarity::Remove;
+    cfg.emitParams.mode = EmitMode::Separate; // 分离
     {
         const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
@@ -95,7 +95,7 @@ void testEngineExport() {
 
     // ---- 多级不存在目录也会被自动创建（E-8：仅创建失败才报错）。----
     {
-        const auto r = toTest(runEngine(img, cfg)); // 仍为 SEPARATE
+        const auto r = toTest(runEngine(img, cfg)); // 仍为 Separate
         const fs::path nested = dir / "a" / "b" / "deep";
         CHECK(!fs::exists(nested));
         CHECK(exportImage(r.composition, img, nested.string()));
@@ -104,8 +104,8 @@ void testEngineExport() {
     }
 
     // ---- 合并坍缩 → 单图，校验画布尺寸 (W−Δx)×(H−Δy) 落盘。----
-    cfg.emitParams.mode = EmitMode::MERGED;
-    cfg.emitParams.layout = MergeLayout::COLLAPSE;
+    cfg.emitParams.mode = EmitMode::Merged;
+    cfg.emitParams.layout = MergeLayout::Collapse;
     {
         const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
@@ -130,7 +130,7 @@ void testEngineExport() {
         CHECK(fs::exists(jpg) && fs::file_size(jpg, ec) > 0);
     }
 
-    // ---- WebP 写盘成功（libwebp 补齐；校验 RIFF....WEBP 容器魔数）。----
+    // ---- WebP 写盘成功（libwebp 编码；校验 RIFF....WEBP 容器魔数）。----
     {
         const auto r = toTest(runEngine(img, cfg));
         const fs::path webp = dir / "collapsed.webp";
@@ -147,13 +147,13 @@ void testEngineExport() {
         const Image big = makeImage(300, 300);
         EngineConfig g;
         g.source = SourceInfo{300, 300};
-        g.cut.tier = Tier::L3;
-        g.cut.generator = CutGenerator::GRID;
-        g.cut.grid = GridParams{.originX = 0, .originY = 0, .cellWidth = 100, .cellHeight = 100, .remainder = RemainderPolicy::DISCARD}; // 300/100 → 3×3 自动推导
-        g.cut.polarity = Polarity::KEEP;
+        g.cut.tier = Tier::Grid;
+        g.cut.generator = CutGenerator::Grid;
+        g.cut.grid = GridParams{.originX = 0, .originY = 0, .cellWidth = 100, .cellHeight = 100, .remainder = RemainderPolicy::Discard}; // 300/100 → 3×3 自动推导
+        g.cut.polarity = Polarity::Keep;
         g.selectedCells = {0, 4, 8}; // 对角：非整行整列 → 不可坍缩。
-        g.emitParams.mode = EmitMode::MERGED;
-        g.emitParams.layout = MergeLayout::COLLAPSE; // 请求坍缩，但应被降级为重排。
+        g.emitParams.mode = EmitMode::Merged;
+        g.emitParams.layout = MergeLayout::Collapse; // 请求坍缩，但应被降级为重排。
         const auto r = toTest(runEngine(big, g));
         CHECK(r.ok);
         CHECK(!r.collapsible); // 判定为不可坍缩。

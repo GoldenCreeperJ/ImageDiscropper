@@ -1,10 +1,10 @@
 // ============================================================================
-// 文件：include/i18n/gui_texts_base.h（GUI 常量层 · 字符串 · 前半：ident / menu / label）
-// 作用：原 gui_texts.h 拆出的两半之一——收录**不可译契约组** ident（QSettings 键 / MIME / objectName /
+// 文件：i18n/gui_texts_base.h（GUI 常量层 · 字符串 · 前半：ident / menu / label）
+// 作用：常量层拆分两半之一——收录**不可译契约组** ident（QSettings 键 / MIME / objectName /
 //       快捷键 / 模板 token 等跨版本契约串）与两个**可译组** menu（菜单 / 上下文菜单项）、
 //       label（控件文字：标签 / 按钮 / 分组框 / 复选框 / 对话框标题与过滤器）。
-//       tooltip / status / msg 见同目录 gui_texts_detail.h；gui_texts.h 已转为聚合转发头，
-//       消费方 include 路径与常量引用形态（texts::label::kXxx 等）不变。
+//       tooltip / status / msg 见同目录 gui_texts_detail.h；gui_texts.h 为聚合转发头，
+//       消费方 include 路径与常量引用形态（texts::label::kXxx 等）保持不变。
 // 架构定位：GUI 顶层 i18n 基建（与 gui_i18n.h / retranslate.h / gui_nums.h 同族，统一住 include/i18n）。
 // 命名 / 类型：k + 域 + 语义驼峰；inline constexpr char[]（UTF-8 无 BOM）；「&」助记符与「…」省略号逐字保留。
 // 目录与对账：menu / label 的英文表住 src/i18n/lang_en.cpp（前半）；ident 组永不进表
@@ -20,7 +20,7 @@ namespace ident {
 inline constexpr char kSettingsOrg[] = "ImageDiscropper";      // QApplication::setOrganizationName（app/main.cpp）。
 inline constexpr char kSettingsApp[] = "ImageDiscropperGui";   // QApplication::setApplicationName（app/main.cpp）。
 // 三组互不耦合（配色 / 画布交互 / 会话记忆）。组名与键名在「载入 / 落盘 / 恢复默认」三处成对出现，
-// 历史上各处各写一份字面量 —— 任一处笔误即静默读不到偏好（不报错，只回退默认值），故收此单点。
+// 任一处笔误即静默读不到偏好（不报错，只回退默认值），故收此单点。
 inline constexpr char kGroupPalette[] = "palette";   // app/palette.cpp
 inline constexpr char kGroupCanvas[]  = "canvas";    // app/canvas_prefs.cpp
 inline constexpr char kGroupUi[]      = "ui";        // app/app_prefs.cpp
@@ -150,7 +150,7 @@ inline constexpr char kSortSnake[]          = "蛇形排序";         // 面板�
 inline constexpr char kRemainderDiscard[]   = "丢弃残缺";         // 余量策略三项，按枚举序入表。
 inline constexpr char kRemainderKeep[]      = "保留残缺";
 inline constexpr char kRemainderPad[]       = "补白";
-// ——预处理（main_window_menus.cpp::buildImageMenu，菜单名带「图像」助记符而类名为 preprocess）——
+// ——预处理（main_window_menus.cpp::buildPreprocessMenu，菜单名带「图像」助记符而类名为 preprocess）——
 inline constexpr char kMenuPreprocess[]   = "预处理(&I)";
 inline constexpr char kRotLeft90[]        = "左转 90°";
 inline constexpr char kRotRight90[]       = "右转 90°";
@@ -235,7 +235,7 @@ inline constexpr char kDlgTitleSaveConfig[]   = "保存配置";      // app/cont
 inline constexpr char kDlgTitleLoadConfig[]   = "加载配置";      // app/controllers/config_controller.cpp。同上（label::kTbLoadConfig / kTbLoadConfigEllipsis）。
 inline constexpr char kDlgTitleOpenImage[]    = "打开图像";      // app/controllers/session_controller.cpp。
 inline constexpr char kDlgTitleExportAs[]     = "导出为";        // app/controllers/export_controller.cpp 与 panels/export_panel.cpp（同一动作两处入口）。
-inline constexpr char kDlgTitleChooseOutDir[] = "选择输出目录";   // 同上两处。
+inline constexpr char kDlgTitleChooseOutDir[] = "选择输出目录";   // 同上两处，另 app/appearance_dialog.cpp（默认输出目录）同题共用，共三处。
 inline constexpr char kDlgTitlePickSourceImage[] = "选择源图";   // app/new_canvas_dialog.cpp（附加图片选源）。
 inline constexpr char kDlgLabelChooseConfig[]  = "选择配置";     // app/controllers/config_controller.cpp——Android 加载列表的 QInputDialog 标签。
 // 过滤器：前半段是人看的描述、后半段是扩展名契约（两边须同步改），故整串集中一份。
@@ -275,7 +275,7 @@ inline constexpr char kOutModeLabel[]      = "输出模式";
 inline constexpr char kEmitSeparateItem[]  = "分离导出";     // 下拉三项（与 menu::kEmit* 同义异词）。
 inline constexpr char kEmitCollapseItem[]  = "合并坍缩";
 inline constexpr char kEmitRearrangeItem[] = "合并重排";
-inline constexpr char kBrowseButton[]      = "浏览…";       // 目录行与文件行两处共用。
+inline constexpr char kBrowseButton[]      = "浏览…";       // 导出面板目录行/文件行与外观对话框默认输出目录行三处共用。
 inline constexpr char kOutDirLabel[]       = "目录";
 inline constexpr char kNamingLabel[]       = "命名";
 inline constexpr char kOutFileLabel[]      = "文件";
@@ -340,12 +340,12 @@ inline constexpr char kMultiRectNote[]   = "空白处拖拽追加矩形，可拖
 inline constexpr char kL2OutModeNote[]   = "输出模式见右侧「导出」页。";
 inline constexpr char kCellSelectNote[]  = "画布上：单击单元切换选中、拖拽框选批量选中。";
 // 图层编辑面板（src/panels/layer_edit_panel.cpp）：分组框标题 / 行标签 / 按钮。
-inline constexpr char kImageLayerName[]    = "图片图层";   // 两处落点：图层编辑面板分组框标题（layer_edit_panel.cpp）、预处理目标三元名（image_panel.cpp）；
+inline constexpr char kImageLayerName[]    = "图片图层";   // 三处落点：图层编辑面板分组框标题（layer_edit_panel.cpp）；预处理目标三元名两处（preprocess_panel.cpp 面板回显 与 canvas_coordinator.cpp 状态栏交互提示，同一 PreprocessTarget::Layer 分支）；
                                                            // 与视图菜单开关 menu::kShowImageLayer 同字（显隐开关与面板条目语义不同，各立一条）。
 inline constexpr char kLayerPlaceBox[]     = "图层落位";
 inline constexpr char kCanvasSizeBox[]     = "画布尺寸";   // 两处落点：图层编辑面板的画布尺寸区与预处理面板的 resize 区（同一物理量，两处共用）。
 inline constexpr char kAddImageButton[]    = "添加图片…";
-inline constexpr char kMoveUpButton[]      = "上移";       // 面板按钮短词（图层编辑与预处理队列两处共用）；菜单项带助记符与「一层」后缀，见 menu::kLayerUp。
+inline constexpr char kMoveUpButton[]      = "上移";       // 面板按钮短词（图层编辑与预处理几何/色彩队列行三处共用）；菜单项带助记符与「一层」后缀，见 menu::kLayerUp。
 inline constexpr char kMoveDownButton[]    = "下移";
 inline constexpr char kMoveTopButton[]     = "移至顶层";   // 菜单侧同字但带助记符 menu::kLayerToTop（“移至顶层(&T)”），两形各一条。
 inline constexpr char kMoveBottomButton[]  = "移至底层";   // 同上见 menu::kLayerToBottom（“移至底层(&B)”）。
@@ -361,7 +361,7 @@ inline constexpr char kApplyButton[]          = "应用";
 inline constexpr char kNativeSpecialValue[]   = "原生";     // 目标宽/高最小值 0 的显示文本（两项共用；与导出段的 label::kAutoSpecialValue 同类用法）。
                                                              // 摘要行短名同字见 label::kFitNameNative（specialValueText 与摘要名角色不同，各立一条）。
 // 注：数值框后缀 " px" 与 " ×" **不上提**（属单字符排版碎片，与千位分隔符同级，提取反而隔开「_SUFFIX ↔ 单位」的可见耦合）。
-// 预处理面板（src/panels/image_panel.cpp 与 image_panel_sections.cpp）：分区标题 / 行标签 / 下拉项 / 按钮。
+// 预处理面板（src/panels/preprocess_panel.cpp 与 preprocess_panel_sections.cpp）：分区标题 / 行标签 / 下拉项 / 按钮。
 // resize 区标题复用上方图层编辑面板的 kCanvasSizeBox（同字同义，不立第二条）。
 inline constexpr char kGeoSectionBox[]     = "几何操作";
 inline constexpr char kColorSectionBox[]   = "色彩操作";
@@ -424,7 +424,7 @@ inline constexpr char kDlgLabelAnnoText[]      = "请输入标注文字：";
 // 导出面板的填充色取色框标题（panels/export_panel_merge.cpp）：与标注属性页的「选择填充颜色」（kDlgTitlePickFillColor）措辞有意不同。
 inline constexpr char kDlgTitlePickPadColor[]  = "选择填充色";
 inline constexpr char kPadColorTransparent[]   = "透明";   // 色块按钮在 alpha==0 时的替代表述（非 rgba 回显）。
-// 工具面板（src/panels/tool_panel.cpp）：分组框标题。四态模式名与形状名不本组重复定义：
+// 工具面板（src/panels/mode_tool_panel.cpp）：分组框标题。四态模式名与形状名不本组重复定义：
 // 模式名复用 menu::kCanvas*（同字），形状名复用 label::kTool*（同字）。
 inline constexpr char kInteractionModeBox[]  = "交互模式";   // 与菜单入口 menu::kCanvasMode（「画布模式」）措辞不同，各自逐字保留。
 // 图层面板（src/panels/layer_panel.cpp）：分组框与八行显示开关（名称与「显示」中间为两个空格，原文如此）。
@@ -475,7 +475,7 @@ inline constexpr char kPolarityRemoveButton[] = "删除框内";   // 与按钮�
 inline constexpr char kDlgTitleAppearance[]   = "外观 / 交互";
 inline constexpr char kPaletteBoxTitle[]      = "画布配色";
 inline constexpr char kInteractionBoxTitle[]  = "画布交互";
-// 上区六项语义色的行标签（按钮背色即直观示色）。
+// 配色页六项语义色的行标签（按钮背色即直观示色）。
 inline constexpr char kSwatchKeepMask[]      = "保留块遮罩";
 inline constexpr char kSwatchDeleteMask[]    = "删除块遮罩";
 inline constexpr char kSwatchSelectionCut[]  = "选区 / 切割线";
@@ -486,7 +486,7 @@ inline constexpr char kSwatchCanvasBg[]      = "画布背景";
 inline constexpr char kAlphaKeepSpin[]       = "保留遮罩浓度";
 inline constexpr char kAlphaDeleteSpin[]     = "删除遮罩浓度";
 inline constexpr char kAlphaSelectionSpin[]  = "选区填充浓度";
-// 下区交互偏好的行标签（数值框后缀 " px" / " %" 不上提，与全仓口径一致）。
+// 其他页交互偏好的行标签（数值框后缀 " px" / " %" 不上提，与全仓口径一致）。
 inline constexpr char kHandleSizeField[]     = "手柄 / 命中尺寸";
 inline constexpr char kScrollMarginField[]   = "边缘滚动余量";
 inline constexpr char kZoomStepField[]       = "缩放步进";
@@ -497,8 +497,8 @@ inline constexpr char kNewHeightField[]      = "新建默认高度";
 inline constexpr char kNoMarginSpecialValue[] = "不留";   // 边缘滚动余量框 0 的显示文本（手柄框的「自动」复用上方 kAutoSpecialValue）。
 inline constexpr char kAppearanceHint[]      = "改动即时生效并跨会话记住。";
 inline constexpr char kRestoreDefaultsButton[] = "恢复默认";
-// 第三区「应用语言」（同一对话框）：分区标题 / 行标签 / 三个下拉项 / 即时生效提示。
-// 热切换已实现：下拉选中即落盘并由 app/main.cpp 于模态关闭后重建窗口（会话无损），故行尾说明即时生效。
+// 其他页「应用语言」组（同一对话框）：组标题 / 行标签 / 三个下拉项 / 即时生效提示。
+// 热切换已实现：下拉选中即落盘并由外观对话框调 setupFromPreference 切全局语言、原地重放各窗文案（不重建窗口、会话无损），故行尾说明即时生效。
 inline constexpr char kLangBoxTitle[]         = "应用语言";
 inline constexpr char kLangField[]            = "界面语言";
 inline constexpr char kLangFollowSystem[]     = "跟随系统";   // 下拉首项，项数据存 ident::kLangAuto。
@@ -507,21 +507,21 @@ inline constexpr char kLangEn[]               = "English";    // 项数据存 co
                                                             // 两条语言名**永不翻译**：以其自身书写展示是通行惯例
                                                             // （把 “English” 译成 “英语” 会让不识该语言的人认不出它）。
 inline constexpr char kLangApplyHint[]        = "选定后立即生效，不影响正在编辑的内容。";
-// 第五区「外观主题」（同一对话框，写 UiPrefs，**深浅三态**）：分区标题 / 行标签 / 三个下拉项 / 即时生效提示。
-// 与画布配色（Palette 六色）正交：本区只切应用外壳控件的深/浅，画布内容色不受影响。
+// 配色页「外观主题」组（同一对话框，写 UiPrefs，**深浅三态**）：组标题 / 行标签 / 三个下拉项 / 即时生效提示。
+// 与画布配色（Palette 六色）正交：本组只切应用外壳控件的深/浅，画布内容色不受影响。
 inline constexpr char kThemeBoxTitle[]        = "外观主题";
 inline constexpr char kThemeField[]           = "深浅色";
 inline constexpr char kThemeSystem[]          = "跟随系统";   // 下拉首项，项数据存 "system"（theme::Mode::System）。
 inline constexpr char kThemeLight[]           = "浅色";       // 项数据存 "light"。
 inline constexpr char kThemeDark[]            = "深色";       // 项数据存 "dark"。
 inline constexpr char kThemeApplyHint[]       = "选定后立即切换深浅，不影响画布配色与导出。";
-// 第四区「默认输出文件夹」（同一对话框，写 UiPrefs，**仅桌面**）：分区标题 / 行标签 / 空值占位 / 行尾说明。
+// 其他页「默认输出文件夹」组（同一对话框，写 UiPrefs，**仅桌面**）：组标题 / 行标签 / 空值占位 / 行尾说明。
 // 只译措辞：目录路径本身是用户手输数据，不进表也不受语言影响。
 inline constexpr char kExportDirBoxTitle[]    = "输出";
 inline constexpr char kExportDirField[]       = "默认输出文件夹";
 inline constexpr char kExportDirPlaceholder[] = "留空＝每次弹框选择";
 inline constexpr char kExportDirHint[]        = "导出起始目录：本次手输 > 上次 > 此默认（仅桌面）。";
-// 「外观/交互…」对话框改多 Tab（app/appearance_dialog.cpp）：三页签标题 + 快捷键编辑区（列头 / 行内恢复 / 全量恢复 / 说明 / 未绑定占位）。
+// 「外观/交互…」对话框采多 Tab 布局（app/appearance_dialog.cpp）：三页签标题 + 快捷键编辑区（列头 / 行内恢复 / 全量恢复 / 说明 / 未绑定占位）。
 // 快捷键页仅在桌面构建出现（无键盘的移动形态不建本页）。
 inline constexpr char kTabColors[]           = "配色";
 inline constexpr char kTabOther[]            = "其他";
@@ -579,7 +579,7 @@ inline constexpr char kAttachImageCheck[]      = "附加图片";
 inline constexpr char kPickSourceImageButton[] = "选择源图…";   // 与取色对话框标题 kDlgTitlePickSourceImage（「选择源图」无省略号）字形异。
 inline constexpr char kNoSourceImageChosen[]   = "未选择";   // 源图路径行的初值。
 inline constexpr char kImageFitFieldLabel[]    = "适应方式：";
-// 适应方式下拉三项：只留短名（释文不再占用行面）；与下方摘要短名 kFitName* 同字但角色不同（下拉项 / 摘要），各立一条。
+// 适应方式下拉三项：只留短名（释文不占用行面）；与下方摘要短名 kFitName* 同字但角色不同（下拉项 / 摘要），各立一条。
 inline constexpr char kFitCropItem[]           = "裁剪";
 inline constexpr char kFitStretchItem[]        = "拉伸";
 inline constexpr char kFitNativeItem[]         = "原生";
@@ -592,7 +592,7 @@ inline constexpr char kDialogCancelButton[]    = "取消";
 // 预览标签的内联回显（校验未过时占住预览位，不进状态栏）。
 inline constexpr char kNeedSourceImage[]       = "请先选择源图";   // 两处落点：refreshPreview 与 accept 的同句早退校验。
 inline constexpr char kBadCanvasSize[]         = "尺寸非法";   // 两处落点：合成回空图时的预览回显；状态栏全句见 status::kSessionNewFailedBadSize。
-inline constexpr char kReadSourceFailedFmt[]   = "读取失败：%1";   // 源图路径行改为报因。
+inline constexpr char kReadSourceFailedFmt[]   = "读取失败：%1";   // 源图读取失败行的报因文案。
 // 定稿摘要行（状态栏 status::kSessionNewOk 等以 %1 携入本串）。
 inline constexpr char kSummaryBaseFmt[]        = "%1×%2 · %3 · 底色(%4,%5,%6,%7)";
 inline constexpr char kSummaryFgPartFmt[]      = " · 前景(%1,%2,%3,%4)";   // 非纯色图案追加。

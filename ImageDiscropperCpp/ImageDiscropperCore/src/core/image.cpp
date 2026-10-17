@@ -1,8 +1,8 @@
 // ============================================================================
 // 文件：src/core/image.cpp
-// 作用：实现 include/core/image.h 中声明的 Image 类，包括像素缓冲管理、像素读写、
-//       格式转换（toRGBA / toGray）、缓冲重分配（reallocate）、裁剪贴图（crop / blit）、
-//       重采样缩放（resized / scaled）与整体填充等。
+// 作用：实现 Image 类的像素缓冲管理、像素读写、格式转换（toRGBA / toGray）、
+//       缓冲重分配（reallocate）、裁剪贴图（crop / blit）、重采样缩放
+//       （resized / scaled）与整体填充。
 // ============================================================================
 #include "core/image.h"
 
@@ -29,9 +29,9 @@ std::uint8_t rgbToGray(const int r, const int g, const int b) {
 // 每像素字节数：RGB = 3、RGBA = 4、GRAY = 1。
 std::size_t bytesPerPixel(const ImageFormat fmt) {
     switch (fmt) {
-        case ImageFormat::RGB: return 3;
-        case ImageFormat::RGBA: return 4;
-        case ImageFormat::GRAY: return 1;
+        case ImageFormat::Rgb: return 3;
+        case ImageFormat::Rgba: return 4;
+        case ImageFormat::Gray: return 1;
     }
     return 4;
 }
@@ -69,11 +69,11 @@ Color Image::getPixel(const int x, const int y) const {
     if (off < 0) return kTransparent;
     const std::uint8_t* p = data_.data() + off;
     switch (format_) {
-        case ImageFormat::RGB:
+        case ImageFormat::Rgb:
             return Color(p[0], p[1], p[2], 255);
-        case ImageFormat::RGBA:
+        case ImageFormat::Rgba:
             return Color(p[0], p[1], p[2], p[3]);
-        case ImageFormat::GRAY:
+        case ImageFormat::Gray:
             return Color(p[0], p[0], p[0], 255);
     }
     return kTransparent;
@@ -85,13 +85,13 @@ void Image::setPixel(const int x, const int y, const Color& c) {
     if (off < 0) return;
     std::uint8_t* p = data_.data() + off;
     switch (format_) {
-        case ImageFormat::RGB:
+        case ImageFormat::Rgb:
             p[0] = c.r; p[1] = c.g; p[2] = c.b;
             break;
-        case ImageFormat::RGBA:
+        case ImageFormat::Rgba:
             p[0] = c.r; p[1] = c.g; p[2] = c.b; p[3] = c.a;
             break;
-        case ImageFormat::GRAY:
+        case ImageFormat::Gray:
             p[0] = rgbToGray(c.r, c.g, c.b); // BT.601 亮度压缩为单通道。
             break;
     }
@@ -113,7 +113,7 @@ std::uint8_t Image::getGray(const int x, const int y) const {
     const std::ptrdiff_t off = byteOffset(x, y);
     if (off < 0) return 0;
     const std::uint8_t* p = data_.data() + off;
-    if (format_ == ImageFormat::GRAY) return p[0];
+    if (format_ == ImageFormat::Gray) return p[0];
     return rgbToGray(p[0], p[1], p[2]); // 非灰度图按 BT.601 即时计算。
 }
 
@@ -123,13 +123,13 @@ void Image::setGray(const int x, const int y, const std::uint8_t v) {
     if (off < 0) return;
     std::uint8_t* p = data_.data() + off;
     switch (format_) {
-        case ImageFormat::GRAY:
+        case ImageFormat::Gray:
             p[0] = v;
             break;
-        case ImageFormat::RGB:
+        case ImageFormat::Rgb:
             p[0] = p[1] = p[2] = v;
             break;
-        case ImageFormat::RGBA:
+        case ImageFormat::Rgba:
             p[0] = p[1] = p[2] = v; p[3] = 255;
             break;
     }
@@ -137,8 +137,8 @@ void Image::setGray(const int x, const int y, const std::uint8_t v) {
 
 // 转换为 RGBA 图像。原格式已为 RGBA 时返回克隆副本。
 Image Image::toRGBA() const {
-    if (format_ == ImageFormat::RGBA) return clone();
-    Image out(width_, height_, ImageFormat::RGBA);
+    if (format_ == ImageFormat::Rgba) return clone();
+    Image out(width_, height_, ImageFormat::Rgba);
     for (int y = 0; y < height_; ++y) {
         for (int x = 0; x < width_; ++x) {
             out.setPixel(x, y, getPixel(x, y));
@@ -149,8 +149,8 @@ Image Image::toRGBA() const {
 
 // 转换为 GRAY 图像。原格式已为 GRAY 时返回克隆副本。
 Image Image::toGray() const {
-    if (format_ == ImageFormat::GRAY) return clone();
-    Image out(width_, height_, ImageFormat::GRAY);
+    if (format_ == ImageFormat::Gray) return clone();
+    Image out(width_, height_, ImageFormat::Gray);
     for (int y = 0; y < height_; ++y) {
         for (int x = 0; x < width_; ++x) {
             out.setGray(x, y, getGray(x, y));
@@ -159,7 +159,7 @@ Image Image::toGray() const {
     return out;
 }
 
-// 尺寸调整：按目标宽高进行最近邻或双线性重采样（原 pixel_ops::resize 逐字迁入，语义与输出字节恒等）。
+// 尺寸调整：按目标宽高进行最近邻或双线性重采样，输出对相同输入与参数逐字节确定。
 // 性能要点：直接基于行主序字节缓冲计算——四个角点指针每像素只求一次并一次性读取全部通道，
 // 避免逐像素 getPixel/setPixel 的边界检查与逐通道的格式分支。
 Image Image::resized(const int newWidth, const int newHeight, const ResampleMode mode) const {
@@ -168,7 +168,7 @@ Image Image::resized(const int newWidth, const int newHeight, const ResampleMode
 
     const int sw = width_;
     const int sh = height_;
-    const int ch = isGray() ? 1 : format_ == ImageFormat::RGBA ? 4 : 3;
+    const int ch = isGray() ? 1 : format_ == ImageFormat::Rgba ? 4 : 3;
     const std::uint8_t* sd = data_.data();
     std::uint8_t* dd = out.data_.data();
     const double stepX = static_cast<double>(sw) / newWidth;
@@ -182,7 +182,7 @@ Image Image::resized(const int newWidth, const int newHeight, const ResampleMode
             const double srcXf = (x + 0.5) * stepX - 0.5;
             std::uint8_t* o = dd + (static_cast<std::size_t>(y) * newWidth + x) * ch;
 
-            if (mode == ResampleMode::NEAREST) {
+            if (mode == ResampleMode::Nearest) {
                 const int xi = std::clamp(static_cast<int>(std::round(srcXf)), 0, sw - 1);
                 const int yi = std::clamp(static_cast<int>(std::round(srcYf)), 0, sh - 1);
                 const std::uint8_t* p = sd + (static_cast<std::size_t>(yi) * sw + xi) * ch;

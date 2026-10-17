@@ -1,8 +1,8 @@
 // ============================================================================
 // 文件：include/annotation/annotation_json.h
 // 作用：标注 JSON 的公共入口（SPEC §7 annotations 段元素语法）——把标注文本解析为 Annotation 列表。
-// 分块依据：标注的 JSON 序列化 / 反序列化实现归属 annotation 模块（src/annotation/annotation_json.cpp），
-//       不再挂在 engine 下；engine_config_json 组装整份 §7 文档时经私有内部头调用本模块的段级实现
+// 分块依据：标注的 JSON 序列化 / 反序列化实现归属 annotation 模块（src/annotation/annotation_json.cpp）；
+//       engine_config_json 组装整份 §7 文档时经私有内部头调用本模块的段级实现
 //       （annotationsSegmentToJson / annotationsFromSegmentJson），公共签名 saveEngineConfig /
 //       loadEngineConfig 不受影响。本头只暴露 std 级 API，不泄漏第三方 JSON 类型（对齐「nlohmann 不进公共头」纪律）。
 // ============================================================================

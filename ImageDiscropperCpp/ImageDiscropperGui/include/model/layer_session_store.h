@@ -1,13 +1,14 @@
 // ============================================================================
 // 文件：model/layer_session_store.h
 // 作用：LayerSessionStore——GUI 侧「每层会话 + 物化缓存」的零 Qt 内聚容器（按 layerId 单点持有），
-//       把原先散落两处的缓存收敛到一处：
-//         · Document::layerSessions_[id]（每层预处理声明态会话，含 base 缓存槽）；
-//         · PreprocessController::layerSig_[id] / layerMat_[id]（逐层物化位图 + 来源签名）。
-//       三类同键数据现由本 store 统一持有、统一按 id 生命周期回收（删层 / 清栈 / 换图 / 配置重载一处搞定）。
+//       统一持有三类同键数据：
+//         · 每层预处理声明态会话（含 base 缓存槽）；
+//         · 逐层物化位图；
+//         · 上次物化的来源签名。
+//       三者按 id 统一生命周期回收（删层 / 清栈 / 换图 / 配置重载一处搞定）。
 // 分块依据：
 //   - 与 PreprocessSession / AnnotationEditor 同构——纯 C++、零 Qt 依赖，可被无头 unit_tests 直编回归
-//     （会话路由 / 签名比对 / 剔除陈旧层的语义第一次可脱离 GUI 直接测试）。
+//     （会话路由 / 签名比对 / 剔除陈旧层的语义可脱离 GUI 直接测试）。
 //   - 只存数据与做纯查改，**绝不跑像素**：materializeLayer（EngineBridge/Core）仍由 PreprocessController
 //     驱动并写回本 store 的位图槽（分层纪律，与 PreprocessSession 不持引擎同理）。
 //   - 物化位图以**并列 unordered_map<int,core::Image>** 存于本 store（而非嵌进 LayerSession）：Core
@@ -31,12 +32,11 @@
 namespace idc::gui {
 
 // ---------------------------------------------------------------------------
-// LayerSig：图层物化签名——覆盖 materializeLayer（现为整层位图：组装含底色框→缩放→预处理）
-//   读取的全部输入：kind / 逐层 preprocess / 文件名 / 解码像素布局 / 配方参数 / 目标尺寸（所有 kind）/
-//   内层落位与图层框（hasImagePlacement / box / fit / 锚点枢轴偏移 / boxBackdrop），恒不含
-//   transform.x/y/anchor/layerPivot/opacity/zOrder——改落位或不透明度只重组、不重跑（缺口 1）。
-//   注：旧口径下缩放/进框发生在 composeCanvas（与物化解耦，故 tw/th 仅配方层入键、框字段不入）；现缩放/进框
-//   已上移到 materializeLayer 内，整层位图依赖它们，故均须入键。解码像素以「空态 + 宽高」作内容代理。
+// LayerSig：图层物化签名——覆盖 materializeLayer（整层位图：组装含底色框→缩放→预处理）读取的全部输入：
+//   kind / 逐层 preprocess / 文件名 / 解码像素布局 / 配方参数 / 目标尺寸（所有 kind）/ 内层落位与图层框
+//   （hasImagePlacement / box / fit / 锚点枢轴偏移 / boxBackdrop）。缩放与进框发生在 materializeLayer 内，
+//   整层位图依赖它们，故均入键；transform.x/y/anchor/layerPivot/opacity/zOrder 恒不入键——改落位或不透明度
+//   只重组、不重跑。解码像素以「空态 + 宽高」作内容代理。
 // ---------------------------------------------------------------------------
 struct LayerSig {
     int kind{0};                                  // canvas::LayerSourceKind 序号
@@ -46,10 +46,10 @@ struct LayerSig {
     int decH{0};
     bool decEmpty{true};                          // 文件层解码像素布局（空态/尺寸）作内容代理
     int tw{0};
-    int th{0};                                    // 目标尺寸（所有 kind 均入键：materializeLayer 现按此缩放）
+    int th{0};                                    // 目标尺寸（所有 kind 均入键：materializeLayer 按此缩放）
     bool hasRecipe{false};
     std::optional<generate::PatternParams> recipe;
-    // ---- 内层落位 / 图层框（现 materializeLayer 组装阶段读取，故入键）----
+    // ---- 内层落位 / 图层框（materializeLayer 组装阶段读取，故入键）----
     bool hasPlacement{false};                      // canvas::ImageLayer.hasImagePlacement
     int boxW{0};
     int boxH{0};                                    // 图层框尺寸
@@ -64,10 +64,10 @@ struct LayerSig {
     bool operator==(const LayerSig& o) const {
         if (kind != o.kind || fileName != o.fileName) return false;
         if (decEmpty != o.decEmpty || decW != o.decW || decH != o.decH) return false;
-        if (pre.items() != o.pre.items()) return false;   // 预处理队列逐项相等
+        if (pre != o.pre) return false;   // 预处理队列逐项相等（复用 PreprocessPipeline::operator==）
         if (hasRecipe != o.hasRecipe) return false;
         if (hasRecipe && !(recipe == o.recipe)) return false;
-        // 缩放现发生在 materializeLayer 内（整层位图）→ 目标尺寸对所有 kind 均入键。
+        // 缩放发生在 materializeLayer 内（整层位图）→ 目标尺寸对所有 kind 均入键。
         if (tw != o.tw || th != o.th) return false;
         // 内层落位 / 图层框：仅启用两级落位时参与（决定组装后的框位图）。
         if (hasPlacement != o.hasPlacement) return false;
@@ -113,7 +113,7 @@ public:
     std::unordered_map<int, core::Image>& materialized() { return materialized_; }
     const std::unordered_map<int, core::Image>& materialized() const { return materialized_; }
 
-    // 依图层现声明算其物化签名（自 PreprocessController::makeLayerSig 迁入）。
+    // 依图层现声明算其物化签名。
     static LayerSig makeSig(const canvas::ImageLayer& layer);
 
 private:

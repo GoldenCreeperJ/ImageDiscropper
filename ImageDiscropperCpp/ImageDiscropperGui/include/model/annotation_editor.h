@@ -2,13 +2,13 @@
 // 文件：model/annotation_editor.h
 // 作用：标注「编辑会话」状态机——持有 Core annotation::AnnotationSet（纯数据集合），
 //       在其上叠加 GUI 交互态：编辑模式（EditType）/ 选中项 / 当前属性模板 / 撤销重做栈。
-//       自原 Core annotation::AnnotationLayer 拆分而来（会话半边归 app 层，数据/合成半边留 Core）。
+//       数据与合成在 Core 的 annotation::AnnotationSet，本类只在其上叠加 GUI 交互与撤销态。
 // 分块依据：
-//   - EditType      : 当前编辑模式（DRAW / EDIT / MOVE）——纯交互枚举，Core 不再持有。
+//   - EditType      : 当前编辑模式（Draw / Edit / Move）——纯交互枚举，Core 不含。
 //   - AnnotationEditor : 组合 AnnotationSet（唯一数据真相源）+ redoStack_（重做栈）+ 会话态；
-//       撤销保持**条目级**语义（列表即主栈、撤销弹尾入重做栈、新操作清重做），与原 AnnotationLayer 逐字一致。
+//       撤销保持**条目级**语义（列表即主栈、撤销弹尾入重做栈、新操作清重做）。
 // 说明：本类**零 Qt 依赖**，可被无头（CTest）直接编译进 unit_tests 作会话语义回归；
-//       撤销/重做不再复用 core::HistoryManager，改在 AnnotationSet + redoStack_ 上 1:1 复刻其语义。
+//       撤销/重做直接在 AnnotationSet + redoStack_ 上实现。
 // ============================================================================
 #pragma once
 
@@ -30,12 +30,12 @@
 namespace idc::gui {
 
 // ---------------------------------------------------------------------------
-// EditType：编辑模式（自原 Core annotation::EditType 迁入 GUI；交互概念，Core 不留）。
+// EditType：编辑模式（交互概念，仅 GUI 持有）。
 // ---------------------------------------------------------------------------
 enum class EditType {
-    DRAW,   // 绘制新形状
-    EDIT,   // 选中并修改已有形状
-    MOVE,   // 平移视图
+    Draw,   // 绘制新形状
+    Edit,   // 选中并修改已有形状
+    Move,   // 平移视图
 };
 
 // ---------------------------------------------------------------------------
@@ -68,7 +68,7 @@ public:
     double currentFontSize() const { return currentFontSize_; }
     double currentCornerRadius() const { return currentCornerRadius_; }
 
-    // 修改当前属性；EDIT 模式作用到 selectedAnnotation，DRAW 模式改当前默认（语义同原 AnnotationLayer）。
+    // 修改当前属性；Edit 模式作用到 selectedAnnotation，Draw 模式改当前默认。
     void changeColor(const core::Color& c);
     void changeFillColor(const core::Color& c);
     void changeStrokeWidth(int w);
@@ -106,15 +106,15 @@ public:
     core::Image burnIn(const core::Image& base) const { return set_.burnIn(base); }
 
 private:
-    // EDIT 模式且选中有效时返回选中项可写引用，否则 nullptr。
+    // Edit 模式且选中有效时返回选中项可写引用，否则 nullptr。
     annotation::Annotation* editableSelected();
 
     annotation::AnnotationSet set_;               // 数据集合（唯一标注真相源，含 zOrder 不变式）
     std::vector<annotation::Annotation> redoStack_; // 重做栈（撤销弹尾入此、重做回推集合）
     core::Image image_;                           // 底图（供无参 burnIn）
 
-    EditType editType_{EditType::DRAW};
-    geometry::ShapeType currentType_{geometry::ShapeType::LINE};
+    EditType editType_{EditType::Draw};
+    geometry::ShapeType currentType_{geometry::ShapeType::Line};
     core::Color currentColor_{core::kBlack};
     core::Color currentFillColor_{core::kBlack};
     bool fillColorLinked_{true};   // 填充色是否跟随边框色（未显式改过填充色时为真）
@@ -123,7 +123,7 @@ private:
     std::string currentText_{texts::label::kDefaultAnnotationText};   // 与 panels/annotation_prop_panel.cpp 文字框初值同源。
     // 注：本类零 Qt（unit_tests 直编），不能引 IDC_GTR，故这里的默认文字恒为源语言。
     //     英文界面下面板里的初值已译文，但“未动文字框就直接拖一个新标注”时落的是中文默认值——
-    //     一期已知边界（属数据而非界面装饰，二期若要统一，应在 GUI 侧赋值而非模型默认值）。
+    //     已知边界（属数据默认而非界面装饰）：若需随界面语言统一，应在 GUI 侧赋值而非模型默认值。
     double currentFontSize_{nums::model::kDefaultFontSizePx};
     double currentCornerRadius_{nums::model::kDefaultCornerRadiusPx};
 

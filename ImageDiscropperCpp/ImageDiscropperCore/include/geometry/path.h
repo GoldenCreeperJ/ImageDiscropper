@@ -17,23 +17,23 @@ namespace idc::geometry {
 // PathSegmentType：路径段类型
 // ---------------------------------------------------------------------------
 enum class PathSegmentType {
-    MOVE_TO,    // 抬笔移动
-    LINE_TO,    // 直线段
-    QUAD_TO,    // 二次贝塞尔
-    CUBIC_TO,   // 三次贝塞尔
-    CLOSE,      // 闭合到当前子路径起点
+    MoveTo,    // 抬笔移动
+    LineTo,    // 直线段
+    QuadTo,    // 二次贝塞尔
+    CubicTo,   // 三次贝塞尔
+    Close,     // 闭合到当前子路径起点
 };
 
 // ---------------------------------------------------------------------------
 // PathSegment：路径段
 // 说明：坐标统一存放在 coords 中，数量取决于 type：
-//   MOVE_TO / LINE_TO：2 个（x, y）
-//   QUAD_TO          ：4 个（cx, cy, x, y）
-//   CUBIC_TO         ：6 个（c1x, c1y, c2x, c2y, x, y）
-//   CLOSE            ：0 个
+//   MoveTo  / LineTo ：2 个（x, y）
+//   QuadTo           ：4 个（cx, cy, x, y）
+//   CubicTo          ：6 个（c1x, c1y, c2x, c2y, x, y）
+//   Close            ：0 个
 // ---------------------------------------------------------------------------
 struct PathSegment {
-    PathSegmentType type{PathSegmentType::MOVE_TO};
+    PathSegmentType type{PathSegmentType::MoveTo};
     std::vector<double> coords;
 };
 

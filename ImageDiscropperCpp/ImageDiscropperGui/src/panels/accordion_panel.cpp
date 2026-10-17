@@ -45,7 +45,7 @@ void AccordionPanel::addSection(QWidget* content, const QString& title) {
 
     auto* header = new QPushButton(section);
     header->setCheckable(true);
-    header->setChecked(true);            // 初始全展开：四面板内容默认可达（滚动触达）。
+    header->setChecked(true);            // 初始全展开：五节内容默认可达（滚动触达）。
     header->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     // 轻量分隔条样式（逐按钮设定，不波及节内容里的同类控件）：
     // 展开＝白底加粗 + ▾，收起＝灰字 + ▸，hover 浅底；底边线分节，无原生 checked 下陷色块。

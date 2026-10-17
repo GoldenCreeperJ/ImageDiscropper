@@ -71,7 +71,7 @@ void CanvasPrefs::setHandleScreenPx(const int px) {
 }
 
 void CanvasPrefs::setScrollMarginPercent(const int percent) {
-    // 0 = 不留余量（图像边缘即滚动极限，旧观感）；上限 50%（两侧各 50% 就把视口吃满，再大内容无可见区）。
+    // 0 = 不留余量（图像边缘即滚动极限，无边距观感）；上限 50%（两侧各 50% 就把视口吃满，再大内容无可见区）。
     scrollMarginPercent_ = std::clamp(percent, 0, nums::app::kScrollMarginPercentMax);
     touched();
 }

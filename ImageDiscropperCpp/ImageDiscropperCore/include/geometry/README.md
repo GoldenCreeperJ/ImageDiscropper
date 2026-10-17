@@ -11,8 +11,7 @@
 3. `shapes.h` —— 抽象基类 `Shape` 与四个具体形状类：`EllipseShape`（椭圆 / 圆）、`PolygonShape`（顶点列表
    描述的一切：矩形 / 正方形 / 菱形 / 各类三角形 / 折线 / 直线，直线＝2 顶点开放多边形）、`PathShape`（仅画笔自由路径）、
    `TextShape`（文字）；基类提供 `translate(dx,dy)` 就地平移（各子类偏移自身参数，保留具体类型）。
-   **形状已收敛**：原 `LineShape` / `RectShape` / `RoundRectShape` 等类均已删除，直线 / 折线 / 矩形类统一由 `PolygonShape` 承载；
-   `ShapeType` 枚举仍是构造分支，但**不再有独立的圆角矩形 / 圆角正方形类型**——转角圆角改由 `PolygonShape` 的 `cornerRadius`（二次贝塞尔倒角）统一表达。
+   转角圆角没有独立类型——由 `PolygonShape` 的 `cornerRadius`（二次贝塞尔倒角）统一表达。
 4. `affine_transform.h` —— header-only 2×3 仿射矩阵 `AffineTransform`（平移/缩放/旋转构造、矩阵乘法、作用于点/路径、行列式/逆/isIdentity），为形状提供**非破坏性变换**。
 
 **shapes.h 的设计要点**（完整机制见头文件注释与 `src/geometry`）：

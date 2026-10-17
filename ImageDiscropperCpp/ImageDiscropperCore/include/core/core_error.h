@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：include/core/core_error.h
-// 作用：Core 统一错误对象 CoreError——std::expected<T, CoreError> 的错误侧载荷。
-//       取代旧的「EngineResult.ok + error 字符串」「bool + out 参数」约定，把失败面显式化。
+// 作用：Core 统一错误对象 CoreError——std::expected<T, CoreError> 的错误侧载荷，
+//       把失败面显式化。
 // 分块依据：错误分两层——
 //           · code（枚举）：程序化分派用，对齐 Rust GuideLine §3.3 的 E-1~E-8 变体，
 //             供 CLI 映射退出码、供跨语言/上层按类别处理，不随语言变化。
@@ -27,9 +27,9 @@ struct CoreError {
         MultiRectEmpty,             // 多矩形并集但矩形列表为空
         NoGrid,                     // 未诱导任何网格单元
         EmptyDeleteRegion,          // E-6：删除区为空（REMOVE 却无单元被剔除）
-        EmptyKeepRegion,            // E-7：保留区为空（删除覆盖全图）
+        EmptyKeepRegion,            // E-7：删除覆盖全图（保留区为空）
         RearrangeNeedsL3,           // 仅网格模式可重排（非网格显式请求重排）
-        NotCollapsible,             // 请求坍缩但不可坍缩（L1/L2 无重排可用）
+        NotCollapsible,             // 请求坍缩但不可坍缩（标准/擦除模式无重排可用）
         // —— 图像 I/O 与配置（SPEC §5 E-8）——
         PathEmpty,          // 路径为空
         Io,                 // 读写盘 / 目录创建失败

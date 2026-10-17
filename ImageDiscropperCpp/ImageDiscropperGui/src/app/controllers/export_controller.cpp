@@ -1,7 +1,7 @@
 // ============================================================================
-// 文件：app/export_controller.cpp
-// 作用：实现 ExportController 的导出编排（见同名头文件说明）；自 MainWindow::onExport
-//       原封迁出，仅父窗口改 dialogParent_、提示改 status_->notify、发布层改调
+// 文件：app/controllers/export_controller.cpp
+// 作用：实现 ExportController 的导出编排（见同名头文件说明）——对应 onExport 职责：
+//       对话框父窗口取 dialogParent_、提示经 status_->notify 发出、移动端发布层调
 //       mobile/android_export_publish。
 // ============================================================================
 #include "app/controllers/export_controller.h"
@@ -44,7 +44,7 @@ void ExportController::onExport() {
     if (!doc_->hasImage()) { status_->notify(IDC_GTR(status, kExportNoImage), true); return; }
     // 选区形态随模式不同（SPEC §8.3 行为同构、零形态分支的唯一必要分派）：
     // L1/L2 = 矩形选区（含 L2 多矩形）；L3 = 显式单元选择集（rect 恒空）。
-    const bool hasSelection = doc_->mode() == engine::Tier::L3
+    const bool hasSelection = doc_->mode() == engine::Tier::Grid
         ? !doc_->selectedCells().empty()
         : doc_->hasRect();
     if (!hasSelection) { status_->notify(IDC_GTR(status, kExportNoSelection), true); return; }
@@ -81,10 +81,10 @@ void ExportController::onExport() {
     QString galleryDisplay; // 单文件在相册中的显示名（自动名或面板自定义名）。
     QString tempRoot;       // 临时根（空=直写路径，无需发布层）。
 #endif
-    if (cfg.emitParams.mode == engine::EmitMode::SEPARATE) {
+    if (cfg.emitParams.mode == engine::EmitMode::Separate) {
         path = doc_->outputDir();
 #ifdef Q_OS_ANDROID
-        // 手输 content://（历史遗留）在移动端无意义：视同留空走相册默认子目录。
+        // 手输的 content:// 在移动端无意义：视同留空走相册默认子目录。
         if (!path.isEmpty() && path.startsWith(QString::fromUtf8(texts::ident::kContentUriScheme))) path.clear();
 #endif
         if (path.isEmpty()) {
@@ -107,7 +107,7 @@ void ExportController::onExport() {
     } else {
         path = doc_->outputFile();
 #ifdef Q_OS_ANDROID
-        // 手输 content://（历史遗留）在移动端无意义：视同留空走相册默认。
+        // 手输的 content:// 在移动端无意义：视同留空走相册默认。
         if (!path.isEmpty() && path.startsWith(QString::fromUtf8(texts::ident::kContentUriScheme))) path.clear();
 #endif
         if (path.isEmpty()) {
@@ -148,7 +148,7 @@ void ExportController::onExport() {
 #endif
     }
 
-    // 导出烧录（G-4）：
+    // 导出烧录（SPEC §8.2 导出侧的标注烧录 + 图片图层合并）：
     //   · 图片图层（多层画布）——由「导出面板·烧录图片图层」开关独立决定是否并入，与图层面板「显示」（仅影响预览 working_）正交；
     //     composeLayerCanvasForExport 与当前预览态一致时内部直接复用 working_，否则无副作用地现算另一形态。
     //   · 标注——开关开且有标注时以当前导出基准逐个调 Core rasterize 合成（标注随像素被切开）。

@@ -24,11 +24,12 @@ inline Color compositeOver(const Color& dst, const Color& src) {
     const double da = dst.a / 255.0;
     const double oa = sa + da * (1.0 - sa);
     if (oa <= 0.0) return Color(0, 0, 0, 0);
-    auto ch = [&](const std::uint8_t s, const std::uint8_t d) {
-        return static_cast<std::uint8_t>(std::lround(std::clamp((s * sa + d * da * (1.0 - sa)) / oa, 0.0, 255.0)));
+    auto ch = [&](const std::uint8_t sc, const std::uint8_t dc) {
+        const double v = (sc * sa + dc * da * (1.0 - sa)) / oa;
+        return static_cast<std::uint8_t>(std::lround(std::clamp(v, 0.0, 255.0)));
     };
     return Color(ch(src.r, dst.r), ch(src.g, dst.g), ch(src.b, dst.b),
-                       static_cast<std::uint8_t>(std::lround(std::clamp(oa * 255.0, 0.0, 255.0))));
+                 static_cast<std::uint8_t>(std::lround(std::clamp(oa * 255.0, 0.0, 255.0))));
 }
 
 } // namespace idc::core

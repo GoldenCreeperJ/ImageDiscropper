@@ -33,7 +33,7 @@ PreviewImage makePreview(const core::Image& src, const int maxDimension) {
     const double s = static_cast<double>(maxDimension) / static_cast<double>(longest);
     const int nw = std::max(1, static_cast<int>(std::llround(w * s)));
     const int nh = std::max(1, static_cast<int>(std::llround(h * s)));
-    out.image = src.resized(nw, nh, core::ResampleMode::NEAREST);
+    out.image = src.resized(nw, nh, core::ResampleMode::Nearest);
 
     // 放大系数以「实际预览尺寸」为准（round 可能与理论值有 1px 级偏差）。
     out.scaleX = static_cast<double>(w) / static_cast<double>(out.image.width());
