@@ -1,7 +1,6 @@
 # C++ 实现的 CI 入口：五腿矩阵（桌面三平台 + 移动双端）→ cpp-build.yml。
 # 移动腿不跑 ctest（交叉编译产物无法在构建机执行）；依赖树缓存命中后分钟级。
-# 由通用分发入口 ci.yml 调用；未来其他语言实现（rust/tauri/wails/flutter 等）
-# 在各自目录建同构入口（<impl>/ci.yml），行为契约见 SPEC §8 与 NFR-10。
+# 由通用分发入口 ci.yml 调用；新语言实现按同构在本目录顶层建 <impl>-ci.yml 接回。
 name: cpp-ci
 
 on:
@@ -10,8 +9,7 @@ on:
 jobs:
   build:
     strategy:
-      # 稳定期 true：任一平台失败即取消其余进行中的平台（止损省时）；
-      # 多平台调试期可临时改 false，一轮看全五个平台的失败信息。
+      # false：矩阵五平台并行、互不取消，一轮看全各平台的失败信息。
       fail-fast: false
       matrix:
         include:

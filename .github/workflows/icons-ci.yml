@@ -6,7 +6,7 @@
 #   · 上传 artifact `icon-products`，各构建腿（cpp-build.yml）下载落地——
 #     派生物不入库后，CI/CD 构建腿的图标**唯一来源**就是本产物；
 #   · 失败 → job 红，下游 needs 腿被跳过。
-# 缓存策略（三层，各司其职）：
+# 缓存策略（两条，各司其职）：
 #   · 产物缓存（icon-products-*）：key = hash(svg, 脚本)。命中即免构建；不用
 #     restore-keys——前缀回退会取到旧 svg 的产物。失败轮次 post 步骤仍会存
 #     （内容 = 该 key 的规范输出，语义自洽，不污染后续）。
@@ -22,13 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # 产物缓存：key = hash(svg, 脚本)。命中 = 该输入组合的规范生成物已在工作区，
+      # 产物缓存：key = hash(svg, 脚本)；命中即复用规范生成物、跳过重跑，未命中由下方步骤现场 regenerate。
       - name: Restore icon products cache
         id: iconcache
         uses: actions/cache@v5
         with:
           # 只缓存派生子目录：整目录缓存会连带覆盖提交版脚本/README/手工 xml。
-          path: |
+          path: &icon-products |
             assets/icon.png
             assets/icons/android/
             assets/icons/ios/
@@ -79,16 +79,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: icon-products
-          path: |
-            assets/icon.png
-            assets/icons/android/
-            assets/icons/ios/
-            assets/icons/linux/
-            assets/icons/mac/
-            assets/icons/windows/
-            ImageDiscropperCpp/packaging/android/res/mipmap-mdpi/
-            ImageDiscropperCpp/packaging/android/res/mipmap-hdpi/
-            ImageDiscropperCpp/packaging/android/res/mipmap-xhdpi/
-            ImageDiscropperCpp/packaging/android/res/mipmap-xxhdpi/
-            ImageDiscropperCpp/packaging/android/res/mipmap-xxxhdpi/
+          path: *icon-products
           if-no-files-found: error

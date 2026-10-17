@@ -1,22 +1,12 @@
 # CI 通用分发入口：每 push / PR 先按变更路径定向，再把验证任务分发到对应实现。
-# 分发规则（两层，filters 是定向的单一事实来源）：
-#   · 触发层 paths = filters 的粗粒度超集——挡住纯无关 push，不产生空跑
-#     （!**/*.md 排除全部文档：文档单独改动不触发 CI；文档随代码同改时仍经 shared 全测。
-#      若需 SPEC 单独触发，在否定行之后补一行 'SPEC.md' 即可。）
-#   · changes job 的 filters 精定向：实现路径 → 只测该实现；
-#     共享契约（SPEC.md / .github/workflows/** / 根文档）→ 全实现都测（NFR-10）。
-#   · 图标构建 + 比对（icons-ci）**无条件每次跑**：分钟级，产出 icon-products 供构建腿
-#     下载落地（腿需 needs icons，启动延后 ~2-3 分钟）；不为省这几分钟引入路由边
-#     （assets/** 仍列入触发路径，保证纯图标 push 也触发 CI）。
-# 接入新实现（tauri / wails / flutter / …）= 在本目录建同构文件（形态见 cpp-ci.yml：
-# 矩阵 + cpp-build.yml 可复用构建工作流；命名约定 <impl>-ci / <impl>-cd / <impl>-build，
-# GitHub 要求本地可复用工作流必须位于本目录顶层），然后：
-#   1. 触发层 paths 与 filters 各加一行 <impl> 相关路径（两处同步！）
-#   2. 加一个 job：
-#        <impl>:
-#          needs: changes
-#          if: ${{ needs.changes.outputs.<impl> == 'true' || needs.changes.outputs.shared == 'true' }}
-#          uses: ./.github/workflows/<impl>-ci.yml
+# 分发规则（filters 是定向的单一事实来源）：
+#   · 触发层 paths = filters 的粗粒度超集——挡住纯无关 push，不产生空跑（!**/*.md 排除文档单独改动）。
+#   · changes job 的 filters 精定向：实现路径 → 只测该实现；共享契约（.github/workflows/**）→ 全实现都测（NFR-10）。
+#   · 图标构建 + 产物上传（icons-ci）无条件每次跑：产出 icon-products 供构建腿下载落地，
+#     icons 失败则下游 needs 腿被跳过（闸门语义）。
+# 接入新实现（tauri / wails / flutter / …）：在本目录建同构 <impl>-ci.yml（形态见 cpp-ci.yml：
+# 矩阵 + cpp-build.yml 可复用构建；GitHub 要求本地可复用工作流须位于本目录顶层），
+# paths 与 filters 各加一行 <impl> 路径（两处同步），再加一个 needs changes 的分发 job。
 # 本文件只声明触发条件与分发清单，不含任何平台细节。
 name: CI
 
@@ -67,15 +57,14 @@ jobs:
             shared:
               - '.github/workflows/**'
 
-  # 图标构建 + 一致性比对 + 产物上传（icon-products）：无条件每次跑，无 needs 依赖，
-  # changes 未判定完即可开工。与构建矩阵并行（矩阵腿需等它的产物，故实际在腿前完成）。
+  # 图标构建 + 产物上传（icon-products）：无条件每次跑、无 needs，与 changes 并行
+  # （矩阵腿需等它的产物，故实际在腿前完成）。
   icons:
     uses: ./.github/workflows/icons-ci.yml
 
   cpp:
-    # needs icons：构建腿消费 icons job 产出的 icon-products 产物（腿内 download-artifact
-    # 落地）；比对失败则 icons 红 → 本 job 被跳过（闸门语义）。代价是腿启动延后
-    # 图标构建的 ~2-3 分钟。
+    # needs icons：构建腿消费 icon-products 产物（腿内 download-artifact 落地）；
+    # icons 失败则本 job 被跳过（闸门语义）。代价是腿启动延后图标构建的 ~2-3 分钟。
     needs: [changes, icons]
     if: ${{ needs.changes.outputs.cpp == 'true' || needs.changes.outputs.shared == 'true' }}
     uses: ./.github/workflows/cpp-ci.yml

@@ -56,7 +56,7 @@ concurrency:
 
 jobs:
   # 手动触发时若标签不存在：在当前默认分支 HEAD 上创建并推送该标签
-  # （打标即「此刻的 main 就是要发布的版本」）。tag push 触发的运行跳过本 job。
+  # （打标即「此刻的默认分支就是要发布的版本」）。tag push 触发的运行跳过本 job。
   prepare:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -142,9 +142,8 @@ jobs:
           [ -z "$RANGE" ] && RANGE="$TAG"
           emit() {
             local items
-            # %s%n%b：除标题外也扫描正文中的 conventional 行（一次提交混入两个
-            # 变更时正文里会有第二个「前缀: 描述」标题）；锚定的前缀模式天然排除
-            # 正文的「- 」要点行，无噪音。兜底项（rest_items）仍只用 %s。
+            # %s%n%b 一并扫描正文里的 conventional 行（一次提交混多变更时正文含第二个「前缀: 描述」标题）；
+            # 锚定前缀模式天然排除正文的「- 」要点行。兜底项（rest_items）只用 %s。
             items=$(git log --pretty=format:"%s%n%b" "$RANGE" | grep -E "^$2" || true)
             if [ -n "$items" ]; then
               echo "### $1" >> release-notes.md
@@ -152,9 +151,7 @@ jobs:
               echo "" >> release-notes.md
             fi
           }
-          # 分组模式必须「前缀 + 冒号」锚定：裸 ^feat 会误吞 feature: 开头；
-          # 多词分支必须显式分组（^build|ci 未分组时第二分支退化为「含 ci 子串即中」，
-          # 导致跨分组重复）。
+          # 分组须「前缀+冒号」锚定且多词分支显式分组（如 (build|ci)），否则误吞相近前缀或跨组重复。
           : > release-notes.md
           echo "## 变更" >> release-notes.md
           emit "新功能" "feat(\([^)]*\))?:"
@@ -163,8 +160,7 @@ jobs:
           emit "构建与发布" "(build|ci)(\([^)]*\))?:"
           emit "文档" "docs(\([^)]*\))?:"
           emit "其他" "(test|chore|perf|style)(\([^)]*\))?:"
-          # 兜底：无任何 conventional 前缀的提交并入「其他」节（不兜底则静默消失）；
-          # 用反向排除而非正向匹配（正向会与前缀组重叠导致双列）。
+          # 兜底：无前缀提交并入「其他」，用反向排除避免与前缀组重叠双列。
           rest_items=$(git log --pretty=format:"%s" "$RANGE" \
               | grep -vE "^(feat|fix|refactor|build|ci|docs|test|chore|perf|style)(\([^)]*\))?:" || true)
           if [ -n "$rest_items" ]; then

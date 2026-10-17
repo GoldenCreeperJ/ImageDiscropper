@@ -62,11 +62,8 @@ jobs:
           echo "VCPKG_ROOT=$DEST" >> "$GITHUB_ENV"
 
       # 二进制缓存：整树 restore（命中则 vcpkg 跳过已装包；未命中则 job 结束自动 save）。
-      # 不缓存 downloads：downloads 只在 binary 未命中的冷构建里被消费，而命中轮次里
-      # 恢复它是纯开销（白解压 ~1G）且与 binary 条目 LRU 权重相同——冷构建属低频事件，
-      # 偶发下载失败重跑即可，不需要常驻 0.9G 的保险条目。
-      # 弃用原因备注：x-gha 后端已被新版 vcpkg 移除；nuget,github 在该版本下
-      # 源解析失效且非 Windows 需 mono（runner 屏蔽 keyserver），故退回 actions/cache 整树方案。
+      # 不缓存 downloads：仅冷构建消费，命中轮恢复它是纯开销（冷构建低频，偶发下载失败重跑即可）。
+      # 弃用 vcpkg 原生二进制后端（x-gha 已移除、nuget 源解析失效且非 Windows 需 mono），退回 actions/cache 整树方案。
       # key 含 preset（ci 与 cd 同为 release 预设共享同一条目）与 triplet 哈希
       # （改 triplet 即自动换 key）；Debug 树（cpp-verify debug-all）不写缓存。
       - name: Restore vcpkg binary cache
@@ -183,10 +180,8 @@ jobs:
             DMG_SRC=$(mktemp -d)
             cp -R "$BIN/idc_gui.app" "$DMG_SRC/ImageDiscropper.app"
             cp "$BIN/idc" "dist/idc-macos-${TAG}"
-            # 去符号：vcpkg 的 qtbase 以 force_debug_info 构建，静态链入的 Qt 符号
-            # 显著抬升二进制体积；strip 会连带破坏链接器默认加的 ad-hoc 签名——
-            # 而 arm64 macOS 内核要求原生代码至少 ad-hoc 签名（否则 Killed: 9），
-            # 故 strip 后必须补免费 ad-hoc 重签（codesign --sign -，无需账号）。
+            # 去符号（Qt 静态链入的调试符号显著抬升体积）；strip 会破坏链接器默认加的 ad-hoc 签名，
+            # 而 arm64 macOS 内核要求至少 ad-hoc 签名（否则 Killed: 9），故 strip 后补 codesign --sign - 重签。
             strip "$DMG_SRC/ImageDiscropper.app/Contents/MacOS/idc_gui"
             strip "dist/idc-macos-${TAG}"
             codesign --force --sign - "$DMG_SRC/ImageDiscropper.app/Contents/MacOS/idc_gui"
@@ -233,7 +228,7 @@ jobs:
       # "Creating APK"），APK 与部署设置 json 均生成在目标所在子目录
       # build/<preset>/ImageDiscropperGui/ 下——此处只搬运改名，不再二次调用
       # androiddeployqt（旧 gradle 路径约定已随 qt_finalize_target 方案作废）。
-      # 注意：release 构建产出未签名 APK（alpha 分发前需补签名配置，后续处理）。
+      # 注：androiddeployqt 产出未签名 APK，签名与瘦身见下方 Package APK 步骤（secrets 缺则降级未签名）。
       - name: Package APK
         if: startsWith(inputs.preset, 'android')
         run: |
@@ -248,17 +243,14 @@ jobs:
           else
             # 瘦身 + 签名（release）：strip .so（Qt 三件套是大头）→ 重打包
             #（.so 保持 stored 不压缩，与原 APK 行为一致）→ zipalign → apksigner。
-            # 签名密钥来自仓库 secrets（base64 keystore + 密码，别名约定 idc、
-            # store/key 密码相同）；secrets 未配置时降级为未签名 APK 并告警
-            #（仅可 adb 侧载，无密钥环境仍可跑通）。
+            # 签名密钥来自仓库 secrets（base64 keystore + 密码，别名 key1、store/key 同密）；
+            # secrets 未配置时降级为未签名 APK 并告警（仅可 adb 侧载，无密钥环境仍可跑通）。
             WORK=$(mktemp -d)
             unzip -q "$APK" -d "$WORK/unpacked"
             "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-all \
               "$WORK"/unpacked/lib/arm64-v8a/*.so
-            # .so 压缩（~50% 压缩率）；resources.arsc 必须保持不压缩——Android 11+
-            # 安装器拒绝压缩的 arsc，报「无效安装包/与系统不兼容」。实测 -n arsc
-            # 在该环境未生效（alpha.7 产物 arsc 仍被压缩），故保留 -n 之外再显式
-            # 用 zip -0 重写该条目（更新已存在条目 = 替换为 stored），确定性保证。
+            # .so 压缩（~50%）；resources.arsc 须保持不压缩（Android 11+ 拒压缩的 arsc，报无效安装包）。
+            # 该环境 -n arsc 不生效，故再用 zip -0 显式把该条目重写为 stored，确定性保证。
             (cd "$WORK/unpacked" && zip -9qrX -n arsc "$WORK/repacked.apk" . && \
               zip -0X "$WORK/repacked.apk" resources.arsc)
             ZA=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/*/zipalign 2>/dev/null | sort -V | tail -1)
