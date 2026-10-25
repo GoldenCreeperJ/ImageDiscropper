@@ -3,7 +3,8 @@
 // 作用：实现 value_parser.h——把命令行字符串解析为 Core 强类型，并做格式校验。
 // 分块依据：纯「字符串 → 类型」转换，无副作用、不触碰引擎；失败一律返回 false 并写 err，
 //       由命令层组装为退出码 1（第 5 步：参数格式校验在调用 Core 之前完成）。
-// 说明：整数解析用 strtol 全量消费校验（拒绝 "12abc" / 空串 / 溢出）；颜色十六进制解析
+// 说明：坐标段接受整数（strtol 全量消费校验，拒绝 "12abc" / 空串 / 溢出）或百分比串（"50%"，
+//       相对基准尺寸换算，口径见 core/percent.h）；颜色十六进制解析
 //       与 Core 配置约定（#RRGGBB / #AARRGGBB）一致。
 // 常量层：报因文案经门面 IDC_CTR(msg, ...) 取 texts::msg、质量范围取 nums::parser；
 //       各枚举的 token 值（png / row-major / discard / collapse / none …）与枚举成对出现在映射表里，
@@ -14,6 +15,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
+#include <cmath>
 #include <cstdlib>
 
 #include "cli_nums.h"
@@ -72,36 +74,152 @@ bool hexByte(const std::string& s, const std::size_t pos, std::uint8_t& out) {
     return true;
 }
 
+// 坐标段：% 结尾按百分比（相对基准尺寸），否则按严格整数（像素）。
+bool parseCoord(const std::string& s, Coord& out) {
+    if (toInt(s, out.px)) { out.ratio.reset(); return true; }
+    const auto ratio = core::parsePercent(s);
+    if (!ratio) return false;
+    out.px = 0;
+    out.ratio = *ratio;
+    return true;
+}
+
+// 单段换算成像素；百分比而基准未知（<= 0）→ false。
+bool resolveCoord(const Coord& c, const int basis, int& out) {
+    if (!c.ratio) { out = c.px; return true; }
+    if (basis <= 0) return false;
+    out = core::resolvePercent(*c.ratio, basis);
+    return true;
+}
+
 } // namespace
 
-bool parseRect(const std::string& s, engine::RectRegion& out, std::string& err) {
+bool parseRectCoords(const std::string& s, RectCoords& out, std::string& err) {
     const std::vector<std::string> p = split(s, ',');
     if (p.size() != 4) { err = IDC_CTR(msg, kErrRectFourInts); return false; }
-    int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
-    if (!toInt(p[0], x1) || !toInt(p[1], y1) || !toInt(p[2], x2) || !toInt(p[3], y2)) {
+    if (!parseCoord(p[0], out.x1) || !parseCoord(p[1], out.y1) ||
+        !parseCoord(p[2], out.x2) || !parseCoord(p[3], out.y2)) {
         err = IDC_CTR(msg, kErrRectNotInt) + s + "'";
+        return false;
+    }
+    return true;
+}
+
+bool parseBandCoords(const std::string& s, BandCoords& out, std::string& err) {
+    const std::vector<std::string> p = split(s, ',');
+    if (p.size() != 2) { err = IDC_CTR(msg, kErrBandTwoInts); return false; }
+    if (!parseCoord(p[0], out.a) || !parseCoord(p[1], out.b)) {
+        err = IDC_CTR(msg, kErrBandNotInt) + s + "'";
+        return false;
+    }
+    return true;
+}
+
+bool parseGridCoords(const std::string& s, GridCoords& out, std::string& err) {
+    const std::vector<std::string> p = split(s, ',');
+    if (p.size() != 4) { err = IDC_CTR(msg, kErrGridFourInts); return false; }
+    if (!parseCoord(p[0], out.x0) || !parseCoord(p[1], out.y0) ||
+        !parseCoord(p[2], out.cw) || !parseCoord(p[3], out.ch)) {
+        err = IDC_CTR(msg, kErrGridNotInt) + s + "'";
+        return false;
+    }
+    return true;
+}
+
+bool resolveRectCoords(const RectCoords& in, const int basisW, const int basisH,
+                       engine::RectRegion& out, std::string& err) {
+    int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+    if (!resolveCoord(in.x1, basisW, x1) || !resolveCoord(in.x2, basisW, x2) ||
+        !resolveCoord(in.y1, basisH, y1) || !resolveCoord(in.y2, basisH, y2)) {
+        err = IDC_CTR(msg, kErrCoordNeedsBasis);
         return false;
     }
     out = engine::RectRegion(x1, y1, x2, y2);
     return true;
 }
 
-bool parseBand(const std::string& s, int& a, int& b, std::string& err) {
-    const std::vector<std::string> p = split(s, ',');
-    if (p.size() != 2) { err = IDC_CTR(msg, kErrBandTwoInts); return false; }
-    if (!toInt(p[0], a) || !toInt(p[1], b)) { err = IDC_CTR(msg, kErrBandNotInt) + s + "'"; return false; }
+bool resolveBandCoords(const BandCoords& in, const int basis, int& a, int& b, std::string& err) {
+    if (!resolveCoord(in.a, basis, a) || !resolveCoord(in.b, basis, b)) {
+        err = IDC_CTR(msg, kErrCoordNeedsBasis);
+        return false;
+    }
     return true;
 }
 
-bool parseGridGeo(const std::string& s, int& x0, int& y0, int& cw, int& ch, std::string& err) {
-    const std::vector<std::string> p = split(s, ',');
-    if (p.size() != 4) { err = IDC_CTR(msg, kErrGridFourInts); return false; }
-    if (!toInt(p[0], x0) || !toInt(p[1], y0) || !toInt(p[2], cw) || !toInt(p[3], ch)) {
-        err = IDC_CTR(msg, kErrGridNotInt) + s + "'";
+bool resolveGridCoords(const GridCoords& in, const int basisW, const int basisH,
+                       engine::GridParams& out, std::string& err) {
+    if (!resolveCoord(in.x0, basisW, out.originX) || !resolveCoord(in.y0, basisH, out.originY) ||
+        !resolveCoord(in.cw, basisW, out.cellWidth) || !resolveCoord(in.ch, basisH, out.cellHeight)) {
+        err = IDC_CTR(msg, kErrCoordNeedsBasis);
         return false;
     }
     // 单元尺寸必须为正——否则无法产生贯穿全图的周期切割线（SPEC §3.4.3）。
-    if (cw <= 0 || ch <= 0) { err = IDC_CTR(msg, kErrCellSizePositive); return false; }
+    if (out.cellWidth <= 0 || out.cellHeight <= 0) { err = IDC_CTR(msg, kErrCellSizePositive); return false; }
+    return true;
+}
+
+bool parseAxisPitchCoords(const std::string& s, AxisPitchCoords& out, std::string& err) {
+    const std::vector<std::string> p = split(s, ',');
+    if (p.size() != 2) { err = IDC_CTR(msg, kErrAxisPitchTwo); return false; }
+    if (!parseCoord(p[0], out.origin) || !parseCoord(p[1], out.cell)) {
+        err = IDC_CTR(msg, kErrAxisPitchNotInt) + s + "'";
+        return false;
+    }
+    return true;
+}
+
+bool resolveAxisPitchCoords(const AxisPitchCoords& in, const int basis, engine::GridAxisSpec& out, std::string& err) {
+    out.mode = engine::GridAxisMode::Pitch;
+    if (!resolveCoord(in.origin, basis, out.origin) || !resolveCoord(in.cell, basis, out.cell)) {
+        err = IDC_CTR(msg, kErrCoordNeedsBasis);
+        return false;
+    }
+    if (out.cell <= 0) { err = IDC_CTR(msg, kErrCellSizePositive); return false; }
+    return true;
+}
+
+bool parseDivide(const std::string& s, int& cols, int& rows, std::string& err) {
+    // "ColxRow"：'x'/'X' 与逗号均可作分隔（3x4 与 3,4 等价）。
+    const std::size_t sep = s.find_first_of("xX,");
+    if (sep == std::string::npos || s.find_first_of("xX,", sep + 1) != std::string::npos) {
+        err = IDC_CTR(msg, kErrDivideForm);
+        return false;
+    }
+    if (!toInt(s.substr(0, sep), cols) || !toInt(s.substr(sep + 1), rows)) {
+        err = IDC_CTR(msg, kErrDivideNotInt) + s + "'";
+        return false;
+    }
+    if (cols <= 0 || rows <= 0) { err = IDC_CTR(msg, kErrDividePositive); return false; }
+    return true;
+}
+
+bool parsePositiveCount(const std::string& s, int& out, std::string& err) {
+    if (!toInt(s, out)) { err = IDC_CTR(msg, kErrDivideNotInt) + s + "'"; return false; }
+    if (out <= 0) { err = IDC_CTR(msg, kErrDividePositive); return false; }
+    return true;
+}
+
+bool parseWeightList(const std::string& s, std::vector<double>& out, std::string& err) {
+    out.clear();
+    for (const std::vector<std::string> items = split(s, ','); const std::string& item : items) {
+        double w = 0.0;
+        bool ok = false;
+        if (char* end = nullptr; !item.empty()) {   // 数字：正数（可带小数）。
+            errno = 0;
+            const double v = std::strtod(item.c_str(), &end);
+            ok = errno != ERANGE && end != item.c_str() && *end == '\0' && std::isfinite(v) && v > 0.0;
+            w = v;
+        }
+        if (!ok) {   // 百分比串：折成百分数量级（与配置 weights 同口径）。
+            if (const auto ratio = core::parsePercent(item); ratio.has_value() && *ratio > 0.0) {
+                w = *ratio * 100.0;
+                ok = true;
+            }
+        }
+        if (!ok) { err = IDC_CTR(msg, kErrWeightsBad) + item + "'"; return false; }
+        out.push_back(w);
+    }
+    if (out.empty()) { err = IDC_CTR(msg, kErrWeightsForm); return false; }
     return true;
 }
 
@@ -126,7 +244,7 @@ bool parseCanvas(const std::string& s, int& cols, int& rows, std::string& err) {
     return true;
 }
 
-bool parseOrderCells(const std::string& s, std::vector<std::pair<int, int>>& out, std::string& err) {
+bool parseCellList(const std::string& s, std::vector<std::pair<int, int>>& out, std::string& err) {
     out.clear();
     for (const std::vector<std::string> items = split(s, ';'); const std::string& item : items) {
         if (item.empty()) continue; // 容忍尾随分号。
@@ -134,8 +252,12 @@ bool parseOrderCells(const std::string& s, std::vector<std::pair<int, int>>& out
         if (!parseCell(item, r, c, err)) return false;
         out.emplace_back(r, c);
     }
-    if (out.empty()) { err = IDC_CTR(msg, kErrOrderEmpty); return false; }
+    if (out.empty()) { err = IDC_CTR(msg, kErrCellListEmpty); return false; }
     return true;
+}
+
+bool parseOrderCells(const std::string& s, std::vector<std::pair<int, int>>& out, std::string& err) {
+    return parseCellList(s, out, err);   // 与 --keep/--remove 共用的单元列表解析（空列表报因同形，见 kErrCellListEmpty）。
 }
 
 bool parseColor(const std::string& s, core::Color& out, std::string& err) {
@@ -214,6 +336,40 @@ bool parseMerge(const std::string& s, engine::MergeLayout& out, std::string& err
     if (v == "collapse") { out = engine::MergeLayout::Collapse; return true; }
     if (v == "rearrange") { out = engine::MergeLayout::Rearrange; return true; }
     err = IDC_CTR(msg, kErrUnknownMerge) + s + IDC_CTR(msg, kErrUnknownMergeTail);
+    return false;
+}
+
+bool parseTier(const std::string& s, engine::Tier& out, std::string& err) {
+    const std::string v = toLower(s);
+    if (v == "extract") { out = engine::Tier::Standard; return true; }
+    if (v == "erase") { out = engine::Tier::Erase; return true; }
+    if (v == "grid") { out = engine::Tier::Grid; return true; }
+    err = IDC_CTR(msg, kErrUnknownTier) + s + IDC_CTR(msg, kErrUnknownTierTail);
+    return false;
+}
+
+bool parsePolarity(const std::string& s, engine::Polarity& out, std::string& err) {
+    const std::string v = toLower(s);
+    if (v == "keep") { out = engine::Polarity::Keep; return true; }
+    if (v == "remove") { out = engine::Polarity::Remove; return true; }
+    err = IDC_CTR(msg, kErrUnknownPolarity) + s + IDC_CTR(msg, kErrUnknownPolarityTail);
+    return false;
+}
+
+bool parseExportMode(const std::string& s, engine::ExportMode& out, std::string& err) {
+    const std::string v = toLower(s);
+    if (v == "merged") { out = engine::ExportMode::Merged; return true; }
+    if (v == "separate") { out = engine::ExportMode::Separate; return true; }
+    err = IDC_CTR(msg, kErrUnknownExportMode) + s + IDC_CTR(msg, kErrUnknownExportModeTail);
+    return false;
+}
+
+bool parseFit(const std::string& s, canvas::ImageFit& out, std::string& err) {
+    const std::string v = toLower(s);
+    if (v == "crop") { out = canvas::ImageFit::Crop; return true; }
+    if (v == "stretch") { out = canvas::ImageFit::Stretch; return true; }
+    if (v == "native") { out = canvas::ImageFit::Native; return true; }
+    err = IDC_CTR(msg, kErrUnknownFit) + s + IDC_CTR(msg, kErrUnknownFitTail);
     return false;
 }
 

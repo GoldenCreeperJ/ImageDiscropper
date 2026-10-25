@@ -19,7 +19,7 @@
 #include <utility>
 #include <vector>
 
-#include "engine/engine.h" // EngineConfig / Tier / CutGenerator / Polarity / EmitMode / MergeLayout
+#include "engine/engine.h" // EngineConfig / Tier / CutGenerator / Polarity / ExportMode / MergeLayout
 #include "engine/region.h" // RectRegion / horizontalBand / verticalBand
 #include "annotation/annotation_set.h" // AnnotationSet / Annotation（命令行标注烧录容器）
 
@@ -28,6 +28,7 @@
 #include "command_support.h"
 #include "generate_args.h"
 #include "job.h"
+#include "layer_args.h"   // collectLayers / finalizeAppendedLayers（命令行图层，--layer/--layers）
 #include "value_parser.h"
 #include "i18n/cli_texts.h"
 #include "i18n/cli_i18n.h"
@@ -42,11 +43,17 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     ArgParser args;
     args.parse(tokens);
 
+    // --- 第 2.5 步：拒绝本命令不接受的输入（G1+A/B/C，退出码 1）；--rect 在 L2 可重复做并集，列入可重复集。---
+    if (const int rc = rejectUnknownOptions(args, makeCommandArgs(
+            {opts::kInput, opts::kRect, opts::kHband, opts::kVband, opts::kMerge, opts::kOutput, opts::kOutputDir, opts::kFit},
+            MixGenerate | MixAnnotation | MixExport | MixLayers | MixAssets,
+            {opts::kRect})); rc != 0) return rc;
+
     // --- 第 3 步：必填。（输入来源二选一：--input 读文件 或 --size 生成画布。）---
     if (!args.has(opts::kInput) && !hasGenerateOptions(args))
         return argError(IDC_CTR(msg, kErrMissingInput), IDC_CTR(msg, kHintInputOrSize));
-    if (args.has(opts::kInput) && hasGenerateOptions(args))
-        return argError(IDC_CTR(msg, kErrInputAndSizeMix), IDC_CTR(msg, kHintPickInputSource));
+    if (!args.has(opts::kSize) && hasPatternOptions(args))
+        return argError(IDC_CTR(msg, kErrPatternNeedsSize), IDC_CTR(msg, kHintPatternNeedsSize));
 
     // --- 第 4 步：互斥——几何三选一（--rect 可重复，整体算作一类）。---
     const bool hasRect = args.has(opts::kRect);
@@ -76,79 +83,102 @@ int cmdErase(const std::vector<std::string>& tokens, const GlobalOptions& go) {
         // 仅 L3 可重排（Core runEngine 硬约束）：erase 为 L2，显式 rearrange 直接拒绝。
         if (layout == engine::MergeLayout::Rearrange)
             return argError(IDC_CTR(msg, kErrEraseNoRearrange), IDC_CTR(msg, kHintRearrangeL3Only));
-        config.emitParams.mode = engine::EmitMode::Merged;
-        config.emitParams.layout = layout;
+        config.exportParams.mode = engine::ExportMode::Merged;
+        config.exportParams.layout = layout;
         explicitCollapse = layout == engine::MergeLayout::Collapse;
-        if (!args.has(opts::kOutput))
+        if (!args.has(opts::kSaveConfig) && !args.has(opts::kOutput))
             return argError(IDC_CTR(msg, kErrMissingMergeOutput), IDC_CTR(msg, kHintMergeOutputPath));
     } else {
-        config.emitParams.mode = engine::EmitMode::Separate;
-        if (!args.has(opts::kOutputDir))
+        // 模式级对称守卫（与上方 --merge 拒 --output-dir 反向）：--output 属合并目标，
+        //   未加 --merge 却给出属误用，一律退出码 1。
+        if (args.has(opts::kOutput))
+            return argError(IDC_CTR(msg, kErrSeparateWithOutput), IDC_CTR(msg, kHintMergeVsSeparate));
+        config.exportParams.mode = engine::ExportMode::Separate;
+        if (!args.has(opts::kSaveConfig) && !args.has(opts::kOutputDir))
             return argError(IDC_CTR(msg, kErrMissingOutputDir), IDC_CTR(msg, kHintOutputDirAutoCreate));
     }
 
-    // --- 第 5 步：几何格式校验。带坐标先暂存，读图后再构造贯穿全图的带矩形。---
-    int bandA = 0, bandB = 0;
+    // --- 第 5 步：几何形态校验（整数像素或百分比段）；百分比需图像尺寸作基准，故换算与退化校验
+    //     留到第 6 步解图之后。---
+    std::vector<std::string> rectStrs;   // --rect 原值（多矩形退化时按条回指具体那一个）
+    std::vector<RectCoords> rectCoords;
+    BandCoords bandCoords;
     if (hasRect) {
-        if (const std::vector<std::string> rectStrs = args.getAll(opts::kRect); rectStrs.size() == 1) {
-            // 单矩形 → 十字切割（保留四角）。
-            engine::RectRegion r;
-            if (!parseRect(rectStrs[0], r, err)) return argError(err);
-            if (r.width() <= 0 || r.height() <= 0)
-                return argError(IDC_CTR(msg, kErrRectDegenerate), IDC_CTR(msg, kHintRectOrder));
-            config.cut.generator = engine::CutGenerator::Rect;
-            config.cut.rect = r;
-        } else {
-            // 多矩形并集剔除（FR-L2.4）：各矩形诱导十字带，删除区为并集（始终满足坍缩条件）。
-            config.cut.generator = engine::CutGenerator::MultiRect;
-            for (const std::string& s : rectStrs) {
-                engine::RectRegion r;
-                if (!parseRect(s, r, err)) return argError(err);
-                if (r.width() <= 0 || r.height() <= 0)
-                    return argError(IDC_CTR(msg, kErrRectDegenerate),
-                                    IDC_CTR(msg, kHintRectOrderLead) + s + IDC_CTR(msg, kHintRectOrderTail));
-                config.cut.rects.push_back(r);
-            }
+        rectStrs = args.getAll(opts::kRect);
+        // 单矩形 → 十字切割（保留四角）；多矩形 → 并集剔除（FR-L2.4）。
+        config.cut.generator = rectStrs.size() == 1 ? engine::CutGenerator::Rect : engine::CutGenerator::MultiRect;
+        for (const std::string& s : rectStrs) {
+            RectCoords rc;
+            if (!parseRectCoords(s, rc, err)) return argError(err);
+            rectCoords.push_back(rc);
         }
     } else if (hasH) {
-        if (!parseBand(args.get(opts::kHband), bandA, bandB, err)) return argError(err);
-        if (bandA >= bandB)
-            return argError(IDC_CTR(msg, kErrHbandDegenerate), IDC_CTR(msg, kHintHbandOrder));
+        if (!parseBandCoords(args.get(opts::kHband), bandCoords, err)) return argError(err);
         config.cut.generator = engine::CutGenerator::HorizontalLine;
     } else { // hasV
-        if (!parseBand(args.get(opts::kVband), bandA, bandB, err)) return argError(err);
-        if (bandA >= bandB)
-            return argError(IDC_CTR(msg, kErrVbandDegenerate), IDC_CTR(msg, kHintVbandOrder));
+        if (!parseBandCoords(args.get(opts::kVband), bandCoords, err)) return argError(err);
         config.cut.generator = engine::CutGenerator::VerticalLine;
     }
     // 公共导出选项：--format（分离时决定扩展名 / 合并时作扩展名回退）/ --quality（JPEG/WebP）/ --naming（分离命名模板）。
-    if (!applyExportOptions(args, config.emitParams, err)) return argError(err);
+    if (!applyExportOptions(args, config.exportParams, err)) return argError(err);
 
     // --- 第 6 步：获取输入图像（--input 读文件失败 3；--size 生成参数非法 1）。---
-    const JobOptions opt = makeJobOptions(go, explicitCollapse);
+    JobOptions opt = makeJobOptions(go, explicitCollapse);
     core::Image image;
     if (const ExitCode ec = resolveInputImage(args, image, opt); ec != ExitCode::Ok)
         return toInt(ec);
 
-    // --- 装配切割几何：带需图像尺寸构造贯穿全图矩形；写入 source（供 --save-config 完整）。---
-    if (config.cut.generator == engine::CutGenerator::HorizontalLine)
+    // --- 装配切割几何：百分比段按图像宽 / 高换算成像素并做退化校验；带需图像尺寸构造贯穿全图矩形；
+    //     写入 source（供 --save-config 完整）。---
+    int bandA = 0, bandB = 0;
+    if (!rectCoords.empty()) {
+        const bool multi = config.cut.generator == engine::CutGenerator::MultiRect;
+        for (std::size_t i = 0; i < rectCoords.size(); ++i) {
+            engine::RectRegion r;
+            if (!resolveRectCoords(rectCoords[i], image.width(), image.height(), r, err)) return argError(err);
+            if (r.width() <= 0 || r.height() <= 0) {
+                const std::string hint = multi ? IDC_CTR(msg, kHintRectOrderLead) + rectStrs[i] + IDC_CTR(msg, kHintRectOrderTail)
+                                               : IDC_CTR(msg, kHintRectOrder);
+                return argError(IDC_CTR(msg, kErrRectDegenerate), hint);
+            }
+            if (multi) config.cut.rects.push_back(r);
+            else config.cut.rect = r;
+        }
+    } else if (config.cut.generator == engine::CutGenerator::HorizontalLine) {
+        if (!resolveBandCoords(bandCoords, image.width(), bandA, bandB, err)) return argError(err);
+        if (bandA >= bandB)
+            return argError(IDC_CTR(msg, kErrHbandDegenerate), IDC_CTR(msg, kHintHbandOrder));
         config.cut.rect = engine::horizontalBand(bandA, bandB, image.width());
-    else if (config.cut.generator == engine::CutGenerator::VerticalLine)
+    } else {
+        if (!resolveBandCoords(bandCoords, image.height(), bandA, bandB, err)) return argError(err);
+        if (bandA >= bandB)
+            return argError(IDC_CTR(msg, kErrVbandDegenerate), IDC_CTR(msg, kHintVbandOrder));
         config.cut.rect = engine::verticalBand(bandA, bandB, image.height());
+    }
     config.source.width = image.width();
     config.source.height = image.height();
 
     // --- 第 7 步：命令行标注（SPEC §7 annotations 元素语法）装配到临时集合，交 job 烧录 / 随 --save-config 透写。---
-    //     坐标基准＝预处理产出（job 内先物化 preprocess 再烧标注）；无标注时传 nullptr（不烧录、不写段）。
+    //     坐标基准＝工作图尺寸（本命令无预处理选项，工作图即输入图）；几何坐标可写百分比串（源输入图宽高）。
+    //     无标注时传 nullptr（不烧录、不写段）。---
     std::vector<annotation::Annotation> annos;
-    if (!collectAnnotations(args, annos, err)) return argError(err);
+    if (!collectAnnotations(args, annos, err, image.width(), image.height())) return argError(err);
     annotation::AnnotationSet annoSet;
     const annotation::AnnotationSet* annoPtr = nullptr;
     if (!annos.empty()) { annoSet.restore(std::move(annos)); annoPtr = &annoSet; }
 
+    // --- 第 7 步：命令行图层（--layer/--layers）装配：作为叠加层展平进引擎（资产按当前工作目录解析）。---
+    std::vector<canvas::ImageLayer> cliLayers;
+    if (!collectLayers(args, cliLayers, err, image.width(), image.height())) return argError(err);
+    if (!cliLayers.empty()) {
+        finalizeAppendedLayers({}, cliLayers);
+        config.layers = std::move(cliLayers);
+    }
+
     // --- 第 7 步：执行 / dry-run（--save-config）。分离取 --output-dir，合并取 --output。---
     const JobOutput out{separate ? args.get(opts::kOutputDir) : args.get(opts::kOutput), separate};
-    return toInt(finishJob(config, image, out, go.saveConfig, opt, annoPtr));
+    opt.assetsDir = assetsDirFromArgs(args);   // --assets-dir 三态（作业级通用，命令后）
+    return toInt(finishJob(config, image, out, args.get(opts::kSaveConfig), opt, annoPtr));
 }
 
 } // namespace idc::cli

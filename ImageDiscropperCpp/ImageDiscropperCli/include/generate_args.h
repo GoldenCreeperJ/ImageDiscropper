@@ -31,6 +31,9 @@ namespace idc::cli {
 
 // 是否给出图像生成选项（以 --size 为触发标志：合成画布必须有尺寸）。
 bool hasGenerateOptions(const ArgParser& args);
+// 是否给出了任一图案参数（--pattern/--orientation/--bg/--fg/--period/--line-width/--dot-radius/--seed/--noise）。
+// 这些参数只对 --size 生成的画布生效：未给 --size 时须报错（杜绝静默忽略）。
+bool hasPatternOptions(const ArgParser& args);
 
 // 解析图像生成选项并合成一张 RGBA 画布图（委托 Core generate::makePattern）。
 //   --size 必填且须为 WxH 正整数、且不超 Core 上限；图案名 / 方向 / 颜色 / 周期等逐格式校验。

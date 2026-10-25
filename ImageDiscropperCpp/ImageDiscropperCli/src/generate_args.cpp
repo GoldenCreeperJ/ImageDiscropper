@@ -3,8 +3,7 @@
 // 作用：generate_args.h 的实现——读取 --size / --pattern / --orientation / --bg / --fg /
 //       --period / --line-width / --dot-radius 选项，装配 Core generate::PatternParams 并调
 //       generate::makePattern 合成画布；另提供 resolveInputImage 统一「读文件 / 生成」两种输入来源。
-//       图片不是图案类型（--pattern 无 image，也无 --pattern-image / --image-anchor / --image-scale）；
-//       图片层只能经 config 的 layers 段传入。
+//       图片不入图案类型；图片经 config 的 layers 段（file 图层）或 generate 段落位声明引入。
 // 分块依据：CLI 不实现任何像素 / 图案逻辑，全部委托 Core（CONTRIBUTING.md「分层纪律」）；本文件只做
 //       「取选项 + 纯格式校验 + 调 Core + 汇总错误」。颜色解析复用 value_parser::parseColor（含 alpha）。
 // 常量层：选项名取 texts::opt（不可译）、报因文案经门面 IDC_CTR(msg, ...) 取 texts::msg；尺寸单边与总像素上限
@@ -19,7 +18,8 @@
 #include <iostream>
 #include <string>
 
-#include "generate/pattern.h" // generate::PatternParams / makePattern / kMaxDimension
+#include "generate/pattern.h" // generate::PatternParams / makePattern / ImageAnchor / kMaxDimension
+#include "canvas/layer.h"     // canvas::ImageLayer / composeCanvas（--input + --size 同给时的铺入合成）
 #include "value_parser.h"     // parseColor（底色 / 前景色，含 alpha）
 
 #include "cli_error.h"
@@ -142,6 +142,12 @@ bool hasGenerateOptions(const ArgParser& args) {
     return args.has(opts::kSize);
 }
 
+bool hasPatternOptions(const ArgParser& args) {
+    return args.has(opts::kPattern) || args.has(opts::kOrientation) || args.has(opts::kBg) ||
+           args.has(opts::kFg) || args.has(opts::kPeriod) || args.has(opts::kLineWidth) ||
+           args.has(opts::kDotRadius) || args.has(opts::kSeed) || args.has(opts::kNoise);
+}
+
 // 仅解析尺寸 + 图案参数为 PatternParams（不落像素）；new --save-config 与 buildGeneratedImage 共用。
 bool parseGenerateParams(const ArgParser& args, int& w, int& h,
                          generate::PatternParams& params, std::string& err) {
@@ -192,16 +198,58 @@ bool buildGeneratedImage(const ArgParser& args, core::Image& out, std::string& e
 }
 
 ExitCode resolveInputImage(const ArgParser& args, core::Image& out, const JobOptions& opt) {
-    // 来源①：--input 读文件（复用 job 的执行桥，失败已打印，退出码 3）。
-    if (args.has(opts::kInput)) return loadInputImage(args.get(opts::kInput), out, opt);
+    const bool hasInput = args.has(opts::kInput);
+    const bool hasGen = hasGenerateOptions(args);
 
-    // 来源②：用生成选项合成画布（失败归参数错误 1）。
+    // --fit 只对「位图 + 画布」组合有效（①②无组合对象）。
+    if (args.has(opts::kFit) && !(hasInput && hasGen)) {
+        reportError(makeError(ExitCode::ArgError, IDC_CTR(msg, kErrFitNeedsBoth)));
+        return ExitCode::ArgError;
+    }
+
+    // 来源①：仅 --input → 位图即工作图（画布=图尺寸）。
+    if (hasInput && !hasGen) return loadInputImage(args.get(opts::kInput), out, opt);
+
+    // 来源②：仅生成选项 → 生成画布即工作图。
+    if (!hasInput) {
+        if (std::string err; !buildGeneratedImage(args, out, err)) {
+            reportError(makeError(ExitCode::ArgError, IDC_CTR(msg, kErrGenArgs), err, IDC_CTR(msg, kHintGenArgs)));
+            return ExitCode::ArgError;
+        }
+        if (opt.verbose)
+            std::cerr << IDC_CTR(msg, kLogPrefix) << IDC_CTR(msg, kLogGenCanvas) << out.width() << "x" << out.height() << "\n";
+        return ExitCode::Ok;
+    }
+
+    // 来源③：--input 与 --size 同给 → 画布尺寸由 --size 定（含图案 / 底色），位图居中铺入
+    //   （缺省 native 原生尺寸；--fit crop/stretch/native 改为位图→画布适应）；--layer 仍可叠加其上。
+    core::Image bmp;
+    if (const ExitCode ec = loadInputImage(args.get(opts::kInput), bmp, opt); ec != ExitCode::Ok)
+        return ec;
     if (std::string err; !buildGeneratedImage(args, out, err)) {
         reportError(makeError(ExitCode::ArgError, IDC_CTR(msg, kErrGenArgs), err, IDC_CTR(msg, kHintGenArgs)));
         return ExitCode::ArgError;
     }
-    if (opt.verbose)
-        std::cerr << IDC_CTR(msg, kLogPrefix) << IDC_CTR(msg, kLogGenCanvas) << out.width() << "x" << out.height() << "\n";
+    canvas::ImageLayer overlay;
+    overlay.decodedPixels = std::move(bmp);
+    overlay.zOrder = 0;
+    if (args.has(opts::kFit)) {
+        if (std::string err; !parseFit(args.get(opts::kFit), overlay.imageFit, err)) {
+            reportError(makeError(ExitCode::ArgError, err));
+            return ExitCode::ArgError;
+        }
+        overlay.hasImagePlacement = true;   // 位图→画布适应：框恒=画布、锚点 center。
+        overlay.boxWidth = out.width();
+        overlay.boxHeight = out.height();
+    }
+    const core::Image composed = canvas::composeCanvas({overlay}, out.width(), out.height(), out);
+    if (composed.empty()) {
+        reportError(makeError(ExitCode::RuntimeError, IDC_CTR(msg, kErrLayerCanvasEmpty),
+                              IDC_CTRF(msg, kDetSourceSize, std::to_string(out.width()) + "x" + std::to_string(out.height())),
+                              IDC_CTR(msg, kHintSourceBounds)));
+        return ExitCode::RuntimeError;
+    }
+    out = composed;
     return ExitCode::Ok;
 }
 

@@ -8,7 +8,10 @@
 // ============================================================================
 #include "arg_parser.h"
 
+#include <algorithm>
 #include <cctype>
+#include <ranges>
+#include <set>
 
 #include "i18n/cli_texts.h"
 
@@ -21,10 +24,33 @@ namespace {
 
 // 已知的「无值 flag」集合：这些选项后不消费 value，仅记录其出现过。
 // 其余以 '-' 开头的选项一律按「取值选项」处理（消费紧随其后、不以 '-' 开头的 token）。
+// 三处同步登记（新增 flag 必须三处齐改）：① opt 常量（cli_texts_base.h）；② 本集合；
+// ③ makeCommandArgs 的 repeatable 集（command_support.h / 各命令）。
 bool isFlagOption(const std::string& name) {
-    return name == opt::kCompose || name == opt::kVerbose || name == opt::kQuiet ||
+    return name == opt::kCompose || name == opt::kVerbose || name == opt::kShortVerbose ||
            name == opt::kHelp || name == opt::kShortHelp || name == opt::kVersion ||
-           name == opt::kShortVersion;
+           name == opt::kShortVersion || name == opt::kStrict ||
+           name == opt::kAssetsDir || name == opt::kReplaceAnnotations || name == opt::kReplaceLayers;
+}
+
+// 短选项簇展开（GNU 惯例 -abc ≡ -a -b -c）：整簇都是已知 flag 短写（h/v/V）时拆成独立短选项，
+// 否则原样保留（交后续按未知选项报错）。
+std::vector<std::string> expandShortClusters(const std::vector<std::string>& args) {
+    std::vector<std::string> out;
+    for (const std::string& t : args) {
+        if (t.size() > 2 && t[0] == '-' && t[1] != '-') {
+            const std::string known = "hvV";
+            bool allKnown = true;
+            for (std::size_t i = 1; i < t.size(); ++i)
+                if (known.find(t[i]) == std::string::npos) { allKnown = false; break; }
+            if (allKnown) {
+                for (std::size_t i = 1; i < t.size(); ++i) out.push_back(std::string("-") + t[i]);
+                continue;
+            }
+        }
+        out.push_back(t);
+    }
+    return out;
 }
 
 // 判断 token 是否以 '-' 开头（即选项 / flag，而非值 / 位置参数）。
@@ -95,11 +121,36 @@ std::vector<std::string> ArgParser::getAll(const std::string& name) const {
     return it == opts_.end() ? std::vector<std::string>{} : it->second;
 }
 
-// 扫描完整 argv 提取全局选项。--config / --save-config / --lang 取其后的值（或 "=value" 形式）。
+// 不在给定可接受集内的选项名 = 本命令收集、但调用方未列入白名单的键（去重）。
+//  opts_ 键已去重，排序仅为输出稳定。负数值已被上游当作选项值消费，不在 opts_ 键中。
+std::vector<std::string> ArgParser::optionsNotIn(const std::set<std::string>& accepted) const {
+    std::vector<std::string> unknown;
+    for (const auto &name: opts_ | std::views::keys) {
+        if (!accepted.contains(name)) unknown.push_back(name);
+    }
+    std::ranges::sort(unknown);
+    return unknown;
+}
+
+// 重复的单值选项 = 出现次数 >1、且不在「可重复」集内的键（去重、字典序）。
+//  opts_ 每个键的 vector 长度即出现次数；调用方把 flag 与合法多值选项并入 allowedRepeat 以免误报。
+std::vector<std::string> ArgParser::duplicatedValueOptions(const std::set<std::string>& allowedRepeat) const {
+    std::vector<std::string> dups;
+    for (const auto& [name, values] : opts_) {
+        if (values.size() > 1 && !allowedRepeat.contains(name)) dups.push_back(name);
+    }
+    std::ranges::sort(dups);
+    return dups;
+}
+
+// 扫描完整 argv 提取全局选项。--save-config / --lang 取其后的值（或 "=value" 形式）。
 GlobalOptions parseGlobalOptions(const std::vector<std::string>& args) {
     GlobalOptions go;
-    for (std::size_t i = 0; i < args.size(); ++i) {
-        const std::string& t = args[i];
+    bool seenCommand = false;   // 已越过命令名：其后 -h/-V/--help/--version 不再生效（命令后拒绝，交命令层报「不接受」）。
+    const std::vector<std::string> expanded = expandShortClusters(args);
+    for (std::size_t i = 0; i < expanded.size(); ++i) {
+        const std::string& t = expanded[i];
+        if (!t.empty() && t.front() != '-') seenCommand = true;   // 第一个非选项 token 即命令名（与 splitCommand 同规）。
 
         // "=value" 形式的全局取值选项。
         const std::size_t eq = t.find('=');
@@ -107,26 +158,17 @@ GlobalOptions parseGlobalOptions(const std::vector<std::string>& args) {
         const bool hasInline = eq != std::string::npos;
         const std::string inlineVal = hasInline ? t.substr(eq + 1) : std::string();
 
-        if (name == opt::kHelp || name == opt::kShortHelp) { go.help = true; continue; }
-        if (name == opt::kVersion || name == opt::kShortVersion) { go.version = true; continue; }
-        if (name == opt::kVerbose) { go.verbose = true; continue; }
-        if (name == opt::kQuiet) { go.quiet = true; continue; }
-        if (name == opt::kBundleAssets) { go.bundleAssets = true; continue; }
+        if ((name == opt::kHelp || name == opt::kShortHelp) && !seenCommand) { go.help = true; continue; }
+        if ((name == opt::kVersion || name == opt::kShortVersion) && !seenCommand) { go.version = true; continue; }
+        if (name == opt::kVerbose || name == opt::kShortVerbose) { go.verbose = true; continue; }
+        if (name == opt::kStrict) { go.strict = true; continue; }
 
-        if (name == opt::kConfig) {
-            if (hasInline) go.config = inlineVal;
-            else if (i + 1 < args.size()) go.config = args[++i];
-            continue;
-        }
-        if (name == opt::kSaveConfig) {
-            if (hasInline) go.saveConfig = inlineVal;
-            else if (i + 1 < args.size()) go.saveConfig = args[++i];
-            continue;
-        }
         // --lang <code>：取原值不校验（语言码是否可用属语义层，见 cli_i18n.cpp::applyLanguage）。
+        // 下一 token 以 '-' 开头（另一个选项）则不消费——记空串＝未指定（与 ArgParser 同规，不吞选项）。
         if (name == opt::kLang) {
             if (hasInline) go.lang = inlineVal;
-            else if (i + 1 < args.size()) go.lang = args[++i];
+            else if (i + 1 < expanded.size() && !expanded[i + 1].empty() && expanded[i + 1].front() != '-')
+                go.lang = expanded[++i];
         }
     }
     return go;
