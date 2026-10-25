@@ -28,9 +28,11 @@ bool hasAnnotationOptions(const ArgParser& args);
 
 // 收集命令行标注并追加到 out（逐条复用 Core parseAnnotationsFromJsonText）：
 //   --annotation <内联 JSON 对象>（可重复）+ --annotations <file.json>（根为数组＝多条）。
+//   basisWidth/basisHeight 为标注坐标基准（标注所在图像 / 工作图宽高）：几何坐标写百分比串时按此换算，
+//   故须在基准可知后调用（解图之后；config 的 dry-run 用配置工作图尺寸）。
 //   无标注选项时不改动 out 并返回 true；内联 / 文件 JSON 非法、文件不可读、或某选项有值却解析出
 //   0 条有效标注 → 写 err 返回 false（命令层据此转退出码 1）。
 bool collectAnnotations(const ArgParser& args, std::vector<annotation::Annotation>& out,
-                        std::string& err);
+                        std::string& err, int basisWidth, int basisHeight);
 
 } // namespace idc::cli

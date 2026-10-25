@@ -16,6 +16,7 @@
 #include <string>
 
 #include "core/image.h"
+#include "core/percent.h"      // PercentHints（配置中以百分比书写的几何字段，保存时原样回写）
 #include "engine/engine.h" // EngineConfig（聚合各阶段头）
 
 #include "exit_code.h"
@@ -39,8 +40,11 @@ struct JobOutput {
 // ---------------------------------------------------------------------------
 struct JobOptions {
     bool explicitCollapse{false}; // 用户是否显式要求 collapse（不可坍缩时 → 退出码 2）。
-    bool verbose{false};          // 输出详细进度到 stderr。
-    bool quiet{false};            // 静默：抑制正常结果输出（错误仍写 stderr）。
+    bool verbose{false};          // 输出详细进度到 stderr（默认静默；--verbose/-v 打开，见 makeJobOptions）。
+    bool strict{false};             // --strict（伞形）：图层资源缺失报错退出码 3，「尺寸错配静默裁切」（→输入错误码 3）与「零产出」（→运行错误码 2）由 WARN 升级为报错。
+    // --assets-dir 三态（缺省 nullopt＝不打包、纯约定查找；flag 空串＝打包进默认目录；非空＝自定义目录：
+    //   加载时插查找链最前、打包输出到该目录）。
+    std::optional<std::string> assetsDir;
 };
 
 // 读取输入图像（Core readImageFile）。成功返回 Ok 并填充 out；
@@ -49,9 +53,9 @@ ExitCode loadInputImage(const std::string& path, core::Image& out, const JobOpti
 
 // 把一张「已生成的图像」作为合并单图落盘（new 命令专用）：内部构造覆盖全画布的单片段
 // Composition 复用 Core exportImage，从而共享「扩展名推断格式 / 自动建父目录 / JPEG 压平」等行为
-// （emit.format 仅作扩展名不明时的回退）。失败返回 OutputError(4) 并已打印错误。
+// （exportParams.format 仅作扩展名不明时的回退）。失败返回 OutputError(4) 并已打印错误。
 ExitCode writeGeneratedImage(const core::Image& image, const std::string& outPath,
-                             const engine::CompositionParams& emit, const JobOptions& opt);
+                             const engine::CompositionParams& exportParams, const JobOptions& opt);
 
 // 执行作业：按需物化工作图 work（preprocess / 标注；两者皆无时直指入参图、不深拷贝）
 // → 以 work 尺寸校正 config.source → runEngine(work) → 坍缩校验 → exportImage(work)。
@@ -62,7 +66,8 @@ ExitCode executeJob(engine::EngineConfig& config, const core::Image& image, cons
 // 多层画布合成（SPEC §7 layers 段）：config 带 layers 时，按 configPath 所在目录（及同名
 //  <配置名>.assets/ 伴随目录）逐层解码 File 叠加层源图像注入 decodedPixels，再交 Core canvas::composeCanvas
 //  以传入的 **base（画布底图，可为空＝仅背景）**为基座、按 zOrder 叠上层展平为 config.source 尺寸的画布写入 out
-//  （引擎仍只收一张展平画布，签名不变）。缺文件降级为占位；越界（绝对路径 / `..`）文件层名 → InputError(3)。
+//  （引擎仍只收一张展平画布，签名不变）。缺文件默认降级为占位并输出一条 WARN 汇总（与 verbose 无关）；
+//  加 --strict（opt.strict）则缺文件报输入错误退出码 3。越界（绝对路径 / `..`）文件层名 → InputError(3)。
 //  composeCanvas 产空图（尺寸非法）→ RuntimeError(2)。仅在 config.layers 有值时由命令层调用。
 ExitCode buildLayerCanvas(const engine::EngineConfig& config, const std::string& configPath,
                           const core::Image& base, core::Image& out, const JobOptions& opt);
@@ -78,15 +83,22 @@ ExitCode buildBaseCanvas(const engine::EngineConfig& config, core::Image& out, c
 //  无落位声明 → 原样返回（恒等底图）。composeBase 产空图 → RuntimeError(2)。仅在 config.base 带落位时由命令层调用。
 ExitCode placeInputIntoBase(const engine::EngineConfig& config, core::Image& io, const JobOptions& opt);
 
-// 资源打包（--bundle-assets）：把 config 内各 File 层源图按相对名复制到
-//  <saveConfigPath 同名>.assets/ 下（保留子目录相对路径）。源图缺失 → InputError(3)；
-//  越界文件层名 → ArgError(1)；复制 / 建目录失败 → OutputError(4)。仅在 --save-config 且 --bundle-assets 时调用。
+// 资源打包（--assets-dir 出现时，与 --save-config 同用）：把 config 内各 File 层源图按相对名复制到
+//  opt.assetsDir 指定的目录（相对路径按保存配置所在目录解析；flag 空串 → <保存配置名>.assets/，保留子目录相对路径）。
+//  源图缺失 → InputError(3)；越界文件层名 → ArgError(1)；复制 / 建目录失败 → OutputError(4)；src==dst 同路径 → 幂等跳过。
 ExitCode bundleLayerAssets(const engine::EngineConfig& config, const std::string& configPath,
                            const std::string& saveConfigPath, const JobOptions& opt);
 
+// 把 --assets-dir=path 的目录在「保存配置目录之内」时相对化（可写 §7 assetsDir 字段）；
+// 相对路径原样返回；目录之外 → 空串（字段契约＝配置内声明，不写）。saveConfigPath 空 → 返回空。
+std::string relativizeAssetsDirForSave(const std::string& saveConfigPath, const std::string& overrideDir);
+
 // 把一份 EngineConfig 序列化到 JSON 文件（Core saveEngineConfig），用于 --save-config dry-run。
-// annotations 非空时附带标注段（往返不丢）。成功返回 Ok 并（非 quiet 时）提示；失败（路径空 / 写盘失败）返回 OutputError(4)。
-ExitCode saveConfigToFile(const engine::EngineConfig& config, const std::string& path, const JobOptions& opt, const annotation::AnnotationSet* annotations = nullptr);
+// annotations 非空时附带标注段（往返不丢）；percentHints 非空时把未改动的百分比几何字段原样回写（"50%"）。
+// 成功返回 Ok 并提示（结果行恒写 stdout）；失败（路径空 / 写盘失败）返回 OutputError(4)。
+ExitCode saveConfigToFile(const engine::EngineConfig& config, const std::string& path, const JobOptions& opt,
+                          const annotation::AnnotationSet* annotations = nullptr,
+                          const core::PercentHints* percentHints = nullptr);
 
 // 作业收尾（三层命令 + config 共用）：若 saveConfigPath 非空则序列化配置并返回（dry-run，
 // 不执行切割）；否则执行 executeJob。使命令层收尾逻辑单点化（CONTRIBUTING.md「分层纪律」 不重复）。

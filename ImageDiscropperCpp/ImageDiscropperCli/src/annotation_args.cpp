@@ -14,7 +14,7 @@
 
 #include "annotation/annotation_set.h" // annotation::Annotation（仅记录类型，供 vector 实例化）
 #include "annotation/annotation_json.h" // annotation::parseAnnotationsFromJsonText（标注 JSON 段级解析，归属 annotation 模块）
-#include "core/path_utf8.h" // pathFromUtf8（取代 C++23 已移除的 u8path）
+#include "command_support.h" // readFileText（整文件读入，与 layer_args 共用）
 
 #include "i18n/cli_texts.h"
 #include "i18n/cli_i18n.h"
@@ -24,31 +24,17 @@ namespace idc::cli {
 // 选项名简写（不可译契约；报因文案走 IDC_CTR）。
 namespace opts = texts::opt;
 
-namespace {
-
-// 读取整个文本文件到 outText；文件不存在或不可读返回 false。path 按 UTF-8 → 宽字符开（中文 / 非 ASCII 路径可读）。
-bool readFileText(const std::string& path, std::string& outText) {
-    const std::ifstream ifs(core::pathFromUtf8(path), std::ios::binary);
-    if (!ifs) return false;
-    std::ostringstream ss;
-    ss << ifs.rdbuf();
-    outText = ss.str();
-    return true;
-}
-
-} // namespace
-
 bool hasAnnotationOptions(const ArgParser& args) {
     return args.has(opts::kAnnotation) || args.has(opts::kAnnotations);
 }
 
 bool collectAnnotations(const ArgParser& args, std::vector<annotation::Annotation>& out,
-                        std::string& err) {
+                        std::string& err, const int basisWidth, const int basisHeight) {
     // 1) 内联：--annotation 可重复，逐条 JSON 对象解析后追加（保持出现顺序）。
     for (const std::string& item : args.getAll(opts::kAnnotation)) {
         std::vector<annotation::Annotation> parsed;
-        if (!annotation::parseAnnotationsFromJsonText(item, parsed, err))
-            return false; // err 由 Core 给出（语法错误 / 无有效条目）。
+        if (!annotation::parseAnnotationsFromJsonText(item, parsed, err, basisWidth, basisHeight))
+            return false; // err 由 Core 给出（语法错误 / 无有效条目 / 百分比无基准）。
         for (auto& a : parsed) out.push_back(std::move(a));
     }
 
@@ -59,7 +45,7 @@ bool collectAnnotations(const ArgParser& args, std::vector<annotation::Annotatio
             err = IDC_CTR(msg, kErrAnnoFileUnreadable) + path;
             return false;
         }
-        if (!annotation::parseAnnotationsFromJsonText(text, out, err))
+        if (!annotation::parseAnnotationsFromJsonText(text, out, err, basisWidth, basisHeight))
             return false;
     }
     return true;
