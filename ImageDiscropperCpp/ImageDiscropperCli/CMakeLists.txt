@@ -46,6 +46,7 @@ set(IDC_CLI_LIB_SRC
         src/arg_parser.cpp           # 轻量参数解析：token → 选项名到值列表
         src/value_parser.cpp         # 值解析：坐标 / 带 / 网格 / r,c / 画布 / 颜色 / 枚举 / 模板
         src/annotation_args.cpp      # 命令行标注装配：--annotation 内联对象 / --annotations 文件 → Core 段解析 → 标注列表
+        src/layer_args.cpp           # 命令行图层装配：--layer 内联对象 / --layers 文件 → Core 段解析 → ImageLayer 列表（仅 config）
         src/generate_args.cpp        # 命令行图像生成装配：--size/--pattern/… → Core generate::makePattern → 画布图（含 resolveInputImage 统一输入来源）
         src/cli_error.cpp            # 错误报告：按约定格式写 stderr（见本目录 README）
         src/help.cpp                 # 帮助输出全集（单文件）：顶层 / 版本 / 子命令分派 + 五个子命令帮助 + 共享小节 + 编译期列宽
@@ -78,7 +79,7 @@ add_executable(idc src/main.cpp)
 target_link_libraries(idc PRIVATE idc_cli_lib)
 
 # ---------------------------------------------------------------------------
-# 测试：单元（参数解析 / 值解析）+ 集成（IT-1~IT-53，进程内调用 cliMain）。
+# 测试：单元（参数解析 / 值解析）+ 集成（IT-1~IT-60，进程内调用 cliMain）。
 # 仅在 IDC_BUILD_TESTS=ON 时构建，Release 发布可关闭。
 # ---------------------------------------------------------------------------
 if(IDC_BUILD_TESTS)

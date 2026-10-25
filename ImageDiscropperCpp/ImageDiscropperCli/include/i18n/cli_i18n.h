@@ -25,7 +25,7 @@ inline std::string tr(const std::string_view key, const std::string_view fallbac
     return core::i18n::translate(key, fallbackUtf8);
 }
 
-// 登记本层全部内置语言的译文表（一期仅英文）。必须在 applyLanguage 之前调用。
+// 登记本层全部内置语言的译文表（当前仅英文一表）。必须在 applyLanguage 之前调用。
 // 定义在表文件 src/i18n/lang_en.cpp——译文表归本层所有，不经 image_discropper_core 传播。
 void installCatalogs();
 

@@ -5,10 +5,6 @@
 //       分派到命令实现 → 未捕获异常兜底（退出码 5）。main.cpp 仅把 argv 转发到此。
 // 分块依据：顶层「分派 + 全局横切」与「单命令参数装配」分离——各命令实现（commands/*.cpp）
 //       只关心自身参数，全局逻辑集中于此，避免散落到每个命令（严禁上帝文件，亦避免重复）。
-// 说明：全局 --config <file> 复用 config 命令的「加载 + 执行」路径（NFR-0：同一执行通道），
-//       不另起炉灶；因 --config 无子命令时 splitCommand 会把首个非选项取值（如 --input 的图像
-//       路径）误判为命令名，故 --config 路由传入「全部 args」并前置于命令名判定，避免 --input/
-//       --output 等选项丢失（详见下方 cliMain 内注释）。
 // 常量层：选项名取 texts::opt、子命令名取 texts::cmd、错误文案取 texts::msg（均见 include/i18n/cli_texts.h）；
 //       别名只落在本 .cpp 内（命令名别名写作 cmds，以免与局部变量 cmd 同名）。
 // ============================================================================
@@ -33,15 +29,15 @@ namespace cmds = texts::cmd;
 namespace {
 
 // 从 args 中定位子命令名，并把其后的全部 token 写入 tokens。
-// 规则：第一个「不以 '-' 开头」的 token 即命令；跳过全局取值选项（--config / --save-config / --lang）
-// 及其值，避免把它们的值误当作命令名。未找到命令时返回空串。
+// 规则：第一个「不以 '-' 开头」的 token 即命令；跳过全局运行修饰的取值项（仅 --lang）
+// 及其值，避免把语言码误当作命令名。未找到命令时返回空串。
 std::string splitCommand(const std::vector<std::string>& args, std::vector<std::string>& tokens) {
     for (std::size_t i = 0; i < args.size(); ++i) {
         const std::string& t = args[i];
         if (!t.empty() && t.front() == '-') {
-            // 全局取值选项（无 '=' 内联值时）会消费下一个 token，一并跳过。
-            // --lang 同形：漏进这个集合会让「idc --lang en extract …」把 "en" 误当命令名。
-            if (const bool takesValue = t == opts::kConfig || t == opts::kSaveConfig || t == opts::kLang;
+            // 全局取值项（无 '=' 内联值时）会消费下一个 token，一并跳过。
+            // 漏进这个集合会让「idc --lang en extract …」把 "en" 误当命令名。
+            if (const bool takesValue = t == opts::kLang;
                 takesValue && !t.contains('=')) ++i;
             continue;
         }
@@ -86,27 +82,18 @@ int cliMain(const std::vector<std::string>& args) {
         std::vector<std::string> tokens;
         const std::string cmd = splitCommand(args, tokens);
 
-        // --help：有命令 → 该命令帮助；仅 --config（无命令）→ config 帮助；否则顶层帮助。
+        // --help [目标]：目标＝命令名 → 该命令帮助；目标＝主题名 → 主题帮助页；无目标 → 顶层帮助；
+        // 都不是 → 参数错误（1），提示命令与主题两清单。
         if (go.help) {
-            if (!cmd.empty()) printCommandHelp(cmd);
-            else if (!go.config.empty()) printCommandHelp(cmds::kConfig);
-            else printTopHelp();
-            return toInt(ExitCode::Ok);
+            if (cmd.empty()) { printTopHelp(); return toInt(ExitCode::Ok); }
+            if (isKnownCommand(cmd)) { printCommandHelp(cmd); return toInt(ExitCode::Ok); }
+            if (isKnownTopic(cmd)) { printTopicHelp(cmd); return toInt(ExitCode::Ok); }
+            reportError(makeError(ExitCode::ArgError, IDC_CTR(msg, kErrUnknownHelpTarget) + cmd + "'",
+                                  "", IDC_CTR(msg, kHintKnownHelpTargets)));
+            return toInt(ExitCode::ArgError);
         }
 
-        // 全局 --config：以 JSON 配置驱动本次作业（复用 config 命令的加载 + 执行路径，NFR-0）。
-        // 关键：传入「全部 args」而非命令后 tokens——因为 --config 无子命令时，splitCommand 会把
-        // 第一个非选项取值（如 --input 的 photo.jpg）误判为命令名并据其切分 tokens，导致 --input
-        // 等选项丢失；传全量 args 可让 cmdConfig 完整看到 --input / --output（命令名被忽略，一切
-        // 以 JSON 配置为准）。此路由须前置于 cmd.empty() 判定，否则「idc --config x.json --input
-        // ...」（无子命令）会先落入顶层帮助分支而不执行。
-        if (!go.config.empty()) {
-            std::vector<std::string> cfgTokens{opts::kLoad, go.config};
-            cfgTokens.insert(cfgTokens.end(), args.begin(), args.end());
-            return cmdConfig(cfgTokens, go);
-        }
-
-        // 有 --help / --config 之外的选项但无命令名：显示顶层帮助。
+        // 有选项但无命令名：显示顶层帮助。
         if (cmd.empty()) { printTopHelp(); return toInt(ExitCode::Ok); }
 
         // 2) 分派到子命令；各命令内部按 第 3~5 步校验必填 / 互斥 / 格式。

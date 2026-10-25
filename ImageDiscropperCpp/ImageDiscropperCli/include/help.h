@@ -22,4 +22,12 @@ void printVersion();
 // cmd 为子命令名（extract / erase / grid / config）；未知命令回退为顶层帮助。
 void printCommandHelp(const std::string& cmd);
 
+// 主题帮助页（idc --help <topic>）：annotations（标注）/ layers（图层）/ generate（生成源）
+// 三套作业级通用选项的自包含说明。未知主题报参数错误（1）。
+int printTopicHelp(const std::string& topic);
+
+// 已知命令 / 主题名判定（--help 目标分派：命令 → 命令帮助，主题 → 主题页）。
+bool isKnownCommand(const std::string& cmd);
+bool isKnownTopic(const std::string& topic);
+
 } // namespace idc::cli

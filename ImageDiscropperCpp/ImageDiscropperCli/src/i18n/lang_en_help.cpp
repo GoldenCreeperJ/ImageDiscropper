@@ -19,50 +19,62 @@ constexpr core::I18nEntry kEntriesEnHelp[] = {
     // —— help 描述列 kDesc* / 小节 lead kLead*（kUse* 用法列为脚本契约不译）——
     {"help::kDescHelp", "Show help"},
     {"help::kDescVersion", "Show version"},
-    {"help::kDescHelpThis", "Show this help"},
-    {"help::kDescVerbose", "Write detailed logs to stderr"},
-    {"help::kDescQuiet", "Silent mode, print errors only"},
+    {"help::kTextSeeThisHelp", "  Show this help: idc --help "},
+    {"help::kDescVerbose", "Write progress diagnostics to stderr (silent by default; result lines always go to stdout)"},
     {"help::kDescLang", "Set the language of help and error text (zh-CN / en); when unset, falls back to IDC_LANG, LC_ALL, LANG"},
-    {"help::kDescTopConfig", "Read all parameters from a JSON config file (the command's geometry arguments are ignored)"},
     {"help::kDescTopSaveConfig", "Serialize the current parameters to a JSON config file (dry-run, no job executed)"},
-    {"help::kDescTopBundleAssets", "When used with --save-config, copy the config's File-layer source images by relative name into <configname>.assets/ (must be explicitly enabled; not the default)"},
-    {"help::kDescInput", "Input image path (choose one with --size)"},
+        {"help::kDescTopAnnoPtr", "[repeatable] command-line annotations (fields and syntax: idc --help annotations)"},
+    {"help::kDescTopLayerPtr", "[repeatable] command-line layers (fields and syntax: idc --help layers)"},
+    {"help::kDescTopGenPtr", "procedural generated source (applicability matrix: idc help generate)"},
+{"help::kDescTopAssetsDir", "Asset-dir three states: absent = JSON only; bare flag = bundle into <configname>.assets/ when used with --save-config; =path = custom directory (prepended to the lookup chain on load, bundle output on save; the path must use the '=' form)"},
+    {"help::kDescTopStrict", "Strict mode: upgrades all three default degradations -- the missing-layer-asset placeholder fallback, the silent crop on size mismatch, and the empty output -- to error exits (exit code 3/2, so unattended scripts can abort on a non-zero exit code)"},
+    {"help::kDescInput", "Input image path (with --size also given: --size fixes the canvas size and the bitmap is centered)"},
     {"help::kDescRectKeep", "Rectangle region (keep the center rectangle)"},
     {"help::kDescHbandKeep", "Horizontal band (keep the whole band where y is in [y1,y2))"},
     {"help::kDescVbandKeep", "Vertical band (keep the whole band where x is in [x1,x2))"},
     {"help::kDescRectErase", "[repeatable] once = single-rectangle cross cut; multiple = multi-rect union remove"},
     {"help::kDescHbandErase", "Delete the whole horizontal band where y is in [y1,y2)"},
     {"help::kDescVbandErase", "Delete the whole vertical band where x is in [x1,x2)"},
-    {"help::kDescOutputRequired", "[required] output image path"},
+    {"help::kDescOutputRequired", "Output image path (give at least one of this and --save-config; may be omitted for a dry-run)"},
     {"help::kDescFormatInfer", "Output format png/jpeg/webp/bmp (inferred from the --output extension by default)"},
     {"help::kDescFormatPngDefault", "Output format png/jpeg/webp/bmp (default png; when merging, the --output extension takes priority)"},
     {"help::kDescFormatPlain", "Output format png/jpeg/webp/bmp"},
     {"help::kDescQuality", "Lossy quality 0~100 (default 90; only jpeg/webp take effect, png/bmp ignore it)"},
-    {"help::kDescNamingDefault", "Separate naming template, default {name}_{index:03d}"},
-    {"help::kDescNamingPlain", "Separate naming template"},
+    {"help::kDescNaming", "File name template for separated export: {name} = output folder name (falls back to region), {index} = index, {index:03d} = zero-padded index, {row}/{col} = source grid row/column number (0 for non-grid sources); default {name}_{index:03d}; applies to separated export only (not merged single image), must be non-empty and contain no path separators"},
     {"help::kDescMerge", "collapse only; default is separate export (rearrange is exclusive to the grid command)"},
-    {"help::kDescOutputMergeErase", "Merged output path (required with --merge collapse)"},
-    {"help::kDescOutputMergeCompose", "Merged output path (required with --compose)"},
-    {"help::kDescOutputDirErase", "Separate output directory (required for the default separate export; created automatically if missing)"},
-    {"help::kDescOutputDirGrid", "Separate output directory (required for the default separate export)"},
-    {"help::kDescOutputConfigMerged", "Merged output path (used when the config has emit.mode=merged)"},
-    {"help::kDescOutputDirConfigSeparate", "Separate output directory (used when the config has emit.mode=separate)"},
+    {"help::kDescOutputMergeErase", "Merged output path (used with --merge collapse; give at least one of this and --save-config)"},
+    {"help::kDescOutputMergeCompose", "Merged output path (used with --compose; give at least one of this and --save-config)"},
+    {"help::kDescOutputDirErase", "Separate output directory (used for the default separate export; created automatically if missing; give at least one of this and --save-config)"},
+    {"help::kDescOutputDirGrid", "Separate output directory (used for the default separate export; give at least one of this and --save-config)"},
+    {"help::kDescOutputConfigMerged", "Merged output path (used when the config has export.mode=merged)"},
+    {"help::kDescOutputDirConfigSeparate", "Separate output directory (used when the config has export.mode=separate)"},
     {"help::kDescAnnoInline", "[repeatable] inline one annotation object, or an array of annotation objects"},
     {"help::kDescAnnoFile", "[repeatable] read from a JSON file whose root is an annotation array"},
-    {"help::kDescGrid", "[required] origin + cell size (the origin may be negative, cw/ch must be positive)"},
-    {"help::kDescKeepCell", "[repeatable] keep the specified cell"},
-    {"help::kDescRemoveCell", "[repeatable] remove the specified cell"},
-    {"help::kDescSort", "row-major (default) / column-major / custom"},
-    {"help::kDescDecorate", "none (default) / reverse / snake / reverse-snake / snake-reverse (not available with --sort custom)"},
-    {"help::kDescOrderCustom", "Custom sequence (required with --sort custom; defines both the kept cells and their order)"},
-    {"help::kDescMargin", "discard (default) / keep-partial / pad"},
+    {"help::kDescLayerInline", "[repeatable] inline one layer object, or an array of layer objects"},
+    {"help::kDescLayerFile", "[repeatable] read from a JSON file whose root is a layer array"},
+    {"help::kDescGrid", "Whole-canvas period: origin + cell size (the origin may be negative, cw/ch must be positive after conversion; each value may be a percentage such as \"50%\")"},
+    {"help::kDescGridX", "Horizontal period: origin x0 + cell width cw (percentages convert against the image width); an undefined vertical axis = one whole span"},
+    {"help::kDescGridY", "Vertical period: origin y0 + cell height ch (percentages convert against the image height); an undefined horizontal axis = one whole span"},
+    {"help::kDescDivide", "Divide counts ColxRow for both axes (e.g. 3x4 = 3 columns by 4 rows): origin always 0, split as evenly as possible, the last piece absorbs the rounding error"},
+    {"help::kDescDivideX", "Horizontal divide count (origin always 0, split as evenly as possible); an undefined vertical axis = one whole span"},
+    {"help::kDescDivideY", "Vertical divide count (origin always 0, split as evenly as possible); an undefined horizontal axis = one whole span"},
+    {"help::kDescWeightsX", "Horizontal weights (positive numbers or percentage strings, e.g. 1,2,1 or 25%,50%,25%): only the relative ratio matters, the last piece absorbs the rounding error"},
+    {"help::kDescWeightsY", "Vertical weights (positive numbers or percentage strings): only the relative ratio matters, the last piece absorbs the rounding error"},
+    {"help::kDescKeepCell", "[repeatable] keep the specified cell(s): one r,c per flag, or a semicolon list r,c;r,c (row, column from 0)"},
+    {"help::kDescRemoveCell", "[repeatable] remove the specified cell(s): one r,c per flag, or a semicolon list r,c;r,c (row, column from 0)"},
+    {"help::kDescSort", "Sorting strategy: row-major traverse by rows (number row by row, left to right within each row, default) / column-major traverse by columns (number column by column, top to bottom within each column) / custom (the picked order is the sequence, requires --order)"},
+    {"help::kDescDecorate", "Order decoration (not available with --sort custom): none (default) / reverse the whole order / snake reverses every other row/column / reverse-snake and snake-reverse are equivalent (fixed order: snake first, then reverse)"},
+    {"help::kDescOrderCustom", "Custom sequence (required with --sort custom): defines both the kept cells and their output order (any permutation), mutually exclusive with --keep/--remove/--decorate - --keep/--remove only pick the set while --sort fixes the order, this option sets both"},
+    {"help::kDescMargin", "Remainder policy (partial cells where the grid crosses the image boundary): discard them (keep only complete cells, default) / keep-partial keeps them cropped to the image / pad keeps them at full cell size, the out-of-bounds part filled with --pad-color"},
     {"help::kDescCompose", "Merge into a single image (rearrange); default is separate export"},
     {"help::kDescCanvas", "Rearrange canvas cell columns x rows, e.g. 2x2 (required with --compose)"},
     {"help::kDescMergeSort", "Rearrange fill order row-major (default) / column-major (orthogonal to the --sort selection order; custom not supported)"},
     {"help::kDescMergeDecorate", "Rearrange fill decoration none (default) / reverse / snake / reverse-snake / snake-reverse"},
-    {"help::kDescPadColorDefault", "#RRGGBB / #AARRGGBB, transparent by default"},
+    {"help::kDescPadColorDefault", "Padding fill color #RRGGBB / #AARRGGBB (fills the out-of-bounds part of --margin pad cells and the gaps of the rearrange-merged canvas, transparent by default)"},
     {"help::kDescPadColorFlatten", "Background color #RRGGBB/#AARRGGBB used to flatten transparent pixels in lossy formats (jpeg/bmp) (default transparent -> black; specify it explicitly when exporting a transparent canvas to jpeg)"},
-    {"help::kDescSizeGen", "Generated canvas size (positive integer pixels; each side <= 65535 and width x height <= 64,000,000 ~= 256MB; replaces --input)"},
+        {"help::kDescFit", "Bitmap-to-canvas adaptation: crop fill / stretch / native (applies when --input and --size are both given, default native centered)"},
+    {"help::kDescFitOverride", "Bitmap-to-canvas adaptation override crop / stretch / native (applies when --input and --size are both given; overrides the config placement's fit when present)"},
+{"help::kDescSizeGen", "Generated canvas size (positive integer pixels; each side <= 65535 and width x height <= 64,000,000 ~= 256MB; fixes the canvas size when --input is also given)"},
     {"help::kDescSizeGenRequired", "[required] generated canvas size (positive integer pixels; each side <= 65535 and width x height <= 64,000,000 ~= 256MB)"},
     {"help::kDescPatternKinds", "solid(default)/linear-gradient/radial-gradient/checkerboard/stripes/grid-lines/dot-grid/concentric/radial-rays/hue-gradient/noise"},
     {"help::kDescOrientationDirs", "horizontal(default)/vertical/diagonal-down/diagonal-up -- linear-gradient axis / stripe direction (incl. diagonal) / concentric-ring shape / hue-scan axis"},
@@ -73,25 +85,78 @@ constexpr core::I18nEntry kEntriesEnHelp[] = {
     {"help::kDescDotRadius", "Dot-grid dot radius in pixels (positive integer, default 2)"},
     {"help::kDescSeed", "Noise random seed (non-negative integer, default 0; only --pattern noise takes effect; the same seed always yields the same image)"},
     {"help::kDescNoise", "Noise color mode full-color(default)/grayscale/two-color (only --pattern noise takes effect)"},
-    {"help::kDescNewOutput", "Path to write the generated image (may be omitted for a --save-config dry-run)"},
-    {"help::kDescNewSaveConfig", "dry-run: writes no pixels; serializes this generation recipe (source size + generate section + emit) into a config so config --load can reproduce the canvas (this path does not require --output)"},
-    {"help::kDescLoad", "[required] read all parameters from a JSON config file"},
-    {"help::kDescConfigSaveAs", "Save the loaded config as JSON (transform / validate; dry-run, no job executed)"},
-    {"help::kDescConfigBundle", "With --save-config: copy the File-layer source images in layers by relative name into <configname>.assets/ (escaping paths are rejected; missing sources raise an error)"},
-    {"help::kDescConfigInput", "Base image path (choose one with --size; combinable with the config's layers section, layers stack on top of this base; both may be omitted when the config has a generate section)"},
-    {"help::kLeadGenOverride", "Command-line generation options override this run's input source; if there is no --input/--size and the config has a generate section, the canvas is composed from the config."},
-    {"help::kLeadAnnoAppend", "Command-line annotations are appended after the --load config's own annotations section."},
+    {"help::kDescNewOutput", "Path to write the generated image (give at least one of this and --save-config)"},
+        {"help::kDescLoad", "[required] read all parameters from a JSON config file"},
+    {"help::kDescTierOverride", "Tier override extract / erase / grid"},
+    {"help::kDescPolarityOverride", "Polarity override keep / remove"},
+    {"help::kDescCutRectOverride", "Cut rectangle override (choose one with --hband / --vband)"},
+    {"help::kDescHbandOverride", "Horizontal band override y1,y2 (turned into a full-width band at execution; cannot be combined with --save-config)"},
+    {"help::kDescVbandOverride", "Vertical band override x1,x2 (same as above)"},
+    {"help::kDescExportModeOverride", "Export mode override merged / separate"},
+    {"help::kDescExportLayoutOverride", "Merge layout override collapse / rearrange"},
+    {"help::kDescExportFormatOverride", "Output format override png/jpeg/webp/bmp"},
+    {"help::kDescCanvasOverride", "Rearrange canvas override colsxrows (used with --export-layout rearrange)"},
+            {"help::kDescConfigInput", "Base image path (with --size also given: --size fixes the canvas size and the bitmap is placed per the config's placement or centered; combinable with the config's layers section, layers stack on top of this base; both may be omitted when the config has a generate section)"},
+    {"help::kLeadGenOverride", "Command-line generation options may be combined with --input (--size fixes the canvas size, the bitmap is placed per the config's placement or centered); if there is no --input/--size and the config has a generate section, the canvas is composed from the config."},
+    {"help::kLeadAnnoAppend", "Command-line annotations are appended after the --load config's own annotations section; --replace-annotations replaces it instead (with no command-line annotations the section is cleared)."},
+    {"help::kLeadLayerAppend", "Command-line layers are appended after the --load config's own layers section (missing zOrder auto-increments, stacking on top); --replace-layers replaces it instead (with no command-line layers the section is removed)."},
+    {"help::kLeadLayerOverlay", "Command-line layers are composited as overlays on top of the input (mirroring --annotation; file assets resolve relative to the current working directory)."},
+    {"help::kLeadAnnoNew", "Coordinates are relative to the generated canvas size; burned in after layer compositing (annotations are always on top)."},
+    {"help::kLeadLayerNew", "Command-line layers are composited as overlays on top of the generated canvas (mirroring --annotation; file assets resolve relative to the current working directory)."},
+    // —— 小节标题（kTextSec*：与 zh 版逐段对齐的标题行；缺条目会漏出中文标题）——
+    {"help::kTextSecCutThree", "\nCut lines (choose one of --rect / --hband / --vband):\n"},
+    {"help::kTextSecOutput", "\nOutput:\n"},
+    {"help::kTextSecExport", "\nExport:\n"},
+    {"help::kTextSecCommonBlank", "\n\nCommon:\n"},
+    {"help::kTextSecCommon", "\nCommon:\n"},
+    {"help::kTextSecGrid", "\nGrid:\n"},
+    {"help::kTextSecSelect", "\nSelection (choose one of --keep / --remove):\n"},
+    {"help::kTextSecSortDecorate", "\nSorting and decoration:\n"},
+    {"help::kTextSecMargin", "\nMargin:\n"},
+    {"help::kTextSecCompose", "\nRearrange-merge:\n"},
+    {"help::kTextSecOverride", "\nField overrides (optional, override the config's corresponding fields; applied both to the --save-config output and to execution):\n"},
+    {"help::kTextSecIo", "\nInput / output:\n"},
+    {"help::kTextSecSizeBg", "\nSize and background:\n"},
+    {"help::kTextSecPattern", "\nPattern:\n"},
+    {"help::kTextCommonOptsPtr", "Job-level common options (--save-config / --assets-dir): see idc --help\n"},
+    {"help::kTextPatternMatrix",
+        "\n"
+        "Pattern x parameter applicability matrix (parameters not listed have no effect on that pattern, matching actual engine behavior):\n"
+        "    solid            the whole canvas = --bg; ignores --fg/--orientation/--period/--line-width/--dot-radius\n"
+        "    linear-gradient  --bg --fg linearly interpolated along --orientation (horizontal along x, vertical along y); ignores --period/--line-width/--dot-radius\n"
+        "    radial-gradient  --bg (edge) --fg (center) radial interpolation; --orientation has no effect; ignores --period/--line-width/--dot-radius\n"
+        "    checkerboard     --fg cell side = --period (--orientation has no effect); ignores --line-width/--dot-radius\n"
+        "    stripes          --fg stripe width = --period; --orientation horizontal=vertical stripes (along x)/vertical=horizontal stripes (along y)/diagonal-down (along x-y)/diagonal-up (along x+y); ignores --line-width/--dot-radius\n"
+        "    grid-lines       --fg grid lines: spacing = --period, line width = --line-width; --orientation has no effect; ignores --dot-radius\n"
+        "    dot-grid         --fg dots: spacing = --period, radius = --dot-radius; --orientation has no effect; ignores --line-width\n"
+        "    concentric       --fg concentric rings: ring spacing = --period, ring width = --line-width; --orientation horizontal=circle rings (Euclidean)/vertical=square rings (Chebyshev); ignores --dot-radius\n"
+        "    radial-rays      --fg radial sectors: density = --period (smaller is denser); --orientation has no effect; ignores --line-width/--dot-radius\n"
+        "    hue-gradient     full-hue rainbow scanned along --orientation (H 0 to 1, fully saturated, fully bright, opaque), --period = one rainbow's pixel width; ignores --bg/--fg/--line-width/--dot-radius\n"
+        "    noise            deterministic pseudo-random noise: --seed sets the seed (the same seed + the same size always yield the same image, for pixel-by-pixel comparison), --noise picks full-color (default)/grayscale/two-color; two-color picks randomly between --bg and --fg, the rest ignore --bg/--fg/--orientation/--period/--line-width/--dot-radius\n"
+        "  alpha: the #AARRGGBB alpha of --bg/--fg takes part in interpolation and is written; PNG/WebP keep transparency, JPEG/BMP export flattens with the pad color.\n"
+        "  Note: no pattern type includes an image sticker; images are introduced via the config's layers section (file layers) or generate-section placement declarations, composed in by config --load.\n"},
+    {"help::kTextGenTail",
+        "\n"
+        "  Examples:\n"
+        "    # a radial-gradient canvas as extract's generated source, keeping the center 100x100\n"
+        "    idc extract --size 200x200 --pattern radial-gradient --bg \"#FF000000\" --fg \"#FFFFFFFF\" --rect 50,50,150,150 --output grad.png\n"
+        "    # checkerboard input for erase: cross cut then collapse-merge\n"
+        "    idc erase --size 300x200 --pattern checkerboard --fg \"#FF000000\" --period 50 --rect 100,100,200,150 --merge collapse --output out.png\n"
+        "    # deterministic noise (the same --seed always yields the same image, for pixel-by-pixel comparison)\n"
+        "    idc extract --size 256x256 --pattern noise --seed 7 --rect 0,0,256,256 --output n.png\n"
+        "  Constraints and exit codes:\n"
+        "    - give at least one of --input and --size; --size each side <= 65535 and width x height <= 64,000,000.\n"
+        "    - Illegal arguments (pattern kind / color / direction / period etc.) -> exit code 1, reasons listed one by one.\n"
+        "    - With --save-config only the source size and the cut / annotations / layers are written; the pattern arguments are not written as a generate section - use idc new --save-config to persist a recipe.\n"},
     // —— help 散文块 kText*（逐字搬移：换行、缩进、示例与末尾换行都是 --help 输出的一部分；
     //    为规避目录测试逐物理行取键，示例里的 {\"...\"} 一律用相邻字符串字面量，物理行首恒以 \" 起）——
     {"help::kTextTopIntro",
-        "idc — image region extraction / reverse removal / grid splitting tool (command line)\n"
-        "\n"
-        "The three-tier modes share a single Grid-Selection-Emit engine\n"
-        "(source image -> cut lines -> induced grid -> selection -> polarity -> arranged export); the modes are just parameter presets:\n"
+        "idc — image region extraction / reverse removal / grid splitting tool\n"
         "\n"
         "Usage:\n"
         "  idc <command> [options]\n"
-        "  idc --help | --version\n"
+        "  idc --version\n"
+        "  idc --help [<subcommand> | <topic>]    command help / topic help\n"
         "\n"
         "Subcommands:\n"
         "  extract   standard extraction: keep rectangle / horizontal band / vertical band, output a single image\n"
@@ -100,9 +165,10 @@ constexpr core::I18nEntry kEntriesEnHelp[] = {
         "  new       New canvas: generate a canvas by size / background(alpha) / procedural pattern and write it to disk\n"
         "  config    Run one complete job from a JSON config file (with optional annotations / multi-layer canvas)\n"
         "\n"
-        "Global options:\n"
     },
-    {"help::kTextTopTail",
+    {"help::kTextTopModsHead", "\nRun modifiers:\n"},
+    {"help::kTextTopJobHead", "\nJob-level common options:\n"},
+        {"help::kTextTopTail",
         "\n"
         "Exit codes:\n"
         "  0 success | 1 argument error | 2 runtime error | 3 input file error | 4 output failure | 5 internal error\n"
@@ -122,44 +188,53 @@ constexpr core::I18nEntry kEntriesEnHelp[] = {
         "  idc new --size 1024x768 --pattern checkerboard --bg \"#FFFFFFFF\" --fg \"#800000FF\" --period 64 --output board.png\n"
         "  # Cut a generated source: use a procedurally generated canvas directly as the input (--size replaces --input)\n"
         "  idc extract --size 200x200 --pattern radial-gradient --bg \"#FF000000\" --fg \"#FFFFFFFF\" --rect 50,50,150,150 --output grad.png\n"
-        "\n"
-        "To see a subcommand's full options: idc <command> --help\n"
     },
-    {"help::kTextAnnoHead", "\nAnnotations (optional, burned into the working image before cutting; the coordinate origin = the working-image size after preprocessing):\n"},
-    {"help::kTextGenHead", "\nGenerated source (optional): when --input is not given, use --size (optionally with --pattern, etc.) to procedurally generate a canvas as the input; --input and --size are mutually exclusive - pick one.\n"},
-    {"help::kTextSecCutThree", "\nCut lines (choose one of --rect / --hband / --vband):\n"},
-    {"help::kTextSecOutput", "\nOutput:\n"},
-    {"help::kTextSecExport", "\nExport:\n"},
-    {"help::kTextSecCommonBlank", "\n\nGeneral:\n"},
-    {"help::kTextSecCommon", "\nGeneral:\n"},
-    {"help::kTextSecGrid", "\nGrid:\n"},
-    {"help::kTextSecSelect", "\nSelection (choose one of --keep and --remove):\n"},
-    {"help::kTextSecSortDecorate", "\nSorting and decoration:\n"},
-    {"help::kTextSecMargin", "\nRemainder:\n"},
-    {"help::kTextSecCompose", "\nMerge and rearrange:\n"},
-    {"help::kTextSecIo", "\nInput and output:\n"},
-    {"help::kTextSecSizeBg", "\nSize and background:\n"},
-    {"help::kTextSecPattern", "\nPattern:\n"},
-    {"help::kTextPatternMatrix",
+        {"help::kTextAnnoSeeTopic", "\nCommand-line annotations: --annotation / --annotations (repeatable); fields and syntax: idc --help annotations\n"},
+    {"help::kTextLayerSeeTopic", "\nCommand-line layers: --layer / --layers (repeatable); fields and syntax: idc --help layers\n"},
+    {"help::kTextGenSeeTopic", "\nGenerated source: --size (with --pattern, etc.) may be combined with --input - --size fixes the canvas size, the bitmap is centered (native size by default; --fit changes the adaptation); the full applicability matrix: idc --help generate\n"},
+    {"help::kTextGenParamsPtr", "\nPattern arguments (--pattern / --orientation / --bg / --fg / --period / --line-width / --dot-radius / --seed / --noise) and the applicability matrix are the same as the new command: idc --help new\n"},
+    {"help::kTextGenTopicHead", "\nProcedural generated source (shared by extract / erase / grid / config; the same pattern parameter set as the new command): use --size (optionally with --pattern, etc.) to procedurally generate a canvas; it may be combined with --input - --size fixes the canvas size, the bitmap is centered (native size by default; --fit changes the adaptation; clipped when over, exposing the base when under):\n"},
+{"help::kTextAnnoHead", "\nAnnotations (optional, burned into the working image before cutting; the coordinate origin = the working-image size after preprocessing; geometry coordinates also accept percentage strings, e.g. \"50%\", horizontal against the working width and vertical against the height):\n"},
+    {"help::kTextLayerHead", "\nLayers (optional: flattened into the engine as overlay layers, mirroring annotations; transform x/y/width/height also accept percentage strings, basis = canvas size; the config command appends them after the --load config's own layers section):\n"},
+    {"help::kTextLayerFields", "  Fields are grouped by source / placement / stacking (defaults in parentheses):\n"
+        "    source (pick one):\n"
+        "      file: a relative asset name (e.g. \"sub/a.png\") - looked up in [custom dir (--assets-dir) -> <configname>.assets/ -> config directory];\n"
+        "             a missing asset degrades to an empty placeholder (skipped when compositing, no error)\n"
+        "      recipe: a procedural pattern - the keys match --pattern (kind / background / foreground / period / line-width / dot-radius /\n"
+        "              orientation / seed / noise), rendered at the transform target size\n"
+        "    transform placement and compositing (all optional):\n"
+        "      inCanvasAnchor canvas anchor / layerPivot layer pivot - 9-way enum: top-left / top-center / top-right /\n"
+        "        middle-left / center (default) / middle-right / bottom-left / bottom-center / bottom-right\n"
+        "      x / y: free pixel offsets (may be negative, default 0; also accept percentage strings, horizontal against the canvas width and vertical against the height)\n"
+        "      width / height: target size (<=0 = source / recipe native size, no scaling; default 0; also accept percentage strings against the canvas width / height)\n"
+        "      opacity: overall layer opacity 0..255 (default 255 = opaque; applied per pixel at composite time)\n"
+        "    zOrder stacking order: integer, ascending (larger is on top; equal values keep array order, later on top); default 0 -\n"
+        "      command-line appends auto-increment and stack on top of the config's own layers\n"
+        "    preprocess per-layer preprocess array (applied in order; same as the config preprocess section):\n"
+        "      {\"op\":\"gray\"} grayscale; {\"op\":\"split\",\"mask\":\"111\"} channel split / {\"op\":\"invert\",\"mask\":\"111\"} invert (mask = 3-char RGB mask, '1' enables)\n"
+        "      {\"op\":\"rotate\",\"deg\":90} rotate (any integer degrees); {\"op\":\"flip\",\"axis\":\"horizontal\"|\"vertical\"} flip\n"
+        "      {\"op\":\"resize\",\"width\":W,\"height\":H} resample to W x H\n"
+        "    imagePlacement two-level placement (optional; off by default = the source is placed directly by transform):\n"
+        "      fit source-to-box adaptation: crop fill (default) / stretch / native\n"
+        "      boxWidth / boxHeight layer-box size (<=0 = no box, the two-level placement degrades)\n"
+        "      imageAnchor / imagePivot in-box anchor / pivot (9-way enum as above, default center); x / y free in-box offsets (may be negative, default 0)\n"
+        "      backdrop layer-box backdrop pattern (keys as recipe, laid under the source)\n"
+    },
+    {"help::kTextLayerTail",
         "\n"
-        "Pattern x parameter applicability matrix (an unlisted parameter has no effect for that pattern, consistent with the engine's actual behavior):\n"
-        "    solid            entire canvas = --bg; ignores --fg/--orientation/--period/--line-width/--dot-radius\n"
-        "    linear-gradient  --bg <-> --fg linear interpolation along --orientation (horizontal varies with x, vertical with y); ignores --period/--line-width/--dot-radius\n"
-        "    radial-gradient  --bg (edge) <-> --fg (center) radial interpolation; --orientation has no effect, ignores --period/--line-width/--dot-radius\n"
-        "    checkerboard     --fg square edge length = --period (--orientation has no effect); ignores --line-width/--dot-radius\n"
-        "    stripes          --fg stripe width = --period; --orientation horizontal=vertical bars(over x)/vertical=horizontal bars(over y)/diagonal-down=down-right(along x-y)/diagonal-up=up-right(along x+y); ignores --line-width/--dot-radius\n"
-        "    grid-lines       --fg grid lines: spacing = --period, line width = --line-width; --orientation has no effect, ignores --dot-radius\n"
-        "    dot-grid         --fg dots: dot spacing = --period, radius = --dot-radius; --orientation has no effect, ignores --line-width\n"
-        "    concentric       --fg concentric rings: ring spacing = --period, ring width = --line-width; --orientation horizontal=circles(Euclidean)/vertical=square rings(Chebyshev maze), ignores --dot-radius\n"
-        "    radial-rays      --fg radial sectors: density = --period (smaller is denser); --orientation has no effect, ignores --line-width/--dot-radius\n"
-        "    hue-gradient     full-hue rainbow scanned along --orientation (H 0->1, full saturation, full value, opaque), --period = pixel width of one rainbow; ignores --bg/--fg/--line-width/--dot-radius\n"
-        "    noise            deterministic pseudo-random noise: --seed fixes the seed (same seed + same size always yields the same image, for pixel-by-pixel comparison), --noise picks the palette full-color(default)/grayscale/two-color; two-color picks randomly between --bg <-> --fg, the rest ignores --bg/--fg/--orientation/--period/--line-width/--dot-radius\n"
-        "  alpha: the #AARRGGBB alpha of --bg/--fg participates in interpolation and is written to disk; PNG/WebP keep transparency, JPEG/BMP flatten by the fill color on export.\n"
-        "  Note: the \"image\" paste pattern is not among the pattern types (--pattern image / --pattern-image / --image-anchor / --image-scale are not accepted);\n"
-        "      an image as an \"additional layer\" can only be passed via the config file's layers section (source.kind=\"file\"), composited onto the canvas by config --load.\n"
+        "  Validation and exit codes (mandatory per-item validation like annotations, reasons reported one by one):\n"
+        "    - a misspelled anchor / fit / pattern key, an illegal color, a numeric field that is neither an integer nor a percentage string, or an opacity outside 0..255 -> exit code 1, the reason pinpoints the field (e.g. \"Config field '[0].transform.inCanvasAnchor' has unknown value 'bogus'\").\n"
+        "    - zOrder must be an integer (negative is legal, treated as the bottom); file must be a string (empty = placeholder layer); a JSON syntax error, a root that is not an object/array, or an array with no valid layer object -> exit code 1.\n"
+        "    - an escaping file name (absolute path / containing ..) -> exit code 3 at execution; a missing file degrades to an empty placeholder with a warning, --strict turns it into exit code 3.\n"
+        "  Single-item examples:\n"
+        "    {\"source\":{\"file\":\"badge.png\"},\"transform\":{\"inCanvasAnchor\":\"top-right\",\"layerPivot\":\"top-right\"}}\n"
+        "    {\"source\":{\"recipe\":{\"kind\":\"stripes\",\"foreground\":\"#FF000000\"}},\"transform\":{\"width\":320,\"height\":240}}\n"
+        "    {\"source\":{\"file\":\"badge.png\"},\"imagePlacement\":{\"fit\":\"stretch\",\"boxWidth\":160,\"boxHeight\":120,\"backdrop\":{\"kind\":\"solid\",\"background\":\"#FFFFFFFF\"}}}\n"
+        "  Export: --save-config writes the command-line layers into the config file's layers section (the config command appends them after the --load config's own section; the other commands carry them through).\n"
     },
     {"help::kTextAnnoFields",
         "  Fields dispatch geometry by type; the styling applies to all types:\n"
+        "    Geometry coordinates (x/y, x1..y2, points, segments[].coords) accept integers or percentage strings (e.g. \"50%\", >100% and negatives are legal; coordinates only - fontSize / cornerRadius / strokeWidth / zOrder still require integers):\n"
         "    · line: points exactly 2 vertices [[x1,y1],[x2,y2]]\n"
         "    · polyline: points >= 2 vertices (open segment)\n"
         "    · constrained primitives - write only the two anchors x1,y1,x2,y2 (the geometry is built by the engine from the anchors and is always valid; hand-written vertices are not accepted); all may take an optional cornerRadius (rounded-corner pixels):\n"
@@ -184,6 +259,7 @@ constexpr core::I18nEntry kEntriesEnHelp[] = {
         "    · A missing type or an unknown string always errors (does not default to line).\n"
         "    · A degenerate anchor reports \"degenerate anchor\": rectangle/rhombus need |dx|>0 and |dy|>0; square/isosceles-right need max(|dx|,|dy|)>0; isosceles/equilateral need the half-base and height, right need both legs non-degenerate; circle needs radius > 0, ellipse needs both semi-axes > 0.\n"
         "    · Free primitives: line must have exactly 2 points; text's fontSize must be > 0 if given; path must have non-empty and valid segments.\n"
+        "    · A geometry field that is neither an integer nor a percentage string errors (e.g. \"wide%\"); a percentage requires a known basis (converted after reading the image), otherwise it errors instead of collapsing to 0.\n"
         "    · color/fillColor must be a valid #RRGGBB or #AARRGGBB; strokeWidth / zOrder must be integers (a decimal/string zOrder errors; negative is valid). A JSON syntax error or a root that is not an object/array also gives exit code 1.\n"
         "  Single-item examples:\n"
         "    {\"type\":\"line\",\"points\":[[10,10],[200,150]],\"color\":\"#FF0000\",\"strokeWidth\":4}\n"
@@ -193,12 +269,11 @@ constexpr core::I18nEntry kEntriesEnHelp[] = {
         "    {\"type\":\"text\",\"x\":20,\"y\":30,\"text\":\"HELLO\",\"fontSize\":18,\"color\":\"#0000FF\"}\n"
         "    {\"type\":\"path\",\"segments\":[{\"t\":\"M\",\"coords\":[0,0]},{\"t\":\"L\",\"coords\":[50,50]},{\"t\":\"Z\",\"coords\":[]}],\"color\":\"#00FFFF\"}\n"
         "  Multiple: repeat --annotation once each, or pass an array at once [{\"type\":\"line\",...},{\"type\":\"circle\",...}]; you can also use --annotations file to batch-read from a file.\n"
-        "  Export: --save-config also writes the command-line annotations into the config file's annotations section (round-trips without loss)."},
+        "  Export: --save-config also writes the command-line annotations into the config file's annotations section (round-trips without loss).\n"},
     {"help::kTextExtractIntro",
         "idc extract - standard extraction mode\n"
         "\n"
-        "Semantics: polarity is always keep, output is always a single image. The rectangle keeps the center cell; a horizontal / vertical line keeps the whole band.\n"
-        "      Cut lines span the whole image (axiom); the kept regions are collapsed and stitched into a single image.\n"
+        "Coordinates: pixel integers, or percentage strings (e.g. \"50%\", converted against the input image width / height).\n"
         "\n"
         "Input:\n"},
     {"help::kTextExtractTail",
@@ -217,9 +292,7 @@ constexpr core::I18nEntry kEntriesEnHelp[] = {
     {"help::kTextEraseIntro",
         "idc erase - reverse removal mode (differentiated kernel)\n"
         "\n"
-        "Semantics: polarity is always remove, \"delete along the line\" - pull out the middle seam and butt the two sides together, shrinking the size (W-dx x H-dy).\n"
-        "      A single rectangle -> cross cut (keeps the four corners); --rect repeated -> multi-rectangle union removal;\n"
-        "      a horizontal / vertical line -> delete the whole band. Default is separate export (one image per kept block); --merge collapse merges into a single image.\n"
+        "Coordinates: pixel integers, or percentage strings (e.g. \"50%\", converted against the input image width / height).\n"
         "\n"
         "Input:\n"},
     {"help::kTextEraseTail",
@@ -242,15 +315,21 @@ constexpr core::I18nEntry kEntriesEnHelp[] = {
     {"help::kTextGridIntro",
         "idc grid - grid splitting mode (complete-expressiveness tier)\n"
         "\n"
-        "Semantics: use the origin (x0,y0) as the phase anchor and the cell size (cw,ch) as the period to generate cut lines spanning the whole image and induce\n"
-        "      the grid; the row / column count is derived automatically from the image bounds (not a parameter). --keep / --remove select cells one by one,\n"
-        "      which can be sorted then exported separately or rearrange-merged onto a ColxRow canvas.\n"
+        "Coordinates: pixel integers, or percentage strings (e.g. \"50%\", converted against the input image width / height).\n"
+        "\n"
+        "Grid definition: pick one of three forms (give it for the whole canvas, or per axis with the -x / -y variants; each axis takes exactly one form):\n"
+        "  · period   --grid / --grid-x / --grid-y: origin + cell size, boundary-crossing partial cells handled by --margin;\n"
+        "  · divide   --divide / --divide-x / --divide-y: origin always 0, split as evenly as possible, the last piece absorbs the rounding error;\n"
+        "  · weights  --weights-x / --weights-y: origin always 0, allocated by weight, the last piece absorbs the rounding error.\n"
+        "  Divide counts and weights always tile the canvas exactly with no partial cells, so --margin is not needed; an undefined axis counts as one whole span.\n"
         "\n"
         "Input:\n"},
     {"help::kTextGridTail",
         "\n"
         "Constraints:\n"
         "  - --keep and --remove are mutually exclusive; --compose and --output-dir are mutually exclusive.\n"
+        "  - Grid definition: --grid and --divide are mutually exclusive, and neither may be combined with the per-axis options (--grid-x/--grid-y, --divide-x/--divide-y, --weights-x/--weights-y); each axis takes exactly one form.\n"
+        "  - The remainder policy --margin only applies to a period axis (divide counts / weights have no partial cells).\n"
         "  - --decorate is not available with --sort custom; --merge-sort does not support custom (rearrange fill is only\n"
         "    row / column major; use --sort custom for a custom block order).\n"
         "  - With --compose, --canvas cols/rows are required and must be positive.\n"
@@ -260,6 +339,12 @@ constexpr core::I18nEntry kEntriesEnHelp[] = {
         "  idc grid --input photo.jpg --grid 100,100,200,150 --keep 0,0 --keep 0,2 --keep 2,0 --keep 2,2 --compose --canvas 2x2 --output result.png\n"
         "  idc grid --input photo.jpg --grid 0,0,100,100 --remove 1,1 --output-dir ./cells/\n"
         "  idc grid --input photo.jpg --grid 0,0,100,100 --sort custom --order 0,0;1,1;2,2 --compose --canvas 3x1 --output diag.png\n"
+        "  # 3 columns by 4 rows, split evenly (the last piece absorbs the rounding error), export the bottom-left cell\n"
+        "  idc grid --input photo.jpg --divide 3x4 --keep 3,0 --output-dir ./cells/\n"
+        "  # 3 even columns horizontally + a fixed 200px period vertically (mixed per-axis forms)\n"
+        "  idc grid --input photo.jpg --divide-x 3 --grid-y 0,200 --keep 0,0 --output-dir ./cells/\n"
+        "  # split horizontally by the ratio 1:2:1\n"
+        "  idc grid --input photo.jpg --weights-x 1,2,1 --keep 0,0 --output-dir ./cells/\n"
         "\n"
         "Common errors:\n"
         "  Exit code 1: missing required / mutual-exclusion conflict / r,c out of range / illegal format\n"
@@ -268,16 +353,12 @@ constexpr core::I18nEntry kEntriesEnHelp[] = {
     {"help::kTextConfigIntro",
         "idc config - config-file job\n"
         "\n"
-        "Semantics: read all parameters of one complete job from a JSON config file (source/generate/layers/preprocess/cut/order/emit/select),\n"
-        "      reusing the unified JSON parser (the command-line side does not re-implement it). A config file generally contains no image path, so running it usually\n"
-        "      needs --input or --size to provide the **base image**;\n"
-        "      the base image (canvas base, input niche) comes from one of: --input reads a file, --size generates on the command line, or the config generate section generates;\n"
-        "      if none of the three is present but the config has a layers section, the overlay layers are laid directly on a fully transparent base and can still run.\n"
+        "Geometry fields in the config and the --rect override accept percentage strings (e.g. \"50%\", converted against the canvas source width / height).\n"
         "\n"
         "Config:\n"},
     {"help::kTextConfigLayers",
         "\n"
-        "Multi-layer canvas (layers section, optional): carries only **overlay layers** (not the base image), stacked on top of the base by zOrder; before running the engine\n"
+        "Multi-layer canvas (layers section, optional): carries only overlay layers (not the base image), stacked on top of the base by zOrder; before running the engine\n"
         "      flattens them into a source-sized canvas (order: fully transparent base -> base image -> overlay layers; the engine still receives just one flattened canvas).\n"
         "      The base image comes from --input / --size / the config generate section (combinable, not mutually exclusive); when none is present the overlay layers are laid directly on a fully transparent base. Each layer source is one of three:\n"
         "        · recipe (pattern parameters isomorphic to the generate section, byte-for-byte reproducible, no bitmap stored);\n"
@@ -289,7 +370,7 @@ constexpr core::I18nEntry kEntriesEnHelp[] = {
         "Base image (generate section, optional): the base image = one layer record isomorphic to the layers, only its role is pinned to the bottom, undraggable / its placement unchangeable.\n"
         "      Besides the pattern fields (kind/background/foreground/..., isomorphic to the generate section's pattern params), an image base attached to a new canvas may also carry\n"
         "      fit + imageAnchor/imagePivot + x/y + backdrop (layer-box backing pattern) placement keys (the placement box size always equals the canvas, derived from source and not stored separately), so the base placement round-trips with the config and is reproducible\n"
-        "      (**the config stores only placement, not file paths**; the base bitmap is always supplied at runtime by --input, so the same config can be reused across different inputs for batching).\n"
+        "      (the config stores only placement, not file paths; the base bitmap is always supplied at runtime by --input, so the same config can be reused across different inputs for batching).\n"
         "      --input / open image = an identity base with no placement, canvas size = image size; external usage is the same.\n"
         "\n"
         "Preprocessing (preprocess array, optional): six kinds of steps gray/split/invert/rotate/flip/resize (opacity is not a preprocess step; it is carried by the layer compositing parameter).\n"
@@ -307,18 +388,16 @@ constexpr core::I18nEntry kEntriesEnHelp[] = {
         "  # Base image + overlay layers combined: --input provides the base, the config layers section stacks on it (flatten order: fully transparent base -> base -> overlays)\n"
         "  idc config --load canvas.json --input base.jpg --output out.png\n"
         "  # Save the config and carry File-layer assets into <configname>.assets/ (for distribution / reproduction alongside the config)\n"
-        "  idc config --load canvas.json --save-config bundle.json --bundle-assets\n"
+        "  idc config --load canvas.json --save-config bundle.json --assets-dir\n"
         "\n"
         "Common errors:\n"
-        "  Exit code 1: missing --load / missing output / config parse failed; --input and --size given together; with --bundle-assets a File-layer name is an absolute path / contains .. (escaping)\n"
+        "  Exit code 1: missing --load / missing output / config parse failed; --hband/--vband combined with --save-config; with --assets-dir a File-layer name is an absolute path / contains .. (escaping)\n"
         "  Exit code 2: canvas flattening produced an empty image (illegal source size) / engine business failure\n"
-        "  Exit code 3: the config file or input image does not exist / cannot be read; a layer asset path escapes; with --bundle-assets a File-layer source image is missing\n"
-        "  Exit code 4: output / write failed; --bundle-assets failed to copy assets or create the directory\n"},
+        "  Exit code 3: the config file or input image does not exist / cannot be read; a layer asset path escapes; with --assets-dir a File-layer source image is missing\n"
+        "  Exit code 4: output / write failed; --assets-dir failed to copy assets or create the directory\n"},
     {"help::kTextNewIntro",
         "idc new - new canvas (procedurally generate a canvas and write it to disk)\n"
-        "\n"
-        "Semantics: by size + background (with alpha) + pattern type and parameters, the pattern factory generates a brand-new RGBA canvas,\n"
-        "      written to --output. Equivalent to the GUI \"New Canvas\" dialog; it does not involve cutting (to cut a generated image, use the --size generated source of extract/erase/grid instead).\n"},
+        "\n"},
     {"help::kTextNewTail",
         "\n"
         "Examples:\n"
@@ -336,12 +415,15 @@ constexpr core::I18nEntry kEntriesEnHelp[] = {
         "  idc new --size 512x512 --bg \"#00FFFFFF\" --output transparent.png\n"
         "  # Exporting a transparent canvas to JPEG: give an explicit flatten color to avoid a silent black background\n"
         "  idc new --size 512x512 --bg \"#00FFFFFF\" --format jpeg --pad-color \"#FFFFFFFF\" --output flat.jpg\n"
-        "  # Save the generation recipe as a config (dry-run), so config --load can reproduce the canvas from the generate section\n"
+        "  # Save the generation recipe as a config (dry-run; carries a keep-the-whole-canvas cut section, so config --load reproduces the canvas directly)\n"
         "  idc new --size 200x150 --pattern solid --bg \"#FFFF0000\" --save-config recipe.json\n"
+        "  # Generate a canvas while burning in an annotation and stacking a layer (layers first, annotations always on top)\n"
+        "  idc new --size 200x150 --bg \"#FFFFFFFF\" --annotation '{\"type\":\"circle\",\"x1\":100,\"y1\":75,\"x2\":130,\"y2\":75,\"color\":\"#FF00FF00\",\"strokeWidth\":3}' --layer '{\"source\":{\"recipe\":{\"kind\":\"stripes\",\"foreground\":\"#40000000\"}},\"transform\":{\"width\":200,\"height\":150}}' --output done.png\n"
         "\n"
         "Common errors:\n"
-        "  Exit code 1: missing --size; missing --output when not a dry-run; --size not WxH positive integers / one side over 65535 / width x height over 64,000,000; illegal format for --pattern / --orientation / --bg / --fg / --pad-color / --period / --seed / --noise etc.; --quality not an integer 0~100; --input given (new does not accept it)\n"
-        "  Exit code 4: writing the output failed\n"},
+        "  Exit code 1: missing --size; missing --output when not a dry-run; --size not WxH positive integers / one side over 65535 / width x height over 64,000,000; illegal format for --pattern / --orientation / --bg / --fg / --pad-color / --period / --seed / --noise etc.; --quality not an integer 0~100; --input given (new does not accept it); illegal --annotation / --layer arguments; with --assets-dir bundling, an escaping File-layer name\n"
+        "  Exit code 3: a File-layer asset path escapes; with --strict a File source image is missing; with --assets-dir bundling a File source image is missing\n"
+        "  Exit code 4: writing the output failed; --assets-dir failed to copy assets or create the directory\n"},
 };
 
 } // namespace
