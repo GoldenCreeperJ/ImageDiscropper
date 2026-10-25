@@ -10,7 +10,7 @@
 
 ## 1. 应用介绍
 
-所有功能归约为同一条 **Grid-Selection-Emit** 流水线（SPEC §1）：
+所有功能归约为同一条 **Grid-Selection-Export** 流水线（SPEC §1）：
 
 ```text
 原图 → ① 切割线集合 → ② 诱导网格 → ③ 选择集 → ④ 极性(Keep/Remove) → ⑤ 排布导出(Collapse/Rearrange)
@@ -37,11 +37,11 @@ GUI ──────┐
 CLI ──────┘
 ```
 
-| 模块目录                                          | 层    | 产物                               | 职责                                             | 状态    |
-|-----------------------------------------------|------|----------------------------------|------------------------------------------------|-------|
-| [`ImageDiscropperCore/`](ImageDiscropperCore) | Core | 静态库 `image_discropper_core`      | 纯逻辑：Grid-Selection-Emit 统一引擎 + 基础图像处理，无 GUI 依赖 | ✅ 已落地 |
-| [`ImageDiscropperCli/`](ImageDiscropperCli)   | CLI  | 可执行 `idc`                        | 命令行薄壳：解析参数 → 调用 Core → 格式化输出 → 返回退出码           | ✅ 已落地 |
-| [`ImageDiscropperGui/`](ImageDiscropperGui)   | GUI  | 可执行 `idc_gui` / `idc_gui_mobile` | Qt6 桌面前端与移动形态：交互式画布、拖拽切割线 / 选区、实时预览、参数面板       | ✅ 已落地 |
+| 模块目录                                          | 层    | 产物                               | 职责                                               | 状态    |
+|-----------------------------------------------|------|----------------------------------|--------------------------------------------------|-------|
+| [`ImageDiscropperCore/`](ImageDiscropperCore) | Core | 静态库 `image_discropper_core`      | 纯逻辑：Grid-Selection-Export 统一引擎 + 基础图像处理，无 GUI 依赖 | ✅ 已落地 |
+| [`ImageDiscropperCli/`](ImageDiscropperCli)   | CLI  | 可执行 `idc`                        | 命令行薄壳：解析参数 → 调用 Core → 格式化输出 → 返回退出码             | ✅ 已落地 |
+| [`ImageDiscropperGui/`](ImageDiscropperGui)   | GUI  | 可执行 `idc_gui` / `idc_gui_mobile` | Qt6 桌面前端与移动形态：交互式画布、拖拽切割线 / 选区、实时预览、参数面板         | ✅ 已落地 |
 
 顶层 [`CMakeLists.txt`](CMakeLists.txt) 只做「模块编排 + 全局约定」：统一 C++23、
 按依赖顺序先引入 Core 再引入 CLI 与 GUI、开放 `ctest`。第三方库（stb / libwebp / nlohmann_json）
@@ -102,13 +102,13 @@ SPEC §1 流水线概念在本工程中的落点（详见 [`ImageDiscropperCore/
 
 CLI 命令与规格功能的对应（详见 [`ImageDiscropperCli/README.md`](ImageDiscropperCli/README.md)）：
 
-| CLI 命令    | 层级        | 极性            | 输出               | 对应规格                    |
-|-----------|-----------|---------------|------------------|-------------------------|
-| `extract` | L1 标准提取   | 恒 keep        | 合并单图（坍缩）         | SPEC §3.2               |
-| `erase`   | L2 反向剔除   | 恒 remove      | 分离 / 坍缩          | SPEC §3.3（FR-L2.1~L2.6） |
-| `grid`    | L3 网格分割   | keep 或 remove | 分离 / 重排合并        | SPEC §3.4（FR-L3.1~L3.8） |
-| `new`     | 新建画布（非切割） | 不涉及           | 一张程序生成的 RGBA 画布  | SPEC §8.1 / §8.2        |
-| `config`  | 配置驱动      | 由 JSON 决定     | 由 JSON 的 emit 决定 | SPEC §7 / FR-L3.8       |
+| CLI 命令    | 层级        | 极性            | 输出                 | 对应规格                    |
+|-----------|-----------|---------------|--------------------|-------------------------|
+| `extract` | L1 标准提取   | 恒 keep        | 合并单图（坍缩）           | SPEC §3.2               |
+| `erase`   | L2 反向剔除   | 恒 remove      | 分离 / 坍缩            | SPEC §3.3（FR-L2.1~L2.6） |
+| `grid`    | L3 网格分割   | keep 或 remove | 分离 / 重排合并          | SPEC §3.4（FR-L3.1~L3.8） |
+| `new`     | 新建画布（非切割） | 不涉及           | 一张程序生成的 RGBA 画布    | SPEC §8.1 / §8.2        |
+| `config`  | 配置驱动      | 由 JSON 决定     | 由 JSON 的 export 决定 | SPEC §7 / FR-L3.8       |
 
 ---
 

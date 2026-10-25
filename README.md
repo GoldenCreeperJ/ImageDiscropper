@@ -10,7 +10,7 @@
 
 > 一句话定位：常规裁剪只回答「保留哪一块」；本工具回答「**沿哪些线切开、留下哪些块、怎么重新拼起来**」。
 
-ImageDiscropper 是一款**本地运行**的图像切割工具。所有功能都归约为同一条 **Grid-Selection-Emit** 流水线，
+ImageDiscropper 是一款**本地运行**的图像切割工具。所有功能都归约为同一条 **Grid-Selection-Export** 流水线，
 通过贯穿全图的切割线把图像诱导为规则网格，再按「选择集 + 极性」决定保留/剔除，最后以分离、坍缩或重排的方式导出。
 
 ---
@@ -48,7 +48,7 @@ ImageDiscropper 是一款**本地运行**的图像切割工具。所有功能都
 ```text
 ImageDiscropper/
 ├── ImageDiscropperCpp/          # C++ 实现（当前主体，v1.0.1）
-│   ├── ImageDiscropperCore/     #   Core：Grid-Selection-Emit 统一引擎 + 基础图像处理（静态库）
+│   ├── ImageDiscropperCore/     #   Core：Grid-Selection-Export 统一引擎 + 基础图像处理（静态库）
 │   ├── ImageDiscropperCli/      #   CLI：命令行薄壳（可执行 idc）
 │   └── ImageDiscropperGui/      #   GUI：Qt 6 桌面前端（可执行 idc_gui）
 ├── ImageDiscropperRust/         # Rust 引擎实现（规划中：core/cli 两 crate；GUI 壳与前端在 ImageDiscropperWeb）
@@ -125,6 +125,7 @@ git tag v1.0.1-alpha.1 && git push origin v1.0.1-alpha.1       # 全平台预发
 
 ```bash
 idc extract --input photo.jpg --rect 100,100,300,250 --output out.png   # L1：保留中心矩形
+idc extract --input photo.jpg --rect 25%,25%,75%,75% --output out.png   # 几何坐标可写百分比（按输入图宽 / 高换算）
 ```
 
 完整示例与全部命令见 [`ImageDiscropperCli/README.md`](ImageDiscropperCpp/ImageDiscropperCli/README.md)「用法速览」；

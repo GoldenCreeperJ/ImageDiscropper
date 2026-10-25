@@ -10,7 +10,7 @@
 
 > In one sentence: conventional cropping only answers "which part to keep"; this tool answers "**which lines to cut along, which blocks to keep, and how to reassemble them**".
 
-ImageDiscropper is a **fully local** image cutting tool. Every feature reduces to a single **Grid-Selection-Emit** pipeline:
+ImageDiscropper is a **fully local** image cutting tool. Every feature reduces to a single **Grid-Selection-Export** pipeline:
 full-span cut lines induce a regular grid over the image, a selection set plus a polarity decide what is kept/removed,
 and the result is exported by separating, collapsing, or rearranging.
 
@@ -41,7 +41,7 @@ This project is primarily AI-led (~99%), and the documentation is AI-generated a
 - **Customizable shortcuts**: 15 commands in one registry, rebindable on the *Appearance / Interaction → Shortcuts* page (applies immediately, saved across sessions, conflict detection, unbindable); help text no longer hard-codes key names.
 
 ```text
-Source → ① cut-line set → ② induced grid → ③ selection set → ④ polarity (Keep/Remove) → ⑤ emit (Collapse/Rearrange)
+Source → ① cut-line set → ② induced grid → ③ selection set → ④ polarity (Keep/Remove) → ⑤ export (Collapse/Rearrange)
 ```
 
 ## 📁 Repository layout
@@ -49,7 +49,7 @@ Source → ① cut-line set → ② induced grid → ③ selection set → ④ p
 ```text
 ImageDiscropper/
 ├── ImageDiscropperCpp/          # C++ implementation (current mainline, v1.0.1)
-│   ├── ImageDiscropperCore/     #   Core: Grid-Selection-Emit engine + basic image processing (static library)
+│   ├── ImageDiscropperCore/     #   Core: Grid-Selection-Export engine + basic image processing (static library)
 │   ├── ImageDiscropperCli/      #   CLI: thin command-line shell (executable idc)
 │   └── ImageDiscropperGui/      #   GUI: Qt 6 desktop frontend (executable idc_gui)
 ├── ImageDiscropperRust/         # Rust engine implementation (planned: core/cli crates; GUI shell & frontend live in ImageDiscropperWeb)
@@ -126,6 +126,7 @@ Releases can also be triggered manually from the Actions tab — just enter a ta
 
 ```bash
 idc extract --input photo.jpg --rect 100,100,300,250 --output out.png   # L1: keep the center rect
+idc extract --input photo.jpg --rect 25%,25%,75%,75% --output out.png   # geometry also accepts percentages (of input width/height)
 ```
 
 Full examples and all commands: [`ImageDiscropperCli/README.md`](ImageDiscropperCpp/ImageDiscropperCli/README.md) (Chinese);
