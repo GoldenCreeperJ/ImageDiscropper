@@ -69,6 +69,7 @@ void AnnotationCoordinator::connectSignals() {
     });
 
     connect(scene_, &CanvasScene::annotationSelectRequested, this, &AnnotationCoordinator::onAnnotationSelect);
+    connect(scene_, &CanvasScene::annotationClicked, this, &AnnotationCoordinator::onAnnotationClicked);
     connect(scene_, &CanvasScene::annotationMoved, this, &AnnotationCoordinator::onAnnotationMoved);
     connect(scene_, &CanvasScene::annotationTransformed, this, &AnnotationCoordinator::onAnnotationTransformed);
     connect(scene_, &CanvasScene::annotationTransformPreview, this, &AnnotationCoordinator::onAnnotationTransformPreview);
@@ -77,7 +78,6 @@ void AnnotationCoordinator::connectSignals() {
     connect(layerPanel_, &LayerPanel::baseVisibilityChanged, this, &AnnotationCoordinator::onBaseVisibilityChanged);
     connect(layerPanel_, &LayerPanel::maskVisibilityChanged, this, &AnnotationCoordinator::onMaskVisibilityChanged);
     connect(layerPanel_, &LayerPanel::gridVisibilityChanged, this, &AnnotationCoordinator::onGridVisibilityChanged);
-    connect(layerPanel_, &LayerPanel::cutLineVisibilityChanged, this, &AnnotationCoordinator::onCutLineVisibilityChanged);
     connect(layerPanel_, &LayerPanel::selectionVisibilityChanged, this, &AnnotationCoordinator::onSelectionVisibilityChanged);
     connect(layerPanel_, &LayerPanel::annotationVisibilityChanged, this, &AnnotationCoordinator::onAnnotationVisibilityChanged);
     connect(layerPanel_, &LayerPanel::numberVisibilityChanged, this,
@@ -219,8 +219,16 @@ void AnnotationCoordinator::onAnnoFinish() const {
 }
 
 // Select 工具下点中标注图元：委托 Core hitTest 选中（几何命中在 Core，CONTRIBUTING.md「分层纪律」）。
+// 选中后随即由场景对**选中项**发起平移拖拽（重叠时被按项是最顶图元，拖动须跟随选中项）。
 void AnnotationCoordinator::onAnnotationSelect(const QPointF& scenePos) const {
     anno_->selectAt(core::Point2D(scenePos.x(), scenePos.y()));
+    if (const std::optional<std::size_t> sel = anno_->selectedIndex())
+        scene_->beginAnnotationDrag(static_cast<int>(*sel), scenePos);
+}
+
+// Select 工具下原地点击某标注图元：推进同点连击循环（重叠标注轮流选中）。
+void AnnotationCoordinator::onAnnotationClicked(const QPointF& scenePos) const {
+    anno_->cycleAt(core::Point2D(scenePos.x(), scenePos.y()));
 }
 
 // 拖动选中标注：委托 Core 平移其几何（下标须与当前选中项一致，防御误触）。
@@ -260,13 +268,10 @@ void AnnotationCoordinator::onAnnoTransformApply(const double sx, const double s
 // 图层面板 → 画布/模型（底图仅切画布可见；标注同时同步模型标志与画布图元）。
 void AnnotationCoordinator::onBaseVisibilityChanged(const bool visible) const { scene_->setBaseVisible(visible); }
 void AnnotationCoordinator::onMaskVisibilityChanged(const bool visible) const { scene_->setMasksVisible(visible); }
+// 网格线/切割线共用同一开关：L3 为灰色网格线，L1/L2 为贯穿切割线（延伸段 + 多矩形诱导线）。
 void AnnotationCoordinator::onGridVisibilityChanged(const bool visible) const {
-    scene_->setGridVisible(visible);
-    preview_->refreshPreview();   // 网格线依 gridVisible_ 门控重建（L3 / L2 多矩形）。
-}
-void AnnotationCoordinator::onCutLineVisibilityChanged(const bool visible) const {
-    scene_->setCutLinesVisible(visible);
-    preview_->refreshPreview();   // L2 多矩形诱导线依 cutLinesVisible_ 门控重建（橙色切割线）。
+    scene_->setGridLinesVisible(visible);
+    preview_->refreshPreview();   // L3 灰色网格 / L2 多矩形诱导线依门控重建。
 }
 void AnnotationCoordinator::onSelectionVisibilityChanged(const bool visible) const {
     scene_->setSelectionVisible(visible);

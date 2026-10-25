@@ -16,6 +16,7 @@
 #include "engine/engine.h"
 #include "model/document.h"
 #include "util/gui_nums.h"
+#include "util/widget_factory.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 
@@ -45,37 +46,31 @@ auto kRemoveStyle =
 // 构建面板布局。
 LeftPanel::LeftPanel(QWidget* parent) : QWidget(parent) {
     setMinimumWidth(nums::panels::kLeftPanelMinWidthPx); // 左侧面板下限（实际左栏最小宽由主窗 leftScroll 控制，需容纳标注工具 3 列网格）。
-    auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx,
-                             nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx);
+    auto* root = makePanelLayout(this);
     root->setSpacing(nums::panels::kPanelGroupSpacingPx); // 分组间距 12px（本目录 README「画布视觉规范」）。
 
     // ---- 模式切换分组 ----
-    auto* modeBox = new QGroupBox(this);
-    i18n::bindTitle(retranslator_, modeBox, IDC_GT(label, kModeSection));
+    auto* modeBox = makeGroupBox(retranslator_, this, IDC_GT(label, kModeSection));
     auto* modeLay = new QHBoxLayout(modeBox);
     modeLay->setSpacing(nums::panels::kPanelSpacingPx); // 控件间距 6px。
     modeGroup_ = new QButtonGroup(this);
     modeGroup_->setExclusive(true);
 
-    auto* l1Btn = new QPushButton(modeBox);
-    i18n::bindButton(retranslator_, l1Btn, IDC_GT(menu, kModeL1));
+    auto* l1Btn = makeButton(retranslator_, modeBox, IDC_GT(menu, kModeL1));
     l1Btn->setCheckable(true);
     l1Btn->setStyleSheet(kModeStyle);
     i18n::bindToolTip(retranslator_, l1Btn, IDC_GT(tooltip, kModeL1Btn));
     modeGroup_->addButton(l1Btn, 1);
     modeLay->addWidget(l1Btn);
 
-    auto* l2Btn = new QPushButton(modeBox);
-    i18n::bindButton(retranslator_, l2Btn, IDC_GT(menu, kModeL2));
+    auto* l2Btn = makeButton(retranslator_, modeBox, IDC_GT(menu, kModeL2));
     l2Btn->setCheckable(true);
     l2Btn->setStyleSheet(kL2Style); // 强调色区分核心特色。
     i18n::bindToolTip(retranslator_, l2Btn, IDC_GT(tooltip, kModeL2Btn));
     modeGroup_->addButton(l2Btn, 2);
     modeLay->addWidget(l2Btn);
 
-    auto* l3Btn = new QPushButton(modeBox);
-    i18n::bindButton(retranslator_, l3Btn, IDC_GT(menu, kModeL3));
+    auto* l3Btn = makeButton(retranslator_, modeBox, IDC_GT(menu, kModeL3));
     l3Btn->setCheckable(true);
     l3Btn->setStyleSheet(kModeStyle);
     i18n::bindToolTip(retranslator_, l3Btn, IDC_GT(tooltip, kModeL3Btn));
@@ -86,23 +81,20 @@ LeftPanel::LeftPanel(QWidget* parent) : QWidget(parent) {
     root->addWidget(modeBox);
 
     // ---- 极性开关分组 ----
-    auto* polBox = new QGroupBox(this);
-    i18n::bindTitle(retranslator_, polBox, IDC_GT(label, kPolarityGroupBox));
+    auto* polBox = makeGroupBox(retranslator_, this, IDC_GT(label, kPolarityGroupBox));
     auto* polLay = new QHBoxLayout(polBox);
     polLay->setSpacing(nums::panels::kPanelSpacingPx);
     polarityGroup_ = new QButtonGroup(this);
     polarityGroup_->setExclusive(true);
 
-    auto* keepBtn = new QPushButton(polBox);
-    i18n::bindButton(retranslator_, keepBtn, IDC_GT(label, kPolarityKeepButton));
+    auto* keepBtn = makeButton(retranslator_, polBox, IDC_GT(label, kPolarityKeepButton));
     keepBtn->setCheckable(true);
     keepBtn->setStyleSheet(kKeepStyle);
     i18n::bindToolTip(retranslator_, keepBtn, IDC_GT(tooltip, kPolarityKeepBtn));
     polarityGroup_->addButton(keepBtn, 0);
     polLay->addWidget(keepBtn);
 
-    auto* removeBtn = new QPushButton(polBox);
-    i18n::bindButton(retranslator_, removeBtn, IDC_GT(label, kPolarityRemoveButton));
+    auto* removeBtn = makeButton(retranslator_, polBox, IDC_GT(label, kPolarityRemoveButton));
     removeBtn->setCheckable(true);
     removeBtn->setStyleSheet(kRemoveStyle);
     i18n::bindToolTip(retranslator_, removeBtn, IDC_GT(tooltip, kPolarityRemoveBtn));

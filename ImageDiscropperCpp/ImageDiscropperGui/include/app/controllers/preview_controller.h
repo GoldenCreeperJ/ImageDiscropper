@@ -13,6 +13,7 @@
 #include <QObject>
 #include <QPixmap>
 
+#include "core/image.h"
 #include "engine/engine.h"
 
 class QTabWidget;
@@ -27,6 +28,7 @@ class ParamPanel;
 class StatusBar;
 class AnnotationBridge;
 class LayerPanel;
+class PreprocessController;
 
 // ---------------------------------------------------------------------------
 // PreviewController：预览刷新状态机 + 导出前输出预览缓存（A/B 按需渲染）。
@@ -46,11 +48,20 @@ public:
     void setAnnotationBridge(AnnotationBridge* anno);  // 导出预览源图烧录判定
     void setMultiPageContainer(QWidget* tabs);       // A 规则：导出页可见性（AccordionPanel 或 QTabWidget / QStackedWidget）
     void setLayerPanel(LayerPanel* panel);           // 遮罩切换反向同步图层面板复选框
+    void setPreprocessController(PreprocessController* preprocess);  // 解耦渲染：底图/图层像素分离合成
     void connectSignals();                             // rightTabs currentChanged / 画布右键遮罩切换
 
     void rebuildPreviewPixmap();         // 依工作图重建降采样预览底图 + 导出预览小源图
     void refreshPreview();               // 五分支状态机：跑 Core 预览并刷新画布/状态栏/面板
     void refreshExportPreviewFromCache(); // 用缓存重渲染输出预览（不重跑 Core；A 切回补渲染 / B 轻量刷新共用）
+    void refreshExportSource();          // 按当前「烧录图片图层」开关重算导出预览小源图后重渲染（不重跑 Core 几何）
+
+    // 预览重建时留存的「仅底图」全分辨率合成（不含叠加层）：图层显隐是纯预览态、working_ 恒含层，
+    //   隐藏图层后状态栏取色须读本图才与屏幕所见一致（见 MainWindow::onCursor）；随 rebuildPreviewPixmap 刷新。
+    const core::Image& displayBaseImage() const { return displayBaseImage_; }
+    // 与 displayBaseImage 对称的「仅图层」全分辨率合成（图层于透明底、不含底图）：底图隐藏后状态栏取色
+    //   须读本图（透明处即屏幕空白），否则会取到已被隐藏的底图像素（所见≠所取）。同样随重建刷新。
+    const core::Image& displayLayersImage() const { return displayLayersImage_; }
 
 public slots:
     void onToggleMasks();                // 切换预览遮罩显隐（视图菜单 / 画布右键）；同步图层面板复选框。
@@ -61,6 +72,7 @@ private slots:
 private:
     void updateExportPreview(const engine::EngineResult& res);  // 缓存 res 后转 refreshExportPreviewFromCache
     QPixmap exportPreviewSource() const;                        // 烧录开启且有标注时返回烘焙副本
+    void rebuildExportSourcePixmap();                           // 依 layersBurnIn 从工作图/仅底图重算 exportSrcPixmap_ 与缩放
 
     Document* doc_{nullptr};
     CanvasScene* scene_{nullptr};
@@ -70,6 +82,7 @@ private:
     StatusBar* status_{nullptr};
     AnnotationBridge* anno_{nullptr};
     LayerPanel* layerPanel_{nullptr};  // 遮罩切换反向同步（blockSignals 防回环）
+    PreprocessController* preprocess_{nullptr};  // 解耦渲染：取底图/图层像素分离合成
     QWidget* rightTabs_{nullptr};      // 拥有者 MainWindow 的右侧多页容器（桌面 AccordionPanel / 移动 QStackedWidget）
 
     // 输出预览（导出前预览）专用的小源图：由 rebuildPreviewPixmap 把底图再降到最长边 ≤ 512，
@@ -78,6 +91,10 @@ private:
     QPixmap exportSrcPixmap_;
     double exportSrcScaleX_{1.0};
     double exportSrcScaleY_{1.0};
+    // 与场景底图 item 同源的全分辨率「仅底图」合成：图层隐藏时状态栏取色的真相源（working_ 恒含叠加层，不可直接取）。
+    core::Image displayBaseImage_;
+    // 与场景图层覆盖 item 同源的全分辨率「仅图层」合成：底图隐藏时状态栏取色的真相源（透明像素即屏幕空白）。
+    core::Image displayLayersImage_;
     bool exportPreviewDirty_{false};   // 导出页不可见期间参数有变→置脏；切回该页时补渲染（A）。
     // 上次引擎结果的合成缓存：供烧录/标注变更时**只重渲染缩略图、不重跑 Core**（切割几何不受标注影响）。
     engine::Composition lastComposition_;

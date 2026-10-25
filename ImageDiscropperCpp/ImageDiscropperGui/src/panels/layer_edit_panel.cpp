@@ -20,7 +20,9 @@
 
 #include "model/document.h"
 #include "generate/pattern.h"   // generate::kMaxDimension：画布尺寸上限的真相源在 Core
+#include "util/coord_spin.h"
 #include "util/gui_nums.h"
+#include "util/widget_factory.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 
@@ -37,40 +39,30 @@ void fillAnchorCombo(i18n::Retranslator& r, QComboBox* combo) {
 } // namespace
 
 LayerEditPanel::LayerEditPanel(QWidget* parent) : QWidget(parent) {
-    auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx,
-                             nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx);
+    auto* root = makePanelLayout(this);
     root->setSpacing(nums::panels::kPanelSpacingPx);
 
     // ---- ① 图层增删序区（作用于画布当前拾取层；无图层列表，选中由画布承担）----
-    auto* listBox = new QGroupBox(this);
-    i18n::bindTitle(retranslator_, listBox, IDC_GT(label, kImageLayerName));
+    auto* listBox = makeGroupBox(retranslator_, this, IDC_GT(label, kImageLayerName));
     auto* listLay = new QVBoxLayout(listBox);
     listLay->setSpacing(nums::panels::kPanelTightSpacingPx);
 
     // 1-2-2-2 网格：「添加图片」独占首行（跨两列），上移/下移、移至顶层/底层、删除/清空图层各占一行。
     auto* gridBtns = new QGridLayout();
     gridBtns->setSpacing(nums::panels::kPanelTightSpacingPx);
-    addImageBtn_ = new QPushButton(listBox);
-    i18n::bindButton(retranslator_, addImageBtn_, IDC_GT(label, kAddImageButton));
+    addImageBtn_ = makeButton(retranslator_, listBox, IDC_GT(label, kAddImageButton));
     i18n::bindToolTip(retranslator_, addImageBtn_, IDC_GT(tooltip, kLayerAddImage));
-    moveUpBtn_ = new QPushButton(listBox);
-    i18n::bindButton(retranslator_, moveUpBtn_, IDC_GT(label, kMoveUpButton));
+    moveUpBtn_ = makeButton(retranslator_, listBox, IDC_GT(label, kMoveUpButton));
     i18n::bindToolTip(retranslator_, moveUpBtn_, IDC_GT(tooltip, kLayerMoveUp));
-    moveDownBtn_ = new QPushButton(listBox);
-    i18n::bindButton(retranslator_, moveDownBtn_, IDC_GT(label, kMoveDownButton));
+    moveDownBtn_ = makeButton(retranslator_, listBox, IDC_GT(label, kMoveDownButton));
     i18n::bindToolTip(retranslator_, moveDownBtn_, IDC_GT(tooltip, kLayerMoveDown));
-    moveTopBtn_ = new QPushButton(listBox);
-    i18n::bindButton(retranslator_, moveTopBtn_, IDC_GT(label, kMoveTopButton));
+    moveTopBtn_ = makeButton(retranslator_, listBox, IDC_GT(label, kMoveTopButton));
     i18n::bindToolTip(retranslator_, moveTopBtn_, IDC_GT(tooltip, kLayerMoveTop));
-    moveBottomBtn_ = new QPushButton(listBox);
-    i18n::bindButton(retranslator_, moveBottomBtn_, IDC_GT(label, kMoveBottomButton));
+    moveBottomBtn_ = makeButton(retranslator_, listBox, IDC_GT(label, kMoveBottomButton));
     i18n::bindToolTip(retranslator_, moveBottomBtn_, IDC_GT(tooltip, kLayerMoveBottom));
-    removeBtn_ = new QPushButton(listBox);
-    i18n::bindButton(retranslator_, removeBtn_, IDC_GT(label, kRemoveButton));
+    removeBtn_ = makeButton(retranslator_, listBox, IDC_GT(label, kRemoveButton));
     i18n::bindToolTip(retranslator_, removeBtn_, IDC_GT(tooltip, kLayerEditRemove));
-    clearLayersBtn_ = new QPushButton(listBox);
-    i18n::bindButton(retranslator_, clearLayersBtn_, IDC_GT(label, kClearLayersButton));
+    clearLayersBtn_ = makeButton(retranslator_, listBox, IDC_GT(label, kClearLayersButton));
     i18n::bindToolTip(retranslator_, clearLayersBtn_, IDC_GT(tooltip, kClearAllImageLayers));
     gridBtns->addWidget(addImageBtn_, 0, 0, 1, 2);   // 首行跨两列
     gridBtns->addWidget(moveUpBtn_, 1, 0);
@@ -81,8 +73,7 @@ LayerEditPanel::LayerEditPanel(QWidget* parent) : QWidget(parent) {
     gridBtns->addWidget(clearLayersBtn_, 3, 1);
     listLay->addLayout(gridBtns);
     root->addWidget(listBox);
-    auto* tfBox = new QGroupBox(this);
-    i18n::bindTitle(retranslator_, tfBox, IDC_GT(label, kLayerPlaceBox));
+    auto* tfBox = makeGroupBox(retranslator_, this, IDC_GT(label, kLayerPlaceBox));
     auto* tfForm = new QFormLayout(tfBox);
     tfForm->setSpacing(nums::panels::kPanelTightSpacingPx);
     anchorCombo_ = new QComboBox(tfBox);
@@ -91,26 +82,21 @@ LayerEditPanel::LayerEditPanel(QWidget* parent) : QWidget(parent) {
     pivotCombo_ = new QComboBox(tfBox);
     fillAnchorCombo(retranslator_, pivotCombo_);
     i18n::bindToolTip(retranslator_, pivotCombo_, IDC_GT(tooltip, kLayerPivotCombo));
-    posXSpin_ = new QSpinBox(tfBox);
-    posXSpin_->setRange(-nums::model::kTransformCoordLimitPx, nums::model::kTransformCoordLimitPx);
+    posXSpin_ = makeCoordSpin(tfBox, -nums::model::kTransformCoordLimitPx, nums::model::kTransformCoordLimitPx);
     posXSpin_->setSuffix(QStringLiteral(" px"));
     i18n::bindToolTip(retranslator_, posXSpin_, IDC_GT(tooltip, kLayerOffsetXSpin));
-    posYSpin_ = new QSpinBox(tfBox);
-    posYSpin_->setRange(-nums::model::kTransformCoordLimitPx, nums::model::kTransformCoordLimitPx);
+    posYSpin_ = makeCoordSpin(tfBox, -nums::model::kTransformCoordLimitPx, nums::model::kTransformCoordLimitPx);
     posYSpin_->setSuffix(QStringLiteral(" px"));
     i18n::bindToolTip(retranslator_, posYSpin_, IDC_GT(tooltip, kLayerOffsetYSpin));
-    widthSpin_ = new QSpinBox(tfBox);
-    widthSpin_->setRange(0, nums::model::kTransformCoordLimitPx);
+    widthSpin_ = makeCoordSpin(tfBox, 0, nums::model::kTransformCoordLimitPx);
     widthSpin_->setSuffix(QStringLiteral(" px"));
     i18n::bindSpecialValue(retranslator_, widthSpin_, IDC_GT(label, kNativeSpecialValue));
     i18n::bindToolTip(retranslator_, widthSpin_, IDC_GT(tooltip, kLayerWidthSpin));
-    heightSpin_ = new QSpinBox(tfBox);
-    heightSpin_->setRange(0, nums::model::kTransformCoordLimitPx);
+    heightSpin_ = makeCoordSpin(tfBox, 0, nums::model::kTransformCoordLimitPx);
     heightSpin_->setSuffix(QStringLiteral(" px"));
     i18n::bindSpecialValue(retranslator_, heightSpin_, IDC_GT(label, kNativeSpecialValue));
     i18n::bindToolTip(retranslator_, heightSpin_, IDC_GT(tooltip, kLayerHeightSpin));
-    opacitySpin_ = new QSpinBox(tfBox);
-    opacitySpin_->setRange(0, 255);
+    opacitySpin_ = makeSpin(tfBox, 0, 255);
     opacitySpin_->setValue(255);
     i18n::bindToolTip(retranslator_, opacitySpin_, IDC_GT(tooltip, kLayerOpacitySpin));
     i18n::bindFormRow(retranslator_, tfForm, anchorCombo_, IDC_GT(label, kAnchorFieldLabel));
@@ -132,23 +118,16 @@ LayerEditPanel::LayerEditPanel(QWidget* parent) : QWidget(parent) {
         return w;
     }(), IDC_GT(label, kTargetSizeFieldLabel));
     i18n::bindFormRow(retranslator_, tfForm, opacitySpin_, IDC_GT(label, kOpacityFieldLabel));
-    applyTransformBtn_ = new QPushButton(tfBox);
-    i18n::bindButton(retranslator_, applyTransformBtn_, IDC_GT(label, kApplyPlaceButton));
+    applyTransformBtn_ = makeButton(retranslator_, tfBox, IDC_GT(label, kApplyPlaceButton));
     tfForm->addRow(applyTransformBtn_);
     root->addWidget(tfBox);
 
     // ---- ③ 画布尺寸区 ----
-    auto* sizeBox = new QGroupBox(this);
-    i18n::bindTitle(retranslator_, sizeBox, IDC_GT(label, kCanvasSizeBox));
+    auto* sizeBox = makeGroupBox(retranslator_, this, IDC_GT(label, kCanvasSizeBox));
     auto* sizeLay = new QHBoxLayout(sizeBox);
-    canvasWSpin_ = new QSpinBox(sizeBox);
-    canvasWSpin_->setRange(1, generate::kMaxDimension);
-    canvasWSpin_->setSuffix(QStringLiteral(" ×"));
-    canvasHSpin_ = new QSpinBox(sizeBox);
-    canvasHSpin_->setRange(1, generate::kMaxDimension);
-    canvasHSpin_->setSuffix(QStringLiteral(" px"));
-    applyCanvasBtn_ = new QPushButton(sizeBox);
-    i18n::bindButton(retranslator_, applyCanvasBtn_, IDC_GT(label, kApplyButton));
+    canvasWSpin_ = makeSpin(sizeBox, 1, generate::kMaxDimension, QStringLiteral(" ×"));
+    canvasHSpin_ = makeSpin(sizeBox, 1, generate::kMaxDimension, QStringLiteral(" px"));
+    applyCanvasBtn_ = makeButton(retranslator_, sizeBox, IDC_GT(label, kApplyButton));
     i18n::bindToolTip(retranslator_, applyCanvasBtn_, IDC_GT(tooltip, kLayerCanvasSizeApply));
     sizeLay->addWidget(canvasWSpin_);
     sizeLay->addWidget(canvasHSpin_);
@@ -176,6 +155,17 @@ LayerEditPanel::LayerEditPanel(QWidget* parent) : QWidget(parent) {
     connect(widthSpin_, qOverload<int>(&QSpinBox::valueChanged), this, &LayerEditPanel::onApplyTransform);
     connect(heightSpin_, qOverload<int>(&QSpinBox::valueChanged), this, &LayerEditPanel::onApplyTransform);
     connect(opacitySpin_, qOverload<int>(&QSpinBox::valueChanged), this, &LayerEditPanel::onApplyTransform);
+
+    // 落位坐标另接受百分比串（SPEC §2.1）：基准＝画布宽/高（§7 layers[].transform 以画布为基准），
+    // x/宽 用宽、y/高 用高；无画布（_canvasWidth/Height 为 0）时只认整数像素。“0%”在宽/高上即“原生”。
+    const auto canvasBasis = [this](const bool horizontal) {
+        if (!doc_) return 0;
+        return horizontal ? doc_->canvasWidth() : doc_->canvasHeight();
+    };
+    posXSpin_->setBasisProvider([canvasBasis] { return canvasBasis(true); });
+    widthSpin_->setBasisProvider([canvasBasis] { return canvasBasis(true); });
+    posYSpin_->setBasisProvider([canvasBasis] { return canvasBasis(false); });
+    heightSpin_->setBasisProvider([canvasBasis] { return canvasBasis(false); });
 }
 
 void LayerEditPanel::setDocument(Document* doc) {
@@ -221,7 +211,7 @@ void LayerEditPanel::loadTransformIntoControls(const canvas::ImageTransform& t) 
 }
 
 void LayerEditPanel::setControlsEnabled(const bool hasLayerCanvas, const bool hasSelection) const {
-    // 「添加图片」入口：只要有图即可用（单图态下经 ensureLayerCanvas 自动起图层画布），无需已是图层画布。
+    // 「添加图片」入口：只要有图即可用（有图即图层画布；空文档经 ensureLayerCanvas 兜底起画布）。
     addImageBtn_->setEnabled(doc_ != nullptr && doc_->hasImage());
     clearLayersBtn_->setEnabled(hasLayerCanvas);   // 仅图层画布态可清空全部图层。
     canvasWSpin_->setEnabled(hasLayerCanvas);

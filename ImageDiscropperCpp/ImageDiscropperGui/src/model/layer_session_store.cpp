@@ -7,11 +7,10 @@
 
 namespace idc::gui {
 
-// 依图层现声明算其物化签名：字段口径见 LayerSig 头注（来源态 + 目标尺寸 + 内层落位/图层框；
-// 恒不含 transform 落位/不透明度——改这些只重组、不重跑）。
+// 依图层现声明算其物化签名：字段口径见 LayerSig 头注（来源由 fileName/hasRecipe/解码像素派生 + 目标尺寸 +
+// 内层落位/图层框；恒不含 transform 落位/不透明度——改这些只重组、不重跑）。
 LayerSig LayerSessionStore::makeSig(const canvas::ImageLayer& layer) {
     LayerSig s;
-    s.kind = static_cast<int>(layer.sourceKind);
     s.pre = layer.preprocess;
     s.fileName = layer.fileName;
     s.decEmpty = layer.decodedPixels.empty();

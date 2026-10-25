@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：util/scrollable_dialog.cpp
 // 作用：实现对话框滚动外壳与屏幕尺寸护栏（见同名头文件说明）。
-// 分块依据：wrapScrollable 只做「装 QScrollArea + 换装触控滚动」；护栏为自包含事件过滤器（DialogSizeGuard）；
+// 分块依据：wrapScrollable 只做「装 QScrollArea + 预留纵滚宽 + 换装触控滚动」；护栏为自包含事件过滤器（DialogSizeGuard）；
 //           showScrollableMessage 组合二者呈现长文本信息框。滚动换装委托 mobile/touch_scroll（归 common/util 组编译）。
 // ============================================================================
 #include "util/scrollable_dialog.h"
@@ -13,6 +13,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QRect>
+#include <QScrollBar>
 #include <QScrollArea>
 #include <QScreen>
 #include <QVBoxLayout>
@@ -23,6 +24,13 @@
 
 namespace idc::gui {
 
+int verticalScrollBarExtent(const QScrollArea* area) {
+    if (!area) return 0;
+    if (const QScrollBar* bar = area->verticalScrollBar())
+        return bar->sizeHint().width();   // 当前样式下纵滚条的横向占用（未显时也据此预留）。
+    return 0;
+}
+
 QScrollArea* wrapScrollable(QWidget* body) {
     auto* area = new QScrollArea;
     area->setWidgetResizable(true);
@@ -30,6 +38,10 @@ QScrollArea* wrapScrollable(QWidget* body) {
     area->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);   // 内容随视口宽自适应，不出横滚。
     area->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);      // 超高才出纵滚。
     area->setWidget(body);
+    // 预留一条纵滚宽度：横滚 AlwaysOff + 纵滚 AsNeeded 时，纵滚一旦显示会吃掉视口一条宽；把滚动区最小宽
+    // 抬到「内容最小宽 + 纵滚条宽」，所在对话框的布局下限随之抬升、resize 被钳到此下限，使视口恒 ≥ 内容最小宽，
+    // 最右列不再被裁（不预留时须手动拖窗重排才回正）。无纵滚时仅多一条窄空隙，不影响可读性。
+    area->setMinimumWidth(body->minimumSizeHint().width() + verticalScrollBarExtent(area));
     installTouchScroll(area);   // 移动端换装触控过滤器；桌面回落 QScroller 鼠标协调器。
     return area;
 }
@@ -43,8 +55,8 @@ namespace {
 //   故以父窗口几何变化为触发条件，不依赖屏幕级 availableGeometry 变更检测。
 class DialogSizeGuard : public QObject {
 public:
-    DialogSizeGuard(QDialog* dialog, const QSize& preferredContentSize)
-        : QObject(dialog), dialog_(dialog), preferred_(preferredContentSize) {
+    DialogSizeGuard(QDialog* dialog, const QSize& preferredDialogSize)
+        : QObject(dialog), dialog_(dialog), preferred_(preferredDialogSize) {
         // 额外注册父窗口事件监听——捕获 parent resize/move 以居中回正。
         if (auto* p = dialog->parentWidget()) {
             parent_ = p;
@@ -102,7 +114,7 @@ private:
         dialog_->setMaximumSize(maxW, maxH);
     }
 
-    // 首次显示：把尺寸收到「内容首选尺寸（未提供则对话框自身 sizeHint）与可用几何钳值」的较小者。
+    // 首次显示：把整窗尺寸收到「首选整窗尺寸（未提供则对话框自身 sizeHint）与可用几何钳值」的较小者。
     void sizeToContent() {
         const QRect avail = availableGeometry();
         if (avail.isNull()) return;
@@ -134,8 +146,8 @@ private:
 
 } // namespace
 
-void limitDialogToScreen(QDialog* dialog, const QSize& preferredContentSize) {
-    dialog->installEventFilter(new DialogSizeGuard(dialog, preferredContentSize));
+void limitDialogToScreen(QDialog* dialog, const QSize& preferredDialogSize) {
+    dialog->installEventFilter(new DialogSizeGuard(dialog, preferredDialogSize));
 }
 
 void showScrollableMessage(QWidget* parent, const QString& title, const QString& text, const QString& okLabel) {

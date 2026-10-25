@@ -7,7 +7,6 @@
 #include "panels/annotation_prop_panel.h"
 
 #include <QCheckBox>
-#include <QColorDialog>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QGridLayout>
@@ -20,6 +19,8 @@
 
 #include "util/path_qt_adapter.h"
 #include "util/gui_nums.h"
+#include "util/widget_factory.h"
+#include "util/color_picker.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 
@@ -48,37 +49,13 @@ void applySwatch(QPushButton* btn, const QColor& c) {
                      .arg(c.red()).arg(c.green()).arg(c.blue()).arg(c.alpha()));
 }
 
-// 通用取色：弹出带 Alpha 的非原生 QColorDialog；确认且颜色有效则写回 inout 并返回 true。
-// 说明：标注颜色支持 alpha（Core Color 含 a 分量、rasterizer 已做 src-over 混合），故开启 ShowAlphaChannel。
-//       因需 Alpha 通道，Qt 在 Windows 无法用原生取色框而回退到自带固定尺寸对话框（min==max）；若不显式
-//       设定初始 geometry，会被 Windows 夹到默认最小尺寸而反复刷 setGeometry 噪声告警。故以顶层窗口为父 +
-//       DontUseNativeDialog，并在 exec 前显式给定 >= 最小尺寸的初始 geometry（取自 sizeHint、居中到父窗口）。
-bool pickColorWithAlpha(QWidget* dlgParent, QColor& inout, const QString& title) {
-    QColorDialog dlg(inout, dlgParent);
-    dlg.setWindowTitle(title);
-    dlg.setOption(QColorDialog::ShowAlphaChannel, true);
-    dlg.setOption(QColorDialog::DontUseNativeDialog, true);
-    const QSize dlgSz = dlg.minimumSizeHint().expandedTo(dlg.sizeHint());
-    QPoint pos(80, 80);
-    if (const QWidget* pw = dlg.parentWidget()) {
-        const QRect pg = pw->window()->geometry();
-        pos = pg.center() - QPoint(dlgSz.width() / 2, dlgSz.height() / 2);
-    }
-    dlg.setGeometry(pos.x(), pos.y(), dlgSz.width(), dlgSz.height());
-    if (dlg.exec() != QDialog::Accepted) return false;
-    const QColor c = dlg.currentColor();
-    if (!c.isValid()) return false;
-    inout = c;
-    return true;
-}
+// 取色助手 pickColorWithAlpha 见 util/color_picker.h。
 
 } // namespace
 
 // 构建属性页表单。
 AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
-    auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx,
-                             nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx);
+    auto* root = makePanelLayout(this);
     root->setSpacing(nums::panels::kPanelSpacingPx);
 
     auto* form = new QFormLayout();
@@ -90,16 +67,14 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     i18n::bindFormRow(retranslator_, form, colorBtn_, IDC_GT(label, kStrokeColorFieldLabel));
 
     // 描边粗细。
-    strokeSpin_ = new QSpinBox(this);
-    strokeSpin_->setRange(nums::model::kStrokeWidthMinPx, nums::model::kStrokeWidthMaxPx);
+    strokeSpin_ = makeSpin(this, nums::model::kStrokeWidthMinPx, nums::model::kStrokeWidthMaxPx,
+                           QStringLiteral(" px"));
     strokeSpin_->setValue(nums::model::kDefaultStrokeWidthPx);
-    strokeSpin_->setSuffix(QStringLiteral(" px"));
     i18n::bindToolTip(retranslator_, strokeSpin_, IDC_GT(tooltip, kStrokeWidthSpin));
     i18n::bindFormRow(retranslator_, form, strokeSpin_, IDC_GT(label, kStrokeWidthFieldLabel));
 
     // 填充开关。
-    fillCheck_ = new QCheckBox(this);
-    i18n::bindButton(retranslator_, fillCheck_, IDC_GT(label, kFillCheckLabel));
+    fillCheck_ = makeCheckBox(retranslator_, this, IDC_GT(label, kFillCheckLabel));
     i18n::bindToolTip(retranslator_, fillCheck_, IDC_GT(tooltip, kFillCheckTip));
     i18n::bindFormRow(retranslator_, form, fillCheck_, IDC_GT(label, kFillFieldLabel));
 
@@ -115,8 +90,7 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     i18n::bindFormRow(retranslator_, form, textEdit_, IDC_GT(label, kTextFieldLabel));
 
     // 字号。
-    fontSpin_ = new QSpinBox(this);
-    fontSpin_->setRange(nums::model::kFontSizeMinPx, nums::model::kFontSizeMaxPx);
+    fontSpin_ = makeSpin(this, nums::model::kFontSizeMinPx, nums::model::kFontSizeMaxPx);
     fontSpin_->setValue(static_cast<int>(nums::model::kDefaultFontSizePx));
     i18n::bindToolTip(retranslator_, fontSpin_, IDC_GT(tooltip, kFontSizeSpin));
     i18n::bindFormRow(retranslator_, form, fontSpin_, IDC_GT(label, kFontSizeFieldLabel));
@@ -137,28 +111,24 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     // ---- 变换区（仅对选中标注生效）：显示选中形状的**绝对累积变换**（缩放%/旋转°，负缩放=翻转）----
     // 无「应用」按钮：改动任一 spin 即直接下发（见下方 valueChanged 连接）；keyboardTracking 关闭，
     // 键入时不逐字符触发（回车/失焦或点箭头才更新），避免中间态反复变换。
-    transformGroup_ = new QGroupBox(this);
-    i18n::bindTitle(retranslator_, transformGroup_, IDC_GT(label, kTransformGroupBox));
+    transformGroup_ = makeGroupBox(retranslator_, this, IDC_GT(label, kTransformGroupBox));
     auto* tf = new QFormLayout(transformGroup_);
     tf->setSpacing(nums::panels::kPanelSpacingPx);
-    scaleXSpin_ = new QSpinBox(transformGroup_);
-    scaleXSpin_->setRange(-nums::model::kAnnoScalePercentLimit, nums::model::kAnnoScalePercentLimit);   // 含负：忠实反映翻转与大幅缩放
+    scaleXSpin_ = makeSpin(transformGroup_, -nums::model::kAnnoScalePercentLimit, nums::model::kAnnoScalePercentLimit,
+                           QStringLiteral(" %"));   // 含负：忠实反映翻转与大幅缩放
     scaleXSpin_->setValue(100);
-    scaleXSpin_->setSuffix(QStringLiteral(" %"));
     scaleXSpin_->setKeyboardTracking(false);
     i18n::bindToolTip(retranslator_, scaleXSpin_, IDC_GT(tooltip, kScaleXSpin));
     i18n::bindFormRow(retranslator_, tf, scaleXSpin_, IDC_GT(label, kScaleXFieldLabel));
-    scaleYSpin_ = new QSpinBox(transformGroup_);
-    scaleYSpin_->setRange(-nums::model::kAnnoScalePercentLimit, nums::model::kAnnoScalePercentLimit);
+    scaleYSpin_ = makeSpin(transformGroup_, -nums::model::kAnnoScalePercentLimit, nums::model::kAnnoScalePercentLimit,
+                           QStringLiteral(" %"));
     scaleYSpin_->setValue(100);
-    scaleYSpin_->setSuffix(QStringLiteral(" %"));
     scaleYSpin_->setKeyboardTracking(false);
     i18n::bindToolTip(retranslator_, scaleYSpin_, IDC_GT(tooltip, kScaleYSpin));
     i18n::bindFormRow(retranslator_, tf, scaleYSpin_, IDC_GT(label, kScaleYFieldLabel));
-    rotateSpin_ = new QSpinBox(transformGroup_);
-    rotateSpin_->setRange(-nums::model::kAnnoRotateDegLimit, nums::model::kAnnoRotateDegLimit);   // 宽区间：容纳多次旋转的累积角度
+    rotateSpin_ = makeSpin(transformGroup_, -nums::model::kAnnoRotateDegLimit, nums::model::kAnnoRotateDegLimit,
+                           QStringLiteral(" °"));   // 宽区间：容纳多次旋转的累积角度
     rotateSpin_->setValue(0);
-    rotateSpin_->setSuffix(QStringLiteral(" °"));
     rotateSpin_->setKeyboardTracking(false);
     i18n::bindToolTip(retranslator_, rotateSpin_, IDC_GT(tooltip, kRotateSpin));
     i18n::bindFormRow(retranslator_, tf, rotateSpin_, IDC_GT(label, kRotateFieldLabel));
@@ -168,22 +138,17 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     // ---- 叠放次序区（仅对选中标注生效）：上移一层 / 下移一层 / 置于顶层 / 置于底层 ----
     // 层序属“选中项属性”，故归位于属性页（而非菜单）；无选中时整区置灰。
     // 列表下标即 z 序（大＝顶，见 Core hitTest/burnIn），本区仅发意图、真正重排在 AnnotationBridge→Core moveAnnotation。
-    stackGroup_ = new QGroupBox(this);
-    i18n::bindTitle(retranslator_, stackGroup_, IDC_GT(label, kStackOrderGroupBox));
+    stackGroup_ = makeGroupBox(retranslator_, this, IDC_GT(label, kStackOrderGroupBox));
     // 2×2 网格（上移/下移 第一行，置顶/置底 第二行），按钮文字较短时单行四钮会挤，改两行更清晰。
     auto* stackGrid = new QGridLayout(stackGroup_);
     stackGrid->setSpacing(nums::panels::kPanelSpacingPx);
-    raiseBtn_ = new QPushButton(stackGroup_);
-    i18n::bindButton(retranslator_, raiseBtn_, IDC_GT(label, kRaiseOneButton));
+    raiseBtn_ = makeButton(retranslator_, stackGroup_, IDC_GT(label, kRaiseOneButton));
     i18n::bindToolTip(retranslator_, raiseBtn_, IDC_GT(tooltip, kStackRaiseBtn));
-    lowerBtn_ = new QPushButton(stackGroup_);
-    i18n::bindButton(retranslator_, lowerBtn_, IDC_GT(label, kLowerOneButton));
+    lowerBtn_ = makeButton(retranslator_, stackGroup_, IDC_GT(label, kLowerOneButton));
     i18n::bindToolTip(retranslator_, lowerBtn_, IDC_GT(tooltip, kStackLowerBtn));
-    toFrontBtn_ = new QPushButton(stackGroup_);
-    i18n::bindButton(retranslator_, toFrontBtn_, IDC_GT(label, kToFrontButton));
+    toFrontBtn_ = makeButton(retranslator_, stackGroup_, IDC_GT(label, kToFrontButton));
     i18n::bindToolTip(retranslator_, toFrontBtn_, IDC_GT(tooltip, kStackToFrontBtn));
-    toBackBtn_ = new QPushButton(stackGroup_);
-    i18n::bindButton(retranslator_, toBackBtn_, IDC_GT(label, kToBackButton));
+    toBackBtn_ = makeButton(retranslator_, stackGroup_, IDC_GT(label, kToBackButton));
     i18n::bindToolTip(retranslator_, toBackBtn_, IDC_GT(tooltip, kStackToBackBtn));
     stackGrid->addWidget(raiseBtn_, 0, 0);
     stackGrid->addWidget(lowerBtn_, 0, 1);
@@ -194,11 +159,9 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
 
     // ---- 删除选中 / 一键清除全部标注（删除作于选中项、无选中置灰；清除作用于全体，
     //      不依赖选中，协调器弹确认后清空并保留可撤销）---- 两者并排 1×2。
-    deleteSelBtn_ = new QPushButton(this);
-    i18n::bindButton(retranslator_, deleteSelBtn_, IDC_GT(label, kDeleteSelectedAnnoButton));
+    deleteSelBtn_ = makeButton(retranslator_, this, IDC_GT(label, kDeleteSelectedAnnoButton));
     i18n::bindToolTip(retranslator_, deleteSelBtn_, IDC_GT(tooltip, kDeleteSelectedAnnoBtn));
-    clearAllBtn_ = new QPushButton(this);
-    i18n::bindButton(retranslator_, clearAllBtn_, IDC_GT(label, kClearAllAnnoButton));
+    clearAllBtn_ = makeButton(retranslator_, this, IDC_GT(label, kClearAllAnnoButton));
     i18n::bindToolTip(retranslator_, clearAllBtn_, IDC_GT(tooltip, kClearAllAnnoBtn));
     auto* delClearRow = new QHBoxLayout();
     delClearRow->setSpacing(nums::panels::kPanelSpacingPx);

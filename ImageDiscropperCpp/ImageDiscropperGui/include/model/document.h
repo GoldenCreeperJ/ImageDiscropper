@@ -72,13 +72,13 @@ public:
     explicit Document(QObject* parent = nullptr);
 
     // ---- 图像 ----
-    // 载入新图像：original_ 与 working_ 均置为 img（新图无预处理，工作图=原图），
-    // 记录路径、清空选区，发 imageChanged()。
+    // 载入新图像＝建立「含底图的图层画布」（打开图片）：img 立为 baseImage_（input 生态位，**绝不入 layers_**）、
+    //   layersActive_ 置真、恒等底图声明带白 backdrop；original_ 与 working_ 均置为 img（无预处理）。记录路径、清空选区，发 imageChanged()。
     void setImage(core::Image img, QString path);
-    // 新建语义（**非破坏性**）：以新扁平底图 flat 替换画布基座，保留图层栈/每层会话与画布级**色彩预处理**，
+    // 新建语义（**非破坏性**）：以新扁平底图 flat 替换画布基座（入 baseImage_），保留图层栈/每层会话与画布级**色彩预处理**，
     //   清空 resize 与**几何预处理**（防重放改变尺寸）；**不触碰标注**（由调用方捕获后回填）；
-    //   尺寸不变则保留框选、尺寸变化则清框选。图层态发 layersChanged（交控制器重组重放色彩预处理），
-    //   单图态发 imageChanged（工作图先置为 flat，调用方随后经重放补算色彩预处理）。
+    //   尺寸不变则保留框选、尺寸变化则清框选。恒图层画布——无图首次新建经 beginLayerCanvas 起画布（flat 作底图、绝不入
+    //   layers_），末尾恒发 layersChanged（交控制器重组重放色彩预处理产出 working_）。
     void resetBaseWith(core::Image flat, std::optional<canvas::ImageLayer> baseLayer);
     const core::Image& original() const { return original_; }
     const core::Image& working() const { return working_; }
@@ -140,15 +140,16 @@ public:
     bool baseDirtyFor(const preprocess::PreprocessPipeline& prefix) const { return preprocess_.baseDirtyFor(prefix); }
 
     // ---- 多层画布（画布层概念，引擎零改动）----
-    // 画布由「底图（input 生态位，不入 layers、无 transform）」+「叠加图片图层栈」展平得来：layersActive_ 为真时，
-    // original_ 恒为 composeCanvas(layers_, canvasW, canvasH, baseImage_) 的产物（由 PreprocessController 经
-    // EngineBridge 物化回灌），其上再叠画布级预处理（preprocess_）得 working_。底图 baseImage_ 独立保留，供重组。
-    // 单一载入图（无图层）时 layersActive_ 为假，canvasBase() 即 original_——既有链路完全不变。
+    // 建模不变式：**任何有效图像都是图层画布**——layersActive_ 恒为真（仅空文档为假）。
+    //   original_ 恒为 composeCanvas(layers_, canvasW, canvasH, fadedCanvasBase()) 的产物（PreprocessController 经
+    //   EngineBridge 物化回灌），其上再叠画布级预处理（preprocess_）得 working_。底图 baseImage_ 独立保留于 input 生态位、
+    //   **绝不入 layers_**，供重组取底。打开图片≡新建画布[白底+原生附图]：底图立为 baseImage_、叠加层栈恒空直至用户加层。
+    // hasLayers()＝layersActive_（是否图层画布）：有图即真（底图可选中路经此恒开）；仅空文档为假。
     bool hasLayers() const { return layersActive_; }
     const std::vector<canvas::ImageLayer>& layerStack() const { return layers_; }
     int canvasWidth() const { return canvasWidth_; }
     int canvasHeight() const { return canvasHeight_; }
-    // 画布底图（input 生态位）：图层画布态返回独立保留的 baseImage_，单图态返回 original_。供控制器 composeCanvas 取底。
+    // 画布底图（input 生态位）：图层画布态（有图）返回独立保留的 baseImage_，空文档兜底返回 original_。供控制器 composeCanvas 取底。
     const core::Image& canvasBase() const { return layersActive_ ? baseImage_ : original_; }
     // 画布底图声明（同构 canvas::ImageLayer）：可空＝无生成底图（外部文件图 / 纯色底）。随 §7 generate 段往返。
     const std::optional<canvas::ImageLayer>& baseLayer() const { return baseLayer_; }
@@ -182,7 +183,9 @@ public:
     bool baseSelected() const { return baseSelected_; }
     void selectBase(bool on);   // 置真时清 selectedLayerId_；发 changed()（切换预处理当前目标）。
     // 底图色彩预处理声明态（恒不含几何/resize）：供共享预处理面板按目标驱动（activeSession 路由到 baseSession_）。
-    //   updateBasePreprocess 只留色彩步、发 layersChanged（交控制器以 fadedCanvasBase 重组预览）；底图色彩预处理仅图层态生效。
+    //   updateBasePreprocess 只留色彩步、发 layersChanged（交控制器以 fadedCanvasBase 重组预览）；底图色彩预处理仅作用底图，
+    //   恒经 fadedCanvasBase 边界施加：由 recompose 取用折进 original_，commitPipeline 再以 original_ 为基准产出 working_
+    //   （与 CLI composeBase 逐像素同序）。
     preprocess::PreprocessPipeline basePreprocess() const { return baseSession_.steps(); }
     bool updateBasePreprocess(const preprocess::PreprocessPipeline &colorSteps);   // 过滤至色彩步后写 baseSession_；内容未变早退返回 false。
 
@@ -191,6 +194,9 @@ public:
     void selectLayer(std::optional<int> id);            // 设选中态并发 changed（清 baseSelected_；切换预处理当前目标）
     const canvas::ImageLayer* layerById(int id) const;  // 只读取层（越界/无→nullptr）
     int layerCount() const { return static_cast<int>(layers_.size()); }
+    // 叠加图层声明态拷贝（含 decodedPixels）——保存配置打包资产时取像素用；
+    // 常规读取仍走 layerById（避免外部持引用越过不变式维护）。
+    std::vector<canvas::ImageLayer> layersSnapshot() const { return layers_; }
 
     // 预处理当前目标三元路由：选中图层→Layer；否则选中底图→Base；否则→Canvas。
     PreprocessTarget preprocessTarget() const {
@@ -206,7 +212,7 @@ public:
     const LayerSessionStore& layerSessions() const { return layerSessions_; }
 
     // ---- 图层声明态 CRUD（纯改栈、不跑像素；重算工作图由控制器接 layersChanged 触发重组）----
-    // 起一个图层画布（新建画布 / 以单图起图层编辑）：置 layersActive_、设尺寸、留存底图 base、清空旧叠加层与会话。
+    // 起一个图层画布：置 layersActive_、设尺寸、留存底图 base（入 baseImage_、绝不入 layers_）、清空旧叠加层与会话。
     // base 为空＝无底图（仅透明底）；非空＝画布基座（input 生态位，不入 layers）。画布无级背景（新画布底色已烤入 base 像素）。
     void beginLayerCanvas(int width, int height, core::Image base = {});
     int  addImageLayer(canvas::ImageLayer layer);   // 追加，分配递增 id 与置顶 zOrder；返回新 id
@@ -215,24 +221,23 @@ public:
     bool moveLayerToEdge(int id, bool toTop);       // 移至顶层（zOrder = 当前最大 +1）/ 底层（最小 −1）
     bool updateLayer(int id, const canvas::ImageLayer& layer); // 就地替换（transform/z/preprocess 编辑）
     // 图片图层「显示」开关（图层面板）：**仅影响画布预览**——纯 GUI 运行态标志（不入 §7 配置、不随存盘往返），
-    //   交 recomposeLayerCanvas 决定当前 working_ 是否叠入图片图层（隐藏时传空 layers，仅留底图）。
-    //   导出是否并入叠加层由下方「烧录」开关独立决定，二者正交。值未变则短路，否则发 layersChanged 交控制器重组预览。
+    //   纯显示切换：发 imageLayersVisibleChanged 交上层切场景图层像素/落位框可见性，**不驱动重组**（working_ 恒为全量合成）。
+    //   导出是否并入叠加层由下方「烧录」开关独立决定，二者正交。值未变则短路。
     void setImageLayersVisible(bool visible);
     bool imageLayersVisible() const { return imageLayersVisible_; }
     // 图片图层「烧录」开关（导出面板）：**仅影响导出**——导出时是否把叠加图片图层并入像素随切割。
     // 纯 GUI 运行期标志（对标 AnnotationBridge::burnInEnabled），不入 §7 配置、不随存盘往返，默认开。
     bool layersBurnIn() const { return layersBurnIn_; }
     void setLayersBurnIn(const bool on) { layersBurnIn_ = on; }
-    void clearLayers();                             // 回退到无图层（单一图态）
-    // 清空全部图片图层并回退为单图底图态：original_ 还原为纯底图 baseImage_、清 layers_/会话/画布尺寸，
-    //   **保留画布级预处理声明与标注**（工作图随后由调用方重放色彩预处理）。仅图层态有效，否则早退返回 false。
+    void clearLayers();                             // 清空叠加图片图层（保留 layersActive_ 与 baseImage_）
+    // 清空全部叠加图片图层、仅留底图（图层画布与 baseImage_ 原样保留、底图绝不入栈）：
+    //   发 layersChanged 交控制器以「仅底图」重出 original_/working_。**保留画布级预处理声明与标注**。仅图层态有效，否则早退返回 false。
     bool clearAllLayersToBase();
     // 声明画布尺寸：更新 canvasW/H 并发 layersChanged（交控制器重组）。尺寸变化只清框选、不清图层/标注。
     void setCanvasSize(int width, int height);
 
-    // 确保当前处于图层画布态（供「添加图片图层」在无图层画布时也能进入图层编辑）：
-    //   已是图层画布 → 直接返回 true；有单张载入图 → 以当前原图为**画布底图**（input 生态位，不入 layers、
-    //   无 transform）进入图层编辑态后返回 true；无图 → 返回 false。
+    // 确保处于图层画布态（兜底）：有图即图层画布（layersActive_ 恒真）→ 直接返回 true；无图 → 返回 false。
+    //   「添加图片图层」入口调用它，正常路径恒命中「已图层画布」早退；保留仅为防御空文档。
     bool ensureLayerCanvas();
 
     // ---- 模式与极性 ----
@@ -246,6 +251,7 @@ public:
     L1Shape l1Shape() const { return l1Shape_; }
     void setL1Shape(L1Shape s);
     L2Sub l2Sub() const { return l2Sub_; }
+    // 切到多矩形时，当前单选区会被带入空的多矩形列表（见 adoptRectIntoMultiRects）。
     void setL2Sub(L2Sub s);
 
     // ---- 切割几何（选区矩形，原图像素坐标，左闭右开）----
@@ -264,9 +270,9 @@ public:
     void clearRects();                                              // 清空多矩形列表
 
     // ---- 导出参数（CompositionParams 的 GUI 侧映射）----
-    engine::EmitMode emitMode() const { return emitMode_; }
+    engine::ExportMode exportMode() const { return exportMode_; }
     engine::MergeLayout layout() const { return layout_; }
-    void setEmit(engine::EmitMode mode, engine::MergeLayout layout);
+    void setExport(engine::ExportMode mode, engine::MergeLayout layout);
     engine::ExportFormat format() const { return format_; }
     void setFormat(engine::ExportFormat f);
     int quality() const { return quality_; }
@@ -300,11 +306,25 @@ public:
     void setMergeOrderSnake(bool on);                        // 填充路径蛇形
 
     // ---- L3 网格参数（FR-L3.1 网格定义 / FR-L3.2 余量策略）----
-    // 网格仅由「基准点 + 单元尺寸 + 余量策略」定义；行列数由 Core 依图像边界自动推导。
+    // 每轴独立定义（Core GridAxisSpec 三态）：周期（基准点 + 单元尺寸）、分割数（等分）、比例（权重）；
+    // 行列数由 Core 依图像边界自动推导。
     const engine::GridParams& gridParams() const { return grid_; }
     void setGridOrigin(int x, int y);                  // 基准点 (x0,y0)
     void setCellSize(int w, int h);                    // 单元尺寸 (cellWidth,cellHeight)
+    // 一次性写回全部网格几何（画布拖拽基准手柄的单一入口）：同一次手势只发一次 changed，
+    // 避开「先改基准再改尺寸」两次全量重算；几何变即清空选择集（同上面两个单参入口）。
+    // 只写平铺（周期）字段——显式定义的轴（分割数/比例）由 axisX/axisY 持有，不受影响。
+    void setGridParams(int x, int y, int w, int h);
     void setRemainder(engine::RemainderPolicy p); // 余量策略 discard/keep-partial/pad
+    // ---- L3 单轴定义（按轴三形态；与 config/CLI 的 x/y 嵌套定义同一口径）----
+    // 取某轴的有效定义（未显式定义的轴由平铺字段合成周期定义，余量策略取网格级 remainder）：
+    // 直接转调 Core，GUI 不自算轴语义。
+    engine::GridAxisSpec gridAxis(bool horizontal) const;
+    // 该轴是否走周期定义（仅周期轴产生残缺单元 → 余量策略 / 画布基准手柄据此门控）。
+    bool gridAxisIsPitch(bool horizontal) const;
+    // 写回某轴定义：周期收回平铺字段（axisX/axisY 置空，避免双真值），分割数/比例写入显式定义。
+    // 非法定义（周期非正 / 份数 <1 / 权重非正）一律拒绝，保持原状。
+    void setGridAxis(bool horizontal, const engine::GridAxisSpec& spec);
     // 派生行列数（只读显示，由 PreviewController 依 Core Grid 结果回灌；不触发 changed 以免回环）。
     int gridRows() const { return gridRows_; }
     int gridCols() const { return gridCols_; }
@@ -323,7 +343,9 @@ public:
     void clearCells();                              // 清空选择集
     void toggleCell(int index);                     // 单击切换某单元（CUSTOM 下点选顺序即序号）
     void addCells(const std::vector<int>& indices); // 并入框选命中的单元（去重，保持纳入顺序）
-    void moveCellOrder(int from, int to);           // CUSTOM 拖拽调序：把 from 单元移到 to 单元原序位
+    // CUSTOM 拖拽调序：to 已选中 → 与 from 互换位次（其余单元的位次不变）；
+    // to 未选中 → to 顶替 from 的原序位（from 移出选择集），位次与数量均不变。
+    void swapCellOrder(int from, int to);
 
     // ---- L3 排序（FR-L3.5：row-major / column-major / reverse / snake / custom）----
     const engine::SequenceParams& order() const { return order_; }
@@ -338,7 +360,7 @@ public:
     // 以下为转发到 ConfigCodec 的一行包装（定义在 document.cpp，避免头文件依赖 ConfigCodec 完整类型）。
     engine::EngineConfig buildEngineConfig() const;
     engine::EngineConfig buildSerializableConfig() const;
-    void applyEngineConfig(const engine::EngineConfig& cfg);
+    void applyEngineConfig(const engine::EngineConfig& cfg, bool preserveBase = false);
 
 signals:
     // 换图：需重建预览 pixmap、重置视图。
@@ -351,8 +373,14 @@ signals:
     // 图层栈/画布尺寸声明态变更（addImageLayer/removeLayer/move/update/setCanvasSize/beginLayerCanvas）：
     // 需 PreprocessController 接此信号走 composeCanvas 重算 original_（再叠画布预处理→working_）。
     void layersChanged();
+    // 图片图层「显示」开关切换（setImageLayersVisible）：**纯显隐**，不重组工作图。
+    // 需 MainWindow 接此信号→ CanvasScene::setImageLayersVisible 切图层像素覆盖图元与落位框可见性。
+    void imageLayersVisibleChanged(bool visible);
 
 private:
+    // 进入 L2 多矩形时的选区带入：列表为空且有有效单选区时，把该矩形作为首个多矩形（见 setMode / setPolarity / setL2Sub）。
+    void adoptRectIntoMultiRects();
+
     core::Image original_;   // 原始载入图（RGBA）——始终不变，供队列重放与「重置预处理」还原
     core::Image working_;    // 切割引擎实际输入图（= steps_ 重放到 original 的物化结果，无预处理时等于原图）
     // 预处理会话态（steps_/resize_/base_/basePath_ 四件套 + geo→color 不变式/归一化/签名推演）内聚于此，
@@ -360,7 +388,7 @@ private:
     PreprocessSession preprocess_;
     QString imagePath_;
 
-    // 多层画布声明态：layersActive_ 为真时 original_ 由下方底图 + 叠加层栈展平而来。
+    // 多层画布声明态（有图即 layersActive_ 真）：original_ 由底图 baseImage_ + 叠加层栈展平而来。
     core::Image baseImage_;                                  // 画布底图像素（input 生态位；overlays 之下的基座，不随重组刷新）
     std::optional<canvas::ImageLayer> baseLayer_;            // 底图声明（同构 ImageLayer，钉住最底：图案配方或文件+落位），随 §7 generate 段往返
     std::uint8_t baseOpacity_{255};                          // 底图整体不透明度（0..255，255＝不透明）：合成边界淡出用，内存 baseLayer_ 声明恒存 255
@@ -390,7 +418,7 @@ private:
     std::uint8_t canvasOpacity_{255};                        // 画布级整体不透明度（0..255）：产出边界 applyAlpha 施加一次、影响预览与导出，随 §7 顶层 opacity 往返
     std::vector<canvas::ImageLayer> layers_;                   // 叠加图片图层数组（声明态；**不含底图**；直接以数组承载）
     bool imageLayersVisible_{true};                            // 图片图层整体显隐（纯 GUI 运行态，不入配置；对标 layersBurnIn_）
-    bool layersActive_{false};                               // 是否为图层画布（新建画布 / 载入含 layers 的配置）
+    bool layersActive_{false};                               // 是否为图层画布（有图即真；仅空文档为假）
     bool layersBurnIn_{true};                                // 图片图层「烧录」导出开关（纯 GUI 运行态，对标标注 burnInEnabled；不入配置）
     int canvasWidth_{0};                                     // 声明画布宽（layersActive_ 下有效）
     int canvasHeight_{0};                                    // 声明画布高
@@ -407,7 +435,7 @@ private:
     bool hasRect_{false};
     std::vector<engine::RectRegion> rects_;  // L2 多矩形并集列表（其余子功能恒空）
 
-    engine::EmitMode emitMode_{engine::EmitMode::Merged};
+    engine::ExportMode exportMode_{engine::ExportMode::Merged};
     engine::MergeLayout layout_{engine::MergeLayout::Collapse};
     engine::ExportFormat format_{engine::ExportFormat::Png};
     int quality_{nums::model::kDefaultExportQualityPercent};   // 出厂默认转引 Core（与导出面板 range 同源）。

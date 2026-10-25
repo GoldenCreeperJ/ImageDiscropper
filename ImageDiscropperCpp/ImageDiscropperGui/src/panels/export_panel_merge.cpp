@@ -8,7 +8,6 @@
 
 #include <QCheckBox>
 #include <QColor>
-#include <QColorDialog>
 #include <QComboBox>
 #include <QGroupBox>
 #include <QLabel>
@@ -20,6 +19,8 @@
 
 #include "engine/engine.h"
 #include "model/document.h"
+#include "util/color_picker.h"
+#include "util/coord_spin.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 
@@ -37,31 +38,13 @@ void ExportPanel::onMergeCellEdited() const {
     updateRearrangeWarning();
 }
 
-// 点击填充色按钮 → 弹带 Alpha 的取色对话框，写回 Document 并刷新色块。
-// 说明：因需 Alpha 通道，Qt 在 Windows 无法使用原生取色框而回退到自带的固定尺寸
-//       对话框 QColorDialogClassWindow（min==max）。若不显式设定初始 geometry，Qt 会以一个
-//       默认小尺寸（如 180x45）初始化，show 时被 Windows 强制夹到固定最小尺寸，刷出大量
-//       "QWindowsWindow::setGeometry: Unable to set geometry" 噪声告警。故：以顶层窗口为父 +
-//       DontUseNativeDialog，并在 exec 前显式给定一个 >= 对话框最小尺寸的初始 geometry（取自
-//       对话框自身 sizeHint，随 DPI 自适应、居中到父窗口），从源头规避该告警。
+// 点击填充色按钮 → 弹带 Alpha 的取色对话框（非原生框装配与 setGeometry 噪声规避见 util/color_picker.h），
+// 写回 Document 并刷新色块。
 void ExportPanel::onPadColorClicked() const {
     if (!doc_) return;
     const core::Color cur = doc_->padColor();
-    const QColor init(cur.r, cur.g, cur.b, cur.a);
-    QColorDialog dlg(init, window());                 // 以顶层窗口为父，便于居中且不以窄面板推导初始位置。
-    dlg.setWindowTitle(IDC_GTR(label, kDlgTitlePickPadColor));
-    dlg.setOption(QColorDialog::ShowAlphaChannel, true);
-    dlg.setOption(QColorDialog::DontUseNativeDialog, true); // Alpha 需求下本就走非原生，显式声明意图。
-    // 关键：显式设定初始 geometry（>= 固定最小尺寸、居中到父窗口），避免默认小尺寸被 Windows 夹取而刷 setGeometry 告警。
-    const QSize dlgSz = dlg.minimumSizeHint().expandedTo(dlg.sizeHint());
-    QPoint dlgPos(80, 80);
-    if (const QWidget* pw = dlg.parentWidget()) {
-        const QRect pg = pw->window()->geometry();       // 顶层窗口 geometry 为全局屏幕坐标。
-        dlgPos = pg.center() - QPoint(dlgSz.width() / 2, dlgSz.height() / 2);
-    }
-    dlg.setGeometry(dlgPos.x(), dlgPos.y(), dlgSz.width(), dlgSz.height());
-    if (dlg.exec() != QDialog::Accepted) return;      // 用户取消。
-    const QColor picked = dlg.currentColor();
+    QColor picked(cur.r, cur.g, cur.b, cur.a);   // 当前色作初值传入，确认时就地取回。
+    if (!pickColorWithAlpha(window(), picked, IDC_GTR(label, kDlgTitlePickPadColor))) return;   // 取消 / 无效色。
     doc_->setPadColor(core::Color(static_cast<std::uint8_t>(picked.red()),
                                        static_cast<std::uint8_t>(picked.green()),
                                        static_cast<std::uint8_t>(picked.blue()),
@@ -81,14 +64,24 @@ void ExportPanel::updatePadColorSwatch() const {
 }
 
 
-// 回灌重排上下文（PreviewController 依 Core 引擎结果调用）：保留块数 + 网格单元尺寸。
-void ExportPanel::setRearrangeContext(const int keptCount, const int cellW, const int cellH) {
+// 回灌重排上下文（PreviewController 依 Core 引擎结果调用）：保留块数 + 网格单元尺寸 + 块尺寸是否全等。
+// 重排准入门限（SPEC §4.3，与 Core runEngine 同一口径）：块尺寸不全等不可重排，当前选中重排则回退到
+// 坍缩（可行时）或分离。调用顺序要求：须在 setCollapsible 之后调用，两个判据都取本次 Core 结果。
+void ExportPanel::setRearrangeContext(const int keptCount, const int cellW, const int cellH,
+                                     const bool uniformBlocks) {
     keptCount_ = keptCount < 0 ? 0 : keptCount;
     cellW_ = cellW < 0 ? 0 : cellW;
     cellH_ = cellH < 0 ? 0 : cellH;
+    const bool wasAvailable = rearrangeAvailable();   // 判据含 uniformBlocks_，赋值前先取旧值。
+    uniformBlocks_ = uniformBlocks;
+    // 块尺寸不全等 → 重排不可用：回退到坍缩（可坍缩）或分离（也不可坍缩）。
+    if (!uniformBlocks_ && modeCombo_->currentIndex() == 2)
+        modeCombo_->setCurrentIndex(collapsible_ ? 1 : 0);
     // 处于重排模式且用户未手动指定 cols/rows 时，依新的保留块数自动开方填入。
     if (modeCombo_->currentIndex() == 2 && !mergeGridTouched_) applyAutoGrid();
+    refreshModeItemStates();
     updateRearrangeWarning();
+    if (rearrangeAvailable() != wasAvailable) emit rearrangeAvailableChanged(rearrangeAvailable());
 }
 
 // 「按格数自动」按钮：清除手动标记并按格数开方重算 cols/rows。

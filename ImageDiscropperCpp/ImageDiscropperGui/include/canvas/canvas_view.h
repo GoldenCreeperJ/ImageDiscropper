@@ -86,6 +86,7 @@ public:
     void gestureStrokeEnd(const QPoint& viewportPos);
     void gestureStrokeFinish();
     // 框选（橡皮筋带）：起 / 更新 / 收（释放时过滤 ≤3px 误触并映射回场景坐标）。
+    // 矩形边恒吸附整数像素（场景坐标）：绘制与上报同一取整口径，做到「看到的就是得到的像素框」。
     void gestureMarqueeBegin(const QPoint& viewportPos);
     void gestureMarqueeUpdate(const QPoint& viewportPos) const;
     void gestureMarqueeEnd(const QPoint& viewportPos);
@@ -160,6 +161,9 @@ private:
     // 按当前视口尺寸与缩放把滚动余量注入场景（横 = 视口宽×百分比、纵 = 视口高×百分比，再除以 m11 折算为场景单位）；
     // 缩放基准变化（updateHandleSize）与视口尺寸变化（resizeEvent）两个入口共用。
     void updateScrollMargins() const;
+    // 框选两点（视口坐标）→ 场景矩形，四边取整（整数像素吸附）：非整数缩放档位下视口→场景映射带小数，
+    // 不取整会框出半像素选区（面板/Core 又只能按整数像素工作）。绘制与上报共用本结果。
+    QRectF snappedMarqueeSceneRect(const QPoint& a, const QPoint& b) const;
     // 按倍数缩放并钳制到 CanvasPrefs 允许区间 [zoomMin,zoomMax]，随后刷新手柄尺寸与倍率回报。
     void zoomBy(qreal factor);
     // 把当前变换的缩放钳制回 CanvasPrefs 允许区间（供 fitToWindow 等绝对变换后收敛回区间）。

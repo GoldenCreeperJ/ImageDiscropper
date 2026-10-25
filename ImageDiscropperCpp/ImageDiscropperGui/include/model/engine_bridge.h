@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "core/image.h"
+#include "core/percent.h"     // core::PercentHints（百分比几何字段的往返记录）
 #include "engine/engine.h"
 #include "preprocess/preprocess_pipeline.h"
 
@@ -75,14 +76,18 @@ public:
     // ---- 配置文件存取（FR-L3.8 / NFR-4；委托 Core，GUI 不自实现 JSON，CONTRIBUTING.md「分层纪律」）----
     // 保存：把一次作业配置序列化为 SPEC §7 schema 的 JSON 文件（缩进美化）。
     // annotations 非空时附带标注段（SPEC §7 annotations，往返不丢）。
+    // percentHints 非空时把仍未被编辑的百分比几何字段回写为 "N%"（见 core/percent.h）。
     // path 为空或 Core 写盘失败返回 false 并给出中文错误 err（配置序列化不属 SPEC §5 引擎边界项，无对应 E 码）。
     static bool saveConfig(const QString& path, const engine::EngineConfig& cfg, QString& err,
-                           const annotation::AnnotationSet* annotations = nullptr);
+                           const annotation::AnnotationSet* annotations = nullptr,
+                           const core::PercentHints* percentHints = nullptr);
     // 加载：从 JSON 文件还原配置（SPEC §7 schema）。path 为空、读盘失败或 JSON 解析失败返回 false
     // 并给出中文错误 err；成功返回 true 并填充 out（由上层 Document::applyEngineConfig 反向映射）。
     // annotations 非空时一并还原标注段到该层（缺段＝清空；调用方决定何时并入真实层，见 ConfigController::onLoadConfig）。
+    // percentHints 非空时收集本档以百分比书写的几何字段（供后续保存原样回写）。
     static bool loadConfig(const QString& path, engine::EngineConfig& out, QString& err,
-                           annotation::AnnotationSet* annotations = nullptr);
+                           annotation::AnnotationSet* annotations = nullptr,
+                           core::PercentHints* percentHints = nullptr);
 
     // 声明式队列物化（委托 Core PreprocessPipeline::applyExec）：把整条预处理流水线以执行层融合
     // 方式应用到 src（色彩折单次 channelMap、几何折单次 D4、与逐步 apply 逐像素等价），返回结果图（不修改入参）。

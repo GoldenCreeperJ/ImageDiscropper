@@ -38,6 +38,9 @@ public:
     static void syncToolActions(const MainWindow& w);
     // 标注叠放次序启用态与「填充」勾选态回同步（AnnotationBridge::selectionChanged/changed 与 syncUi 调用）。
     static void syncAnnoSelActions(const MainWindow& w);
+    // 图层可用性门控：图片/标注图层隐藏时，画布模式入口、属性面板与整域菜单一并置灰；
+    // 当前正处被禁模式时回落框选（syncUi 与两图层显隐信号触发）。
+    static void syncLayerAvailability(const MainWindow& w);
 
 private:
     // 按菜单域拆分的静态构建 helper（定义在 main_window_menus.cpp；buildMenus 依序调用）。

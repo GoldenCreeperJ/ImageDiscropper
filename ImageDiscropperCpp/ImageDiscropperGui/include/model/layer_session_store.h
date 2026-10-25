@@ -23,7 +23,7 @@
 #include <unordered_set>
 #include <map>
 
-#include "canvas/layer.h"          // canvas::ImageLayer / LayerSourceKind（makeSig 读来源态）
+#include "canvas/layer.h"          // canvas::ImageLayer（makeSig 读来源态）
 #include "core/image.h"            // core::Image（物化位图）
 #include "generate/pattern.h"      // generate::PatternParams（配方层签名字段）
 #include "model/preprocess_session.h" // PreprocessSession（逐层声明态会话）
@@ -33,20 +33,20 @@ namespace idc::gui {
 
 // ---------------------------------------------------------------------------
 // LayerSig：图层物化签名——覆盖 materializeLayer（整层位图：组装含底色框→缩放→预处理）读取的全部输入：
-//   kind / 逐层 preprocess / 文件名 / 解码像素布局 / 配方参数 / 目标尺寸（所有 kind）/ 内层落位与图层框
+//   来态（无独立 kind 字段）由 fileName / hasRecipe / 解码像素布局派生，已由下列字段入键：逐层 preprocess / 文件名 /
+//   解码像素布局 / 配方参数 / 目标尺寸 / 内层落位与图层框
 //   （hasImagePlacement / box / fit / 锚点枢轴偏移 / boxBackdrop）。缩放与进框发生在 materializeLayer 内，
 //   整层位图依赖它们，故均入键；transform.x/y/anchor/layerPivot/opacity/zOrder 恒不入键——改落位或不透明度
 //   只重组、不重跑。解码像素以「空态 + 宽高」作内容代理。
 // ---------------------------------------------------------------------------
 struct LayerSig {
-    int kind{0};                                  // canvas::LayerSourceKind 序号
     preprocess::PreprocessPipeline pre;           // 逐层预处理（物化输入）
     std::string fileName;                         // 文件层相对名
     int decW{0};
     int decH{0};
     bool decEmpty{true};                          // 文件层解码像素布局（空态/尺寸）作内容代理
     int tw{0};
-    int th{0};                                    // 目标尺寸（所有 kind 均入键：materializeLayer 按此缩放）
+    int th{0};                                    // 目标尺寸（恒入键：materializeLayer 按此缩放）
     bool hasRecipe{false};
     std::optional<generate::PatternParams> recipe;
     // ---- 内层落位 / 图层框（materializeLayer 组装阶段读取，故入键）----
@@ -62,12 +62,12 @@ struct LayerSig {
     std::optional<generate::PatternParams> backdrop; // 图层框底色/图案
 
     bool operator==(const LayerSig& o) const {
-        if (kind != o.kind || fileName != o.fileName) return false;
+        if (fileName != o.fileName) return false;
         if (decEmpty != o.decEmpty || decW != o.decW || decH != o.decH) return false;
         if (pre != o.pre) return false;   // 预处理队列逐项相等（复用 PreprocessPipeline::operator==）
         if (hasRecipe != o.hasRecipe) return false;
         if (hasRecipe && !(recipe == o.recipe)) return false;
-        // 缩放发生在 materializeLayer 内（整层位图）→ 目标尺寸对所有 kind 均入键。
+        // 缩放发生在 materializeLayer 内（整层位图）→ 目标尺寸恒入键。
         if (tw != o.tw || th != o.th) return false;
         // 内层落位 / 图层框：仅启用两级落位时参与（决定组装后的框位图）。
         if (hasPlacement != o.hasPlacement) return false;
@@ -104,7 +104,7 @@ public:
     LayerSession& ensure(int id);
     // 删某层：连带回收其会话与物化位图（removeLayer）。
     void remove(int id);
-    // 清空全部会话与位图（换图 setImage / 起新图层画布 beginLayerCanvas / 回退单图 clearLayers / 配置重载）。
+    // 清空全部会话与位图（换图 setImage / 起新图层画布 beginLayerCanvas / 清叠加层 clearLayers / 配置重载）。
     void clear();
     // 剔除不在 alive 集合内的层（会话 + 位图一并回收）：控制器每次同步后调用，防陈旧位图驻留 / id 复用误命中。
     void prune(const std::unordered_set<int>& alive);

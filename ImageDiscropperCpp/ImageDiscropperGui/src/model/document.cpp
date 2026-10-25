@@ -13,6 +13,23 @@
 #include "model/config_codec.h"
 
 namespace idc::gui {
+namespace {
+
+// 单轴定义相等（Core 的 GridAxisSpec 无 operator==；只比该形态的有效字段，多余字段不参与）。
+bool sameAxis(const engine::GridAxisSpec& a, const engine::GridAxisSpec& b) {
+    if (a.mode != b.mode) return false;
+    switch (a.mode) {
+        case engine::GridAxisMode::Pitch:
+            return a.origin == b.origin && a.cell == b.cell && a.remainder == b.remainder;
+        case engine::GridAxisMode::Count:
+            return a.count == b.count;
+        case engine::GridAxisMode::Weights:
+            return a.weights == b.weights;
+    }
+    return false;
+}
+
+} // namespace
 
 // 构造：无图像、默认 L1 + Keep。
 Document::Document(QObject* parent) : QObject(parent) {}
@@ -31,6 +48,8 @@ void Document::setMode(const engine::Tier t) {
     // 在模型层维持不变式，避免导出面板/引擎拿到非法的「非 L3 + 重排」组合。
     if (t != engine::Tier::Grid && layout_ == engine::MergeLayout::Rearrange)
         layout_ = engine::MergeLayout::Collapse;
+    // 切入 L2 且子功能为多矩形：把现有单选区带入多矩形列表（该模式不显示单选区框）。
+    if (t == engine::Tier::Erase && l2Sub_ == L2Sub::MultiRect) adoptRectIntoMultiRects();
     emit changed();
     emit modeOrPolarityChanged();
 }
@@ -47,6 +66,8 @@ void Document::setPolarity(const engine::Polarity p) {
         mode_ = p == engine::Polarity::Remove ? engine::Tier::Erase
                                                      : engine::Tier::Standard;
     }
+    // 切到 L2 且子功能为多矩形：同上，把现有单选区带入多矩形列表。
+    if (mode_ == engine::Tier::Erase && l2Sub_ == L2Sub::MultiRect) adoptRectIntoMultiRects();
     emit changed();
     emit modeOrPolarityChanged();
 }
@@ -58,11 +79,20 @@ void Document::setL1Shape(const L1Shape s) {
     emit changed();
 }
 
-// 设置 L2 子功能。
+// 设置 L2 子功能；切到多矩形时把现有单选区带入多矩形列表（见 adoptRectIntoMultiRects）。
 void Document::setL2Sub(const L2Sub s) {
     if (l2Sub_ == s) return;
     l2Sub_ = s;
+    if (s == L2Sub::MultiRect) adoptRectIntoMultiRects();
     emit changed();
+}
+
+// 进入 L2 多矩形时的选区带入：列表为空且有有效单选区时，把该矩形作为首个多矩形。
+// 该模式不显示单选区框（选区改由多矩形轮廓表示），带入后切换瞬间即有一个可拖选框及其诱导切割线。
+void Document::adoptRectIntoMultiRects() {
+    if (!rects_.empty() || !hasRect_) return;
+    if (rect_.width() <= 0 || rect_.height() <= 0) return;
+    rects_.push_back(rect_);
 }
 
 // 设置选区矩形（原图像素坐标），标记已有选区。
@@ -116,20 +146,26 @@ void Document::clearRects() {
 // 设置 L3 网格基准点（相位锚；切割线恒过该点）。
 // 网格几何一变，按序号的选择集即失效（同一序号指向不同单元），故一并清空。
 void Document::setGridOrigin(const int x, const int y) {
-    if (grid_.originX == x && grid_.originY == y) return;
-    grid_.originX = x;
-    grid_.originY = y;
-    selectedCells_.clear();
-    emit changed();
+    setGridParams(x, y, grid_.cellWidth, grid_.cellHeight);
 }
 
 // 设置 L3 单元尺寸；拒绝非正值（会让 Core Grid::build 产不出单元，E-5）。
 void Document::setCellSize(const int w, const int h) {
-    if (w <= 0 || h <= 0) return;
-    if (grid_.cellWidth == w && grid_.cellHeight == h) return;
+    setGridParams(grid_.originX, grid_.originY, w, h);
+}
+
+// 一次性设置网格全部几何参数（画布拖拽基准点/单元尺寸的唯一写回口）：拖拽中不写 Document，
+// 释放时才来一次，故两次面板编辑（setGridOrigin + setCellSize）也只产生一次重算。
+// 与两个单参入口同语义：几何变即清空按序号的选择集（序号已指向不同单元）。
+// 只写平铺（周期）字段——分割数/比例轴由 axisX/axisY 持有，手柄拖动不影响它们。
+void Document::setGridParams(const int x, const int y, const int w, const int h) {
+    if (w <= 0 || h <= 0) return;   // 非法单元尺寸拒绝：Core Grid::build 要求正尺寸（E-5）。
+    if (grid_.originX == x && grid_.originY == y && grid_.cellWidth == w && grid_.cellHeight == h) return;
+    grid_.originX = x;
+    grid_.originY = y;
     grid_.cellWidth = w;
     grid_.cellHeight = h;
-    selectedCells_.clear(); // 单元尺寸变→网格重铺，选择集序号失效。
+    selectedCells_.clear();
     emit changed();
 }
 
@@ -145,6 +181,66 @@ void Document::setRemainder(const engine::RemainderPolicy p) {
 void Document::setDerivedGridSize(const int rows, const int cols) {
     gridRows_ = rows;
     gridCols_ = cols;
+}
+
+// 取某轴的有效定义：直接转调 Core（未显式定义的轴由平铺字段合成周期定义）。
+engine::GridAxisSpec Document::gridAxis(const bool horizontal) const {
+    return engine::effectiveAxis(grid_, horizontal);
+}
+
+// 该轴是否走周期定义：axisX/axisY 为空即周期（真值在平铺字段里）。
+bool Document::gridAxisIsPitch(const bool horizontal) const {
+    return !(horizontal ? grid_.axisX : grid_.axisY).has_value();
+}
+
+// 按轴写回定义（面板「定义方式」下拉与份数/权重编辑的唯一写回口）。
+// 归一：只带该形态的有效字段（周期只认 origin/cell，份数只认 count，比例只认 weights），
+// 周期轴的余量策略取网格级 remainder——于是「平铺字段 + 网格级余量」始终是周期轴的唯一真值，
+// axisX/axisY 只承载分割数/比例，不会出现两处各说各话。
+void Document::setGridAxis(const bool horizontal, const engine::GridAxisSpec& spec) {
+    std::optional<engine::GridAxisSpec>& slot = horizontal ? grid_.axisX : grid_.axisY;
+    engine::GridAxisSpec next;
+    next.mode = spec.mode;
+    switch (spec.mode) {
+        case engine::GridAxisMode::Pitch:
+            if (spec.cell <= 0) return;   // 非正周期产不出单元（Core Grid::build 要求，E-5）。
+            next.origin = spec.origin;
+            next.cell = spec.cell;
+            next.remainder = grid_.remainder;
+            break;
+        case engine::GridAxisMode::Count:
+            if (spec.count < 1) return;   // 份数至少 1（0 份等于不出图）。
+            next.count = spec.count;
+            break;
+        case engine::GridAxisMode::Weights:
+            if (spec.weights.empty()) return;
+            for (const double w : spec.weights) {
+                if (!(w > 0.0)) return;   // 非正权重等于空出零宽格，拒绝。
+            }
+            next.weights = spec.weights;
+            break;
+    }
+
+    if (next.mode == engine::GridAxisMode::Pitch) {
+        // 回到周期：收回平铺字段（axisX/axisY 置空），本来就是周期且值未变则早退。
+        const bool unchanged = !slot.has_value() &&
+            (horizontal ? grid_.originX == next.origin && grid_.cellWidth == next.cell
+                        : grid_.originY == next.origin && grid_.cellHeight == next.cell);
+        if (unchanged) return;
+        slot.reset();
+        if (horizontal) {
+            grid_.originX = next.origin;
+            grid_.cellWidth = next.cell;
+        } else {
+            grid_.originY = next.origin;
+            grid_.cellHeight = next.cell;
+        }
+    } else {
+        if (slot.has_value() && sameAxis(*slot, next)) return;
+        slot = next;
+    }
+    selectedCells_.clear();   // 切割线变 → 按序号的选择集失效（同一序号指向不同单元）。
+    emit changed();
 }
 
 // 「转为网格模式编辑」：把当前矩形选区一键送入 L3 继续精修。
@@ -171,6 +267,10 @@ void Document::convertRectToGrid() {
     grid_.originY = src.top;
     grid_.cellWidth = src.width();
     grid_.cellHeight = src.height();
+    // 转成「基准点 + 单元尺寸」两轴周期：清掉之前可能设过的分割数/比例定义（否则它们优先于平铺字段，
+    // 用户会看不到刚送进来的网格）。
+    grid_.axisX.reset();
+    grid_.axisY.reset();
     selectedCells_.clear();                        // 进入 L3 后由用户重新点选。
     mode_ = engine::Tier::Grid;
     // L3 默认保留选中；空选择集在 Core 会推导为全选，故 keep 下保留全图（避免 remove+全选→剔除全部报 E-7）。
@@ -240,20 +340,20 @@ void Document::addCells(const std::vector<int>& indices) {
     if (modified) emit changed();
 }
 
-// Custom 拖拽调序（FR-L3.5）：把 from 单元移到 to 单元当前所在的序位。
-// selectedCells_ 的顺序即 Core 自定义输出序，故调序只是把 from 元素搬到 to 元素的原位次：
-// 先记录 to 的位次（须在移除 from 之前，否则位次会漂移），移除 from 后在该位次插入 from。
-void Document::moveCellOrder(const int from, const int to) {
+// Custom 拖拽调序（FR-L3.5）：selectedCells_ 的顺序即 Core 自定义输出序，调序只重排该序列。
+// 目标已选中 → from 与 to 互换位次（其余单元的位次不变）。
+// 目标未选中 → to 顶替 from 的原位次（from 移出选择集），选择集数量与各位次均保持不变。
+void Document::swapCellOrder(const int from, const int to) {
     if (from == to || from < 0 || to < 0) return;
-    const auto itTo = std::ranges::find(selectedCells_, to);   // to 当前位次（0-based）。
-    if (itTo == selectedCells_.end()) return;   // to 不在选择集中，无法定位调序目标。
-    int toPos = static_cast<int>(itTo - selectedCells_.begin());
     const auto itFrom = std::ranges::find(selectedCells_, from);
-    if (itFrom == selectedCells_.end()) return; // from 未选中，无需调序。
-    selectedCells_.erase(itFrom);
-    // 移除 from 后 to 的位次可能前移一位；钳制到有效范围，使 from 落在 to 原来的位次。
-    if (toPos > static_cast<int>(selectedCells_.size())) toPos = static_cast<int>(selectedCells_.size());
-    selectedCells_.insert(selectedCells_.begin() + toPos, from);
+    if (itFrom == selectedCells_.end()) return; // from 未选中，无位次可换。
+    const auto itTo = std::ranges::find(selectedCells_, to);
+    if (itTo == selectedCells_.end()) {
+        *itFrom = to;   // 目标未选中：原位替换，位次与选择集数量均不变。
+        emit changed();
+        return;
+    }
+    std::swap(*itFrom, *itTo);
     emit changed();
 }
 
@@ -279,9 +379,9 @@ void Document::setSortSnake(const bool on) {
 }
 
 // 设置导出模式与布局（分离 / 坍缩 / 重排）。
-void Document::setEmit(const engine::EmitMode mode, const engine::MergeLayout layout) {
-    if (emitMode_ == mode && layout_ == layout) return;
-    emitMode_ = mode;
+void Document::setExport(const engine::ExportMode mode, const engine::MergeLayout layout) {
+    if (exportMode_ == mode && layout_ == layout) return;
+    exportMode_ = mode;
     layout_ = layout;
     emit changed();
 }
@@ -411,8 +511,8 @@ engine::EngineConfig Document::buildSerializableConfig() const {
     return ConfigCodec::buildSerializableConfig(*this);
 }
 
-void Document::applyEngineConfig(const engine::EngineConfig& cfg) {
-    ConfigCodec::applyEngineConfig(*this, cfg);
+void Document::applyEngineConfig(const engine::EngineConfig& cfg, const bool preserveBase) {
+    ConfigCodec::applyEngineConfig(*this, cfg, preserveBase);
 }
 
 } // namespace idc::gui

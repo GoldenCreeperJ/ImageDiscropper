@@ -48,6 +48,7 @@
 #include "generate/pattern.h"   // generate::kMaxDimension：新建默认尺寸的上限护栏真相源在 Core
 #include "mobile/touch_scroll.h"   // installTouchScroll：移动端把 QScrollArea 换装触控拖滑（桌面回落鼠标）
 #include "util/gui_nums.h"
+#include "util/widget_factory.h"
 #include "util/scrollable_dialog.h"   // limitDialogToScreen：按可用几何钳对话框最大宽 / 高（小屏 / 横屏护栏）
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
@@ -83,8 +84,7 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
     auto* colorVbox = new QVBoxLayout(colorContent);
 
     // ---- 配色页 · 画布六色（写 Palette，改动即时联动重绘）----
-    auto* colorBox = new QGroupBox(colorContent);
-    i18n::bindTitle(retranslator_, colorBox, IDC_GT(label, kPaletteBoxTitle));
+    auto* colorBox = makeGroupBox(retranslator_, colorContent, IDC_GT(label, kPaletteBoxTitle));
     auto* cform = new QFormLayout(colorBox);
     // 六项语义色：按钮背景即时示色，点开取色对话框。行标签经 bindFormRow 预建 QLabel 并登记重放。
     constexpr i18n::TextRef colorRefs[6] = {
@@ -106,8 +106,7 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
     // 三项填充 alpha（0–255）：遮罩/选区填充浓度。改即写 Palette（联动重绘 + 落盘）。行标签同经 bindFormRow。
     const auto makeAlpha = [this, pal, cform](const i18n::TextRef& text, int (Palette::*getter)() const,
                                        void (Palette::*setter)(int)) {
-        auto* spin = new QSpinBox;
-        spin->setRange(0, 255);
+        auto* spin = makeSpin(nullptr, 0, 255);
         spin->setMinimumHeight(nums::dialog::kTouchFieldMinHeightPx);   // 触控下限，与移动端抽屉内控件最小高一致。
         spin->setValue((pal->*getter)());
         i18n::bindFormRow(retranslator_, cform, spin, text);
@@ -124,8 +123,7 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
     // ---- 配色页附：外观主题（写 UiPrefs，**对话框内即时 theme::apply + 全量 re-polish、不关面板**）----
     // 深浅色主题与画布六色正交（theme::apply 不触 Palette），同属「看颜色」的诉求，故并入本页而非「其他」。
     // 下拉选中即：落盘 mode 串 → theme::apply（强制 Fusion 已首次完成、重灌 palette + 递归 re-polish）→ 发 themeApplied() 供宿主兜底刷新。
-    auto* themeBox = new QGroupBox(colorContent);
-    i18n::bindTitle(retranslator_, themeBox, IDC_GT(label, kThemeBoxTitle));
+    auto* themeBox = makeGroupBox(retranslator_, colorContent, IDC_GT(label, kThemeBoxTitle));
     auto* tform = new QFormLayout(themeBox);
     themeCombo_ = new QComboBox;
     themeCombo_->setMinimumHeight(nums::dialog::kTouchFieldMinHeightPx);   // 触控下限，与色块/alpha 一致
@@ -171,8 +169,7 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
     auto* vbox = new QVBoxLayout(content);
 
     // ---- 其他页 · 画布交互（写 CanvasPrefs；手柄/缩放改动即时重算，新建尺寸仅记住下次用）----
-    auto* interBox = new QGroupBox(content);
-    i18n::bindTitle(retranslator_, interBox, IDC_GT(label, kInteractionBoxTitle));
+    auto* interBox = makeGroupBox(retranslator_, content, IDC_GT(label, kInteractionBoxTitle));
     auto* iform = new QFormLayout(interBox);
     // 一行 = 数值框 + 行标签（bindFormRow）+ 悬停说明（bindToolTip），文案均登记重放。
     const auto addSpinRow = [this, iform](QSpinBox* spin, const i18n::TextRef& field, const i18n::TextRef& tip) {
@@ -181,20 +178,16 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
         i18n::bindToolTip(retranslator_, spin, tip);
     };
     {
-        auto* s = new QSpinBox;
-        s->setRange(0, nums::app::kHandlePxMax);
+        auto* s = makeSpin(nullptr, 0, nums::app::kHandlePxMax, QStringLiteral(" px"));
         i18n::bindSpecialValue(retranslator_, s, IDC_GT(label, kAutoSpecialValue));   // 0 = 跟随平台默认（桌面 8 / 触控 12+）
-        s->setSuffix(QStringLiteral(" px"));
         s->setValue(prefs->handleScreenPx());
         connect(s, qOverload<int>(&QSpinBox::valueChanged), this, [prefs](const int v) { prefs->setHandleScreenPx(v); });
         handlePxSpin_ = s;
         addSpinRow(s, IDC_GT(label, kHandleSizeField), IDC_GT(tooltip, kHandleSizeSpin));
     }
     {
-        auto* s = new QSpinBox;
-        s->setRange(0, nums::app::kScrollMarginPercentMax);
+        auto* s = makeSpin(nullptr, 0, nums::app::kScrollMarginPercentMax, QStringLiteral(" %"));
         i18n::bindSpecialValue(retranslator_, s, IDC_GT(label, kNoMarginSpecialValue));   // 0 = 图像边缘即滚动极限（无边距观感）
-        s->setSuffix(QStringLiteral(" %"));
         s->setValue(prefs->scrollMarginPercent());
         connect(s, qOverload<int>(&QSpinBox::valueChanged), this,
                 [prefs](const int v) { prefs->setScrollMarginPercent(v); });
@@ -202,27 +195,21 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
         addSpinRow(s, IDC_GT(label, kScrollMarginField), IDC_GT(tooltip, kScrollMarginSpin));
     }
     {
-        auto* s = new QSpinBox;
-        s->setRange(nums::app::kZoomStepPercentMin, nums::app::kZoomStepPercentMax);
-        s->setSuffix(QStringLiteral(" %"));
+        auto* s = makeSpin(nullptr, nums::app::kZoomStepPercentMin, nums::app::kZoomStepPercentMax, QStringLiteral(" %"));
         s->setValue(prefs->zoomStepPercent());
         connect(s, qOverload<int>(&QSpinBox::valueChanged), this, [prefs](const int v) { prefs->setZoomStepPercent(v); });
         zoomStepSpin_ = s;
         addSpinRow(s, IDC_GT(label, kZoomStepField), IDC_GT(tooltip, kZoomStepSpin));
     }
     {
-        auto* s = new QSpinBox;
-        s->setRange(nums::app::kZoomMinPercentLower, nums::app::kZoomMinPercentUpper);
-        s->setSuffix(QStringLiteral(" %"));
+        auto* s = makeSpin(nullptr, nums::app::kZoomMinPercentLower, nums::app::kZoomMinPercentUpper, QStringLiteral(" %"));
         s->setValue(prefs->zoomMinPercent());
         connect(s, qOverload<int>(&QSpinBox::valueChanged), this, [prefs](const int v) { prefs->setZoomMinPercent(v); });
         zoomMinSpin_ = s;
         addSpinRow(s, IDC_GT(label, kZoomMinField), IDC_GT(tooltip, kZoomMinSpin));
     }
     {
-        auto* s = new QSpinBox;
-        s->setRange(nums::app::kZoomMaxPercentLower, nums::app::kZoomMaxPercentUpper);
-        s->setSuffix(QStringLiteral(" %"));
+        auto* s = makeSpin(nullptr, nums::app::kZoomMaxPercentLower, nums::app::kZoomMaxPercentUpper, QStringLiteral(" %"));
         s->setValue(prefs->zoomMaxPercent());
         connect(s, qOverload<int>(&QSpinBox::valueChanged), this, [prefs](const int v) { prefs->setZoomMaxPercent(v); });
         zoomMaxSpin_ = s;
@@ -233,18 +220,14 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
         prefs->rememberNewCanvasSize(newWidthSpin_->value(), newHeightSpin_->value());
     };
     {
-        auto* s = new QSpinBox;
-        s->setRange(1, generate::kMaxDimension);
-        s->setSuffix(QStringLiteral(" px"));
+        auto* s = makeSpin(nullptr, 1, generate::kMaxDimension, QStringLiteral(" px"));
         s->setValue(prefs->newCanvasWidth());
         connect(s, qOverload<int>(&QSpinBox::valueChanged), this, [remember](int) { remember(); });
         newWidthSpin_ = s;
         addSpinRow(s, IDC_GT(label, kNewWidthField), IDC_GT(tooltip, kNewWidthSpin));
     }
     {
-        auto* s = new QSpinBox;
-        s->setRange(1, generate::kMaxDimension);
-        s->setSuffix(QStringLiteral(" px"));
+        auto* s = makeSpin(nullptr, 1, generate::kMaxDimension, QStringLiteral(" px"));
         s->setValue(prefs->newCanvasHeight());
         connect(s, qOverload<int>(&QSpinBox::valueChanged), this, [remember](int) { remember(); });
         newHeightSpin_ = s;
@@ -253,8 +236,7 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
     // ---- 其他页 · 应用语言（写 UiPrefs，**对话框内即时热切换、不关面板**）----
     // 下拉选中即：落盘偏好 → 切全局语言 → 重放本对话框自身文案 → 发 languageApplied() 令宿主主窗原地重放。
     // 全 GUI 无工作线程，单线程切换安全；模态期间主窗在信号槽内被程序化更新（不销毁、状态无损）。
-    auto* langBox = new QGroupBox(content);
-    i18n::bindTitle(retranslator_, langBox, IDC_GT(label, kLangBoxTitle));
+    auto* langBox = makeGroupBox(retranslator_, content, IDC_GT(label, kLangBoxTitle));
     auto* lform = new QFormLayout(langBox);
     langCombo_ = new QComboBox;
     langCombo_->setMinimumHeight(nums::dialog::kTouchFieldMinHeightPx);   // 触控下限，与本页其它数值框一致
@@ -290,8 +272,7 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
     // ---- 其他页 · 默认输出文件夹（写 UiPrefs，**仅桌面**；即时落盘）----
     // 行内可手输路径 + 「浏览…」选目录；构造时回显一次已存偏好。文案经 bind 助手随语言热切换一并重放。
     // Android 导出走相册固定目录、无文件夹概念，故本项不参与（export_controller 的 Android 分支不读本值）。
-    auto* exportBox = new QGroupBox(content);
-    i18n::bindTitle(retranslator_, exportBox, IDC_GT(label, kExportDirBoxTitle));
+    auto* exportBox = makeGroupBox(retranslator_, content, IDC_GT(label, kExportDirBoxTitle));
     auto* eform = new QFormLayout(exportBox);
     auto* dirRow = new QWidget(exportBox);
     auto* dirRowLay = new QHBoxLayout(dirRow);
@@ -300,9 +281,8 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
     defaultExportDirEdit_->setMinimumHeight(nums::dialog::kTouchFieldMinHeightPx);   // 触控下限，与本页其它数值框一致
     defaultExportDirEdit_->setText(UiPrefs::instance().defaultExportDir());
     i18n::bindPlaceholder(retranslator_, defaultExportDirEdit_, IDC_GT(label, kExportDirPlaceholder));
-    auto* dirBrowseBtn = new QPushButton(dirRow);
+    auto* dirBrowseBtn = makeButton(retranslator_, dirRow, IDC_GT(label, kBrowseButton));
     dirBrowseBtn->setMinimumHeight(nums::dialog::kTouchFieldMinHeightPx);
-    i18n::bindButton(retranslator_, dirBrowseBtn, IDC_GT(label, kBrowseButton));
     dirRowLay->addWidget(defaultExportDirEdit_, 1);
     dirRowLay->addWidget(dirBrowseBtn);
     i18n::bindFormRow(retranslator_, eform, dirRow, IDC_GT(label, kExportDirField));
@@ -472,8 +452,7 @@ void AppearanceDialog::buildShortcutsTab() {
     lay->addWidget(shortcutTable_, 1);   // 表格先铺满；「全部恢复默认」按钮由下方 bottomRow 放到末尾
 
     // 「全部恢复默认」按钮移到本页末尾（表格之下）：先浏览全部命令，末了才一键复位。
-    auto* resetAllBtn = new QPushButton(page);
-    i18n::bindButton(retranslator_, resetAllBtn, IDC_GT(label, kShortcutResetAllButton));
+    auto* resetAllBtn = makeButton(retranslator_, page, IDC_GT(label, kShortcutResetAllButton));
     connect(resetAllBtn, &QPushButton::clicked, this, [this] {
         KeyBindings::instance().resetAll();
         scheduleConflictReport();   // 全量回落默认后延后扫描：默认键彼此正交，仅当与尚未回落的自定义项相撞时提示。

@@ -115,7 +115,7 @@ void MobileShell::applyOrientationLayout() {
     scroller->setMinimumWidth(0);
     scroller->setMaximumWidth(QWIDGETSIZE_MAX);
     if (landscape) {
-        // 定宽到单列内容（宽扁条实测修复，详见 src/mobile/README.md「触控精度与方向」）。
+        // 定宽到单列内容（免宽扁条观感，详见 src/mobile/README.md「触控精度与方向」）。
         if (grid) grid->activate();
         scroller->setFixedWidth(host ? host->sizeHint().width() : nums::mobile::kStripFallbackWidthPx);
         scroller->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);

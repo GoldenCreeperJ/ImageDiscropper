@@ -112,7 +112,8 @@ public:
     void addText(core::Point2D p, const std::string& text); // 在 p 处添加文字标注
 
     // ---- 选择 / 移动 / 删除（复用 Core，不在 GUI 算几何）----
-    void selectAt(core::Point2D p);     // 命中检测并选中（委托 Core hitTest/selectAnnotation）
+    void selectAt(core::Point2D p);     // 按下选中（命中栈内保持当前选中，否则选最顶；委托 editor_.pickAt）
+    void cycleAt(core::Point2D p);      // 原地点击推进同点连击循环（重叠标注轮流选中；委托 editor_.cycleAt）
     void clearSelection();                   // 取消选中
     std::optional<std::size_t> selectedIndex() const { return editor_.selectedAnnotationIndex(); }
     // 平移选中标注：委托 Core Shape::translateWorld 就地偏移形状自身参数，**保留具体类型**

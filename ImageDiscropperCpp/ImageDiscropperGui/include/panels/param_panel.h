@@ -11,6 +11,7 @@
 #pragma once
 
 #include <QPointer>
+#include <QString>
 #include <QWidget>
 
 #include "engine/engine.h"
@@ -24,10 +25,12 @@ class QPushButton;
 class QResizeEvent;
 class QStackedWidget;
 class QListWidget;
+class QLineEdit;
 
 namespace idc::gui {
 
 class Document;
+class CoordSpinBox;   // 坐标输入框（整数像素 + "50%" 百分比输入，见 include/util/coord_spin.h）
 
 // ---------------------------------------------------------------------------
 // ParamPanel：模式相关的参数输入面板。
@@ -54,6 +57,9 @@ public:
     void updateRectListItem(int index) const;
     // L2 多矩形：把列表选中行置为 index（已是则免打扰），触发 rectSelected 与 spinbox 回填。
     void selectRectRow(int index) const;
+    // 外部（模式菜单「网格定义」）切换某轴定义方式：复用面板同一写回路径（以屏上现有数值起手，
+    // 不会留下「份数=1 / 比例=空」的空参数）。horizontal=true 为横轴。
+    void setGridAxisMode(bool horizontal, engine::GridAxisMode mode) const;
 
 signals:
     // L2 多矩形：列表选中行变化（-1 = 无），供 CanvasCoordinator 高亮画布上对应选区框。
@@ -94,6 +100,20 @@ private:
     QWidget* buildL3Page();
     // 把四个坐标 spinbox 组装为规范化矩形写回 Document。
     void applyCoordsToDocument() const;
+    // 给坐标框装百分比换算基准：横向量取画布宽、纵向量取画布高（SPEC §2.1 分方向取基准）；
+    // 无图像（尺寸为 0）时基准为 0，坐标框退化为纯整数像素输入。
+    // 入参按基类传递（成员与三形态页均以 QSpinBox* 承载），非坐标框（理论上不会出现）静默跳过。
+    void bindCoordBasis(QSpinBox* spin, bool horizontal) const;
+
+    // ---- L3 按轴三形态（周期 / 分割数 / 比例）：构建 / 回填 / 写回 ----
+    // 定义方式下拉、份数框、权重框三类编辑的统一写回口（horizontal=true 为横轴）。
+    void onGridModeChanged(bool horizontal, int index) const;
+    void onGridCountEdited(bool horizontal) const;
+    void onGridWeightsEdited(bool horizontal) const;
+    // 把 Document 中该轴的有效定义回填到控件（定义方式下拉 + 页内控件 + 上下限）。
+    void syncGridAxisToUi(bool horizontal) const;
+    // 读该轴当前编辑控件里的权重文本。
+    QString gridWeightsText(bool horizontal) const;
 
     Document* doc_{nullptr};
     QStackedWidget* stack_{nullptr};
@@ -123,11 +143,21 @@ private:
     bool syncingRectList_{false};          // 重建列表时抑制选中信号回环
 
     // L3 控件（网格定义 / 选择集 / 排序）。
+    // 网格定义按轴拆为三形态：周期页沿用 gx0_/gy0_/gcw_/gch_，分割数页与比例页各轴各一套。
+    QComboBox* gModeX_{nullptr};        // 横向定义方式（索引 = GridAxisMode）
+    QComboBox* gModeY_{nullptr};        // 纵向定义方式
+    QStackedWidget* gStackX_{nullptr};  // 横向三形态页（0 周期 / 1 分割数 / 2 比例）
+    QStackedWidget* gStackY_{nullptr};  // 纵向三形态页
     QSpinBox* gx0_{nullptr};
     QSpinBox* gy0_{nullptr};
     QSpinBox* gcw_{nullptr};
     QSpinBox* gch_{nullptr};
+    QSpinBox* gCountX_{nullptr};        // 横向份数
+    QSpinBox* gCountY_{nullptr};        // 纵向份数
+    QLineEdit* gWeightsX_{nullptr};     // 横向权重（逗号分隔，整数比或百分比）
+    QLineEdit* gWeightsY_{nullptr};     // 纵向权重
     QComboBox* gRemainder_{nullptr};
+    QLabel* gNoPitchHint_{nullptr};     // 两轴均非周期时的余量策略说明（与置灰同显）
     QLabel* gGridInfo_{nullptr};   // 派生行列数（只读，由 Core 回灌）
     QLabel* gSelInfo_{nullptr};    // 已选单元数（只读）
     QComboBox* gSort_{nullptr};

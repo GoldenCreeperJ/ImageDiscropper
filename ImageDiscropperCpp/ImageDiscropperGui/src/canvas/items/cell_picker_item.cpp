@@ -100,8 +100,9 @@ void CellPickerItem::setOverlayScale(const qreal sceneUnits) {
     if (sceneUnits > 0.0) overlayScale_ = sceneUnits;
 }
 
-// 单元编号角标子图层显隐（图层面板开关）。
-void CellPickerItem::setBadgesVisible(const bool visible) const {
+// 单元编号角标子图层显隐（图层面板开关）；隐藏时一并禁用 Custom 拖拽调序（见 mouseMoveEvent）。
+void CellPickerItem::setBadgesVisible(const bool visible) {
+    badgesVisible_ = visible;
     if (numberLayer_) numberLayer_->setVisible(visible);
 }
 
@@ -163,17 +164,18 @@ void CellPickerItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     event->accept();
 }
 
-// 左键移动：Custom 下按在已选单元上拖动→调序；否则超阈值→框选并实时重绘。
+// 左键移动：Custom 下按在已选单元上拖动（且编号角标可见）→调序；否则超阈值→框选并实时重绘。
 void CellPickerItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     if (!pressing_) { event->ignore(); return; }
     curPos_ = event->scenePos();
     const bool moved = (curPos_ - pressPos_).manhattanLength() > overlayScale_;
 
-    // Custom 下按在已选单元上拖动 → 拖拽调序（优先于框选）。
+    // Custom 下按在已选单元上拖动 → 拖拽调序（优先于框选）；落点可为任一单元（已选中则互换位次、未选中则原位替换）。
+    // 角标隐藏时禁用：自定义序无任何可见标识，拖动无法校序且无调序反馈（「隐藏图层=不可交互」）。
     const bool pressSelected =
         pressIndex_ >= 0 && static_cast<std::size_t>(pressIndex_) < selFlag_.size() &&
         selFlag_[static_cast<std::size_t>(pressIndex_)];
-    if (strategy_ == engine::SortStrategy::Custom && pressSelected && moved) {
+    if (strategy_ == engine::SortStrategy::Custom && badgesVisible_ && pressSelected && moved) {
         reorderDrag_ = true;
         reorderTarget_ = cellIndexAt(curPos_);
         update();
@@ -195,9 +197,10 @@ void CellPickerItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
         const int from = pressIndex_, to = reorderTarget_;
         reorderTarget_ = -1;
         update();
-        // 目标须为另一已选单元，方构成有效调序。
-        if (from >= 0 && to >= 0 && to != from &&
-            static_cast<std::size_t>(to) < selFlag_.size() && selFlag_[static_cast<std::size_t>(to)]) {
+        // 目标是任一命中单元即构成有效落点（已选中则互换位次、未选中则原位替换，由 Document 判位次）；
+        // 拖拽途中角标被隐藏则放弃提交（与 mouseMoveEvent 同口径）。
+        if (badgesVisible_ && from >= 0 && to >= 0 && to != from &&
+            static_cast<std::size_t>(to) < selFlag_.size()) {
             emit cellReordered(from, to);
         }
         event->accept();

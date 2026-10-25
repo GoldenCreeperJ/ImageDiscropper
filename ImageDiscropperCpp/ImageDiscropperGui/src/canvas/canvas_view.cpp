@@ -78,18 +78,14 @@ void CanvasView::zoomIn() { zoomBy(1.0 + CanvasPrefs::instance().zoomStepPercent
 void CanvasView::zoomOut() { zoomBy(1.0 / (1.0 + CanvasPrefs::instance().zoomStepPercent() / 100.0)); }
 // 复位到 1:1。
 void CanvasView::resetZoom() { resetTransform(); updateHandleSize(); }
-// 适应窗口：按「内容边界 + 外圈滚动余量（视口各边百分比）」自算倍率，而不是 fitInView(sceneRect)——
-// 场景矩形里的余量是按**当前**缩放折算的场景单位，fit 改掉倍率后 updateScrollMargins 会按新倍率重折算、
-// 场景矩形随之再变，fitInView 一步到位不了（几何上收敛但不精确）。自算可保证该档下场景恰铺满视口
-// → 不出滚动条，且内容恒只占视口的 (1－2×百分比)（与图幅无关、随视口同比）。
-// 关系式（以横向为例）：视口宽 = 内容宽×m11 + 2×百分比×视口宽 → m11 = 视口宽×(1－2×百分比)/内容宽，横纵取小。
-// 铺满的是 contentBounds（原图 ∪ 全部网格单元）而非原图：补白(Pad) 越界块属**内容**，适应窗口时也须完整可见。
+// 适应窗口：按「内容边界 contentBounds（原图 ∪ 全部网格单元）× 固定小边距」自算倍率，使内容恰基本铺满视口——
+// 与「内容边界 + 外圈滚动余量」自算不同：滚动余量是**平移范围**偏好（视口各边百分比），不该拿来限制适配缩放；
+// 否则用户把滚动余量调大时，适配会把内容挤到 (1－2×余量百分比) 乃至趋零、退化成“缩到最小尺寸”。
+// 倍率 = 视口×固定适配比例 / 内容（横纵取小），令内容最长边铺到视口的 kFitToWindowKeepRatio；clampZoom 兜到允许区间。
 void CanvasView::fitToWindow() {
     if (const QRectF content = scene_ ? scene_->contentBounds() : QRectF(); !content.isEmpty()) {
         const QSize vp = viewport()->size();
-        // 百分比接近 50% 时余量把视口吃满（因子趋 0）：抬回极小正数保证倍率恒正，宁可少留余量也不丢适配。
-        const qreal keep = std::max(nums::canvas::kFitKeepFloorRatio,
-                                    1.0 - 2.0 * CanvasPrefs::instance().scrollMarginPercent() / 100.0);
+        constexpr qreal keep = nums::canvas::kFitToWindowKeepRatio;
         const qreal target = std::min(vp.width() * keep / content.width(),
                                       vp.height() * keep / content.height());
         if (target > 0.0) {
@@ -131,6 +127,7 @@ void CanvasView::updateHandleSize() {
     if (scene_->selectionItem()) scene_->selectionItem()->setHandleSize(hs); // 手柄与抓边条带同步随缩放换算。
     scene_->setMultiRectHandleSize(hs); // L2 多矩形选区框手柄同步随缩放换算。
     scene_->setAnnotationHandleSize(hs); // 标注控制点手柄同步随缩放换算。
+    scene_->setGridHandleSize(hs); // L3 网格基准手柄（基准点 / 单元尺寸）同步随缩放换算。
     if (scene_->cellPickerItem()) scene_->cellPickerItem()->setOverlayScale(hs); // L3 点选阈值/重绘余量同步随缩放换算。
 }
 
@@ -302,7 +299,10 @@ void CanvasView::gestureStrokeEnd(const QPoint& viewportPos) {
 void CanvasView::gestureStrokeFinish() { emit annoFinish(); }
 
 // 框选起带：记录起点并显示橡皮筋（同时上报框选起始，供上层清除进行中的标注选中）。
+// 「选取边框」图层隐藏时选区整体不可交互，三种模式均不起带（L1/L2 选区框、L3 单元选择）——
+// 否则会拖出一条看不到结果、且误发 marqueeStarted 抹掉标注选中的橡皮筋；与图元级点选/拖拽同一口径。
 void CanvasView::gestureMarqueeBegin(const QPoint& viewportPos) {
+    if (scene_ && !scene_->selectionVisible()) return;
     rubber_ = true;
     rubberStart_ = viewportPos;
     emit marqueeStarted();
@@ -311,21 +311,33 @@ void CanvasView::gestureMarqueeBegin(const QPoint& viewportPos) {
     rubberBand_->show();
 }
 
-// 框选更新：以起点为一角伸缩橡皮筋。
+// 框选更新：以起点为一角伸缩橡皮筋。橡皮筋按「吸附后的场景整数矩形」回映射到视口，
+// 于是拖动中所见框边已落在像素网格上（释放时上报的也正是同一矩形，不会跳位）。
 void CanvasView::gestureMarqueeUpdate(const QPoint& viewportPos) const {
-    if (rubberBand_) rubberBand_->setGeometry(QRect(rubberStart_, viewportPos).normalized());
+    if (!rubberBand_) return;
+    rubberBand_->setGeometry(mapFromScene(snappedMarqueeSceneRect(rubberStart_, viewportPos)).boundingRect());
 }
 
-// 框选收尾：隐藏橡皮筋；过滤误触（过小框选）；把视口矩形映射回场景/原图坐标后上报。
+// 框选收尾：隐藏橡皮筋；过滤误触（视口尺寸过小）；把已吸附整数像素的场景矩形上报。
 void CanvasView::gestureMarqueeEnd(const QPoint& viewportPos) {
     rubber_ = false;
     const QRect vr = QRect(rubberStart_, viewportPos).normalized();
     if (rubberBand_) rubberBand_->hide();
     if (vr.width() > nums::canvas::kMarqueeMinSizePx && vr.height() > nums::canvas::kMarqueeMinSizePx) {
-        const QPointF tl = mapToScene(vr.topLeft());
-        const QPointF br = mapToScene(vr.bottomRight());
-        emit rubberSelect(QRectF(tl, br).normalized());
+        emit rubberSelect(snappedMarqueeSceneRect(rubberStart_, viewportPos));
     }
+}
+
+// 框选两点（视口坐标）→ 场景矩形：两端各取整（四舍五入）后规范化，使选区四边恒为整数像素。
+// 与选区拖动/缩放的整数像素口径一致（上层再钳到图内），故 L1/L2/L3 三种框选同一行为。
+QRectF CanvasView::snappedMarqueeSceneRect(const QPoint& a, const QPoint& b) const {
+    const QPointF p0 = mapToScene(a);
+    const QPointF p1 = mapToScene(b);
+    const qreal l = std::round(std::min(p0.x(), p1.x()));
+    const qreal t = std::round(std::min(p0.y(), p1.y()));
+    const qreal r = std::round(std::max(p0.x(), p1.x()));
+    const qreal btm = std::round(std::max(p0.y(), p1.y()));
+    return {l, t, r - l, btm - t};
 }
 
 // 标注选取态空白按下：纯意图转发，无任何本地状态（选中清除由上层协调器落地）。

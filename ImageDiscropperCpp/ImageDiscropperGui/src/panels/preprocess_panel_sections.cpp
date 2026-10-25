@@ -17,7 +17,10 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 
+#include "model/document.h"
+#include "util/coord_spin.h"
 #include "util/gui_nums.h"
+#include "util/widget_factory.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 
@@ -25,19 +28,24 @@ namespace idc::gui {
 
 // 画布尺寸（Resize）独立区：常驻、恒最先重放、不入队列。
 void PreprocessPanel::buildResizeSection(QVBoxLayout* root) {
-    auto* sizeBox = sizeBox_ = new QGroupBox(this);
-    i18n::bindTitle(retranslator_, sizeBox_, IDC_GT(label, kCanvasSizeBox));
+    auto* sizeBox = sizeBox_ = makeGroupBox(retranslator_, this, IDC_GT(label, kCanvasSizeBox));
     auto* sizeGrid = new QGridLayout(sizeBox);
     sizeGrid->setSpacing(nums::panels::kPanelSpacingPx);
 
-    resizeW_ = new QSpinBox(sizeBox);
-    resizeH_ = new QSpinBox(sizeBox);
-    for (QSpinBox* s : {resizeW_, resizeH_}) {
-        s->setRange(1, nums::panels::kResizeMaxEdgePx);   // 上限覆盖 8000×8000 大图并留余量。
+    resizeW_ = makeCoordSpin(sizeBox, 1, nums::panels::kResizeMaxEdgePx);
+    resizeH_ = makeCoordSpin(sizeBox, 1, nums::panels::kResizeMaxEdgePx);
+    // 上限覆盖 8000×8000 大图并留余量（范围已由 makeCoordSpin 设定）。
+    for (QSpinBox* s : {resizeW_, resizeH_})
         i18n::bindToolTip(retranslator_, s, IDC_GT(tooltip, kResizeEdgeSpin));
-    }
-    resizeKeepRatio_ = new QCheckBox(sizeBox);
-    i18n::bindButton(retranslator_, resizeKeepRatio_, IDC_GT(label, kKeepRatioCheck));
+    // 目标宽/高另接受百分比串（SPEC §2.1）：基准＝当前工作图宽/高（与「当前尺寸」回显同源，
+    // 未改尺寸时即原图尺寸），故 "100%" 恒等于框内当前值、"50%" 即缩到一半；无图则只认整数像素。
+    const auto resizeBasis = [this](const bool horizontal) {
+        if (!doc_ || !doc_->hasImage()) return 0;
+        return horizontal ? doc_->width() : doc_->height();
+    };
+    resizeW_->setBasisProvider([resizeBasis] { return resizeBasis(true); });
+    resizeH_->setBasisProvider([resizeBasis] { return resizeBasis(false); });
+    resizeKeepRatio_ = makeCheckBox(retranslator_, sizeBox, IDC_GT(label, kKeepRatioCheck));
     resizeKeepRatio_->setChecked(true);
     auto* whLabel = new QLabel(sizeBox);
     i18n::bindText(retranslator_, whLabel, IDC_GT(label, kWidthHeightLabel));
@@ -46,10 +54,8 @@ void PreprocessPanel::buildResizeSection(QVBoxLayout* root) {
     sizeGrid->addWidget(resizeH_, 0, 2);
     sizeGrid->addWidget(resizeKeepRatio_, 0, 3);
 
-    resizeScalePct_ = new QSpinBox(sizeBox);
-    resizeScalePct_->setRange(1, nums::panels::kResizeScaleMaxPercent);      // 1%..1000%。
+    resizeScalePct_ = makeSpin(sizeBox, 1, nums::panels::kResizeScaleMaxPercent, QStringLiteral("%"));   // 1%..1000%。
     resizeScalePct_->setValue(100);
-    resizeScalePct_->setSuffix(QStringLiteral("%"));
     i18n::bindToolTip(retranslator_, resizeScalePct_, IDC_GT(tooltip, kResizeScaleSpin));
     currentSizeLabel_ = new QLabel(sizeBox);
     i18n::bindText(retranslator_, currentSizeLabel_, IDC_GT(status, kCurrentSizeUnknown));   // 初值绑定；有图时 syncFromDocument 回灌
@@ -59,14 +65,11 @@ void PreprocessPanel::buildResizeSection(QVBoxLayout* root) {
     sizeGrid->addWidget(resizeScalePct_, 1, 1);
     sizeGrid->addWidget(currentSizeLabel_, 1, 2, 1, 2);
 
-    applySizeBtn_ = new QPushButton(sizeBox);
-    i18n::bindButton(retranslator_, applySizeBtn_, IDC_GT(label, kApplySizeButton));
+    applySizeBtn_ = makeButton(retranslator_, sizeBox, IDC_GT(label, kApplySizeButton));
     i18n::bindToolTip(retranslator_, applySizeBtn_, IDC_GT(tooltip, kApplySizeBtn));
-    scaleSizeBtn_ = new QPushButton(sizeBox);
-    i18n::bindButton(retranslator_, scaleSizeBtn_, IDC_GT(label, kScaleSizeButton));
+    scaleSizeBtn_ = makeButton(retranslator_, sizeBox, IDC_GT(label, kScaleSizeButton));
     i18n::bindToolTip(retranslator_, scaleSizeBtn_, IDC_GT(tooltip, kScaleSizeBtn));
-    clearSizeBtn_ = new QPushButton(sizeBox);
-    i18n::bindButton(retranslator_, clearSizeBtn_, IDC_GT(label, kClearSizeButton));
+    clearSizeBtn_ = makeButton(retranslator_, sizeBox, IDC_GT(label, kClearSizeButton));
     i18n::bindToolTip(retranslator_, clearSizeBtn_, IDC_GT(tooltip, kClearSizeBtn));
     auto* sizeBtnRow = new QHBoxLayout();
     sizeBtnRow->addWidget(applySizeBtn_);
@@ -79,8 +82,7 @@ void PreprocessPanel::buildResizeSection(QVBoxLayout* root) {
 
 // 几何操作区（旋转 / 翻转）。
 void PreprocessPanel::buildGeoSection(QVBoxLayout* root) {
-    auto* geoBox = geoBox_ = new QGroupBox(this);
-    i18n::bindTitle(retranslator_, geoBox_, IDC_GT(label, kGeoSectionBox));
+    auto* geoBox = geoBox_ = makeGroupBox(retranslator_, this, IDC_GT(label, kGeoSectionBox));
     auto* geoGrid = new QGridLayout(geoBox);
     geoGrid->setSpacing(nums::panels::kPanelSpacingPx);
 
@@ -111,11 +113,9 @@ void PreprocessPanel::buildGeoSection(QVBoxLayout* root) {
     geoGrid->addWidget(flipDir_, 2, 1, 1, 3);
 
     auto* geoBtnRow = new QHBoxLayout();
-    geoAddBtn_ = new QPushButton(geoBox);
-    i18n::bindButton(retranslator_, geoAddBtn_, IDC_GT(label, kGeoAddButton));
+    geoAddBtn_ = makeButton(retranslator_, geoBox, IDC_GT(label, kGeoAddButton));
     i18n::bindToolTip(retranslator_, geoAddBtn_, IDC_GT(tooltip, kGeoAddBtn));
-    geoReplaceBtn_ = new QPushButton(geoBox);
-    i18n::bindButton(retranslator_, geoReplaceBtn_, IDC_GT(label, kUpdateSelectedButton));
+    geoReplaceBtn_ = makeButton(retranslator_, geoBox, IDC_GT(label, kUpdateSelectedButton));
     i18n::bindToolTip(retranslator_, geoReplaceBtn_, IDC_GT(tooltip, kGeoReplaceBtn));
     geoBtnRow->addWidget(geoAddBtn_);
     geoBtnRow->addWidget(geoReplaceBtn_);
@@ -126,12 +126,9 @@ void PreprocessPanel::buildGeoSection(QVBoxLayout* root) {
     geoGrid->addWidget(geoList_, 4, 0, 1, 4);
 
     auto* geoEditRow = new QHBoxLayout();
-    geoDelBtn_ = new QPushButton(geoBox);
-    i18n::bindButton(retranslator_, geoDelBtn_, IDC_GT(label, kRemoveButton));
-    geoUpBtn_ = new QPushButton(geoBox);
-    i18n::bindButton(retranslator_, geoUpBtn_, IDC_GT(label, kMoveUpButton));
-    geoDownBtn_ = new QPushButton(geoBox);
-    i18n::bindButton(retranslator_, geoDownBtn_, IDC_GT(label, kMoveDownButton));
+    geoDelBtn_ = makeButton(retranslator_, geoBox, IDC_GT(label, kRemoveButton));
+    geoUpBtn_ = makeButton(retranslator_, geoBox, IDC_GT(label, kMoveUpButton));
+    geoDownBtn_ = makeButton(retranslator_, geoBox, IDC_GT(label, kMoveDownButton));
     geoEditRow->addWidget(geoDelBtn_);
     geoEditRow->addWidget(geoUpBtn_);
     geoEditRow->addWidget(geoDownBtn_);
@@ -142,8 +139,7 @@ void PreprocessPanel::buildGeoSection(QVBoxLayout* root) {
 
 // 色彩操作区（黑白 / 反色 / 分离）。
 void PreprocessPanel::buildColorSection(QVBoxLayout* root) {
-    auto* colorBox = new QGroupBox(this);
-    i18n::bindTitle(retranslator_, colorBox, IDC_GT(label, kColorSectionBox));
+    auto* colorBox = makeGroupBox(retranslator_, this, IDC_GT(label, kColorSectionBox));
     auto* colorGrid = new QGridLayout(colorBox);
     colorGrid->setSpacing(nums::panels::kPanelSpacingPx);
 
@@ -175,11 +171,9 @@ void PreprocessPanel::buildColorSection(QVBoxLayout* root) {
     colorGrid->addWidget(colorChanRow_, 1, 0, 1, 4);
 
     auto* colorBtnRow = new QHBoxLayout();
-    colorAddBtn_ = new QPushButton(colorBox);
-    i18n::bindButton(retranslator_, colorAddBtn_, IDC_GT(label, kColorAddButton));
+    colorAddBtn_ = makeButton(retranslator_, colorBox, IDC_GT(label, kColorAddButton));
     i18n::bindToolTip(retranslator_, colorAddBtn_, IDC_GT(tooltip, kColorAddBtn));
-    colorReplaceBtn_ = new QPushButton(colorBox);
-    i18n::bindButton(retranslator_, colorReplaceBtn_, IDC_GT(label, kUpdateSelectedButton));
+    colorReplaceBtn_ = makeButton(retranslator_, colorBox, IDC_GT(label, kUpdateSelectedButton));
     i18n::bindToolTip(retranslator_, colorReplaceBtn_, IDC_GT(tooltip, kColorReplaceBtn));
     colorBtnRow->addWidget(colorAddBtn_);
     colorBtnRow->addWidget(colorReplaceBtn_);
@@ -190,12 +184,9 @@ void PreprocessPanel::buildColorSection(QVBoxLayout* root) {
     colorGrid->addWidget(colorList_, 4, 0, 1, 4);
 
     auto* colorEditRow = new QHBoxLayout();
-    colorDelBtn_ = new QPushButton(colorBox);
-    i18n::bindButton(retranslator_, colorDelBtn_, IDC_GT(label, kRemoveButton));
-    colorUpBtn_ = new QPushButton(colorBox);
-    i18n::bindButton(retranslator_, colorUpBtn_, IDC_GT(label, kMoveUpButton));
-    colorDownBtn_ = new QPushButton(colorBox);
-    i18n::bindButton(retranslator_, colorDownBtn_, IDC_GT(label, kMoveDownButton));
+    colorDelBtn_ = makeButton(retranslator_, colorBox, IDC_GT(label, kRemoveButton));
+    colorUpBtn_ = makeButton(retranslator_, colorBox, IDC_GT(label, kMoveUpButton));
+    colorDownBtn_ = makeButton(retranslator_, colorBox, IDC_GT(label, kMoveDownButton));
     colorEditRow->addWidget(colorDelBtn_);
     colorEditRow->addWidget(colorUpBtn_);
     colorEditRow->addWidget(colorDownBtn_);

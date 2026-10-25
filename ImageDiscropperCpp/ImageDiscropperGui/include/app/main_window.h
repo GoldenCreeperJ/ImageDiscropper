@@ -212,15 +212,17 @@ private:
     QAction* aSortReverse_{nullptr};
     QAction* aSortSnake_{nullptr};
     // 文件菜单「导出设置」（输出方式/格式/烧录开关，与导出面板镜像；面板为唯一真相源）。
-    QAction* aEmitSep_{nullptr};
-    QAction* aEmitCol_{nullptr};
-    QAction* aEmitRear_{nullptr};
+    QAction* aExportSep_{nullptr};
+    QAction* aExportCol_{nullptr};
+    QAction* aExportRear_{nullptr};
     QAction* aFmtPng_{nullptr};
     QAction* aFmtJpg_{nullptr};
     QAction* aFmtWebp_{nullptr};
     QAction* aFmtBmp_{nullptr};
     QAction* aBurnAnno_{nullptr};
     QAction* aBurnLayers_{nullptr};
+    // 标注菜单整体入口：标注图层隐藏时整菜单置灰（「隐藏图层=不可交互」；显隐开关在视图菜单/图层面板，不在此菜单内）。
+    QMenu* mAnno_{nullptr};
     // 标注菜单「工具」子菜单动作：按 AnnoTool 枚举序索引（Select=0 无菜单项，由「标注选取」画布模式承担）。
     std::vector<QAction*> toolActions_;
     // 标注菜单「叠放次序」（作用选中标注；无选中时置灰）与「填充」开关（勾选态随选中/默认值回同步）。
@@ -235,6 +237,8 @@ private:
     QAction* aLayerTop_{nullptr};
     QAction* aLayerBottom_{nullptr};
     QAction* aLayerRemove_{nullptr};
+    // 图片菜单整体入口：图片图层隐藏时整菜单置灰（同上；显隐开关在视图菜单/图层面板，不在此菜单内）。
+    QMenu* mLayers_{nullptr};
     // 图层菜单「锚点/枢轴」子菜单（作用当前拾取层落位；动作按 generate::ImageAnchor 枚举序索引，勾选态随拾取层回同步）。
     QMenu* mLayerAnchor_{nullptr};
     QMenu* mLayerPivot_{nullptr};
@@ -243,6 +247,13 @@ private:
     // 模式菜单「L3 余量」子菜单（丢弃残缺/保留残缺/补白；按 RemainderPolicy 枚举序索引，仅 L3 启用）。
     QMenu* mRemainder_{nullptr};
     std::vector<QAction*> remainderActions_;
+    // 模式菜单「网格定义」两级子菜单（L3 每轴三态：周期/分割数/比例；动作按 GridAxisMode 枚举序索引）。
+    // 菜单只切形态、不填数值（基准点/单元尺寸/份数/权重仍在参数页），切换经 ParamPanel 同一入口。
+    QMenu* mGridDefine_{nullptr};
+    QMenu* mGridDefineH_{nullptr};
+    QMenu* mGridDefineV_{nullptr};
+    std::vector<QAction*> gridModeActionsH_;
+    std::vector<QAction*> gridModeActionsV_;
 
     // 编辑菜单 L3 选择集动作：提为成员以便仅在 L3 模式时启用。
     QAction* aCellsAll_{nullptr};

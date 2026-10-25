@@ -25,7 +25,10 @@ public:
     static engine::EngineConfig buildSerializableConfig(const Document& doc);
     // 反向映射（配置加载与撤销重做共用，与 buildEngineConfig 互逆）：直接改私有字段后
     // 只发一次 changed()，避免逐字段多次触发刷新；图像/source 尺寸不还原。
-    static void applyEngineConfig(Document& doc, const engine::EngineConfig& cfg);
+    // preserveBase=true（当前已有打开图）时跳过底图相关回填（baseLayer_/baseOpacity_/baseSession_/base_ 缓存）
+    //   及画布宽高（canvasWidth_/canvasHeight_），使导入配置一律不动当前底图与画布尺寸；
+    //   undo/redo 与空文档载入传 false（照常据配置底还原声明态与画布尺寸）。
+    static void applyEngineConfig(Document& doc, const engine::EngineConfig& cfg, bool preserveBase = false);
 };
 
 } // namespace idc::gui

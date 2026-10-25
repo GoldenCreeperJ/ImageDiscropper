@@ -2,7 +2,7 @@
 // 文件：panels/layer_panel.cpp
 // 作用：实现图层面板的构建与模型反向同步（见同名头文件说明）。
 // 分块依据：一个「图层」分组内按画布 z 序排列各图层显示开关（底图 / 图片图层 / 标注 / 遮罩 /
-//           网格线 / 切割线 / 选取边框 / 单元编号），一行一开关；复选框 toggled 直接转发为面板信号，
+//           网格线与切割线（同一开关）/ 选取边框 / 单元编号），一行一开关；复选框 toggled 直接转发为面板信号，
 //           槽内无任何图层 / 合成逻辑（CONTRIBUTING.md「分层纪律」）。
 // ============================================================================
 #include "panels/layer_panel.h"
@@ -13,27 +13,24 @@
 
 #include "model/document.h"
 #include "util/gui_nums.h"
+#include "util/widget_factory.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 
 namespace idc::gui {
 
-// 构建面板：底图 / 图片（单开关）/ 标注 / 遮罩 / 网格线 / 切割线 / 选取边框 / 单元编号各行显示开关。
+// 构建面板：底图 / 图片（单开关）/ 标注 / 遮罩 / 网格线与切割线（同一开关）/ 选取边框 / 单元编号各行显示开关。
 LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
-    auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx,
-                             nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx);
+    auto* root = makePanelLayout(this);
     root->setSpacing(nums::panels::kPanelSpacingPx);
 
-    auto* box = new QGroupBox(this);
-    i18n::bindTitle(retranslator_, box, IDC_GT(label, kLayerPanelBox));
+    auto* box = makeGroupBox(retranslator_, this, IDC_GT(label, kLayerPanelBox));
     auto* lay = new QVBoxLayout(box);
     lay->setSpacing(nums::panels::kPanelTightSpacingPx);
 
     // 一行一开关：建复选框（绑定文字+tooltip 入重放表、默认勾选）并归入本分组。
     const auto addToggle = [this, box, lay](const i18n::TextRef& text, const i18n::TextRef& tip) {
-        auto* cb = new QCheckBox(box);
-        i18n::bindButton(retranslator_, cb, text);
+        auto* cb = makeCheckBox(retranslator_, box, text);
         cb->setChecked(true);
         i18n::bindToolTip(retranslator_, cb, tip);
         lay->addWidget(cb);
@@ -53,11 +50,8 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     // 遮罩层：保留(绿)/删除(红)预览遮罩（正式图层项）。
     maskVisible_ = addToggle(IDC_GT(label, kShowMaskCheck), IDC_GT(tooltip, kLayerShowMask));
 
-    // 网格线层：L3 / L2 多矩形的 Core 诱导网格灰色虚线。
+    // 网格线与切割线（同一开关）：L3 为 Core 诱导网格灰色虚线，L1/L2 为选区标记边向全图贯穿的橙色切割线。
     gridVisible_ = addToggle(IDC_GT(label, kShowGridCheck), IDC_GT(tooltip, kLayerShowGrid));
-
-    // 切割线层：选区标记边向全图贯穿延伸的橙色切割线。
-    cutLineVisible_ = addToggle(IDC_GT(label, kShowCutLineCheck), IDC_GT(tooltip, kLayerShowCutLine));
 
     // 选取边框层：橙色选区矩形描边/填充/手柄（含 L2 多矩形轮廓）与 L3 单元选择高亮。
     selectionVisible_ = addToggle(IDC_GT(label, kShowSelectionCheck), IDC_GT(tooltip, kLayerShowSelection));
@@ -75,7 +69,6 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     connect(annoVisible_, &QCheckBox::toggled, this, &LayerPanel::annotationVisibilityChanged);
     connect(maskVisible_, &QCheckBox::toggled, this, &LayerPanel::maskVisibilityChanged);
     connect(gridVisible_, &QCheckBox::toggled, this, &LayerPanel::gridVisibilityChanged);
-    connect(cutLineVisible_, &QCheckBox::toggled, this, &LayerPanel::cutLineVisibilityChanged);
     connect(selectionVisible_, &QCheckBox::toggled, this, &LayerPanel::selectionVisibilityChanged);
     connect(numberVisible_, &QCheckBox::toggled, this, &LayerPanel::numberVisibilityChanged);
 }
@@ -107,62 +100,47 @@ void LayerPanel::syncFromModel() const {
     annoVisible_->blockSignals(false);
 }
 
-// 外部（视图菜单 / 右键）切换遮罩后反向同步复选框（blockSignals 防回环）。
+// 各图层显隐的「前向驱动」：视图菜单项调用本组方法切换对应复选框。
+// 关键：不 blockSignals——复选框 toggled 自然发面板意图信号，走与用户直接勾选**同一条落地链**
+//（信号 → AnnotationCoordinator / SessionController → 场景/模型），并触发菜单勾选态反向同步（setChecked
+//  不触发 triggered，无回环）。
 void LayerPanel::setMaskVisible(const bool visible) const {
+    if (!maskVisible_) return;
+    maskVisible_->setChecked(visible);
+}
+
+// 画布右键「切换预览遮罩」的反向同步：落地由调用方（PreviewController 直改场景 + refreshPreview）自理，
+// 本方法只镜像勾选态，故 blockSignals 防回环（与 setMaskVisible 的前向驱动语义相反）。
+void LayerPanel::syncMaskVisible(const bool visible) const {
     if (!maskVisible_) return;
     maskVisible_->blockSignals(true);
     maskVisible_->setChecked(visible);
     maskVisible_->blockSignals(false);
 }
 
-// 视图菜单显隐项的外部反向同步（同 setMaskVisible：复选框为唯一真相源，仅翻转勾选态）。
+// 其余图层显隐：与 setMaskVisible 同为前向驱动（发信号落地）。
 void LayerPanel::setBaseVisible(const bool visible) const {
-    if (!baseVisible_) return;
-    baseVisible_->blockSignals(true);
-    baseVisible_->setChecked(visible);
-    baseVisible_->blockSignals(false);
+    if (baseVisible_) baseVisible_->setChecked(visible);
 }
 
 void LayerPanel::setImageVisible(const bool visible) const {
-    if (!imageVisible_) return;
-    imageVisible_->blockSignals(true);
-    imageVisible_->setChecked(visible);
-    imageVisible_->blockSignals(false);
+    if (imageVisible_) imageVisible_->setChecked(visible);
 }
 
 void LayerPanel::setGridVisible(const bool visible) const {
-    if (!gridVisible_) return;
-    gridVisible_->blockSignals(true);
-    gridVisible_->setChecked(visible);
-    gridVisible_->blockSignals(false);
-}
-
-void LayerPanel::setCutLineVisible(const bool visible) const {
-    if (!cutLineVisible_) return;
-    cutLineVisible_->blockSignals(true);
-    cutLineVisible_->setChecked(visible);
-    cutLineVisible_->blockSignals(false);
+    if (gridVisible_) gridVisible_->setChecked(visible);
 }
 
 void LayerPanel::setSelectionVisible(const bool visible) const {
-    if (!selectionVisible_) return;
-    selectionVisible_->blockSignals(true);
-    selectionVisible_->setChecked(visible);
-    selectionVisible_->blockSignals(false);
+    if (selectionVisible_) selectionVisible_->setChecked(visible);
 }
 
 void LayerPanel::setNumberVisible(const bool visible) const {
-    if (!numberVisible_) return;
-    numberVisible_->blockSignals(true);
-    numberVisible_->setChecked(visible);
-    numberVisible_->blockSignals(false);
+    if (numberVisible_) numberVisible_->setChecked(visible);
 }
 
 void LayerPanel::setAnnotationVisible(const bool visible) const {
-    if (!annoVisible_) return;
-    annoVisible_->blockSignals(true);
-    annoVisible_->setChecked(visible);
-    annoVisible_->blockSignals(false);
+    if (annoVisible_) annoVisible_->setChecked(visible);
 }
 
 } // namespace idc::gui

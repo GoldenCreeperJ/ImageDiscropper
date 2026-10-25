@@ -24,6 +24,8 @@
 class QGraphicsSceneMouseEvent;
 
 #include "canvas/layer.h"
+#include "canvas/pick_cycle.h"   // 同点连击循环选层状态机（与标注拾取共用同实现）
+#include "canvas/items/draggable_canvas_item.h"   // 场景驱动平移拖拽的图元基类（拖拽句柄成员类型）
 #include "core/color.h"        // core::Color（annotationColorAt 返回值）
 #include "canvas/items/mask_layer.h"
 #include "canvas/items/grid_layer.h"
@@ -81,6 +83,9 @@ public:
     void updateGrid(const engine::Grid& grid, bool show);
     void clearGrid();
 
+    // L3 网格基准手柄（网格线层持有）的屏幕尺寸：随视图缩放换算，使手柄恒约 8 屏幕px。
+    void setGridHandleSize(qreal sceneUnits);
+
     // 视图滚动余量（场景单位，由 CanvasView 按 `视口各边百分比 / 当前缩放` 折算：横向取视口宽、纵向取视口高）：
     // 场景矩形即视图滚动条范围，不给余量则「图大于窗」时平移到图像边缘就卡住（边缘的选区手柄 / 标注 / 补白
     // 区块被视口边贴死）。余量按**视口口径**百分比生效，故**与图幅与缩放档无关**（随窗口大小同比变化，故视图尺寸
@@ -114,9 +119,15 @@ public:
     // 单元编号角标图层显隐（图层面板「单元编号」开关；角标为单元点选图元的子图层，随其一起显隐）。
     void setCellNumberVisible(bool on) const;
 
-    // L3 框选命中查询：委托单元点选图元返回与场景矩形相交的单元序号（无图元时返回空）。
+    // L3 框选命中查询：委托单元点选图元返回与场景矩形相交的单元序号（无图元 / 单元选择不可交互时返回空）。
     // 供 CanvasView 橡皮筋框选从图像外起拖（未被 picker grab）时，仍能在 L3 选中单元。
     std::vector<int> cellsIntersecting(const QRectF& sceneRect) const;
+    // 是否处于 L3 网格（updateGrid 置位、clearGrid 复位）：单元选择交互通道的存在判据。
+    bool gridActive() const { return gridActive_; }
+    // L3 单元选择交互是否可用：处于 L3 且「选取边框」图层可见。该图层隐藏时单击点选 / 拖拽框选 / Custom 调序
+    // 一起失效（对齐选区框「隐藏图层=不可交互」）——点选图元随之隐藏，本查询让 L3 框选命中查询同样收敛，
+    // 避免「点选失效、拖选照旧」两条通道门控分叉。
+    bool cellSelectionInteractive() const { return gridActive_ && selectionVisible_; }
 
     // 选区框：依 Document 的矩形显示；无选区时隐藏。
     void syncSelection(const engine::RectRegion& rect, bool hasRect) const;
@@ -140,7 +151,17 @@ public:
     // 取首个可见且命中的标注图元，依其渲染规则返回描边/填充/文字色；无命中或标注层隐藏返回 nullopt。
     std::optional<core::Color> annotationColorAt(const QPointF& scenePos) const;
     // 底图图层显隐（图层面板开关）：仅切换 base 图元可见性，不影响导出。
-    void setBaseVisible(bool on) const;
+    // 同时留存状态：状态栏取色须据此判定底图是否参与「所见」（底图隐藏时不得再读其像素）。
+    void setBaseVisible(bool on);
+    bool baseVisible() const { return baseVisible_; }
+
+    // ---- 图片图层像素（多层画布解耦渲染：独立于底图的图层像素图元）----
+    // 设置图层像素覆盖图元：preview 为「图层于透明底」的降采样 pixmap，scaleX/Y 为预览→原图放大系数，
+    // fullW/H 为原图尺寸（与底图同一坐标系，保证逐像素对齐）。preview 为空则清空覆盖。
+    void setImageLayerOverlay(const QPixmap& preview, double scaleX, double scaleY, int fullW, int fullH);
+    // 图片图层显隐（图层面板开关）：纯显示切换——切图层像素覆盖图元与各落位框可见性，不重组工作图、不影响导出。
+    void setImageLayersVisible(bool on);
+    bool imageLayersVisible() const { return imageLayersVisible_; }
 
     // ---- 图片图层落位框（多层画布，z 位于底图与标注之间）----
     // 依图层栈（zOrder 升序）与 Core layerPlacement 增量维护落位框图元（按 layerId 对齐）；
@@ -163,14 +184,16 @@ public:
     // 关→标注图元不吃鼠标（Qt::NoButton），使框选 / 拾取手势不被标注抢走（新建中的标注不受影响）。
     void setAnnotationSelectMode(bool on);
     bool annotationSelectMode() const { return annotationSelectMode_; }
+    // 标注拖拽（场景驱动）：按下链路选中后，由上层对选中图元调用 beginAnnotationDrag；
+    // 此后移动/释放由本场景转发给该图元（被按项与选中项可能不同——重叠时拖动跟随选中项）。
+    void beginAnnotationDrag(int index, const QPointF& scenePos);
 
     // ---- 其余图层显隐（图层面板开关；遵循「隐藏图层=不可交互」）----
-    // 网格线图层：门控 updateGrid 的 L3 灰色网格可见性（仅置标志，切换后由上层 refreshPreview 重建落地）。
-    void setGridVisible(bool on);
-    bool gridVisible() const { return gridVisible_; }
-    // 切割线图层：影响选区框贯穿延伸段绘制 + L2 多矩形诱导切割线（后者需上层 refreshPreview 重建）。
-    void setCutLinesVisible(bool on);
-    bool cutLinesVisible() const { return cutLinesVisible_; }
+    // 网格线 / 切割线（同一开关，按模式各司其职）：
+    //   L3 → L1 灰色网格线（重建期门控，切换后由上层 refreshPreview 落地）；
+    //   L1/L2 → 选区标记边向全图贯穿的延伸段（绘制 + 可抓）与 L2 多矩形诱导切割线。
+    void setGridLinesVisible(bool on);
+    bool gridLinesVisible() const { return gridVisible_; }
     // 选取边框图层：影响选区框矩形描边/填充/手柄绘制（隐藏同时禁用其拖拽交互）+ L3 单元选择高亮显隐。
     void setSelectionVisible(bool on);
     bool selectionVisible() const { return selectionVisible_; }
@@ -179,17 +202,27 @@ public:
     int imageHeight() const { return imgH_; }
 
 protected:
-    // 图层拾取模式的**场景级**命中与拖拽：重叠落位框不靠 z 序取最顶，而是同点续击沿叠放序
-    //   循环切换选中层（去 z 序依赖，仿 Figma）。非拾取模式 / 拾取点无候选 → 交基类走既有图元交互。
+    // 图层拾取模式的**场景级**命中与拖拽：重叠落位框不靠 z 序取最顶，而是同点**点击**（按下-释放无拖动）
+    //   沿叠放序循环切换选中层（去 z 序依赖，仿 Figma；循环态由 pickCycle_ 承担，与标注拾取共用同实现）。
+    //   按下＝resolveOnPress（保持已选层、拖动跟随选中项），无拖动释放＝advanceOnClick（沿栈推进一位）。
+    //   非拾取模式 / 拾取点无候选 → 交基类走既有图元交互。
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
     void mouseMoveEvent(QGraphicsSceneMouseEvent* event) override;
     void mouseReleaseEvent(QGraphicsSceneMouseEvent* event) override;
 
 private:
+    // L3 基准手柄：惰性创建两个手柄（网格线层持有）并接上其拖拽信号。
+    void ensureGridHandles();
+    // 拖拽中逐帧：按草稿参数交 Core Grid::build 重铺网格线（不写 Document，故无预览全量重算）。
+    void onGridHandlePreviewed(const engine::GridParams& params);
+    // 释放：恢复单元点选图元，并把最终参数一次性上交（gridParamsEdited）。
+    void onGridHandleCommitted(const engine::GridParams& params);
+    // 手柄可交互口径：L3 + 网格线图层可见 + 不在图片拾取/标注选取态（后者让位给它们的图元）。
+    // 网格线图层隐藏 → 手柄不可拖（隐藏图层=不可交互）。
+    void refreshGridHandleInteraction() const;
+
     // 收集 scenePos 处命中的图片图层 id（按 zValue 降序、顶在前；仅拾取模式下的可见图元）。
     std::vector<int> layerStackAt(const QPointF& scenePos) const;
-    // 依循环态返回本次应选中的图层 id：同点续击沿候选栈下标推进，换点则重置为最顶（下标 0）。
-    int advancePickCycle(const QPointF& scenePos, const std::vector<int>& stack);
     // 按 id 取回对应的落位框图元（无则 nullptr）。
     ImageLayerItem* imageLayerItemById(int id) const;
 
@@ -210,12 +243,17 @@ signals:
     // L3 单元点选（转发自 CellPickerItem）：单击切换 / 拖拽框选，交 CanvasCoordinator 写回 Document。
     void cellToggled(int index);
     void cellsMarqueeSelected(const std::vector<int>& indices);
-    // L3 Custom 拖拽调序（转发自 CellPickerItem）：把 fromIndex 移到 toIndex 序位。
+    // L3 Custom 拖拽调序（转发自 CellPickerItem）：已选目标与 fromIndex 互换位次、未选目标原位替换。
     void cellReordered(int fromIndex, int toIndex);
     // L2 多矩形：某个选区框被拖动/缩放（转发自对应 SelectionRectItem），index 为其在列表中的下标。
     void multiRectEdited(int index, const QRectF& sceneRect);
+    // L3 网格基准手柄释放：拖拽中只本地预览（不写 Document），释放时把最终参数一次性上交，
+    // 由 CanvasCoordinator 走 Document::setGridParams（沿用「改网格几何→清空单元选择集」既有行为）。
+    void gridParamsEdited(int originX, int originY, int cellWidth, int cellHeight);
     // 标注：某标注图元被按下（转发自 AnnotationItem），交上层用 Core hitTest 选中（场景坐标）。
     void annotationSelectRequested(const QPointF& scenePos);
+    // 标注：某图元被原地点击（按下-释放无移动，转发自 AnnotationItem），交上层推进同点连击循环。
+    void annotationClicked(const QPointF& scenePos);
     // 标注：某选中图元被拖动平移（转发自 AnnotationItem），index 为其在标注列表中的下标。
     void annotationMoved(int index, double dx, double dy);
     // 标注：某选中图元的定向包围盒手柄被拖拽（转发自 AnnotationItem），请求缩放(sx,sy)+旋转(deg)。
@@ -233,6 +271,7 @@ signals:
 
 private:
     QGraphicsPixmapItem* baseItem_{nullptr};
+    QGraphicsPixmapItem* imageLayerOverlayItem_{nullptr};   // 图片图层像素覆盖（解耦渲染：独立于底图，图层显隐只切此图元）
     MaskLayer maskLayer_;
     GridLayer gridLayer_;
     SelectionRectItem* selItem_{nullptr};
@@ -252,16 +291,20 @@ private:
     qreal viewMarginXScene_ = 0.0;   // 视图注入的左右滚动余量（场景单位，视口宽口径百分比折算而来）
     qreal viewMarginYScene_ = 0.0;   // 视图注入的上下滚动余量（场景单位，视口高口径百分比折算而来）
     QRectF gridBounds_;              // 全部网格单元区域的并集（场景坐标；无网格 / 非 L3 时为空矩形）
+    bool gridActive_{false};         // 是否处于 L3 网格（单元选择交互的 L3 判据；不随网格显隐开关变化）
+    qreal gridHandleScene_{nums::canvas::kFallbackHandleScenePx};  // 网格基准手柄边长（场景单位；视图下发前兜底）
     QVector<ImageLayerItem*> imageLayerItems_;   // 图片图层落位框（按 layerId 对齐，增量维护）
     bool imagePickMode_{false};                  // 图层拾取模式（默认关）
-    ImageLayerItem* pickDragItem_{nullptr};      // 拾取模式下正被场景驱动的拖拽落位框
-    QPointF lastPickPos_{};                      // 上次拾取命中点（循环判定：同点续击才推进）
-    std::vector<int> lastPickStack_;             // 上次命中的候选层栈（同点判定）
-    std::size_t lastPickIndex_{0};               // 上次在候选栈中的循环下标
+    bool imageLayersVisible_{true};              // 图片图层像素/落位框显隐（图层面板开关；纯显示，不驱动重组）
+    bool baseVisible_{true};                     // 底图显隐（图层面板开关；纯显示，状态栏取色据此判定）
+    DraggableCanvasItem* pickDragItem_{nullptr}; // 拾取模式下正被场景驱动的拖拽图元（图层落位框）
+    PickCycle<int> pickCycle_;                   // 同点连击循环选层状态（见 canvas/pick_cycle.h；与标注拾取共用同实现）
+    std::optional<int> pickedLayerId_;           // 当前选中的图片图层 id（按下保持选中的判定基准；由选中回灌）
     bool annotationSelectMode_{false};           // 标注选取模式（默认关＝框选态，标注不吃鼠标）
+    DraggableCanvasItem* annoDragItem_{nullptr}; // 标注选取模式下正被场景驱动的平移拖拽图元（选中项，非被按项）
     bool masksVisible_{true};
-    bool gridVisible_{true};       // 网格线图层可见性（图层面板开关）
-    bool cutLinesVisible_{true};   // 切割线图层可见性（图层面板开关）
+    bool gridVisible_{true};       // 网格线/切割线开关：L3 网格线重建门控（L1/L2 用 cutLinesVisible_，二者同置）
+    bool cutLinesVisible_{true};   // 切割线门控：选区延伸段绘制/可抓 + L2 多矩形诱导线（随同一开关同置）
     bool selectionVisible_{true};  // 选取边框图层可见性（图层面板开关）
 };
 

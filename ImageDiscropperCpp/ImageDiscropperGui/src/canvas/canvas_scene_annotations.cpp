@@ -44,6 +44,7 @@ void CanvasScene::updateAnnotations(const AnnotationBridge& model) {
         it->setAcceptedMouseButtons(annotationSelectMode_ ? Qt::LeftButton : Qt::NoButton);
         addItem(it);
         connect(it, &AnnotationItem::pressed, this, &CanvasScene::annotationSelectRequested);
+        connect(it, &AnnotationItem::clicked, this, &CanvasScene::annotationClicked);
         connect(it, &AnnotationItem::moveRequested, this, [this, it](const double dx, const double dy) {
             if (const int idx = static_cast<int>(annoItems_.indexOf(it)); idx >= 0) emit annotationMoved(idx, dx, dy);
         });
@@ -93,6 +94,15 @@ void CanvasScene::updatePendingAnnotation(const AnnotationBridge& model) {
     } else if (pendingAnnoItem_) {
         pendingAnnoItem_->setVisible(false);
     }
+}
+
+// 场景驱动的标注平移拖拽：按下链路选中后由上层对本方法发起，拖动跟随**选中项**而非被按项
+//（重叠时按下落在最顶图元，但拖动应作用于选中项）。此后移动/释放由 CanvasScene::mouseMove/ReleaseEvent 转发。
+void CanvasScene::beginAnnotationDrag(const int index, const QPointF& scenePos) {
+    if (index < 0 || static_cast<std::size_t>(index) >= annoItems_.size()) { annoDragItem_ = nullptr; return; }
+    AnnotationItem* it = annoItems_[static_cast<std::size_t>(index)];
+    annoDragItem_ = it;
+    it->beginTranslationDrag(scenePos);
 }
 
 // 标注图层显隐：只切图元可见性，不删除（保留 Core 标注数据）。

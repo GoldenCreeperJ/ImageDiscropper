@@ -37,6 +37,9 @@ public:
     void setShapeRowVisible(bool visible) const;
     // 编程式切换当前模式（勾选对应按钮）：经正常 idToggled 路径发 modeChanged（与用户点击同构）。
     void setMode(CanvasMode mode) const;
+    // 依图层可用性启停某模式按钮（「隐藏图层=不可交互」：图片拾取随图片图层、标注选取/绘制随标注层）。
+    // 按钮置灰后不再接收点击；若当前已处该模式，由调用方负责回落框选。
+    void setModeEnabled(CanvasMode mode, bool enabled) const;
 
     // 语言热切换重放：重跑本面板登记的文案闭包（分组标题/模式与工具按钮及其 tooltip）。
     void retranslate() const { retranslator_.run(); }

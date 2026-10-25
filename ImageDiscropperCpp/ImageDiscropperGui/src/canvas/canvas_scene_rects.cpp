@@ -18,6 +18,9 @@
 
 namespace idc::gui {
 
+// 仅刷新 L2 多矩形的诱导切割线（委托 GridLayer 以橙色切割线样式重画），不触碰单元点选图元——
+// 多矩形靠画布框选追加，若显示 picker 会 grab 鼠标、阻断框选，故此处不启动 picker。
+// 这些诱导线本质是各矩形十字带并集的切割线，故画为橙色（asCutLines）并受 cutLinesVisible_ 门控。
 void CanvasScene::updateMultiRectCutLines(const engine::Grid& grid, const bool show) {
     gridLayer_.rebuild(*this, grid, imgW_, imgH_, show && cutLinesVisible_, /*asCutLines=*/true);
 }
@@ -44,7 +47,7 @@ void CanvasScene::updateMultiRects(const std::vector<engine::RectRegion>& rects)
         it->setZValue(zorder::kSelection);
         it->setImageBounds(imgW_, imgH_);
         it->setHandleSize(multiHandleSize_);
-        it->setCutLinesVisible(cutLinesVisible_);   // 继承图层面板切割线显隐开关。
+        it->setCutLinesVisible(cutLinesVisible_);   // 继承图层面板网格线/切割线同一开关。
         it->setBorderVisible(selectionVisible_);    // 继承图层面板选取边框显隐开关。
         addItem(it);
         connect(it, &SelectionRectItem::rectChanged, this, [this, it](const QRectF& r) {

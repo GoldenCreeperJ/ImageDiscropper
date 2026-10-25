@@ -42,6 +42,8 @@ void CanvasCoordinator::connectSignals() {
     connect(scene_, &CanvasScene::cellToggled, this, &CanvasCoordinator::onCellToggled);
     connect(scene_, &CanvasScene::cellsMarqueeSelected, this, &CanvasCoordinator::onCellsMarquee);
     connect(scene_, &CanvasScene::cellReordered, this, &CanvasCoordinator::onCellReordered);
+    // L3 网格基准手柄释放：拖拽中场景只本地预览，此处一次性写回 Document（继承「改网格几何→清空选择集」既有行为）。
+    connect(scene_, &CanvasScene::gridParamsEdited, this, &CanvasCoordinator::onGridParamsEdited);
     connect(param_, &ParamPanel::rectSelected, this, &CanvasCoordinator::onRectSelected);
     // 画布四态互斥模式（「交互模式」面板顶部按钮）→ 落地：切视图模式 + 场景图元可交互性 + 取消前态选中。
     connect(toolPanel_, &ModeToolPanel::modeChanged, this, &CanvasCoordinator::applyCanvasMode);
@@ -52,7 +54,8 @@ void CanvasCoordinator::connectSignals() {
     });
     // 图片拾取态点画布内非图层处 → 选中底图（预处理目标切 Base）；点画布外 → 取消全部选中（回画布目标）。
     connect(scene_, &CanvasScene::basePickRequested, this, [this] {
-        doc_->selectBase(true);   // 选底图与选层互斥（selectBase 内部已清 selectedLayerId_）
+        if (doc_->hasLayers())            // 仅图层画布可拾取底图（空文档无底图；与 selectBase/activeSession 门控同口径）。
+            doc_->selectBase(true);       // 选底图与选层互斥（selectBase 内部已清 selectedLayerId_）
         updateInteractionHint();
     });
     connect(scene_, &CanvasScene::pickDeselectRequested, this, [this] {
@@ -190,10 +193,10 @@ void CanvasCoordinator::onCellsMarquee(const std::vector<int>& indices) const {
     doc_->addCells(indices);
 }
 
-// L3 Custom 拖拽调序：把 from 单元移到 to 单元原序位（重排选择集顺序即自定义输出序）。
+// L3 Custom 拖拽调序：重排选择集（目标已选 → from 与 to 互换位次；目标未选 → to 原位替换 from），即自定义输出序。
 void CanvasCoordinator::onCellReordered(const int fromIndex, const int toIndex) const {
     if (!doc_->hasImage() || doc_->mode() != engine::Tier::Grid) return;
-    doc_->moveCellOrder(fromIndex, toIndex);
+    doc_->swapCellOrder(fromIndex, toIndex);
 }
 
 // 方向键微调选区（保持尺寸，钳制到图像内）。
@@ -248,6 +251,14 @@ void CanvasCoordinator::onCellsInvert() const {
 void CanvasCoordinator::onCellsClear() const {
     if (!doc_->hasImage() || doc_->mode() != engine::Tier::Grid) return;
     doc_->clearCells();
+}
+
+// L3 网格基准手柄释放：把拖拽结果一次性写回（越界/取整已在手柄侧完成，此处只兜非 L3 误触）。
+// 继承既有行为：网格几何一变即清空单元选择集（序号已指向不同单元）。
+void CanvasCoordinator::onGridParamsEdited(const int originX, const int originY,
+                                           const int cellWidth, const int cellHeight) const {
+    if (!doc_->hasImage() || doc_->mode() != engine::Tier::Grid) return;
+    doc_->setGridParams(originX, originY, cellWidth, cellHeight);
 }
 
 } // namespace idc::gui

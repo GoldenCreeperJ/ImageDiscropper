@@ -28,6 +28,7 @@ class QSpinBox;
 namespace idc::gui {
 
 class Document;
+class CoordSpinBox;   // 落位偏移 / 目标宽高（整数像素 + "50%" 百分比输入，见 include/util/coord_spin.h）
 
 // ---------------------------------------------------------------------------
 // LayerEditPanel：图片图层增删序（作用于画布拾取层）+ 落位/画布尺寸编辑。
@@ -86,10 +87,10 @@ private:
     // 落位变换区（选中层可编辑）。
     QComboBox* anchorCombo_{nullptr};   // 画布锚点（9 向）
     QComboBox* pivotCombo_{nullptr};    // 图片枢轴（9 向）
-    QSpinBox*  posXSpin_{nullptr};
-    QSpinBox*  posYSpin_{nullptr};
-    QSpinBox*  widthSpin_{nullptr};     // 目标宽（0＝原生）
-    QSpinBox*  heightSpin_{nullptr};    // 目标高（0＝原生）
+    CoordSpinBox* posXSpin_{nullptr};
+    CoordSpinBox* posYSpin_{nullptr};
+    CoordSpinBox* widthSpin_{nullptr};  // 目标宽（0＝原生；另接受百分比，基准画布宽）
+    CoordSpinBox* heightSpin_{nullptr}; // 目标高（0＝原生；另接受百分比，基准画布高）
     QSpinBox*  opacitySpin_{nullptr};   // 不透明度（0..255，255＝不透明；合成期 alpha 乘子，灰度层亦生效）
     QPushButton* applyTransformBtn_{nullptr};
 

@@ -42,7 +42,10 @@ namespace idc::gui {
 void PreprocessController::commitPipeline(const preprocess::PreprocessPipeline& nextSteps,
                                           const std::optional<ResizeTarget>& nextResize,
                                           const QString& okMsg, const QString& busyText) {
-    if (!doc_->hasImage()) return;
+    // 「无图即跳过」须以本函数真正依赖的基准 original_ 为准，而非 working_：空文档首次建底图走
+    //   beginLayerCanvas/setBaseImage → recomposeLayerCanvas 只 setOriginalImage（不碰 working_）后调本函数产 working_，
+    //   此时 working_ 尚空——若判 hasImage()(=!working_.empty()) 会误挡回，令新建/载入配置的底图永远铺不出。
+    if (doc_->original().empty()) return;
 
     // 编辑前几何签名（对原图尺寸跑「有效管线」的纯元数据推演）。
     const auto [bWidth, bHeight, bRotQuad] = doc_->geomSig();
@@ -59,12 +62,13 @@ void PreprocessController::commitPipeline(const preprocess::PreprocessPipeline& 
     const bool baseDirty = doc_->baseDirtyFor(prefix);
 
     auto doWork = [this, &nextSteps, &nextResize, &prefix, geomChanged, baseDirty, okMsg] {
-        // 轻队列重放基准图 baseSrc：无 resize → 指向不可变 original_（零拷贝）；有 resize → base_（按需重烤复用）。
-        // base_ 仅在「确有 resize 前缀」时维护；无 resize 不克隆一份与 original_ 相同的全图（稳态省一份拷贝）。
+        // 轻队列重放基准图 baseSrc：无 resize → 指向不可变基准（零拷贝）；有 resize → base_（按需重烤复用）。
+        // base_ 仅在「确有 resize 前缀」时维护；无 resize 不克隆一份与基准相同的全图（稳态省一份拷贝）。
+        // 底图色/淡经 recomposeLayerCanvas 以 fadedCanvasBase 折进 original_（有图恒图层画布），故基准恒取 original_。
         const core::Image* baseSrc = &doc_->original();
         if (!prefix.empty()) {
             if (baseDirty) {
-                core::Image newBase = EngineBridge::applyPipeline(doc_->original(), prefix);
+                core::Image newBase = EngineBridge::applyPipeline(*baseSrc, prefix);
                 if (newBase.empty()) {
                     status_->notify(IDC_GTR(status, kPrepFailedEmpty), true);
                     return;

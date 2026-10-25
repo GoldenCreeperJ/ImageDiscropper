@@ -40,7 +40,8 @@ public:
 
     void reset();                       // 清空历史并以当前态为唯一基线（构造/换图后调用）。
     // 加载配置的中间步骤：先冲刷未落定的防抖变更，再抑制采集地应用新配置，最后压栈。
-    void recordConfigLoad(const engine::EngineConfig& cfg);
+    // preserveBase=true 时透传至 applyEngineConfig（当前已有打开图→导入配置不动底图），缺省 false。
+    void recordConfigLoad(const engine::EngineConfig& cfg, bool preserveBase = false);
     // 标注上下文判定：标注工具激活（非 Select）或存在选中标注时，Ctrl+Z/Y 路由到标注撤销/重做。
     bool annotationContextActive() const;
 

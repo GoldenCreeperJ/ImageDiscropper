@@ -17,7 +17,7 @@ namespace {
 
 // 英文目录（后半：tooltip、status、msg，与 gui_texts_detail.h 分组对应）。
 constexpr core::I18nEntry kEntriesEnDetail[] = {
-    // —— status（gui_texts.h::status 全量 104 条，与常量层同序）——
+    // —— status（gui_texts.h::status 全量 107 条，与常量层同序）——
     // 占位符 %1..%5 的**编号**是契约（formatPattern / QString::arg 按编号取参），语序可自由调整；
     // 尺寸乘号 ×、破折占位 —、度数 °、菜单符号 → 等一律逐字沿用源语言写法。
     // 导出回报（export_controller 桌面分支 + android_export_publish 相册发布）
@@ -52,11 +52,16 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"status::kConfigSaveFailed", "Failed to save the configuration: %1"},
     {"status::kConfigLoaded", "Configuration loaded: %1"},
     {"status::kConfigLoadFailed", "Failed to load the configuration: %1"},
+    {"status::kDegradedBase", ", the base image's bitmap could not be loaded (shown as a white/transparent backdrop)"},
+    {"status::kDegradedLayersFmt", ", %1 layer asset(s) could not be loaded (degraded to empty placeholders)"},
+    {"status::kConfigBundledFmt", ", layer assets bundled to %1"},
+    {"status::kConfigBundleFailed", "Failed to bundle layer assets: %1"},
     {"status::kConfigNoneSaved", "No saved configuration yet; save one from the More page first."},
     // 右侧参数面板的只读回显
     {"status::kGridDerivedInfo", "Grid: %1 row(s) × %2 column(s) · %3 cell(s) total"},
     {"status::kGridPendingInfo", "Grid: pending"},
-    {"status::kGridSelectedInfo", "Selected: %1 cell(s)"},
+    {"status::kGridSelectedInfo", "Selected: %1 cell(s)"},   // 面板初值与同步回显均取本模板（初值传 0）。
+    {"status::kGridNoPitchHint", "Both axes are divide counts / weights: the grid tiles exactly with no partial cells, so the remainder policy has no effect."},
     {"status::kRectListItem", "Rect %1: (%2,%3)-(%4,%5)"},
     {"status::kCollapseHintInit", "Collapse feasibility: draw a selection first."},
     {"status::kCollapseHintOk", "Collapse possible: the remaining blocks tile tightly into one image."},
@@ -104,8 +109,8 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"status::kStatusReady", "Ready"},
     {"status::kCoordInit", "Coord: (-, -)"},
     {"status::kCoordFmt", "Coord: (%1, %2)"},
-    {"status::kColorInit", "RGB(-,-,-)"},
-    {"status::kColorFmt", "RGB(%1,%2,%3)"},
+    {"status::kColorInit", "RGBA(-,-,-,-)"},
+    {"status::kColorFmt", "RGBA(%1,%2,%3,%4)"},
     {"status::kZoomInit", "Zoom: 100%"},
     {"status::kZoomFmt", "Zoom: %1%"},
     // 参数撤销 / 重做回报
@@ -148,7 +153,7 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"msg::kShortcutConflictBody", "Already used by \"%1\". Rebind and clear?"},
     {"msg::kShortcutResetConflictBody", "Reset to defaults left these commands sharing one key; adjust them on their rows:\n%1"},
     {"msg::kClearLayersTitle", "Clear All Layers"},
-    {"msg::kClearLayersAsk", "Clear all %1 image layer(s)? The canvas falls back to the single base image (base image, annotations and preprocess are kept)."},
+    {"msg::kClearLayersAsk", "Clear all %1 image layer(s)? Only the base image will be kept (annotations and preprocess are kept)."},
     {"msg::kResetAllTitle", "Reset All"},
     {"msg::kResetAllAsk", "Will clear: image layers (fall back to the base image), all annotations, all preprocess steps, selection.\nKept: the base image itself. Continue?"},
     {"msg::kClearAnnosTitle", "Clear All Annotations"},
@@ -190,8 +195,7 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
         "Shortcuts (mode/polarity/clear/delete, undo/redo, open/new/export, zoom) can be viewed and rebound in the\n"
         "View menu's Appearance/Interaction dialog, on the Shortcuts page (effective immediately, saved across sessions);\n"
         "they are not listed here so this text stays accurate after you rebind one.\n"
-        "Arrow-key nudging (Shift for a larger step) and Esc-to-finish-a-drawing are fixed keys, not customizable.\n\n"
-        "The full manual is README.md in the program directory."},
+        "Arrow-key nudging (Shift for a larger step) and Esc-to-finish-a-drawing are fixed keys, not customizable."},
     {"msg::kMobileHelpBody",
         "1) Load an image with Open on the tool bar, or build a canvas from scratch with New (size / background / pattern).\n"
         "2) The Mode drawer page picks Standard Extract / Reverse Remove / Grid Split and the Keep/Remove polarity; drag on the canvas to select.\n"
@@ -202,15 +206,14 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
         "7) The Export page sets the output mode / format / burn-in flags; produce the files with Export on the tool bar.\n"
         "8) More: load/save configuration, selection snap, appearance/interaction, confirm before rearrange, reset all, exit.\n\n"
         "Gestures: pinch to zoom, double-tap to fit the window, long press = right click (long press finishes a drawing; the menu can clear cut lines);\n"
-        "the Step pad replaces the arrow keys for nudging the selection.\n\n"
-        "The full manual is README.md in the program directory."},
+        "the Step pad replaces the arrow keys for nudging the selection."},
     {"msg::kAboutBody",
-        "ImageDiscropper GUI %1\nAn image cutting tool (core %2).\n"
-        "All modes share one processing path; the modes are only parameter presets."},
-    // —— tooltip（gui_texts.h::tooltip 全量 147 条，与常量层同序）——
+        "ImageDiscropper GUI %1 (core %2)\n"
+        "    -- An image region extraction / reverse removal / grid splitting tool."},
+    // —— tooltip（gui_texts.h::tooltip 全量 150 条，与常量层同序）——
     // 「」/“” 圆括号释文一律以曲引号 “ ” 呈现；× ° → 等符号逐字沿用；、。等中文标点改为 ASCII 句读。
     {"tooltip::kNewCanvas", "New blank or procedural canvas (size, background, pattern)."},
-    {"tooltip::kEmitRearrange", "Rearrange output onto a cols×rows canvas; adjust rows/cols and cell size."},
+    {"tooltip::kExportRearrange", "Rearrange output onto a cols×rows canvas; adjust rows/cols and cell size."},
     {"tooltip::kBurnAnnotation", "On export, composite the annotations into the pixels (annotations are cut along with the image)."},
     {"tooltip::kBurnImageLayers", "On export, merge in the image layers (independent from the Layers panel’s “Show”, which is preview-only)."},
     {"tooltip::kConfirmRearrange", "Confirm before export when rearrange is risky; off exports directly."},
@@ -230,7 +233,7 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"tooltip::kSortReverse", "Reverse the entire fill path (can combine with row/column-major)."},
     {"tooltip::kSortSnake", "Reverse every other row (row-major) / column (column-major)."},
     {"tooltip::kAddImageLayer", "Add an image layer to the canvas from a file."},
-    {"tooltip::kClearAllImageLayers", "Clear all image layers, reverting to the single-image base."},
+    {"tooltip::kClearAllImageLayers", "Clear all image layers, keeping only the base."},
     {"tooltip::kLayerUp", "Raise the currently picked image layer by one (toward the top)."},
     {"tooltip::kLayerDown", "Lower the currently picked image layer by one (toward the bottom)."},
     {"tooltip::kLayerRemove", "Delete the currently picked image layer."},
@@ -248,7 +251,7 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"tooltip::kMergeOrder", "Rearrange fill order: row-major or column-major."},
     {"tooltip::kMergeSnake", "Snake layout: fill every other row (row-major) or column (column-major) in reverse."},
     {"tooltip::kMergeReverse", "Reverse: fill backward starting from the last block."},
-    {"tooltip::kPadColor", "Fill color for empty slots and the remainder (transparent by default); click to choose."},
+    {"tooltip::kPadColor", "Background color for the merged canvas, pad-remainder padding (same for separate and merged export) and for flattening transparency in lossy formats (JPEG/WebP/BMP); transparent by default. Click to choose."},
     {"tooltip::kPreviewThumb", "Low-res preview of the output (illustrative; export stays at original resolution)."},
     {"tooltip::kBurnInHint", "When checked, annotations are drawn into the exported image; otherwise omitted."},
     {"tooltip::kLayersBurnInHint", "Merge image layers into pixels on export; independent of the panel’s “Show” (preview-only)."},
@@ -262,6 +265,9 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"tooltip::kCellWidthSpin", "Cell width cw: the spacing between adjacent vertical cut lines (pixels)."},
     {"tooltip::kCellHeightSpin", "Cell height ch: the spacing between adjacent horizontal cut lines (pixels)."},
     {"tooltip::kRemainderCombo", "Partial edge cells: discard, keep, or pad to full size."},
+    {"tooltip::kGridModeCombo", "How this axis is defined: period (origin + cell size) / divide count (equal parts) / weights; the two axes can each choose their own."},
+    {"tooltip::kGridCountSpin", "Parts: split this direction into equal parts (origin is always 0); the last part absorbs the rounding error and must not exceed the pixel count."},
+    {"tooltip::kGridWeightsEdit", "Weights: comma-separated positive numbers or percentages, e.g. 1,2,1 or 25%,50%,25%; only the relative ratio matters and the last part absorbs the rounding error."},
     {"tooltip::kSortCombo", "Output order: row-major / column-major / custom."},
     {"tooltip::kLayerAddImage", "Add an image layer (generated pattern or imported image); overflow is clipped at compositing."},
     {"tooltip::kLayerMoveUp", "Move the selected layer one step toward the top (more in front)."},
@@ -329,8 +335,7 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"tooltip::kLayerShowImage", "Show / hide image layers (hidden → not composited or exported)"},
     {"tooltip::kLayerShowAnno", "Show / hide the annotation layer (vector overlay, base pixels unchanged)"},
     {"tooltip::kLayerShowMask", "Show / hide the keep(green)/delete(red) preview masks (not the export)"},
-    {"tooltip::kLayerShowGrid", "Show / hide grid lines (appears with grid splitting and the multi-rect union)"},
-    {"tooltip::kLayerShowCutLine", "Show / hide the orange cut lines spanning the whole image (the extension of the selection edges)"},
+    {"tooltip::kLayerShowGrid", "Show / hide grid lines and cut lines (one switch: grid lines in Grid Split, the orange cut lines spanning the whole image in the other modes)"},
     {"tooltip::kLayerShowSelection", "Show / hide the selection border and handles; when hidden it can’t be edited"},
     {"tooltip::kLayerShowNumber", "Show / hide the cell-number badges (appears only with custom ordering)"},
     {"tooltip::kStepFactorBtn", "Toggle the step factor (equivalent to the desktop Shift large step)"},

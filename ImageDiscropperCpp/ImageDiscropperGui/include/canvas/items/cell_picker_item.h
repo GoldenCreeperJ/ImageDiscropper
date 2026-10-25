@@ -4,14 +4,15 @@
 //       依 Core Grid 的单元区域做命中测试：单击某单元发 cellToggled，拖拽框选发
 //       cellsMarqueeSelected（框内单元序号）；并把当前选择集高亮叠加在单元上（独立于极性）。
 //       Custom 排序下（FR-L3.5）额外在每个已选单元角标显示其自定义序号（点选顺序），
-//       并支持把某已选单元拖到另一已选单元上调序（发 cellReordered）。
+//       并支持把某已选单元拖到任一单元上调序/替换（发 cellReordered）：已选目标互换位次、未选目标原位替换。
 // 分块依据：
 //   - 与 SelectionRectItem 并列的第二个交互图元，但二者互斥显隐（L1/L2 用选区框、L3 用点选）；
 //     本图元只做「命中测试 + 手势翻译成信号」，不含网格几何——单元区域全部来自 Core Grid（CONTRIBUTING.md「分层纪律」）。
 //   - 选择集的集合运算（toggle / union）落在 Document；本图元不认识 Document，只发意图信号，
 //     与 CanvasView「采集交互 → 翻译 → 交上层」的定位一致。
 //   - 派生自 QGraphicsObject（而非 QGraphicsItem）以获得 Q_OBJECT 信号能力（同 SelectionRectItem）。
-// 说明：非 Custom 排序不显示角标（输出序由 Core 按行/列主序计算，网格上直观可见）。
+// 说明：非 Custom 排序不显示角标（输出序由 Core 按行/列主序计算，网格上直观可见）；
+//       「单元编号」图层隐藏时角标不绘制，Custom 拖动调序一并停用。
 // ============================================================================
 #pragma once
 
@@ -41,7 +42,8 @@ public:
     void setOverlayScale(qreal sceneUnits);
 
     // 单元编号角标子图层显隐（图层面板「单元编号」开关）；角标是本图元的子图层，随本图元一起显隐。
-    void setBadgesVisible(bool visible) const;
+    // 角标隐藏时 Custom 拖动调序一并失效：自定义序只由角标显示，隐藏后拖动既无序号可辨也无调序反馈。
+    void setBadgesVisible(bool visible);
 
     // 是否正处于拖拽框选手势中。
     bool isMarqueeing() const { return marquee_; }
@@ -59,7 +61,7 @@ signals:
     void cellToggled(int index);
     // 拖拽框选命中的单元序号集合，交上层并入 Document 选择集。
     void cellsMarqueeSelected(const std::vector<int>& indices);
-    // Custom 拖拽调序：把 fromIndex 单元移到 toIndex 单元所在的序位（交上层重排 Document 选择集）。
+    // Custom 拖拽调序：把 fromIndex 交上层重排到 toIndex 的位次（toIndex 已选中则互换位次、未选中则原位替换）。
     void cellReordered(int fromIndex, int toIndex);
 
 protected:
@@ -111,6 +113,7 @@ private:
     int pressIndex_{-1};    // 按下点命中的单元序号（无则 -1）。
     bool reorderDrag_{false}; // 已进入 Custom 拖拽调序。
     int reorderTarget_{-1};   // 调序拖拽的当前目标单元序号。
+    bool badgesVisible_{true}; // 单元编号角标是否可见（图层面板开关；隐藏时禁 Custom 拖拽调序）。
     QPointF pressPos_;      // 按下点（场景坐标）。
     QPointF curPos_;        // 当前拖拽点（场景坐标）。
 };

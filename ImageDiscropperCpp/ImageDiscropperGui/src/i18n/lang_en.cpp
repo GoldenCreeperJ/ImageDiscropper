@@ -24,7 +24,7 @@ namespace {
 
 // 英文目录（前半：menu、label，与 gui_texts_base.h 同序分块罗列，方便与常量层逐行对账）。
 constexpr core::I18nEntry kEntriesEn[] = {
-    // —— menu（gui_texts.h::menu 全量 120 条，与常量层同序）——
+    // —— menu（gui_texts.h::menu 全量 123 条，与常量层同序）——
     // 助记符一律保留原字母并沿用 `(&X)` 写法（英语下改成首字母会改到快捷键，属行为变化）。
     // 文件（main_window_menus.cpp::buildFileMenu）
     {"menu::kMenuFile", "File(&F)"},
@@ -35,9 +35,9 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"menu::kFileRecentClear", "Clear Recent Files"},
     {"menu::kFileExport", "Export(&S)"},
     {"menu::kFileExportSettings", "Export Settings"},
-    {"menu::kEmitSeparate", "Separate"},
-    {"menu::kEmitCollapse", "Collapse"},
-    {"menu::kEmitRearrange", "Rearrange"},
+    {"menu::kExportSeparate", "Separate"},
+    {"menu::kExportCollapse", "Collapse"},
+    {"menu::kExportRearrange", "Rearrange"},
     {"menu::kBurnAnnotation", "Burn In Annotations"},
     {"menu::kBurnImageLayers", "Burn In Image Layers"},
     {"menu::kConfirmRearrange", "Confirm Before Rearrange"},
@@ -69,6 +69,9 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"menu::kL2MethodSub", "Method"},
     {"menu::kL3SortSub", "Order"},
     {"menu::kL3RemainderSub", "Remainder"},
+    {"menu::kL3DefineSub", "Grid Definition"},
+    {"menu::kGridAxisHorizontal", "Horizontal"},
+    {"menu::kGridAxisVertical", "Vertical"},
     // L1 形状 / L2 方式 / 排序 / 余量（与参数面板下拉逐字同形，一处改动两处同变）
     {"menu::kL1Rect", "Rectangle"},
     {"menu::kL1HBand", "Horizontal Band"},
@@ -85,6 +88,9 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"menu::kRemainderDiscard", "Discard Partial"},
     {"menu::kRemainderKeep", "Keep Partial"},
     {"menu::kRemainderPad", "Pad Blank"},
+    {"menu::kGridModePitch", "Period"},
+    {"menu::kGridModeCount", "Divide count"},
+    {"menu::kGridModeWeights", "Weights"},
     // 预处理（菜单名带「图像」助记符而类名为 preprocess）
     {"menu::kMenuPreprocess", "Preprocess(&I)"},
     {"menu::kRotLeft90", "Rotate Left 90°"},
@@ -141,8 +147,7 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"menu::kShowImageLayer", "Image Layers"},
     {"menu::kShowAnnotation", "Annotations"},
     {"menu::kShowMask", "Mask (Keep/Remove Preview)"},
-    {"menu::kShowGrid", "Grid Lines"},
-    {"menu::kShowCutLine", "Cut Lines"},
+    {"menu::kShowGrid", "Grid / Cut Lines"},
     {"menu::kShowSelection", "Selection Border"},
     {"menu::kShowCellNumber", "Cell Numbers"},
     {"menu::kSnapToggle", "Selection Snap"},
@@ -156,7 +161,7 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"menu::kMenuHelp", "Help(&H)"},
     {"menu::kUsageGuide", "Usage Guide"},
     {"menu::kAbout", "About"},
-    // —— label（gui_texts.h::label 全量 282 条，与常量层同序）——
+    // —— label（gui_texts.h::label 全量 287 条，与常量层同序）——
     // 助记符 & 与省略号 … 逐字保留；语言名 kLangZhCn / kLangEn 以各自书写（永不翻译）；%N 编号不变。
     {"label::kWindowTitleFmt", "ImageDiscropper GUI %1"},
     {"label::kDlgTitleSaveConfig", "Save Config"},
@@ -165,6 +170,12 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"label::kDlgTitleExportAs", "Export As"},
     {"label::kDlgTitleChooseOutDir", "Choose Output Directory"},
     {"label::kDlgTitlePickSourceImage", "Pick Source Image"},
+    {"label::kDlgTitlePickAssetDir", "Pick Asset Directory"},
+    {"label::kConfigAssetBoxTitle", "Layer Assets"},
+    {"label::kConfigBundleAssets", "Bundle layer assets"},
+    {"label::kConfigImportAssets", "Import layer assets (decode file-layer pixels)"},
+    {"label::kConfigAssetDirPlaceholder", "Default: <configname>.assets/"},
+    {"label::kConfigAssetSourcePlaceholder", "Auto: config declaration -> <configname>.assets/ -> config directory"},
     {"label::kDlgLabelChooseConfig", "Select a config"},
     {"label::kFilterExportImage", "Images (*.png *.jpg *.jpeg *.bmp *.webp)"},
     {"label::kFilterOpenImage", "Images (*.png *.jpg *.jpeg *.bmp *.webp *.gif *.tga);;All Files (*)"},
@@ -194,9 +205,9 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"label::kDirBottomRight", "Bottom-right"},
     {"label::kExportBoxTitle", "Export"},
     {"label::kOutModeLabel", "Output mode"},
-    {"label::kEmitSeparateItem", "Separate export"},
-    {"label::kEmitCollapseItem", "Merge collapse"},
-    {"label::kEmitRearrangeItem", "Merge rearrange"},
+    {"label::kExportSeparateItem", "Separate export"},
+    {"label::kExportCollapseItem", "Merge collapse"},
+    {"label::kExportRearrangeItem", "Merge rearrange"},
     {"label::kBrowseButton", "Browse…"},
     {"label::kOutDirLabel", "Directory"},
     {"label::kNamingLabel", "Naming"},
@@ -242,6 +253,11 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"label::kCellHeightLabel", "Cell height ch"},
     {"label::kRemainderFieldLabel", "Remainder policy"},
     {"label::kDerivedScaleLabel", "Derived scale"},
+    {"label::kGridDefineXLabel", "Horizontal definition"},
+    {"label::kGridDefineYLabel", "Vertical definition"},
+    {"label::kGridCountLabel", "Parts"},
+    {"label::kGridWeightsLabel", "Weights"},
+    {"label::kGridWeightsPlaceholder", "1,2,1 or 25%,50%,25%"},
     {"label::kStrategyFieldLabel", "Strategy"},
     {"label::kSelectAllButton", "Select all"},
     {"label::kInvertButton", "Invert"},
@@ -329,8 +345,7 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"label::kShowImageCheck", "Image  Show"},
     {"label::kShowAnnoCheck", "Annotation  Show"},
     {"label::kShowMaskCheck", "Mask  Show"},
-    {"label::kShowGridCheck", "Grid lines  Show"},
-    {"label::kShowCutLineCheck", "Cut lines  Show"},
+    {"label::kShowGridCheck", "Grid / Cut lines  Show"},
     {"label::kShowSelectionCheck", "Selection border  Show"},
     {"label::kShowNumberCheck", "Cell numbers  Show"},
     {"label::kModeSection", "Mode"},
@@ -356,7 +371,7 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"label::kPanelToggle", "Panel"},
     {"label::kAnchorColonLabel", "Anchor:"},
     {"label::kPivotColonLabel", "Pivot:"},
-    {"label::kPositionColonLabel", "Position:"},
+    {"label::kPositionColonLabel", "Offset:"},
     {"label::kPolarityGroupBox", "Keep / Remove"},
     {"label::kPolarityKeepButton", "Keep inside"},
     {"label::kPolarityRemoveButton", "Remove inside"},

@@ -48,13 +48,14 @@ void MaskLayerItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QW
 }
 
 // 依 Core 结果重建遮罩（单一图元）。
+// 图元恒按最新结果构建，visible 只决定其可见性：显隐开关切换无需重建，也不会因隐藏期重建而丢失图元。
 void MaskLayer::rebuild(QGraphicsScene& scene, const engine::EngineResult& result,
                         const int width, const int height, const bool visible) {
     clear(); // 先移除旧遮罩。
 
-    // 不显示或无保留块（空结果哨兵）→ 不画遮罩。
+    // 无保留块（空结果哨兵：无图 / 引擎失败）→ 无遮罩可画。
     //（成功结果 kept 恒非空——引擎 kept 为空即报 E-7，故无需再判成功位。）
-    if (!visible || result.kept.empty()) {
+    if (result.kept.empty()) {
         return;
     }
 
@@ -72,6 +73,7 @@ void MaskLayer::rebuild(QGraphicsScene& scene, const engine::EngineResult& resul
     item_->setZValue(zorder::kMask);
     item_->setAcceptedMouseButtons(Qt::NoButton);
     item_->setFlag(QGraphicsItem::ItemIsSelectable, false);
+    item_->setVisible(visible);   // 显隐由「遮罩」图层开关决定（隐藏期重建仍留图元，开回即显）。
     scene.addItem(item_);
 }
 

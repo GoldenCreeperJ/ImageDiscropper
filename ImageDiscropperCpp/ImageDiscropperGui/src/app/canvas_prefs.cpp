@@ -29,10 +29,17 @@ CanvasPrefs::CanvasPrefs(QObject* parent)
     st.beginGroup(QString::fromUtf8(texts::ident::kGroupCanvas));
     snapEnabled_ = st.value(QString::fromUtf8(texts::ident::kCanvasSnap), nums::app::kPrefSnapDefault).toBool();
     handleScreenPx_ = st.value(QString::fromUtf8(texts::ident::kCanvasHandlePx), nums::app::kPrefHandlePxDefault).toInt();
-    scrollMarginPercent_ = st.value(QString::fromUtf8(texts::ident::kCanvasScrollMargin), nums::app::kPrefScrollMarginPercentDefault).toInt();
-    zoomStepPercent_ = st.value(QString::fromUtf8(texts::ident::kCanvasZoomStep), nums::app::kPrefZoomStepPercentDefault).toInt();
-    zoomMinPercent_ = st.value(QString::fromUtf8(texts::ident::kCanvasZoomMin), nums::app::kPrefZoomMinPercentDefault).toInt();
-    zoomMaxPercent_ = st.value(QString::fromUtf8(texts::ident::kCanvasZoomMax), nums::app::kPrefZoomMaxPercentDefault).toInt();
+    // 载入即钳制：持久数据可能留有越界值（旧版写入 / 手改注册表，
+    // 如 scrollMargin=50 会让适应窗口退化缩到最小）；此处自愈到合法区间，与 setter 同口径。
+    scrollMarginPercent_ = std::clamp(st.value(QString::fromUtf8(texts::ident::kCanvasScrollMargin), nums::app::kPrefScrollMarginPercentDefault).toInt(),
+                                      0, nums::app::kScrollMarginPercentMax);
+    zoomStepPercent_ = std::clamp(st.value(QString::fromUtf8(texts::ident::kCanvasZoomStep), nums::app::kPrefZoomStepPercentDefault).toInt(),
+                                  nums::app::kZoomStepPercentMin, nums::app::kZoomStepPercentMax);
+    zoomMinPercent_ = std::clamp(st.value(QString::fromUtf8(texts::ident::kCanvasZoomMin), nums::app::kPrefZoomMinPercentDefault).toInt(),
+                                 nums::app::kZoomMinPercentLower, nums::app::kZoomMinPercentUpper);
+    zoomMaxPercent_ = std::clamp(st.value(QString::fromUtf8(texts::ident::kCanvasZoomMax), nums::app::kPrefZoomMaxPercentDefault).toInt(),
+                                 nums::app::kZoomMaxPercentLower, nums::app::kZoomMaxPercentUpper);
+    if (zoomMinPercent_ >= zoomMaxPercent_) zoomMaxPercent_ = zoomMinPercent_ + 1;   // 维持 min < max（与 setter 同不变式）
     newCanvasWidth_ = st.value(QString::fromUtf8(texts::ident::kCanvasNewWidth), nums::app::kPrefNewWidthPxDefault).toInt();
     newCanvasHeight_ = st.value(QString::fromUtf8(texts::ident::kCanvasNewHeight), nums::app::kPrefNewHeightPxDefault).toInt();
     st.endGroup();
@@ -71,7 +78,8 @@ void CanvasPrefs::setHandleScreenPx(const int px) {
 }
 
 void CanvasPrefs::setScrollMarginPercent(const int percent) {
-    // 0 = 不留余量（图像边缘即滚动极限，无边距观感）；上限 50%（两侧各 50% 就把视口吃满，再大内容无可见区）。
+    // 0 = 不留余量（图像边缘即滚动极限，无边距观感）；上限 kScrollMarginPercentMax（限制内容外的可平移空白，
+    // 避免滚动范围被空白主导；与适应窗口无关——适配已用固定小边距 kFitToWindowKeepRatio、不读此值）。
     scrollMarginPercent_ = std::clamp(percent, 0, nums::app::kScrollMarginPercentMax);
     touched();
 }

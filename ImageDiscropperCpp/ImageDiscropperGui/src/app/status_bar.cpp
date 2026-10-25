@@ -34,8 +34,8 @@ void StatusBar::setCoord(const int x, const int y) const {
     coordLabel_->setText(IDC_GTR(status, kCoordFmt).arg(x).arg(y));
 }
 
-void StatusBar::setColor(const int r, const int g, const int b) const {
-    colorLabel_->setText(IDC_GTR(status, kColorFmt).arg(r).arg(g).arg(b));
+void StatusBar::setColor(const int r, const int g, const int b, const int a) const {
+    colorLabel_->setText(IDC_GTR(status, kColorFmt).arg(r).arg(g).arg(b).arg(a));
 }
 
 void StatusBar::clearColor() const {
@@ -50,7 +50,7 @@ void StatusBar::setHint(const QString& text) const {
     hintLabel_->setText(text);
 }
 
-// 紧凑模式（移动端）：隐藏坐标/RGB/提示三项，只留缩放（SPEC §8.3 布局）。
+// 紧凑模式（移动端）：隐藏坐标/颜色/提示三项，只留缩放（SPEC §8.3 布局）。
 // 提示仍经 showMessage 限时弹出（notify 里的 showMessage 不受标签隐藏影响），错误可见。
 void StatusBar::setCompactMode(const bool compact) const {
     coordLabel_->setVisible(!compact);

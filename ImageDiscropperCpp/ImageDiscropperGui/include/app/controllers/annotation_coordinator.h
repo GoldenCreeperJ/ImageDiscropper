@@ -60,7 +60,8 @@ public slots:
     void onAnnoHover(const QPointF& scenePos) const;       // 绘制态悬停（未按键）：折线实时预览落点与连线。
     void onAnnoFinish() const;                             // 绘制态右键：收笔折线/画笔草稿（提交）或取消当前两点预览。
     void onAnnoEscape() const;                             // 绘制态 Esc：收笔折线/画笔草稿或取消当前两点预览。
-    void onAnnotationSelect(const QPointF& scenePos) const;// Select 工具下点中标注图元：Core hitTest 选中。
+    void onAnnotationSelect(const QPointF& scenePos) const;// Select 工具下点中标注图元：Core hitTest 选中 + 场景对选中项发起平移拖拽。
+    void onAnnotationClicked(const QPointF& scenePos) const;// 原地点击标注图元：推进同点连击循环（重叠标注轮流选中）。
     void onAnnotationMoved(int index, double dx, double dy) const; // 拖动选中标注：Core 平移几何。
     void onAnnotationTransformed(int index, double sx, double sy, double rotateDeg) const; // 拖定向包围盒手柄：Core 缩放/旋转。
     void onAnnotationTransformPreview(int index, double sx, double sy, double rotateDeg) const; // 手柄拖拽中：预览值实时回显到属性面板。
@@ -74,8 +75,7 @@ public slots:
     void onAnnoTransformApply(double sx, double sy, double rotateDeg) const; // 属性面板：缩放/旋转选中标注（Core 非破坏性变换）。
     void onBaseVisibilityChanged(bool visible) const;      // 图层面板：底图显隐（切画布 base 图元）。
     void onMaskVisibilityChanged(bool visible) const;      // 图层面板：遮罩（保留/删除预览）显隐。
-    void onGridVisibilityChanged(bool visible) const;      // 图层面板：网格线显隐（重建落地）。
-    void onCutLineVisibilityChanged(bool visible) const;   // 图层面板：切割线显隐。
+    void onGridVisibilityChanged(bool visible) const;      // 图层面板：网格线/切割线显隐（同一开关，按模式各司其职）。
     void onSelectionVisibilityChanged(bool visible) const; // 图层面板：选取边框显隐。
     void onAnnotationVisibilityChanged(bool visible) const;// 图层面板：标注图层显隐。
     void onBurnInChanged(bool on) const;                   // 导出面板：导出烧录开关。

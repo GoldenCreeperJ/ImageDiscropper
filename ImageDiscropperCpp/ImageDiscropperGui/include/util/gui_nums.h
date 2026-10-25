@@ -20,7 +20,7 @@
 //   · 类型边界：噪声种子上限 2147483647（即 int 上限）、QWIDGETSIZE_MAX。
 //   · 颜色：Palette 六色与三 alpha 默认、图元内的 constexpr QColor —— 属「画布视觉规范」成表且
 //     已单点集中，改动走「外观/交互」对话框，不在本层重复定义。
-//   · 图层 z 序（已集中于 include/canvas/items/z_order.h，勿重复定义）。
+//   · 图层 z 序（统一定义于 include/canvas/items/z_order.h，勿在本层重复定义）。
 //   · 零边距 (0,0,0,0)、循环边界 0/1、Qt 枚举与标志位组合、单点自明的局部临时值
 //     （如 kMaxRecent、流式读块大小、导出源/预览尺寸表——各自已就地 constexpr 且有注释）。
 //   · tests/ 内的期望值。
@@ -52,8 +52,10 @@ inline constexpr int kNudgeStepPx = 1;                  // 方向键微调选区
 inline constexpr int kNudgeStepShiftPx = 10;            // Shift 大步；移动端步进盘 ×10 倍率同值。
 inline constexpr int kMarqueeMinSizePx = 3;             // 框选误触阈值：橡皮筋宽高须同时大于它才上报选区（视口像素）。
                                                         // 调大更耐误触，但小范围精确框选会被吞掉。
-inline constexpr double kFitKeepFloorRatio = 0.01;      // 适应窗口的余量因子下限：边缘滚动余量把视口吃满时
-                                                        // 用它兜底，保证缩放倍率恒为正。
+inline constexpr double kFitToWindowKeepRatio = 0.94;   // 适应窗口时内容占视口的比例（固定小边距，与滚动余量偏好解耦）：
+                                                        // 默认余量 3% 下 0.94＋2×3%＝1.00，适配后场景矩形恰等于视口、不出滚动条；
+                                                        // 适应窗口**不读 scrollMarginPercent**——否则大的滚动余量会
+                                                        // 把内容挤到 (1－2×百分比) 乃至趋零、退化成“缩到最小尺寸”。
 inline constexpr double kPickSamePointTolScenePx = 3.0; // 连击循环选层的「近似同点」容差（场景单位）：
                                                         // 调大则手指微抖更易续上同一候选栈。
 // ——触控手势判定（canvas_touch_input_adapter.cpp）：双击＝适应窗口，轻点是它的最小单位——
@@ -121,7 +123,7 @@ namespace mobile {
 inline constexpr int kWindowWidthPx = 480;  // 移动壳初启尺寸（竖屏典型比例；横屏同为合法形态，SPEC §8.3 双布局）。
 inline constexpr int kWindowHeightPx = 960;
 inline constexpr int kDrawerMinWidthPx = 320;   // 抽屉最小尺寸＝设计下限（真机横/竖屏均放得下；
-                                                // 无界回压的实测修复与取值依据见 src/mobile/README.md「触控精度与方向」）。
+                                                // 防内容自然 hint 无界回压，取值依据见 src/mobile/README.md「触控精度与方向」）。
 inline constexpr int kDrawerMinHeightPx = 240;
 inline constexpr int kDrawerRatioDen = 5;           // 抽屉停靠占比的公共分母（横 2/5、竖 3/5）。
 inline constexpr int kDrawerPortraitHeightNum = 3;  // 竖屏：抽屉占底部高的 3/5。
@@ -162,7 +164,8 @@ inline constexpr int kHintShowMs = 4000;        // 状态栏限时消息普通�
 inline constexpr int kErrorShowMs = 8000;       // 错误回报停留：比常规长一档，留出读完报因的时间。
 inline constexpr int kHandlePxMin = 4;          // 手柄/命中尺寸显式覆盖的钳制区间（0 表示跟随平台默认，不在本区间内）。
 inline constexpr int kHandlePxMax = 64;         // 上限同时是外观对话框该输入框的 range 上界。
-inline constexpr int kScrollMarginPercentMax = 50;  // 边缘滚动余量上限：两侧各 50% 就把视口吃满，再大内容无可见区。
+inline constexpr int kScrollMarginPercentMax = 45;  // 边缘滚动余量（平移范围）上限：配合 0.94 适配比例，适配档下空白
+                                                    // （两侧各 45%＝90% 视口）仍小于内容（94% 视口）；与适应窗口缩放无关（适配已用固定小边距、不读此值）。
 inline constexpr int kZoomStepPercentMin = 1;   // 缩放步进区间（对话框 range 与 prefs clamp 共用，防持久化出非法值）。
 inline constexpr int kZoomStepPercentMax = 100;
 inline constexpr int kZoomMinPercentLower = 1;      // 缩放下限可填区间（上界 9999 < 缩放上限最小 10000，维持 min < max）。

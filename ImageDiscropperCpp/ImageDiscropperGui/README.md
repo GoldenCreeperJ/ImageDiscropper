@@ -159,10 +159,10 @@ GUI 只在 `model` 层三处触碰 Core：`EngineBridge`（切割 / 预处理 / 
 **L3 网格分割示例**（输入：一张图集，希望按网格切片、挑选部分单元并重排）：
 
 1. 打开图像，左侧模式选 **网格分割 (L3)**（或按 `3`）。
-2. 右侧参数页填网格四元组 **`(x0, y0, cellWidth, cellHeight)`**，选择余量策略（丢弃/保留部分/填充）；网格线自动铺满全图，只读栏显示派生的行×列规模。
+2. 右侧参数页为横、纵两轴各选一个「**定义方式**」并填对应参数——**周期**（基准点 `(x0, y0)` + 单元尺寸 `cw/ch`，或在画布上直接**拖网格线层的两个基准手柄**：基准点手柄平移相位、单元尺寸手柄改 cw/ch，释放时一次性写回）/ **分割数**（份数，基准点恒 0、尽量均分、末份吸收取整误差）/ **比例**（权重，`1,2,1` 与 `25%,50%,25%` 等价，只取相对比例）；两轴可各用各的（如横向 3 等分 + 纵向周期 150px）。有周期轴时才需选余量策略（丢弃/保留部分/填充），两轴皆非周期时该项置灰（恰好铺满、无残缺单元）；非周期轴的手柄分量不参与拖动，两轴皆非周期时手柄整体隐藏；网格线自动铺满全图，只读栏显示派生的行×列规模。
 3. 用**选择集**：单击选单元、画布框选、或「全选/反选/清空」。
 4. 设**排序**：行优先(row-major) / 列优先(column-major) / 自定义(custom)，可叠加 reverse（倒序）、snake（蛇形）；自定义序下可在画布拖拽单元调序，每个单元左上角显示序号角标。
-5. 导出页选「合并重排」，设置列/行（或点「按格数自动」依保留块数开方）、单元宽/高、填充色、填充顺序；参数不足时面板给出红字警告，导出前二次确认。
+5. 导出页选「合并重排」，设置列/行（或点「按格数自动」依保留块数开方）、单元宽/高、填充顺序（填充色行恒可见，Pad 补白与有损压平共用）；参数不足时面板给出红字警告，导出前二次确认。
 6. 导出页点导出，得到按序重排拼合的新画布图像。
 
 ### 标注工具
@@ -185,10 +185,10 @@ GUI 只在 `model` 层三处触碰 Core：`EngineBridge`（切割 / 预处理 / 
 
 ### 图层与烧录
 
-左侧 **图层面板** 提供显示叠加开关（按画布 z 序；除「图片图层」外仅影响画布预览、不影响导出结果——「图片图层」为栈级整体开关，
-关时所有图片层退出展平合成，预览与导出同步只见底图）。8 项开关（底图 / 图片图层 / 标注 / 遮罩 / 网格线 / 切割线 / 选取边框 / 单元编号）
+左侧 **图层面板** 提供显示叠加开关（按画布 z 序；七项均**仅切换画布预览可见性与交互性、不影响导出**——「图片图层」为栈级整体开关，
+关时所有图片层退出预览叠加、落位框一并隐藏，导出是否并入叠加层由导出面板「烧录图片图层」开关独立决定）。7 项开关（底图 / 图片图层 / 标注 / 遮罩 / 网格线与切割线（同一开关：L3 为灰色网格线、L1/L2 为贯穿切割线，两模式互斥）/ 选取边框 / 单元编号）
 的具体语义与交互门控（「隐藏图层＝不可交互」）见 [src/panels/README.md](src/panels/README.md)「layer_panel」与
-[src/canvas/README.md](src/canvas/README.md)。
+[src/canvas/README.md](src/canvas/README.md)。**图片图层/标注图层隐藏即整域禁用**：对应画布模式（图片拾取 / 标注选取·绘制）、右侧属性页与整域菜单（图片 / 标注）一并置灰，当前模式被禁时回落框选。
 
 **烧录开关**位于右侧 **导出页**（「导出时烧录标注」）：勾选后导出时把标注按矢量合成进像素，标注**随像素一起被切割**落位到各输出块。
 
@@ -218,7 +218,8 @@ GUI 只在 `model` 层三处触碰 Core：`EngineBridge`（切割 / 预处理 / 
 | **合并重排** | 按显式序列把保留块填入新画布（**仅 L3 可用**）           | 目标文件        |
 
 其他参数：格式（PNG / JPEG / WebP / BMP）、质量（有损格式）、命名模板（仅分离导出）、导出前预览缩略图（实时展示输出效果，所见即所得）、
-导出时烧录标注；**重排专属**：列/行（0＝自动推导）、单元宽/高（0＝用保留块原尺寸）、填充色、填充顺序（行/列优先 + 蛇形 + 倒序）、
+导出时烧录标注；**合并公共**：填充色（合并画布底色 + Pad 余量补白 + 有损格式压平透明像素的背景色；三模式恒显示）；
+**重排专属**：列/行（0＝自动推导）、单元宽/高（0＝用保留块原尺寸）、填充顺序（行/列优先 + 蛇形 + 倒序）、
 「按格数自动」按钮，`cols×rows < 保留块数` 或单元尺寸 < 网格单元尺寸时给内联红字警告 + 导出前弹窗二次确认（该确认可由「文件 → 导出设置 → 重排前二次确认」关闭）。
 控件构成与自动行列/警告判定见 [src/panels/README.md](src/panels/README.md)「export_panel」。
 
@@ -238,7 +239,7 @@ GUI 只在 `model` 层三处触碰 Core：`EngineBridge`（切割 / 预处理 / 
 > 与**图层图片**（入图层栈、走 `layers` 段、位图靠 assets 引用）。
 
 **多图层是「画布层」而非「引擎层」概念**——承重不变：`runEngine(const core::Image&, config)` 永远只收**一张展平的画布图 + 空 preprocess**，
-Grid-Selection-Emit / export / preview / CLI 主链零改动。图层数据模型 `canvas::ImageLayer` 与合成 `composeCanvas`（依底图 base→叠加层按
+Grid-Selection-Export / export / preview / CLI 主链零改动。图层数据模型 `canvas::ImageLayer` 与合成 `composeCanvas`（依底图 base→叠加层按
 `zOrder` 升序逐层物化 → 施 `transform.opacity` alpha 乘子 → 落位 → source-over 写入画布尺寸缓冲、越界自然裁剪）均在 **Core**；
 每层的 `PreprocessSession`（GUI 声明态包装 + `base_` 缓存编排）归 **GUI**。
 
@@ -282,7 +283,7 @@ Grid-Selection-Emit / export / preview / CLI 主链零改动。图层数据模�
 
 ### 图层 z 序（`include/canvas/items/z_order.h`，单一定义点）
 
-叠放次序：**底图 < 图片图层落位框 < 标注 < 标注绘制预览 < 遮罩 < 网格 < 选区 < 单元编号**（遮罩为**单一层** `kMask`：
+叠放次序：**底图 < 图片图层落位框 < 标注 < 标注绘制预览 < 遮罩 < 网格 < 选区 < 单元编号 < 网格基准手柄**（遮罩为**单一层** `kMask`：
 一个图元内先铺红色删除底、再叠绿色保留块，绿覆盖处即保留、透出红处即删除，GUI 不做区域布尔——见决策 #1）。
 
 | z 值 | 常量                   | 图层                                                                      |
@@ -295,6 +296,7 @@ Grid-Selection-Emit / export / preview / CLI 主链零改动。图层数据模�
 | 50  | `kGrid`              | 网格线（L3 / L2 多矩形诱导）                                                      |
 | 60  | `kSelection`         | 选区边框（橙）+ 手柄 + 贯穿切割线延伸（同一橙色图元）                                           |
 | 70  | `kCellNumber`        | 单元格编号角标（L3 自定义序；`CellPickerItem` 的角标子图层，子 z = kCellNumber − kSelection） |
+| 80  | `kGridHandle`        | 网格基准手柄（L3 网格线层内：拖基准点 `(x0,y0)` / 单元尺寸 `(cw,ch)`；置顶以先接按下）                |
 
 > 场景坐标 = 原图像素坐标（见决策 #2）。各图元的可见/可拖门控、L3 单元点选、切割线即选区边等实现见 [src/canvas/README.md](src/canvas/README.md)。
 
@@ -303,8 +305,9 @@ Grid-Selection-Emit / export / preview / CLI 主链零改动。图层数据模�
 ```
 鼠标/键盘 (CanvasView)
    │  拖拽框选 rubberSelect / 微调 nudgeSelection / 光标 cursorScenePos / 缩放 zoomChanged
+   │  L3 网格基准拖拽释放 gridParamsEdited（拖拽中只预览、不写 Document）
    ▼
-MainWindow 编排槽 → CanvasCoordinator 写回 Document（L1/L2 setRect、MULTI_RECT addRect、L3 命中单元 addCells）
+MainWindow 编排槽 → CanvasCoordinator 写回 Document（L1/L2 setRect、MULTI_RECT addRect、L3 命中单元 addCells、L3 网格基准 setGridParams）
    ▼
 Document.changed ──► onDocChanged ──► PreviewController.refreshPreview()
    │                    buildEngineConfig + EngineBridge.runPreviewGeometry → CanvasScene 刷新 + 输出预览
@@ -343,6 +346,7 @@ scheduleHistoryCapture（500ms 防抖）──► DocHistory 压入 EngineConfig
 11. **配置文件加载/保存**：文件菜单「加载配置/保存配置」经 `EngineBridge::saveConfig/loadConfig` 委托 Core `saveEngineConfig/loadEngineConfig`（§7 schema JSON，GUI 不自实现 JSON、不感知 nlohmann）；加载走 `Document::applyEngineConfig` 反向映射并守卫「非 L3 不得重排」「网格单元尺寸为正」不变式，**加载本身入同一撤销栈**（可一步撤销）。**标注随配置往返**：保存附带 `annotations` 段；加载时 Core 先把标注收进**临时层**，待队列重放**之后**再 `replaceAnnotations` 覆盖真实层（顺序纪律：先重放预处理、再还原标注），还原走 Core `restoreAnnotations`、**不纳入 DocHistory 文档撤销栈**（已知限制）。
 12. **导出前输出图像预览（只渲染不重算）**：导出面板 `previewLabel_` 缩略图由 `util::composeOutputThumbnail` 按 `refreshPreview` **已算好**的 `EngineResult.composition` 渲染——**不重跑 Core、不落盘**：把缓存的小源图（最长边 ≤ 512）按 `placements` 的 `source→dest` blit 到小画布（合并模式按真实画布等比缩放、所见即所得；分离模式拼成触图），故原图 8000×8000 也只在小图上运算。**渲染逻辑下沉到 `util/`（离屏预览），app 层（`PreviewController`）只编排缓存与门控**：烧录可见时经 `util::bakeAnnotationsInto` 只烘焙一次；**按需渲染**仅在「导出」页为当前选项卡时才渲染、否则置脏待切回补渲染，烧录开关/标注变更不重跑 Core、仅用缓存重渲染。
 13. **界面文案走自研 i18n 目录 + 原地热切换（不接 Qt Linguist）**：文案真相源是 `texts::` 常量层（中文 = 源语言与回退值），使用点写 `IDC_GTR(分组, 常量名)`——宏在预处理器里同时拼出键 `分组::常量名` 并取到同名中文常量作回退值，**两处同源**，手写键串不可能拼错。不走 `tr()`/`lupdate`/`.ts`/`.qm`（lupdate 抽不到常量层的值，`.qm` 又是 Qt6 内部二进制格式、零 Qt 的 Core/CLI 读不了）；英文表以 **C++ 表文件编译期内嵌**（`src/i18n/lang_en.cpp` + `lang_en_detail.cpp`），与 CLI / Core 共用 Core 的同一份进程级语言状态，且不把 qttools 拖进依赖图。`texts::ident` 与 §7 JSON token **永不进表**（不可译契约）；源语言 zh-CN **不建表**（全部回退），故中文下行为与未接 i18n 时逐字节相同。**语言热切换原地生效**：外观对话框内选定即调 `setupFromPreference` 切全局语言 + `MainWindow::retranslateUi` 逐窗原地重放（各常驻类自持 `Retranslator` + `bind*` 闭包，经 `AppearanceDialog::languageApplied` 触发），**不销毁重建窗口**（`Document` / `DocHistory` 随窗口存活、UI 与业务态无损）；桌面与移动同一机制。机制与扩展见 [include/i18n/README.md](include/i18n/README.md)。
+14. **网格基准参数可在画布上拖（做在网格线层、释放才写回）**：L3 两个基准手柄（`GridHandleItem`：基准点 `(x0,y0)` / 单元尺寸 `(x0+cw,y0+ch)`）由网格线层持有，随「网格线与切割线」开关显隐；拖动中只发 `previewed`，场景依草稿参数交 Core `Grid::build` 重铺线（**不写 `Document`**、不触发 Core 全量预览重算），释放发一次 `committed` → `Document::setGridParams`（保留「几何变即清空选择集」既有语义）。**按轴定义后（SPEC §3.4.3）手柄只服务周期轴**：非周期轴的分量按 0 计且不参与拖动，两轴皆非周期时手柄整体隐藏（`setPitchAxes` 门控）；周期轴写回仍收回平铺四键 `originX/cellWidth`（`Document::setGridAxis` 归一时复位 `axisX/axisY`），使旧配置语义逐字节不变。吸附只取整数像素（四个参数本就是整数量，不做边缘/中线磁吸），越界钳制在图内（基准点 `[0,W-cw]×[0,H-ch]`、单元宽高 `[1,W-x0]×[1,H-y0]`，两手柄均不出图；参数面板的基准点上限（`W-cw`/`H-ch`）与单元尺寸上限（`W`/`H`）同此口径）；z 取 `kGridHandle`（高于 `kSelection`），否则按下会被 L3 单元点选图元先吃掉。
 
 ## 扩展指引
 

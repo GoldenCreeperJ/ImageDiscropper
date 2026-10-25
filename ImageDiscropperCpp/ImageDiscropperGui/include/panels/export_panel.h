@@ -25,6 +25,7 @@ class QPixmap;
 namespace idc::gui {
 
 class Document;
+class CoordSpinBox;   // 坐标输入框（整数像素 + "50%" 百分比输入，见 include/util/coord_spin.h）
 
 // ---------------------------------------------------------------------------
 // ExportPanel：导出参数与导出触发。
@@ -41,14 +42,18 @@ public:
     void setCollapsible(bool collapsible);
     // 最近一次 Core 坍缩可行性（供菜单「导出设置·坍缩」镜像同一置灰规则）。
     bool collapsible() const { return collapsible_; }
+    // 「合并重排」项可用性（置灰口径的唯一真相源）：仅 L3 且保留块长宽全等（Core 重排准入门限，
+    // SPEC §4.3）。菜单「导出设置·重排」与刷新项共用此判据。
+    bool rearrangeAvailable() const;
     // 更新导出前信息文字（画布尺寸、保留块数等；由 PreviewController 回灌）。
     void setPreviewInfo(const QString& text) const;
     // 显示输出图像预览缩略图（由 PreviewController 按 Core Composition 渲染后回灌）。
     // 传入空 pixmap 表示当前无有效输出，标签回退到占位文案。
     void setPreviewPixmap(const QPixmap& pm) const;
-    // 回灌重排上下文（由 PreviewController 依 Core 引擎结果调用）：保留块数 + 网格单元尺寸。
-    // 用于「自动 cols/rows（依格数开方）」与画布/单元尺寸不足的内联警告。
-    void setRearrangeContext(int keptCount, int cellW, int cellH);
+    // 回灌重排上下文（由 PreviewController 依 Core 引擎结果调用）：保留块数 + 网格单元尺寸 +
+    // 保留块长宽是否全等（Core 重排准入门限）。用于「自动 cols/rows（依格数开方）」、
+    // 画布/单元尺寸不足的内联警告，以及块尺寸不全等时从重排回退到坍缩/分离。
+    void setRearrangeContext(int keptCount, int cellW, int cellH, bool uniformBlocks = true);
     // 当前重排参数下的警告文本（cols*rows < 保留块数，或 cw/ch < 网格单元尺寸）；无警告返回空串。
     // ExportController 在导出前调用，非空则弹窗二次确认。
     QString rearrangeWarning() const;
@@ -59,7 +64,7 @@ public:
     void setLayersBurnInChecked(bool on) const;
     // 外部（文件菜单「导出设置」）选择输出方式/格式：经 combo 走与用户点击同一
     // onModeChanged/onFormatChanged 路径（含重排 auto-grid 与警告刷新）；面板为唯一真相源。
-    void selectEmitMode(int index) const;
+    void selectExportMode(int index) const;
     void selectFormat(int index) const;
 
     // 语言热切换重放：重跑本面板登记的静态文案闭包（行标签/下拉项/按钮/提示）。
@@ -75,6 +80,8 @@ signals:
     void layersBurnInChanged(bool on);
     // 坍缩可行性变化（预览刷新回灌）：供菜单「导出设置·坍缩」镜像置灰。
     void collapsibleChanged(bool collapsible);
+    // 重排项可用性变化（预览刷新回灌）：供菜单「导出设置·重排」镜像置灰。
+    void rearrangeAvailableChanged(bool available);
 
 private slots:
     void onModeChanged(int index);
@@ -102,7 +109,7 @@ private:
     QString saveFilter() const;
     // 依 Document 的 padColor 更新填充色按钮的背景色块。
     void updatePadColorSwatch() const;
-    // 依 Core 坍缩可行性与 Document 模式刷新各输出模式项可用性（坍缩依可行性、重排仅 L3）。
+    // 依 Core 坍缩可行性与 Document 模式刷新各输出模式项可用性（坍缩依可行性、重排依 rearrangeAvailable）。
     void refreshModeItemStates() const;
     // 依保留块数开方计算 cols/rows 并填入 spinbox（未手动改过时）。
     void applyAutoGrid();
@@ -118,6 +125,8 @@ private:
     QWidget* fileRow_{nullptr};       // 合并导出目标文件整行（随模式显隐）
     QLineEdit* fileEdit_{nullptr};    // 合并导出目标文件
     QPushButton* fileBtn_{nullptr};
+    QWidget* padRow_{nullptr};        // 填充色整行（恒可见；合并底色 / Pad 补白 / 有损压平）
+    QPushButton* padColorBtn_{nullptr}; // 填充色按钮（背景显示当前色）
     QComboBox* formatCombo_{nullptr}; // PNG/JPEG/WebP/BMP
     QSpinBox* quality_{nullptr};      // 有损格式质量
     QLabel* qualityLabel_{nullptr};
@@ -134,9 +143,8 @@ private:
     QWidget* rearrangeRow_{nullptr};
     QSpinBox* mergeCols_{nullptr};      // 重排列数（0=自动推导）
     QSpinBox* mergeRows_{nullptr};      // 重排行数（0=自动推导）
-    QSpinBox* mergeCellW_{nullptr};     // 重排单元宽（0=用保留块原尺寸）
-    QSpinBox* mergeCellH_{nullptr};     // 重排单元高（0=原尺寸）
-    QPushButton* padColorBtn_{nullptr}; // 填充色按钮（背景显示当前色）
+    CoordSpinBox* mergeCellW_{nullptr}; // 重排单元宽（0=用保留块原尺寸；另接受百分比，基准画布宽）
+    CoordSpinBox* mergeCellH_{nullptr}; // 重排单元高（0=原尺寸；另接受百分比，基准画布高）
 
     // 重排填充顺序控件（MergeOrder；仅「合并重排」显示）与自动/警告。
     QComboBox* mergeSortCombo_{nullptr};   // 0=行优先 1=列优先
@@ -148,6 +156,7 @@ private:
     int keptCount_{0};
     int cellW_{0};
     int cellH_{0};
+    bool uniformBlocks_{true};              // 保留块长宽是否全等（Core 重排准入门限，SPEC §4.3）
     bool mergeGridTouched_{false};         // 用户手动改过 cols/rows → 停止自动填充
     bool collapsible_{true};               // 最近一次 Core 坍缩可行性（供模式项启用/禁用）
     

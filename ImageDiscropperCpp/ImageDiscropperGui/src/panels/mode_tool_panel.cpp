@@ -14,6 +14,7 @@
 #include <QVBoxLayout>
 
 #include "util/gui_nums.h"
+#include "util/widget_factory.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 
@@ -73,13 +74,10 @@ const ToolEntry kTools[] = {
 
 // 构建面板：一个「交互模式」分组——顶部四态模式互斥单选（2 列网格），下方形状子行（3 列网格，仅绘制态可见）。
 ModeToolPanel::ModeToolPanel(QWidget* parent) : QWidget(parent) {
-    auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx,
-                             nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx);
+    auto* root = makePanelLayout(this);
     root->setSpacing(nums::panels::kPanelSpacingPx);
 
-    auto* box = new QGroupBox(this);
-    i18n::bindTitle(retranslator_, box, IDC_GT(label, kInteractionModeBox));
+    auto* box = makeGroupBox(retranslator_, this, IDC_GT(label, kInteractionModeBox));
     auto* boxLay = new QVBoxLayout(box);
     boxLay->setSpacing(nums::panels::kPanelSpacingPx);
 
@@ -91,8 +89,7 @@ ModeToolPanel::ModeToolPanel(QWidget* parent) : QWidget(parent) {
     int mi = 0;
     for (const auto&[mode, label, tip] : kModes) {
         constexpr int cols = 2;
-        auto* btn = new QPushButton(box);
-        i18n::bindButton(retranslator_, btn, label);
+        auto* btn = makeButton(retranslator_, box, label);
         btn->setCheckable(true);
         btn->setStyleSheet(kToolStyle);
         i18n::bindToolTip(retranslator_, btn, tip);
@@ -112,8 +109,7 @@ ModeToolPanel::ModeToolPanel(QWidget* parent) : QWidget(parent) {
     int i = 0;
     for (const auto&[tool, label, tip] : kTools) {
         constexpr int cols = 3;
-        auto* btn = new QPushButton(shapeArea_);
-        i18n::bindButton(retranslator_, btn, label);
+        auto* btn = makeButton(retranslator_, shapeArea_, label);
         btn->setCheckable(true);
         btn->setStyleSheet(kToolStyle);
         i18n::bindToolTip(retranslator_, btn, tip);
@@ -153,6 +149,11 @@ void ModeToolPanel::setShapeRowVisible(const bool visible) const {
 // 编程式切换模式：勾选对应按钮→走与用户点击同一 idToggled 路径（发 modeChanged + 子行显隐）。
 void ModeToolPanel::setMode(const CanvasMode mode) const {
     if (auto* b = modeGroup_->button(static_cast<int>(mode))) b->setChecked(true);
+}
+
+// 模式按钮可用性：仅切按钮 enabled（不触发 idToggled，不动当前勾选态）。
+void ModeToolPanel::setModeEnabled(const CanvasMode mode, const bool enabled) const {
+    if (auto* b = modeGroup_->button(static_cast<int>(mode))) b->setEnabled(enabled);
 }
 
 // 模式按钮切换 → 发 modeChanged（仅选中时上报），并联动形状子行显隐（仅「标注绘制」展开）。

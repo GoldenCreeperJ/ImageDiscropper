@@ -8,6 +8,8 @@
 // ============================================================================
 #include "model/document.h"
 
+#include <QFileInfo>
+
 #include <algorithm>
 #include <utility>
 #include <variant>
@@ -35,35 +37,52 @@ std::uint64_t baseFingerprintOf(const core::Image& img) {
 } // namespace
 
 
-// 载入新图像：置原图与工作图，清空队列与选区。
+// 载入新图像＝建立「含底图的图层画布」（打开图片等价 新建画布[白底+原生附图]）：
+//   底图入 baseImage_（input 生态位，**绝不入 layers_**）、叠加层栈清空；有图即图层画布。
 void Document::setImage(core::Image img, QString path) {
+    const int w = img.width();
+    const int h = img.height();
     original_ = img;             // 保留一份原始副本（供队列重放与「重置预处理」）。
     working_ = std::move(img);   // 新图初始无预处理，工作图即原图。
     preprocess_.clear();         // 换图：轻队列 / 独立 resize / base_ 缓存随原图一并失效。
-    // 载入单一图像＝非图层画布态：清图层数组 / 每层会话 / 选中 / 尺寸，回退到 original_→预处理→working_ 既有链路。
+    // 打开图片＝图层画布基座——baseImage_ 取原图像素（identity），叠加层栈 / 会话 / 选中清空（底图不入 layers_）。
+    layersActive_ = true;
+    canvasWidth_ = w;
+    canvasHeight_ = h;
+    baseImage_ = original_.clone();
+    baseSelected_ = false;
+    baseSession_.clear();
+    // 恒等底图声明（§7 generate 段：placement-only + solid white backdrop）：无「recipe 键」→ 载入端 baseFromJson 视作运行时位图底；
+    //   white backdrop 令「无图重载」生成白底、且导 JPEG/BMP 透明区显白非黑（composeIntoBox 缺 backdrop 才透明）。
+    canvas::ImageLayer base;
+    base.fileName = QFileInfo(path).fileName().toStdString();
+    base.hasImagePlacement = true;
+    base.boxWidth = w;                                  // 落位框＝画布（＝原图尺寸，恒等）。
+    base.boxHeight = h;
+    base.imageFit = canvas::ImageFit::Native;           // 原生不缩放（图==框→逐像素恒等，无缺口）。
+    base.imageAnchor = generate::ImageAnchor::Center;
+    base.imagePivot = generate::ImageAnchor::Center;
+    base.imageX = 0;
+    base.imageY = 0;
+    base.boxBackdrop = generate::PatternParams{};       // 缺省即 solid white（background=kWhite）：白底种子。
+    baseLayer_ = std::move(base);
     layers_.clear();
     imageLayersVisible_ = true;
-    layersActive_ = false;
-    canvasWidth_ = 0;
-    canvasHeight_ = 0;
     layerSessions_.clear();
     selectedLayerId_.reset();
     nextLayerId_ = 1;
-    baseImage_ = core::Image{};   // 载入文件图＝文件底（canvasBase() 走 original_），清残留底图像素与声明。
-    baseLayer_.reset();
-    baseOpacity_ = 255;           // 单图态无底图淡出概念，复位不透明（与 canvasBase() 走 original_ 同口径）。
-    baseSelected_ = false;        // 换图回单图态：底图选中态与色彩预处理会话、画布级透明度一并复位。
-    baseSession_.clear();
+    baseOpacity_ = 255;
     canvasOpacity_ = 255;
     imagePath_ = std::move(path);
     hasRect_ = false;
     rect_ = engine::RectRegion{};
+    rects_.clear();   // 多矩形列表同样基于原图坐标：换图即失效，随单选区一并清空。
     emit imageChanged();
 }
 
 // 新建语义（**非破坏性**）：以新扁平底图替换画布基座、保留图层栈与色彩预处理（详见头文件）。
 //   与 setImage 的关键差异：不清图层/不取消标注会话、仅剥除会改变尺寸的 resize+几何预处理，
-//   从而“新建同尺寸画布”不会清空图层/标注/预处理。标注捕获回填与单图态色彩预处理重放均由调用方（SessionController）掌控。
+//   从而“新建同尺寸画布”不会清空图层/标注/预处理。标注捕获回填与色彩预处理重放均由调用方（SessionController）掌控。
 void Document::resetBaseWith(core::Image flat, std::optional<canvas::ImageLayer> baseLayer) {
     const int newW = flat.width();
     const int newH = flat.height();
@@ -73,8 +92,8 @@ void Document::resetBaseWith(core::Image flat, std::optional<canvas::ImageLayer>
 
     imagePath_.clear();               // 新建画布无文件来源。
     baseLayer_ = std::move(baseLayer);  // 底图声明（同构 ImageLayer：程序图案或附图片+落位），供重组/序列化重生。
-    // 新底图声明携带的 transform.opacity 回填为运行态 baseOpacity_、内存声明归一 255（透明度只走 fadedCanvasBase 边界）。
-    //   新建对话框产的 base transform.opacity 恒为 255 → baseOpacity_ 随之复位为不透明。
+    // 新底图声明携带的 transform.opacity 回填为运行态 baseOpacity_、内存声明归一 255（透明度只走 fadedCanvasBase 边界单点施加，避免与声明字段双淡）。
+    //   新建对话框可直接采集底图不透明度（0..255）落此 transform.opacity，故回填值随对话框选择而变。
     baseOpacity_ = baseLayer_.has_value() ? static_cast<std::uint8_t>(std::clamp(baseLayer_->transform.opacity, 0, 255)) : 255;
     if (baseLayer_.has_value()) baseLayer_->transform.opacity = 255;
     baseSelected_ = false;   // 新建底图：清底图选中态与色彩预处理会话（画布透明度属保留态，此处不改）。
@@ -94,8 +113,9 @@ void Document::resetBaseWith(core::Image flat, std::optional<canvas::ImageLayer>
         canvasWidth_ = newW;
         canvasHeight_ = newH;
     } else {
-        original_ = flat.clone();
-        working_ = std::move(flat);      // 先置为无预处理工作图；调用方随后经 replayCanvasPreprocess 补算色彩预处理。
+        // 无图首次新建 → 起图层画布，flat 作 baseImage_（底图入基座、**绝不入 layers_**）；
+        //   original_/working_ 交下方 layersChanged→recompose 展平产出（勿在此手设，免双路径）。
+        beginLayerCanvas(newW, newH, std::move(flat));
     }
 
     if (sizeChanged) {                  // 尺寸变→旧框选坐标失效；同尺寸→保留框选（仅尺寸不变时留框选）。
@@ -105,10 +125,8 @@ void Document::resetBaseWith(core::Image flat, std::optional<canvas::ImageLayer>
         selectedCells_.clear();
     }
 
-    // 图层态：发 layersChanged → recomposeLayerCanvas 以新 baseImage_ 展平 + 重放色彩预处理 → setWorkingImage（内含 imageChanged）。
-    // 单图态：发 imageChanged 刷新预览（工作图补算交调用方重放）。
-    if (layersActive_) emit layersChanged();
-    else emit imageChanged();
+    // 恒图层画布——发 layersChanged → recomposeLayerCanvas 以 fadedCanvasBase 展平 + 重放色彩预处理 → working_（内含 imageChanged）。
+    emit layersChanged();
 }
 
 // 写回一次预处理物化结果：替换工作图（original_ / steps_ 不变）。
@@ -179,6 +197,8 @@ void Document::selectLayer(const std::optional<int> id) {
 // 设底图（画布基座）选中态：与 selectLayer 互斥（选底图清选中层）；发 changed 切换预处理当前目标。
 void Document::selectBase(const bool on) {
     if (baseSelected_ == on) return;
+    // 空文档（非图层画布）无底图交互目标：底图色彩/透明度仅在图层画布态可拾取。拦住 on，杜绝“能选不能作用”的死控制。
+    if (on && !layersActive_) return;
     baseSelected_ = on;
     if (on) selectedLayerId_.reset();   // 选底图与选层互斥
     emit changed();
@@ -196,7 +216,7 @@ PreprocessSession& Document::activeSession() {
         if (auto* sess = layerSessions_.find(*selectedLayerId_))
             return sess->preprocess;
     }
-    if (baseSelected_) return baseSession_;
+    if (baseSelected_ && layersActive_) return baseSession_;   // 底图目标仅图层态可达（与 selectBase 门控同口径）
     return preprocess_;
 }
 const PreprocessSession& Document::activeSession() const {
@@ -289,37 +309,30 @@ bool Document::updateLayer(const int id, const canvas::ImageLayer& layer) {
     return true;
 }
 
-// 图片图层整体显隐：一个开关直接落到运行态标志 imageLayersVisible_（不入配置；无逐层 visible）。
-// 值未变则短路；否则发 layersChanged 交控制器重组（隐藏时传空 layers，仅留底图）。
+// 图片图层整体显隐（图层面板「显示」开关）：**纯显示切换**——一个开关直接落到运行态标志 imageLayersVisible_（不入配置；无逐层 visible）。
+// 值未变则短路；否则发 imageLayersVisibleChanged 交上层（MainWindow）切场景图层像素/落位框可见性，**不重组 working_、不影响导出**。
 void Document::setImageLayersVisible(const bool visible) {
     if (imageLayersVisible_ == visible) return;
     imageLayersVisible_ = visible;
-    emit layersChanged();
+    emit imageLayersVisibleChanged(visible);
 }
 
-// 回退到无图层（单一载入图态）：清栈、清会话、取消选中、清底图像素（不动 original_/working_）。
+// 清空叠加图片图层：仅清 layers_ / 每层会话 / 选中，保留 layersActive_ 与 baseImage_（底图恒在基座、绝不入栈）。
+//   调用方（clearAllLayersToBase / applyEngineConfig）随后经 layersChanged→recompose 以「仅底图」重出 original_/working_。
 void Document::clearLayers() {
     if (!layersActive_) return;
-    layersActive_ = false;
     layers_.clear();
     layerSessions_.clear();
     selectedLayerId_.reset();
-    baseSelected_ = false;   // 回单图态：底图选中态与色彩预处理会话失效（单图态无 Base 目标）。
-    baseSession_.clear();
-    baseImage_ = core::Image{};   // 回单图态：canvasBase() 转走 original_，清掉独立底图像素。
 }
 
-// 清空全部图片图层并回退为单图底图态：先把 original_/working_ 还原为纯底图 baseImage_，再走 clearLayers 清栈。
-//   保留画布级预处理声明与标注（调用方随后重放色彩预处理）；发 imageChanged 刷新预览。仅图层态有效。
+// 清空全部叠加图片图层、仅留底图：clearLayers 清叠加层（保留 baseImage_/layersActive_），发 layersChanged 交 recompose 以仅底图重出。
+//   保留画布级预处理声明与标注（recompose 重放色彩预处理）；底图绝不入栈。仅图层态有效。
 bool Document::clearAllLayersToBase() {
     if (!layersActive_) return false;
     const bool hadBase = !baseImage_.empty();
-    if (hadBase) {
-        original_ = baseImage_.clone();
-        working_ = baseImage_.clone();
-    }
-    clearLayers();   // layersActive_=false / layers_={} / 清会话 / baseImage_={}；此后 canvasBase() 走 original_（已还原为底图）。
-    emit imageChanged();
+    clearLayers();   // 仅清叠加层（保留 baseImage_/layersActive_）；底图绝不入栈。
+    emit layersChanged();   // 交 recompose 以「仅底图 fadedCanvasBase」重出 original_→working_（含色彩预处理重放）。
     return hadBase;
 }
 
@@ -363,7 +376,8 @@ void Document::setBaseOpacity(const int opacity) {
 
 // 按 baseOpacity_ 淡出的画布底图：以「内容签名」（尺寸/格式/首尾字节指纹 + baseOpacity + 底图色彩步声明）缓存，
 //   签名命中即直接回缓存引用（零 clone/零重跑），未命中才 canvasBase().clone() + applyExec + applyAlpha 重算并回写缓存。
-//   空底图（无 base）返回空图由 composeCanvas 自然处理。仅图层态 recompose / 导出重算取用（canvasBase() 本身保持原样供几何等用途）。
+//   空底图（无 base）返回空图由 composeCanvas 自然处理。取用点：图层态 recompose / 导出重算作 composeCanvas 的底图入参
+//   （折入底图色+淡、不回写 original_）；canvasBase() 本身保持原样供几何等用途。
 const core::Image& Document::fadedCanvasBase() const {
     const core::Image& base = canvasBase();
     FadedBaseCache key;

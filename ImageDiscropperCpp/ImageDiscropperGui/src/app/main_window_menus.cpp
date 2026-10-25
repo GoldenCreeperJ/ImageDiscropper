@@ -34,6 +34,7 @@
 #include "panels/export_panel.h"
 #include "panels/layer_panel.h"
 #include "panels/mode_tool_panel.h"
+#include "panels/param_panel.h"   // 「网格定义」子菜单经 ParamPanel::setGridAxisMode 走面板同一写回路径
 #include "util/scrollable_dialog.h"   // showScrollableMessage：使用说明 / 关于长文本改可滚动信息框
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
@@ -113,21 +114,21 @@ void MainWindowUi::buildFileMenu(MainWindow* w, QMenuBar* bar) {
     KeyBindings::instance().registerAction(CommandId::Export, aExport);
     QObject::connect(aExport, &QAction::triggered, w, [w] { w->export_->onExport(); });
     // 导出设置（输出方式/格式/烧录开关）：与导出面板组合框/复选框镜像——面板为唯一真相源，
-    // 菜单经 selectEmitMode/selectFormat/setBurnInChecked 走与用户点击面板同一路径（含重排 auto-grid）。
+    // 菜单经 selectExportMode/selectFormat/setBurnInChecked 走与用户点击面板同一路径（含重排 auto-grid）。
     QMenu* mExportSet = bindAddMenu(w->retranslator_, mFile, IDC_GT(menu, kFileExportSettings));
-    auto* emitGroup = new QActionGroup(w);
-    emitGroup->setExclusive(true);
-    w->aEmitSep_ = bindAddAction(w->retranslator_, emitGroup, IDC_GT(menu, kEmitSeparate));
-    w->aEmitCol_ = bindAddAction(w->retranslator_, emitGroup, IDC_GT(menu, kEmitCollapse));
-    w->aEmitRear_ = bindAddAction(w->retranslator_, emitGroup, IDC_GT(menu, kEmitRearrange));
-    for (QAction* a : {w->aEmitSep_, w->aEmitCol_, w->aEmitRear_}) {
+    auto* exportGroup = new QActionGroup(w);
+    exportGroup->setExclusive(true);
+    w->aExportSep_ = bindAddAction(w->retranslator_, exportGroup, IDC_GT(menu, kExportSeparate));
+    w->aExportCol_ = bindAddAction(w->retranslator_, exportGroup, IDC_GT(menu, kExportCollapse));
+    w->aExportRear_ = bindAddAction(w->retranslator_, exportGroup, IDC_GT(menu, kExportRearrange));
+    for (QAction* a : {w->aExportSep_, w->aExportCol_, w->aExportRear_}) {
         a->setCheckable(true);
         mExportSet->addAction(a);
     }
-    i18n::bindToolTip(w->retranslator_, w->aEmitRear_, IDC_GT(tooltip, kEmitRearrange));
-    QObject::connect(w->aEmitSep_, &QAction::triggered, w, [w] { w->exportPanel_->selectEmitMode(0); });
-    QObject::connect(w->aEmitCol_, &QAction::triggered, w, [w] { w->exportPanel_->selectEmitMode(1); });
-    QObject::connect(w->aEmitRear_, &QAction::triggered, w, [w] { w->exportPanel_->selectEmitMode(2); });
+    i18n::bindToolTip(w->retranslator_, w->aExportRear_, IDC_GT(tooltip, kExportRearrange));
+    QObject::connect(w->aExportSep_, &QAction::triggered, w, [w] { w->exportPanel_->selectExportMode(0); });
+    QObject::connect(w->aExportCol_, &QAction::triggered, w, [w] { w->exportPanel_->selectExportMode(1); });
+    QObject::connect(w->aExportRear_, &QAction::triggered, w, [w] { w->exportPanel_->selectExportMode(2); });
     mExportSet->addSeparator();
     auto* fmtGroup = new QActionGroup(w);
     fmtGroup->setExclusive(true);
@@ -290,6 +291,12 @@ void MainWindowUi::buildModeMenu(MainWindow* w, QMenuBar* bar) {
     QObject::connect(w->aL2HLine_, &QAction::triggered, w, [w] { w->doc_.setL2Sub(L2Sub::Hline); });
     QObject::connect(w->aL2VLine_, &QAction::triggered, w, [w] { w->doc_.setL2Sub(L2Sub::Vline); });
     QObject::connect(w->aL2Multi_, &QAction::triggered, w, [w] { w->doc_.setL2Sub(L2Sub::MultiRect); });
+    // L2「转为网格模式编辑」：把当前选区（单选矩形或多矩形包围盒）送入 L3——与右侧「参数」页同名按钮
+    // 同一入口 Document::convertRectToGrid（触发 changed → 刷新预览 + 切到 L3 + 工具栏/面板同步）。
+    // 仅 L2 且有选区时启用（syncPanels 依 hasRect/rects 回同步置灰）。
+    mL2->addSeparator();
+    w->aToGrid_ = bindAddAction(w->retranslator_, mL2, IDC_GT(label, kToGridButton));
+    QObject::connect(w->aToGrid_, &QAction::triggered, w, [w] { w->doc_.convertRectToGrid(); });
     QMenu* mSort = bindAddMenu(w->retranslator_, mMode, IDC_GT(menu, kL3SortSub));
     w->mSort_ = mSort;
     auto* sortGroup = new QActionGroup(w);
@@ -331,6 +338,37 @@ void MainWindowUi::buildModeMenu(MainWindow* w, QMenuBar* bar) {
         w->remainderActions_[static_cast<int>(policy)] = a;
         QObject::connect(a, &QAction::triggered, w, [w, policy = policy] { w->doc_.setRemainder(policy); });
     }
+    // L3 网格定义（与「参数」页两轴「定义方式」下拉镜像，面板为真相源）：两级子菜单横向/纵向各三态。
+    // 只切形态不填数值——切换走 ParamPanel::setGridAxisMode（面板以屏上现有数值起手），故不会留下空参数；
+    // 基准点/单元尺寸/份数/权重仍在参数页输入。仅 L3 启用，syncPanels 回同步勾选态。
+    QMenu* mGridDefine = bindAddMenu(w->retranslator_, mMode, IDC_GT(menu, kL3DefineSub));
+    w->mGridDefine_ = mGridDefine;
+    const struct { engine::GridAxisMode mode{}; i18n::TextRef label; } kGridModes[] = {
+        { engine::GridAxisMode::Pitch, IDC_GT(menu, kGridModePitch) },
+        { engine::GridAxisMode::Count, IDC_GT(menu, kGridModeCount) },
+        { engine::GridAxisMode::Weights, IDC_GT(menu, kGridModeWeights) },
+    };
+    const auto addGridDefineAxis = [w, &kGridModes](QMenu* parent, const i18n::TextRef& title,
+                                                    const bool horizontal,
+                                                    std::vector<QAction*>& actions) {
+        QMenu* sub = bindAddMenu(w->retranslator_, parent, title);
+        auto* group = new QActionGroup(w);
+        group->setExclusive(true);
+        actions.resize(3, nullptr);
+        for (const auto&[mode, label] : kGridModes) {
+            QAction* a = bindAddAction(w->retranslator_, group, label);
+            a->setCheckable(true);
+            sub->addAction(a);
+            actions[static_cast<int>(mode)] = a;
+            QObject::connect(a, &QAction::triggered, w,
+                             [w, horizontal, mode = mode] { w->param_->setGridAxisMode(horizontal, mode); });
+        }
+        return sub;
+    };
+    w->mGridDefineH_ = addGridDefineAxis(mGridDefine, IDC_GT(menu, kGridAxisHorizontal), true,
+                                         w->gridModeActionsH_);
+    w->mGridDefineV_ = addGridDefineAxis(mGridDefine, IDC_GT(menu, kGridAxisVertical), false,
+                                         w->gridModeActionsV_);
 
 }
 
@@ -400,7 +438,7 @@ void MainWindowUi::buildPreprocessMenu(MainWindow* w, QMenuBar* bar) {
 
 void MainWindowUi::buildLayerMenu(MainWindow* w, QMenuBar* bar) {
     // ---- 图片（多层画布；图层栈 CRUD 独立成菜单；显隐开关在视图菜单）----
-    QMenu* mLayers = bindAddMenu(w->retranslator_, bar, IDC_GT(menu, kMenuImage));
+    QMenu* mLayers = w->mLayers_ = bindAddMenu(w->retranslator_, bar, IDC_GT(menu, kMenuImage));
     QAction* aAddImageLayer = bindAddAction(w->retranslator_, mLayers, IDC_GT(menu, kAddImageLayer));
     i18n::bindToolTip(w->retranslator_, aAddImageLayer, IDC_GT(tooltip, kAddImageLayer));
     QObject::connect(aAddImageLayer, &QAction::triggered, w, [w] { w->session_->onAddImageLayer(); });
@@ -489,9 +527,9 @@ void MainWindowUi::buildLayerMenu(MainWindow* w, QMenuBar* bar) {
 
 void MainWindowUi::buildAnnoMenu(MainWindow* w, QMenuBar* bar) {
     // ---- 标注：撤销/重做/删除选中/清除全部/属性定位 ----
-    // 标注撤销/重做复用 AnnotationEditor 内建条目级会话态；快捷键 Ctrl+Z/Y 已统一交给编辑菜单
+    // 标注撤销/重做复用 AnnotationEditor 内建条目级会话态；快捷键 Ctrl+Z/Y 统一挂在编辑菜单
     //（上下文路由：标注上下文时自动转发到此处），故本菜单项不绑定快捷键，避免冲突。
-    QMenu* mAnno = bindAddMenu(w->retranslator_, bar, IDC_GT(menu, kMenuAnnotation));
+    QMenu* mAnno = w->mAnno_ = bindAddMenu(w->retranslator_, bar, IDC_GT(menu, kMenuAnnotation));
     const QAction* aAnnoUndo = bindAddAction(w->retranslator_, mAnno, IDC_GT(menu, kAnnoUndo));
     QObject::connect(aAnnoUndo, &QAction::triggered, w, [w] { w->annotation_->onAnnoUndo(); });
     const QAction* aAnnoRedo = bindAddAction(w->retranslator_, mAnno, IDC_GT(menu, kAnnoRedo));
@@ -570,9 +608,10 @@ void MainWindowUi::buildViewMenu(MainWindow* w, QMenuBar* bar) {
     const QAction* aReset = bindAddAction(w->retranslator_, mView, IDC_GT(menu, kResetView));
     QObject::connect(aReset, &QAction::triggered, w, [w] { w->view_->resetZoom(); });
     mView->addSeparator();
-    // 图层显隐（与左侧「图层」面板逐行双向镜像）：面板复选框是唯一真相源——菜单只翻转复选框，
-    // 落地链（面板信号 → AnnotationCoordinator → 场景）保持不变；面板/右键改动反向回同步勾选态
-    // （setChecked 不触发 triggered，无回环）。默认勾选与面板初始态一致（全部可见）。
+    // 图层显隐（与左侧「图层」面板逐行双向镜像）：面板复选框是唯一真相源——菜单经 setXVisible 前向驱动复选框，
+    // 复选框 toggled 自然发面板意图信号，走与用户直接勾选同一条落地链（面板信号 → AnnotationCoordinator /
+    // SessionController → 场景/模型）；面板/右键改动反向回同步勾选态（setChecked 不触发 triggered，无回环）。
+    // 默认勾选与面板初始态一致（全部可见）。
     const auto addViewToggle = [w, mView](const i18n::TextRef& ref,
                                           void (LayerPanel::*setter)(bool) const,
                                           void (LayerPanel::*signal)(bool)) {
@@ -586,8 +625,8 @@ void MainWindowUi::buildViewMenu(MainWindow* w, QMenuBar* bar) {
     addViewToggle(IDC_GT(menu, kShowImageLayer), &LayerPanel::setImageVisible, &LayerPanel::imageLayerVisibilityChanged);
     addViewToggle(IDC_GT(menu, kShowAnnotation), &LayerPanel::setAnnotationVisible, &LayerPanel::annotationVisibilityChanged);
     addViewToggle(IDC_GT(menu, kShowMask), &LayerPanel::setMaskVisible, &LayerPanel::maskVisibilityChanged);
+    // 网格线与切割线共用一项（同一开关，按模式各司其职：L3 网格线 / L1-L2 贯穿切割线）。
     addViewToggle(IDC_GT(menu, kShowGrid), &LayerPanel::setGridVisible, &LayerPanel::gridVisibilityChanged);
-    addViewToggle(IDC_GT(menu, kShowCutLine), &LayerPanel::setCutLineVisible, &LayerPanel::cutLineVisibilityChanged);
     addViewToggle(IDC_GT(menu, kShowSelection), &LayerPanel::setSelectionVisible, &LayerPanel::selectionVisibilityChanged);
     addViewToggle(IDC_GT(menu, kShowCellNumber), &LayerPanel::setNumberVisible, &LayerPanel::numberVisibilityChanged);
 

@@ -81,7 +81,7 @@ void ExportController::onExport() {
     QString galleryDisplay; // 单文件在相册中的显示名（自动名或面板自定义名）。
     QString tempRoot;       // 临时根（空=直写路径，无需发布层）。
 #endif
-    if (cfg.emitParams.mode == engine::EmitMode::Separate) {
+    if (cfg.exportParams.mode == engine::ExportMode::Separate) {
         path = doc_->outputDir();
 #ifdef Q_OS_ANDROID
         // 手输的 content:// 在移动端无意义：视同留空走相册默认子目录。
@@ -149,8 +149,8 @@ void ExportController::onExport() {
     }
 
     // 导出烧录（SPEC §8.2 导出侧的标注烧录 + 图片图层合并）：
-    //   · 图片图层（多层画布）——由「导出面板·烧录图片图层」开关独立决定是否并入，与图层面板「显示」（仅影响预览 working_）正交；
-    //     composeLayerCanvasForExport 与当前预览态一致时内部直接复用 working_，否则无副作用地现算另一形态。
+    //   · 图片图层（多层画布）——由「导出面板·烧录图片图层」开关独立决定是否并入，与图层面板「显示」（纯预览显隐、不影响工作图）正交；
+    //     composeLayerCanvasForExport(layersBurnIn)：含层直接复用 working_（恒全量合成），不含则无副作用地现算仅底图形态。
     //   · 标注——开关开且有标注时以当前导出基准逐个调 Core rasterize 合成（标注随像素被切开）。
     core::Image exportSrc = doc_->working();
     if (doc_->hasLayers()) {

@@ -99,12 +99,12 @@ void MobileShellUi::buildCentral(MainWindow* w) {
 //       对 QStackedWidget 同样成立（页面即滚动包裹后的面板祖先），「错误定位到某页」逻辑自动沿用。
 void MobileShellUi::buildDrawer(MainWindow* w) {
     // 页区最小尺寸＝设计下限（nums::mobile::kDrawerMinWidthPx × kDrawerMinHeightPx，
-    // 真机横/竖屏均放得下；无界回压的实测修复与取值依据见 src/mobile/README.md「触控精度与方向」）。
+    // 真机横/竖屏均放得下；防无界回压，取值依据见 src/mobile/README.md「触控精度与方向」）。
     auto* stacked = new QStackedWidget(w);
     stacked->setMinimumSize(nums::mobile::kDrawerMinWidthPx, nums::mobile::kDrawerMinHeightPx);
 
     // 每页套纵向 QScrollArea：高度不够时页内上下滚动（参数/导出页天然比抽屉高）；
-    // 横向 AlwaysOff——内容随抽屉宽自适应（minimumSizeHint 无界回压的实测修复
+    // 横向 AlwaysOff——内容随抽屉宽自适应（防 minimumSizeHint 无界回压，
     // 详见 src/mobile/README.md「触控精度与方向」）。
     auto scrollPage = [w](QWidget* content) {
         auto* sa = new QScrollArea(w);
@@ -218,7 +218,7 @@ void MobileShellUi::buildDrawer(MainWindow* w) {
     w->applyPanelMinWidths();
 }
 
-// 状态栏精简（SPEC §8.3）：紧凑模式隐藏坐标/RGB/提示标签，只留缩放；模式/保留块数
+// 状态栏精简（SPEC §8.3）：紧凑模式隐藏坐标/RGBA/提示标签，只留缩放；模式/保留块数
 // 经提示线呈现（CanvasCoordinator「交互模式：…」hint），提示仍经 showMessage 限时弹出。
 void MobileShellUi::buildStatus(MainWindow* w) {
     w->status_ = new StatusBar(w);

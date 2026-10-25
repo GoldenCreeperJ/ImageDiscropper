@@ -26,6 +26,7 @@
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMargins>
 #include <QPixmap>
 #include <QPushButton>
 #include <QScrollArea>
@@ -41,6 +42,7 @@
 #include "app/forms/placement_row.h"
 #include "util/gui_nums.h"
 #include "util/scrollable_dialog.h"
+#include "util/widget_factory.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 #include "util/image_qt_adapter.h"
@@ -63,22 +65,28 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     auto* body = new QWidget(this);
     auto* grid = new QGridLayout(body);
     grid->setContentsMargins(0, 0, 0, 0);
-    root->addWidget(wrapScrollable(body), 1);
+    // wrapScrollable 的「内容最小宽 + 纵滚条宽」预留是在调用一刻对 body->minimumSizeHint() 取快照，
+    //   故须等 body 网格装配完毕再接入 root（见预览行之后）；此处空壳时快照≈0、预留会失效。
 
     int row = 0;
     // ---- 尺寸 ----
-    widthSpin_ = new QSpinBox(this);
-    widthSpin_->setRange(1, generate::kMaxDimension);
+    widthSpin_ = makeSpin(this, 1, generate::kMaxDimension, QStringLiteral(" px"));
     widthSpin_->setValue(CanvasPrefs::instance().newCanvasWidth());   // 默认取应用级偏好（记住上次新建）；「添加图层」语境会随后预填真实画布。
-    widthSpin_->setSuffix(QStringLiteral(" px"));
-    heightSpin_ = new QSpinBox(this);
-    heightSpin_->setRange(1, generate::kMaxDimension);
+    heightSpin_ = makeSpin(this, 1, generate::kMaxDimension, QStringLiteral(" px"));
     heightSpin_->setValue(CanvasPrefs::instance().newCanvasHeight());
-    heightSpin_->setSuffix(QStringLiteral(" px"));
     grid->addWidget(new QLabel(IDC_GTR(label, kWidthColonLabel), this), row, 0);
     grid->addWidget(widthSpin_, row, 1);
     grid->addWidget(new QLabel(IDC_GTR(label, kHeightColonLabel), this), row, 2);
     grid->addWidget(heightSpin_, row, 3);
+    ++row;
+
+    // ---- 整体不透明度（0–255，合成期 alpha 乘子）：作用产出的图层或底图（与图层编辑面板口径/用词一致）；
+    //      画布级整体透明度不在本对话框采集（属建好后的画布态，交图层面板处理）。----
+    opacitySpin_ = makeSpin(this, 0, 255);
+    opacitySpin_->setValue(255);   // 默认不透明。
+    opacitySpin_->setToolTip(IDC_GTR(tooltip, kLayerOpacitySpin));
+    grid->addWidget(new QLabel(IDC_GTR(label, kOpacityFieldLabel), this), row, 0);
+    grid->addWidget(opacitySpin_, row, 1);
     ++row;
 
     // ---- 图案参数表单（底色/前景/类型/方向/周期/线宽/点半径/噪声；整表单占一行四列）----
@@ -92,6 +100,12 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     layerPlaceRow_->setToolTip(IDC_GTR(tooltip, kLayerPlaceRowTip));
     imagePlaceRow_ = new PlacementRow(IDC_GTR(label, kImagePlaceBox), this);
     imagePlaceRow_->setToolTip(IDC_GTR(tooltip, kImagePlaceRowTip));
+    // 图层落位偏移另接受百分比串（SPEC §2.1）：基准＝本对话框的尺寸框（即新建画布的宽/高），
+    // 随宽/高实时变化；图片落位（图片相对图层）不接百分比——其基准是图层框而非画布，
+    // 而图层框尺寸要到合成期才由适应方式推出，对话框内无确定基准。
+    layerPlaceRow_->setOffsetBasisProvider([this](const bool horizontal) {
+        return horizontal ? widthSpin_->value() : heightSpin_->value();
+    });
 
     // ---- 附加图片（可选）区块：开关驱动显隐；勾选后源图按「三适应 + 图片落位」先进图层框，再按图层落位叠到底图（两段）。----
     attachImageCheck_ = new QCheckBox(IDC_GTR(label, kAttachImageCheck), this);
@@ -104,11 +118,12 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     for (const auto&[fit, name] : std::array<std::pair<ImageFit, i18n::TextRef>, 3>{{
              {ImageFit::Crop, IDC_GT(label, kFitCropItem)},
              {ImageFit::Stretch, IDC_GT(label, kFitStretchItem)},
-             {ImageFit::Native, IDC_GT(label, kFitNativeItem)}}}) {
+             {ImageFit::Native, IDC_GT(label, kFitNativeItem)}
+             }}) {
         imageFitCombo_->addItem(i18n::qs(name));
         imageFitCombo_->setItemData(imageFitCombo_->count() - 1, static_cast<int>(fit));
     }
-    imageFitCombo_->setCurrentIndex(0);   // 默认「裁剪」。
+    imageFitCombo_->setCurrentIndex(0);
 
     // ---- 装配（每控件都需 addWidget；图层落位常显、与图片落位分块不混淆）----
     // 图层落位（常显，整组一行）。
@@ -136,6 +151,9 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     grid->addWidget(previewLabel_, row, 0, 1, 4);
     ++row;
 
+    // 主体网格装配完毕 → 此刻接入可滑外壳：wrapScrollable 据此刻 body 的真实最小宽预留「内容最小宽 + 纵滚条宽」。
+    root->addWidget(wrapScrollable(body), 1);
+
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     buttons->button(QDialogButtonBox::Ok)->setText(IDC_GTR(label, kDialogOkButton));
     buttons->button(QDialogButtonBox::Cancel)->setText(IDC_GTR(label, kDialogCancelButton));
@@ -145,7 +163,7 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     connect(patternForm_, &PatternFormWidget::paramsChanged, this, &NewCanvasDialog::onParamsChanged);
     connect(buttons, &QDialogButtonBox::accepted, this, &NewCanvasDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    for (const QSpinBox* s : {widthSpin_, heightSpin_})
+    for (const QSpinBox* s : {widthSpin_, heightSpin_, opacitySpin_})
         connect(s, qOverload<int>(&QSpinBox::valueChanged), this, &NewCanvasDialog::onParamsChanged);
     connect(attachImageCheck_, &QCheckBox::toggled, this, [this](const bool on) {
         // 首次开启：原生适应需把顶部宽/高（图层尺寸）回填为源图尺寸。
@@ -170,8 +188,13 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     // 「表单+预览自然尺寸 + 按钮行」与可用几何的较小者；小屏 / 横屏超出即内部滚动、按钮常驻，
     // 勾选附加图片增删的行落在滚动内容里、外层窗口不被撑大；桌面大屏下钳值远超内容、等效无约束。
     const QSize formHint = body->sizeHint();   // 含预览（已在 body 内）
+    // 护栏首显按**整窗尺寸** resize：formHint 只是内容口径，须补根布局左右边距，
+    // 否则视口恒比内容自然宽窄一条边距、最右列被裁（即使无纵滚）；纵滚宽度由 wrapScrollable
+    // 抬滚动区最小宽另行预留。
+    const QMargins rootMargin = root->contentsMargins();
     limitDialogToScreen(this, QSize(
-        qMax(formHint.width(), nums::dialog::kNewCanvasPreviewMinWidthPx),
+        qMax(formHint.width(), nums::dialog::kNewCanvasPreviewMinWidthPx)
+            + rootMargin.left() + rootMargin.right(),
         formHint.height() + 2 * nums::dialog::kTouchFieldMinHeightPx + nums::panels::kPanelSpacingPx));
 }
 
@@ -241,7 +264,7 @@ void NewCanvasDialog::onParamsChanged() const {
 }
 
 // 切「添加图层」语境：顶部宽/高 spin（即图层尺寸）预填真实画布 W×H 并保持可编辑（改小即裁剪、改大即留白）。
-// 附加图片开关默认开（添加图层语境必带图）；图层落位组此时才显示（新建画布语境隐藏）。
+// 附加图片开关默认关（未勾即产纯图案 recipe 图层，勾选才产 file 图层）；图层落位组此时才显示（新建画布语境隐藏）。
 // 合成语义与新建画布完全一致（底图图案 + 图层落位/图片落位两段合成 + 越界裁剪），不叠底图、不撑大。
 void NewCanvasDialog::setAddLayerMode(const int canvasW, const int canvasH) {
     addLayerMode_ = true;
@@ -252,7 +275,9 @@ void NewCanvasDialog::setAddLayerMode(const int canvasW, const int canvasH) {
         widthSpin_->setValue(canvasW);
         heightSpin_->setValue(canvasH);
     }
-    attachImageCheck_->setChecked(true);   // 添加图层语境必带图（此语境恒产图层，故默认勾选）。
+    // 语境切换后刷新控件显隐与预览：构造时以「新建画布」语境（addLayerMode_＝假）算过一次显隐，图层落位组被隐藏；
+    //   此处不改就停留在隐藏态，直到首个交互触发 onParamsChanged——故主动刷一次，使图层落位随语境即时可见。
+    onParamsChanged();
 }
 
 // 组装一个可序列化的附加图片 File 图层：原始源（factor≠1 先等比预缩作预览代理）+ 两级落位（内层源图→
@@ -262,8 +287,7 @@ canvas::ImageLayer NewCanvasDialog::buildAttachedLayer(const double factor, cons
                                                        const generate::PatternParams& boxBackdrop, const int boxW, const int boxH,
                                                        const canvas::ImageTransform& imgPlace, const ImageFit fit) const {
     canvas::ImageLayer layer;
-    layer.sourceKind = canvas::LayerSourceKind::File;
-    layer.decodedPixels = factor < 1.0 ? imageSource_.scaled(factor) : imageSource_;   // 预览代理先等比预缩源。
+    layer.decodedPixels = factor < 1.0 ? imageSource_.scaled(factor) : imageSource_;   // 预览代理先等比预缩源（无 recipe → 文件源派生）。
     layer.hasImagePlacement = true;
     layer.boxWidth = boxW;
     layer.boxHeight = boxH;
@@ -283,7 +307,13 @@ canvas::ImageLayer NewCanvasDialog::buildAttachedLayer(const double factor, cons
 core::Image NewCanvasDialog::composeResult(const generate::PatternParams& p, const int outW, const int outH,
                                            const double factor, const canvas::ImageTransform& layerPlace,
                                            const canvas::ImageTransform& imgPlace, const ImageFit fit) const {
-    if (imageSource_.empty()) return EngineBridge::generatePattern(outW, outH, p);   // 未选：纯图案底图（底色已烤入像素）。
+    if (imageSource_.empty()) {   // 未选：纯图案底图（底色已烤入像素）。
+        auto flat = EngineBridge::generatePattern(outW, outH, p);
+        // 纯图案 makePattern 不施 alpha 乘子（合成边界单点施加、防双淡的不变式）：预览在 layerPlace.opacity 上此处施加；
+        //   定稿恒以 opacity=255 调本函数（flat 保持不透明，透度另由 baseOpacity/图层 transform 于运行时施加），故不双淡。
+        if (const int op = layerPlace.opacity; op < 255) canvas::applyAlpha(flat, static_cast<std::uint8_t>(op));
+        return flat;
+    }
     std::vector<canvas::ImageLayer> layers;   // 无 base（图层框底色已含于层内 boxBackdrop）。
     layers.push_back(buildAttachedLayer(factor, layerPlace, p, outW, outH, imgPlace, fit));
     return EngineBridge::composeCanvas(layers, outW, outH);
@@ -315,6 +345,7 @@ void NewCanvasDialog::refreshPreview() const {
     layerPlace.layerPivot = layerPlaceRow_->pivot();
     layerPlace.x = off(layerPlaceRow_->offsetX());
     layerPlace.y = off(layerPlaceRow_->offsetY());
+    layerPlace.opacity = opacitySpin_->value();   // 预览即时反映整体不透明度（附图路经 composeCanvas 合成可见）。
     if (attach) {
         imgPlace.inCanvasAnchor = imagePlaceRow_->anchor();
         imgPlace.layerPivot = imagePlaceRow_->pivot();
@@ -385,19 +416,23 @@ void NewCanvasDialog::accept() {
     }
 
     // 存结果：新建画布 → result_ = flat 扁平 base；附加图片「添加图层」 → 额外构造可序列化 resultLayer_（原始源 + 两级落位 + 图层框底色）。
+    // 整体不透明度：只随产出载体（图层/底图）携于声明字段，不烘进 flat 像素（底图透度由运行时 fadedCanvasBase 单点施加，避免与 baseOpacity 双淡）。
+    const int op = opacitySpin_->value();
     resultParams_ = p;   // 留存汇编参数（供「添加图片图层」入口未勾图时产 Recipe 层，recipe 可序列化供 config 导出）。
+    resultOpacity_ = op;
     result_ = flat;
     if (attach && addLayerMode_) {
         resultLayer_ = buildAttachedLayer(1.0, layerPlace, p, w, h, imgPlace, fit);   // decodedPixels＝原始源（config 仅存 fileName，重载重解码）。
+        resultLayer_.transform.opacity = op;   // 图层整体不透明度（composeCanvas 合成期施加）
         producesLayerCanvas_ = true;
     }
     // 新建画布语境（非「添加图层」）：产出底图 ImageLayer 声明，使底图落位可随 §7 generate 段往返、可复现。
     if (!addLayerMode_) {
         canvas::ImageLayer base;
         base.zOrder = 0;   // 钉住最底（与叠加层 zOrder 域分离，语义标记）。
+        base.transform.opacity = op;   // 底图整体不透明度：resetBaseWith 回填运行态 baseOpacity_（内存声明随后归一 255）。
         if (attach) {
-            // 附图片底：File 源 + 内层图片落位 + box＝画布尺寸 + boxBackdrop＝图案配方；transform 恒等（底图不可拖）。
-            base.sourceKind = canvas::LayerSourceKind::File;
+            // 附图片底：文件源（携位图/落位）+ box＝画布尺寸 + boxBackdrop＝图案配方；transform 恒等（底图不可拖）。
             base.fileName = QFileInfo(imageSourcePath_).fileName().toStdString();   // 相对名 provenance（供落/取 assets）。
             base.decodedPixels = imageSource_;   // 会话合成用原始源像素；序列化时上游剖离。
             base.hasImagePlacement = true;
@@ -410,8 +445,7 @@ void NewCanvasDialog::accept() {
             base.imageY = imgPlace.y;
             base.boxBackdrop = p;   // 图层框底色/图案（Core 内层先铺底再叠源）。
         } else {
-            // 纯图案底：Recipe 源 + 恒等 transform、无落位（序列化为纯 recipe 形态的 generate 段）。
-            base.sourceKind = canvas::LayerSourceKind::Recipe;
+            // 纯图案底：有 recipe + 恒等 transform、无落位（序列化为纯 recipe 形态的 generate 段）。
             base.recipe = p;
         }
         resultBaseLayer_ = base;

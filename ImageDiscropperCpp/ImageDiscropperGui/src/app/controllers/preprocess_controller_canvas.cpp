@@ -35,7 +35,7 @@ void PreprocessController::syncLayerMaterialCache(const std::vector<canvas::Imag
     store.prune(alive);   // 剔除已删层（会话 + 位图一并回收，防陈旧驻留 / id 复用误命中）
 }
 
-// 多层画布重组：叠加层栈 / 画布尺寸声明变时由本方法展平回灌。非图层画布（单一载入图）早退。
+// 多层画布重组：叠加层栈 / 画布尺寸声明变时由本方法展平回灌。无叠加层（含空文档）早退。
 // 步骤：① 以**画布底图 canvasBase()** 为基、当前叠加层声明栈调 composeCanvas 得 width×height 展平底图；
 //       ② setOriginalImage 回灌为 original_（失效画布 base_）；③ 在新基准上走 commitPipeline 重放画布级预处理→working_。
 //       画布预处理声明未变 → commitPipeline 内部 geomSig 前后一致 → 不误清选区（尺寸变已在 setCanvasSize 清）。
@@ -47,10 +47,9 @@ void PreprocessController::recomposeLayerCanvas() {
     // 先按签名刷新逐层物化缓存：仅签名（来源/图层框/底色/预处理/目标尺寸）变化的层重跑 materializeLayer，改落位/不透明度（transform.x/y/锚点/opacity）复用缓存整层位图。
     //   无论显隐都刷全层（切回可见时免重跑）。
     syncLayerMaterialCache(layers);
-    // 预览显隐关（doc_->imageLayersVisible()==false）→ 传空 layers（仅落底图），与导出侧同口径；Core 不持显隐态。
-    static const std::vector<canvas::ImageLayer> kNoLayers;
-    const std::vector<canvas::ImageLayer>& toCompose = doc_->imageLayersVisible() ? layers : kNoLayers;
-    core::Image composed = EngineBridge::composeCanvas(toCompose, doc_->canvasWidth(), doc_->canvasHeight(), doc_->fadedCanvasBase(),
+    // 解耦渲染：工作图恒为「底图 + 全量叠加层」的展平合成（引擎/导出真相），图层显示态不烘进 working_。
+    //   图层显隐由 CanvasScene 独立像素图元纯显示切换（见 setImageLayersVisible），不重组工作图。
+    core::Image composed = EngineBridge::composeCanvas(layers, doc_->canvasWidth(), doc_->canvasHeight(), doc_->fadedCanvasBase(),
                                                        &doc_->layerSessions().materialized());
     if (composed.empty()) {
         status_->notify(IDC_GTR(status, kLayerComposeFailed), true);
@@ -62,26 +61,41 @@ void PreprocessController::recomposeLayerCanvas() {
                    IDC_GTR(status, kLayerRecomposeBusy));
 }
 
-// 导出侧「图片图层是否并入」现算（对标标注烧录：与「显示」预览开关正交）。无副作用：不改 original_/working_/会话缓存。
-// 与当前预览态一致 → working_ 已是该形态，直接复用；否则在栈副本上翻转 imageLayersVisible 门控（不碰 Core 逻辑）
-// 重跑 composeCanvas，再施加与 working_ 同一条画布级有效管线（resize 前缀 + 轻队列），保证几何/预处理口径一致。
+// 导出侧「图片图层是否并入」现算（与图层面板「显示」开关正交：后者纯预览显隐、不影响工作图与导出）。无副作用：不改 original_/working_/会话缓存。
+// working_ 恒为全量合成（底图 + 全层）：includeOverlays=true 直接复用 working_；false 现算「仅底图」形态（不叠叠加层）
+//   + 施加与 working_ 同一条画布级有效管线（resize 前缀 + 轻队列），保证几何/预处理口径一致。
 core::Image PreprocessController::composeLayerCanvasForExport(const bool includeOverlays) const {
     if (!doc_) return core::Image{};
-    if (!doc_->hasLayers()) return doc_->working();   // 非图层画布：叠加层无从谈起，恒回工作图。
-    // 与当前预览显隐一致 → working_ 即该形态，直接复用，省一次全量合成 + 管线重放。
-    if (includeOverlays == doc_->imageLayersVisible()) return doc_->working();
+    if (!doc_->hasLayers()) return doc_->working();   // 无叠加层：叠加层无从谈起，恒回工作图。
+    // 并入叠加层：working_ 即全量合成形态，直接复用，省一次全量合成 + 管线重放。
+    if (includeOverlays) return doc_->working();
     const int w = doc_->canvasWidth(), h = doc_->canvasHeight();
     if (w <= 0 || h <= 0) return doc_->working();
-    // includeOverlays 决定叠全层还是传空（仅底图）：Core 不持显隐态，显隐由调用方传参决定。
+    // 不含叠加层：传空 layers（仅底图），Core 不持显隐态、形态由调用方传参决定。
     static const std::vector<canvas::ImageLayer> kNoLayers;
-    const std::vector<canvas::ImageLayer>& layers = includeOverlays ? doc_->layerStack() : kNoLayers;
-    // 复用已按签名刷新的物化缓存（图层层内容/preprocess 与预览态一致）：命中直取、未命中 Core 回退现算。
-    const core::Image composed = EngineBridge::composeCanvas(layers, w, h, doc_->fadedCanvasBase(), &doc_->layerSessions().materialized());
+    // 复用已按签名刷新的物化缓存（命中直取、未命中 Core 回退现算）；底图取 fadedCanvasBase（折入底图色 + 淡）。
+    const core::Image composed = EngineBridge::composeCanvas(kNoLayers, w, h, doc_->fadedCanvasBase(), &doc_->layerSessions().materialized());
     if (composed.empty()) return doc_->working();      // 合成失败回退当前工作图（与重组早退同口径）。
     const auto eff = PreprocessSession::makeEffective(doc_->resizeTarget(), doc_->steps());
     core::Image out = eff.empty() ? composed.clone() : EngineBridge::applyPipeline(composed, eff);
     if (out.empty()) return doc_->working();
     // 与预览同口径：导出侧同样在产出边界施加画布级整体透明度（working_ 复用路径已在 commitPipeline 施加）。
+    canvas::applyAlpha(out, static_cast<std::uint8_t>(std::clamp(doc_->canvasOpacity(), 0, 255)));
+    return out;
+}
+
+// 画布预览侧「图层于透明底」现算（解耦渲染专用：供 CanvasScene 独立像素图元与底图分离叠加）：
+//   composeCanvas 传空 base（Core 铺全透明底）+ 全层 → 再施加与 working_ 同一条画布级有效管线 + 画布级透明度。
+//   无副作用；无叠加层（含空文档）返回空图，由调用方清空图层像素覆盖。与 composeLayerCanvasForExport 同走物化缓存。
+core::Image PreprocessController::composeLayersForDisplay() const {
+    if (!doc_ || !doc_->hasLayers()) return core::Image{};
+    const int w = doc_->canvasWidth(), h = doc_->canvasHeight();
+    if (w <= 0 || h <= 0) return core::Image{};
+    const core::Image composed = EngineBridge::composeCanvas(doc_->layerStack(), w, h, core::Image{}, &doc_->layerSessions().materialized());
+    if (composed.empty()) return core::Image{};
+    const auto eff = PreprocessSession::makeEffective(doc_->resizeTarget(), doc_->steps());
+    core::Image out = eff.empty() ? composed.clone() : EngineBridge::applyPipeline(composed, eff);
+    if (out.empty()) return core::Image{};
     canvas::applyAlpha(out, static_cast<std::uint8_t>(std::clamp(doc_->canvasOpacity(), 0, 255)));
     return out;
 }

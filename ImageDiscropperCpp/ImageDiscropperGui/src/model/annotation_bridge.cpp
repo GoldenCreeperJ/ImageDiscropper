@@ -87,7 +87,13 @@ void AnnotationBridge::setFontSize(const double size) { editor_.changeFontSize(s
 void AnnotationBridge::setCornerRadius(const double r) { editor_.changeCornerRadius(r); emit changed(); }
 // ===========================================================================
 void AnnotationBridge::selectAt(const core::Point2D p) {
-    editor_.selectAnnotation(editor_.hitTest(p));    // 命中检测全在 Core
+    editor_.selectAnnotation(editor_.pickAt(p));    // 按下语义：命中栈内保持当前选中，否则选最顶
+    emit selectionChanged();
+    emit changed();
+}
+
+void AnnotationBridge::cycleAt(const core::Point2D p) {
+    editor_.selectAnnotation(editor_.cycleAt(p));   // 原地点击：同点连击沿命中栈循环下探
     emit selectionChanged();
     emit changed();
 }
@@ -105,6 +111,7 @@ void AnnotationBridge::moveSelectedBy(const double dx, const double dy) {
     // ——不展平为通用 Path，故 Text 字形、矩形/圆等元数据与控制点语义均不丢失（shapeType 保持不变）；
     // 且形状经旋转/缩放后拖动方向仍跟随光标（translateWorld 而非 translate）。
     a->shape->translateWorld(dx, dy);
+    editor_.resetPickCycle();   // 拖拽不推进连击循环：清循环态，其后同点单击从无历史重新起算
     emit changed();
 }
 

@@ -29,7 +29,9 @@
 #include <QStandardItemModel>
 
 #include "model/document.h"
+#include "util/coord_spin.h"      // resizeW_/resizeH_ 的静态类型（本 TU 要读值、连信号、设值）
 #include "util/gui_nums.h"
+#include "util/widget_factory.h"   // makePanelLayout / makeGroupBox / makeSpin
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 
@@ -56,9 +58,7 @@ void applyMaskTo(const std::string& mask, QCheckBox* r, QCheckBox* g, QCheckBox*
 
 // 构造：上「画布尺寸（Resize）」+ 中「几何操作」区/列表 + 「色彩操作」区/列表 + 下「重置」。
 PreprocessPanel::PreprocessPanel(QWidget* parent) : QWidget(parent) {
-    auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx,
-                             nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx);   // 面板内边距。
+    auto* root = makePanelLayout(this);   // 四边内边距 8px（工厂统一）。
     root->setSpacing(nums::panels::kPanelGroupSpacingPx);                                    // 分组间距。
 
     // ---- 顶部当前预处理目标标注（未选图层＝画布；选中图片图层＝该层）----
@@ -73,8 +73,7 @@ PreprocessPanel::PreprocessPanel(QWidget* parent) : QWidget(parent) {
     buildColorSection(root);
 
     // ---- 重置 ----
-    resetBtn_ = new QPushButton(this);
-    i18n::bindButton(retranslator_, resetBtn_, IDC_GT(label, kResetPreprocessButton));
+    resetBtn_ = makeButton(retranslator_, this, IDC_GT(label, kResetPreprocessButton));
     i18n::bindToolTip(retranslator_, resetBtn_, IDC_GT(tooltip, kResetPreprocessBtn));
     root->addWidget(resetBtn_);
 

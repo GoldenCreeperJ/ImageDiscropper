@@ -43,6 +43,7 @@
 #include "panels/param_panel.h"       // retranslateUi 调 param_->retranslate()。
 #include "panels/mode_tool_panel.h"
 #include "util/gui_nums.h"
+#include "util/scrollable_dialog.h"   // applyPanelMinWidths 预留纵滚宽（verticalScrollBarExtent）。
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 
@@ -104,6 +105,7 @@ void MainWindow::initCore() {
     preprocess_->setDialogParent(this);
     preprocess_->setPreprocessPanel(preprocessPanel_);
     preprocess_->connectSignals();
+    preview_->setPreprocessController(preprocess_);   // 解耦渲染：PreviewController 取底图/图层像素分离合成。
 
     annotation_ = new AnnotationCoordinator(this);
     annotation_->setAnnotationBridge(&annoBridge_);
@@ -181,6 +183,9 @@ void MainWindow::connectAll() {
     connect(&doc_, &Document::changed, this, &MainWindow::onDocChanged);
     // 多层画布：图层栈/画布尺寸声明变 → 控制器 composeCanvas 重组展平底图（再叠画布预处理→working_）。
     connect(&doc_, &Document::layersChanged, preprocess_, &PreprocessController::recomposeLayerCanvas);
+    // 图片图层「显示」开关（纯显隐、不重组）→ 切场景图层像素覆盖图元与落位框可见性（与底图显隐互不连带）。
+    connect(&doc_, &Document::imageLayersVisibleChanged, this,
+            [this](const bool visible) { scene_->setImageLayersVisible(visible); });
 
     connect(view_, &CanvasView::cursorScenePos, this, &MainWindow::onCursor);
     connect(view_, &CanvasView::zoomChanged, this, &MainWindow::onZoomChanged);
@@ -192,15 +197,24 @@ void MainWindow::connectAll() {
             [this](const bool on) {
                 doc_.setLayersBurnIn(on);
                 if (aBurnLayers_) aBurnLayers_->setChecked(on);
+                preview_->refreshExportSource();   // 烧录开关影响输出预览（含层/仅底图）：重算小源图后重渲染。
             });
     exportPanel_->setLayersBurnInChecked(doc_.layersBurnIn());
     connect(exportPanel_, &ExportPanel::burnInChanged, this,
             [this](const bool on) { if (aBurnAnno_) aBurnAnno_->setChecked(on); });
     // 导出设置「坍缩」置灰随 Core 坍缩可行性回灌（与导出面板组合框同源）。
     connect(exportPanel_, &ExportPanel::collapsibleChanged, this,
-            [this](const bool ok) { if (aEmitCol_) aEmitCol_->setEnabled(ok); });
+            [this](const bool ok) { if (aExportCol_) aExportCol_->setEnabled(ok); });
+    // 导出设置「重排」置灰同受 Core 重排准入门限约束（L3 且保留块长宽全等）：面板回灌变化时镜像。
+    connect(exportPanel_, &ExportPanel::rearrangeAvailableChanged, this,
+            [this](const bool ok) { if (aExportRear_) aExportRear_->setEnabled(ok); });
 
     connect(history_, &DocHistory::availabilityChanged, this, &MainWindow::onHistoryAvailabilityChanged);
+
+    // 图片/标注图层显隐切换 → 重算可用性门控（模式按钮/属性面板/整域菜单，并让当前被禁模式回落框选）。
+    // 显隐落地连接在各属主（SessionController / AnnotationCoordinator），均先于本连接发射链。
+    connect(layerPanel_, &LayerPanel::imageLayerVisibilityChanged, this, [this] { syncPanels(); });
+    connect(layerPanel_, &LayerPanel::annotationVisibilityChanged, this, [this] { syncPanels(); });
 
     // 画布四态菜单勾选态：CanvasCoordinator 的模式落地连接先于本条（initCore 连接序），
     // 模式变更后先 applyCanvasMode 落地、再读视图态回同步菜单勾选。
@@ -294,10 +308,12 @@ void MainWindow::applyPanelMinWidths() {
     // 移动端抽屉：与桌面**同一落点**——把 max(设计下限, 页内容自然宽) 抬到每页 QScrollArea 的最小宽上
     //（桌面也是抬在 leftScroll_/rightScroll_ 而非内容上），使抽屉页区实际加宽、进标注绘制态时形状子行（3 列
     // 网格）不被横向 AlwaysOff 裁掉；随语言重放与进出绘制态重测，防英文长标签截断。桌面形态下本列表恒空，跳过。
+    // 各页同为横滚 AlwaysOff + 纵滚 AsNeeded，故一并预留一条纵滚宽，防纵滚出现时最右列被视口裁掉。
     int maxPageMinW = 0;
     for (QScrollArea* pageScroll : drawerPageScrolls_)
         if (pageScroll && pageScroll->widget()) {
-            const int minW = contentWidth(pageScroll->widget(), nums::panels::kLeftPanelMinWidthPx);
+            const int minW = contentWidth(pageScroll->widget(), nums::panels::kLeftPanelMinWidthPx)
+                           + verticalScrollBarExtent(pageScroll);
             pageScroll->setMinimumWidth(minW);
             maxPageMinW = std::max(maxPageMinW, minW);
         }
@@ -308,8 +324,9 @@ void MainWindow::applyPanelMinWidths() {
 
     // 以下桌面三栏；移动形态无 leftScroll_/split_ 等成员，直接返回。
     if (!leftScroll_ || !rightScroll_ || !split_ || !leftContainer_ || !accordion_) return;
-    const int rightMinW = contentWidth(accordion_, nums::app::kRightPanelWidthPx);
-    const int leftMinW = contentWidth(leftContainer_, nums::app::kLeftPanelWidthPx);
+    // 两栏同为横滚 AlwaysOff + 纵滚 AsNeeded：自然宽之外再预留一条纵滚宽，防纵滚出现时最右列被视口裁掉。
+    const int rightMinW = contentWidth(accordion_, nums::app::kRightPanelWidthPx) + verticalScrollBarExtent(rightScroll_);
+    const int leftMinW = contentWidth(leftContainer_, nums::app::kLeftPanelWidthPx) + verticalScrollBarExtent(leftScroll_);
     rightScroll_->setMinimumWidth(rightMinW);
     leftScroll_->setMinimumWidth(leftMinW);
     // 分隔器取整容差：当前宽与上次实际自动值相差在此内视为“仍处自动宽”（用户没手动拖宽）。
@@ -364,15 +381,32 @@ void MainWindow::onCursor(const QPointF& scenePos) const {
     status_->setCoord(x, y);
     // 标注为矢量叠加、不烘焙进 working()：先问画布此处有无标注命中，命中则显其自身颜色（否则下面只会读到标注底下的图像像素）。
     if (const auto anno = scene_->annotationColorAt(scenePos)) {
-        status_->setColor(anno->r, anno->g, anno->b);
+        status_->setColor(anno->r, anno->g, anno->b, anno->a);
         return;
     }
-    if (doc_.hasImage() && doc_.working().inBounds(x, y)) {
-        const core::Color c = doc_.working().getPixel(x, y);
-        status_->setColor(c.r, c.g, c.b);
-    } else {
+    if (!doc_.hasImage() || !doc_.working().inBounds(x, y)) {
         status_->clearColor();
+        return;
     }
+    // 取色与屏幕所见一致：底图与图片图层是两个独立图元，任一被隐藏就不得再读到它的像素
+    //（working_ 恒为全量合成，含被隐藏的那一份，不能无条件下用）。
+    const auto showColor = [this, x, y](const core::Image& img) {
+        if (img.empty() || !img.inBounds(x, y)) { status_->clearColor(); return; }
+        const core::Color c = img.getPixel(x, y);
+        if (c.a == 0) { status_->clearColor(); return; }   // 屏幕透明处无颜色可报（如底图隐藏后的图层空白）。
+        status_->setColor(c.r, c.g, c.b, c.a);
+    };
+    const bool baseOn = scene_->baseVisible();
+    const bool layersOn = doc_.hasLayers() && doc_.imageLayersVisible();
+    if (!doc_.hasLayers()) {              // 非图层画布：画面只有底图。
+        if (baseOn) showColor(doc_.working());
+        else status_->clearColor();
+        return;
+    }
+    if (baseOn && layersOn) showColor(doc_.working());                        // 两者均可见：全量合成即所见。
+    else if (baseOn) showColor(preview_->displayBaseImage());                 // 仅底图：图层已隐藏。
+    else if (layersOn) showColor(preview_->displayLayersImage());             // 仅图层：底图已隐藏。
+    else status_->clearColor();                                                // 两者均隐藏：无可见像素。
 }
 
 // 视图缩放倍数变化：更新状态栏放大倍数显示（100% = 1:1）。

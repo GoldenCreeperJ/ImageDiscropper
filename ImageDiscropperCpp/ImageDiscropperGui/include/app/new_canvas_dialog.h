@@ -5,9 +5,11 @@
 //       实时预览，接受后经 EngineBridge::generatePattern（委托 Core generate::makePattern）产出初始画布。
 //       图片不是图案类型，而是独立的**可选附加层**入口：
 //       勾选后可选源图 + 三适应（裁剪/拉伸/原生）+ **两级落位**（各自独立成组、勿混淆）：
-//         「图片 相对 图层」（图片锚点/枢轴/位置，随附加图片开关显示）；
-//         「图层 相对 底图」（图层锚点/枢轴/位置，**仅「添加图片图层」语境显示、不随附加图片开关隐藏**——新建画布产扁平整幅、无叠层概念）。
+//         「图片 相对 图层」（图片锚点/枢轴/偏移，随附加图片开关显示）；
+//         「图层 相对 底图」（图层锚点/枢轴/偏移，**仅「添加图片图层」语境显示、不随附加图片开关隐藏**——新建画布产扁平整幅、无叠层概念）。
 //       **顶部宽/高即图层尺寸**（图层框 W×H），不另设图层框；三适应均是「图片适应到这个尺寸」。
+//       **不透明度**（0–255，与图层编辑面板同词同义）为独立一行、恒显：作用本次产出的图层或底图整体 alpha（落 transform.opacity，
+//       底图经 resetBaseWith 回填 baseOpacity_）；画布级整体透明度不在本对话框采集（属建好后的画布态，交图层面板）。
 //       合成走 Core **两级**（已升为 ImageLayer 持久字段）：内层 源图→图层框（ImageFit 适应 + imageAnchor/Pivot/偏移 + boxBackdrop 底色），
 //       外层 图层框→画布（transform）；composeCanvas 一次产图，预览 / 定稿 / config 重载同一条路径。「原生」把顶部宽/高回填为源图尺寸并锁定。
 // 分块依据：对话框只做「尺寸/附加图片/两级落位采参 + 预览/定稿编排」，像素生成一律走桥接调 Core
@@ -60,6 +62,10 @@ public:
     // 供状态栏回显的摘要文本，如「1024×768 纯色 底色(255,255,255,255)」（非纯色图案另附「前景(r,g,b,a)」）。
     QString summary() const { return summary_; }
 
+    // 采参对话框采集的整体不透明度（0–255，255＝不透明）：accept() 时随产出载体（图层/底图）一并落定，
+    //   供「添加图片图层」的配方层（未勾附加图片）回填 transform.opacity；图层 File 层与底图已在 accept() 内直接携 transform.opacity。
+    int resultOpacity() const { return resultOpacity_; }
+
     // ---- 附加图片路（**仅「添加图片图层」语境**）：产出图层内容 ----
     // 仅当处于「添加图片图层」语境且勾选了「附加图片」时 accept() 置真：SessionController::onAddImageLayer 直接取
     // resultLayer()——一个携原始源像素 + 两级落位 + 图层框底色（boxBackdrop）的可序列化 File 层（config 完整往返）。
@@ -85,7 +91,7 @@ public:
     // persistForProvenance 前的原始选取路径（桌面＝imageSourcePath_；Android SAF＝content://），供上层接入 MRU 判定。
     const QString& imageSourceOriginalPath() const { return imageSourceOriginalPath_; }
     // 切换为「添加图层」语境（默认「新建画布」；同一采参面板复用）：改标题 + 置语境标志 +
-    // 附加图片开关默认开（添加图层语境必带图），使 accept() 产出图层内容（producesLayerCanvas）；新建画布语境下恒不产出图层。
+    // 附加图片开关默认关（与新建画布同口径：未勾即产纯图案 recipe 层），勾选后 accept() 才产 file 图层内容（producesLayerCanvas）；新建画布语境下恒不产出图层。
     // 顶部宽/高 spin 预填真实画布 W×H 并**保持可编辑**：此即图层尺寸（适应目标），改小即裁剪、改大即留白。
     // 合成语义与新建画布完全一致（底图图案 + 两级落位两段合成 + 越界裁剪），不叠底图、不撑大。
     void setAddLayerMode(int canvasW, int canvasH);
@@ -112,6 +118,8 @@ private:
     // 尺寸（＝图层尺寸：本对话框产出图/层的 W×H）。
     QSpinBox* widthSpin_{nullptr};
     QSpinBox* heightSpin_{nullptr};
+    // 整体不透明度（0–255，255＝不透明）：作用产出的图层或底图（合成期 alpha 乘子）；画布级不在本对话框采集。
+    QSpinBox* opacitySpin_{nullptr};
     // 图案参数表单（底色/前景色/类型/方向/周期/线宽/点半径/噪声；app/forms/pattern_form）。
     PatternFormWidget* patternForm_{nullptr};
     // 附加图片（可选）区块：开关驱动显隐，与图案类型解耦。
@@ -132,6 +140,7 @@ private:
     canvas::ImageLayer resultLayer_{};   // 附加图片「添加图层」路：可序列化结果层（原始源 + 两级落位 + 图层框底色）。
     std::optional<canvas::ImageLayer> resultBaseLayer_{};   // 新建画布路：底图 ImageLayer 声明（Recipe 图案底 / File 附图底 + 落位）。
     generate::PatternParams resultParams_{};   // accept() 时汇编的图案参数（供「添加图层」未勾图时产 Recipe 层）。
+    int resultOpacity_{255};   // accept() 时采集的整体不透明度（供配方层回填 transform.opacity）。
     QString imageSourcePath_;                   // 附加图片路选中的源图路径（File 层 provenance 取相对名）。
     QString imageSourceOriginalPath_;           // onPickImage 原始选取路径（持久化前）；MRU 据此仅在本地可再开路径登记。
     QString summary_;      // accept() 生成的状态栏摘要。

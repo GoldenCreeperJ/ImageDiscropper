@@ -35,20 +35,20 @@ engine::EngineConfig ConfigCodec::buildEngineConfig(const Document& doc) {
     cfg.order = doc.order_;
 
     // 导出参数：把 GUI 侧字段搬运进 CompositionParams。
-    cfg.emitParams.mode = doc.emitMode_;
-    cfg.emitParams.layout = doc.layout_;
-    cfg.emitParams.format = doc.format_;
-    cfg.emitParams.quality = doc.quality_;
-    cfg.emitParams.naming = doc.naming_.toStdString();
-    cfg.emitParams.padColor = doc.padColor_;
+    cfg.exportParams.mode = doc.exportMode_;
+    cfg.exportParams.layout = doc.layout_;
+    cfg.exportParams.format = doc.format_;
+    cfg.exportParams.quality = doc.quality_;
+    cfg.exportParams.naming = doc.naming_.toStdString();
+    cfg.exportParams.padColor = doc.padColor_;
     // 重排填充顺序（MergeOrder）：与选择排序 doc.order_ 正交，仅 Rearrange 时被 Core compose 使用。
-    cfg.emitParams.mergeOrder = doc.mergeOrder_;
+    cfg.exportParams.mergeOrder = doc.mergeOrder_;
     // 重排画布参数（FR-L3.7）：0 视为未指定 → 保持 nullopt 交 Core compose 自动推导；
     // 仅正值写入 optional，避免用 0 覆盖 Core 的默认布局（否则画布尺寸会被算成 0）。
-    if (doc.mergeCols_ > 0) cfg.emitParams.cols = doc.mergeCols_;
-    if (doc.mergeRows_ > 0) cfg.emitParams.rows = doc.mergeRows_;
-    if (doc.mergeCellW_ > 0) cfg.emitParams.cellWidth = doc.mergeCellW_;
-    if (doc.mergeCellH_ > 0) cfg.emitParams.cellHeight = doc.mergeCellH_;
+    if (doc.mergeCols_ > 0) cfg.exportParams.cols = doc.mergeCols_;
+    if (doc.mergeRows_ > 0) cfg.exportParams.rows = doc.mergeRows_;
+    if (doc.mergeCellW_ > 0) cfg.exportParams.cellWidth = doc.mergeCellW_;
+    if (doc.mergeCellH_ > 0) cfg.exportParams.cellHeight = doc.mergeCellH_;
 
     // preprocess 保持默认空流水线：预处理已即时作用于工作图（见 setWorkingImage），不在此重复。
     return cfg;
@@ -93,7 +93,7 @@ engine::EngineConfig ConfigCodec::buildSerializableConfig(const Document& doc) {
 
 // 反向映射（配置加载与撤销重做共用）：把 EngineConfig 搬回 Document 状态，与 buildEngineConfig 互逆。
 // 直接改私有字段（不走各 setter）后只发一次 changed()，避免逐字段多次触发刷新；图像/source 尺寸不还原。
-void ConfigCodec::applyEngineConfig(Document& doc, const engine::EngineConfig& cfg) {
+void ConfigCodec::applyEngineConfig(Document& doc, const engine::EngineConfig& cfg, const bool preserveBase) {
     // ---- 模式与极性 ----
     doc.mode_ = cfg.cut.tier;
     doc.polarity_ = cfg.cut.polarity;
@@ -134,18 +134,18 @@ void ConfigCodec::applyEngineConfig(Document& doc, const engine::EngineConfig& c
     doc.order_ = cfg.order;
 
     // ---- 导出参数 ----
-    doc.emitMode_ = cfg.emitParams.mode;
-    doc.layout_ = cfg.emitParams.layout;
-    doc.format_ = cfg.emitParams.format;
-    doc.quality_ = cfg.emitParams.quality;
-    doc.naming_ = QString::fromStdString(cfg.emitParams.naming);
-    doc.padColor_ = cfg.emitParams.padColor;
-    doc.mergeOrder_ = cfg.emitParams.mergeOrder;
+    doc.exportMode_ = cfg.exportParams.mode;
+    doc.layout_ = cfg.exportParams.layout;
+    doc.format_ = cfg.exportParams.format;
+    doc.quality_ = cfg.exportParams.quality;
+    doc.naming_ = QString::fromStdString(cfg.exportParams.naming);
+    doc.padColor_ = cfg.exportParams.padColor;
+    doc.mergeOrder_ = cfg.exportParams.mergeOrder;
     // optional 画布/单元尺寸：nullopt（未指定）→ 0（交 Core 自动推导），与 buildEngineConfig 的「0 视为未指定」互逆。
-    doc.mergeCols_ = cfg.emitParams.cols.value_or(0);
-    doc.mergeRows_ = cfg.emitParams.rows.value_or(0);
-    doc.mergeCellW_ = cfg.emitParams.cellWidth.value_or(0);
-    doc.mergeCellH_ = cfg.emitParams.cellHeight.value_or(0);
+    doc.mergeCols_ = cfg.exportParams.cols.value_or(0);
+    doc.mergeRows_ = cfg.exportParams.rows.value_or(0);
+    doc.mergeCellW_ = cfg.exportParams.cellWidth.value_or(0);
+    doc.mergeCellH_ = cfg.exportParams.cellHeight.value_or(0);
 
     // ---- 维持模型不变式：合并重排为 L3 专属（Core runEngine 硬约束）----
     // 载入/还原出「非 L3 + 重排」的非法组合时复位为坍缩，与 setMode 的守卫一致，避免引擎拿到非法配置。
@@ -153,32 +153,45 @@ void ConfigCodec::applyEngineConfig(Document& doc, const engine::EngineConfig& c
         doc.layout_ = engine::MergeLayout::Collapse;
 
     // ---- 多层画布声明还原（与 buildSerializableConfig 互逆；layers 入快照使图层可撤销）----
-    // 底图配方（§7 generate 段）回装为声明态（像素重生由调用方 onLoadConfig 专步回灌 setBaseImage，不走快照）；
-    // 画布级 preprocess 仍交由 PreprocessController.applyLoadedQueue 在配置载入时单独重放（不入文档快照）；
     // 图层声明（transform/z/逐层 preprocess/尺寸）在此还原：位图不入快照，按 id 合并回现有内存像素供合成。
-    doc.baseLayer_ = cfg.base;
-    // 底图整体透明度：§7 generate 段 transform.opacity 载入即回填为运行态 baseOpacity_，并把内存声明归一 255——
-    //   透明度恒在 fadedCanvasBase 边界施加，避免与 composeBase 双淡（撤销/重做快照回退亦经此对称还原）。
-    doc.baseOpacity_ = doc.baseLayer_.has_value() ? static_cast<std::uint8_t>(std::clamp(doc.baseLayer_->transform.opacity, 0, 255)) : 255;
-    if (doc.baseLayer_.has_value()) doc.baseLayer_->transform.opacity = 255;
-    // 画布级整体透明度：§7 顶层 opacity 键还原（缺省已由 engineConfigFromJson 夹为 255）。
-    doc.canvasOpacity_ = static_cast<std::uint8_t>(std::clamp(cfg.canvasOpacity, 0, 255));
-    // 底图色彩预处理：从 generate 段 base->preprocess 取色彩步入 baseSession_（内存 doc.baseLayer_->preprocess 置空，
-    //   色彩预处理恒由 fadedCanvasBase 边界施加、不烘焙 baseImage_，杜绝与 composeBase 双应用）。底图选中态复位（快照不含运行态选中）。
-    doc.baseSelected_ = false;
-    doc.baseSession_.clear();
-    if (doc.baseLayer_.has_value()) {
-        preprocess::PreprocessPipeline colorSteps;
-        for (const auto& step : doc.baseLayer_->preprocess.items())
-            if (preprocess::isColorStep(step)) colorSteps.add(step);
-        doc.baseSession_.setSteps(std::move(colorSteps));
-        doc.baseLayer_->preprocess.clear();   // 内存声明剥离 preprocess：重生底图时 composeBase 不施加（由 fadedCanvasBase 承担）
+    // 画布级 preprocess 仍交由 PreprocessController.applyLoadedQueue 在配置载入时单独重放（不入文档快照）。
+    // preserveBase=true（当前已有打开图）：底图像素与声明一律不动（不回填 baseLayer_/baseOpacity_/baseSession_、不作废 base_ 缓存），
+    //   使导入配置只改切割/选择/排序/导出/图层参数而绝不覆盖底图；画布级 opacity 属独立顶层设置、仍照常还原。
+    if (!preserveBase) {
+        // 底图配方（§7 generate 段）回装为声明态（像素重生由调用方 onLoadConfig 专步回灌 setBaseImage，不走快照）。
+        doc.baseLayer_ = cfg.base;
+        // 底图整体透明度：§7 generate 段 transform.opacity 载入即回填为运行态 baseOpacity_，并把内存声明归一 255——
+        //   透明度恒在 fadedCanvasBase 边界施加，避免与 composeBase 双淡（撤销/重做快照回退亦经此对称还原）。
+        doc.baseOpacity_ = doc.baseLayer_.has_value() ? static_cast<std::uint8_t>(std::clamp(doc.baseLayer_->transform.opacity, 0, 255)) : 255;
+        if (doc.baseLayer_.has_value()) doc.baseLayer_->transform.opacity = 255;
+        // 底图色彩预处理：从 generate 段 base->preprocess 取色彩步入 baseSession_（内存 doc.baseLayer_->preprocess 置空，
+        //   色彩预处理恒由 fadedCanvasBase 边界施加、不烘焙 baseImage_，杜绝与 composeBase 双应用）。底图选中态复位（快照不含运行态选中）。
+        doc.baseSelected_ = false;
+        doc.baseSession_.clear();
+        if (doc.baseLayer_.has_value()) {
+            preprocess::PreprocessPipeline colorSteps;
+            for (const auto& step : doc.baseLayer_->preprocess.items())
+                if (preprocess::isColorStep(step)) colorSteps.add(step);
+            doc.baseSession_.setSteps(std::move(colorSteps));
+            doc.baseLayer_->preprocess.clear();   // 内存声明剥离 preprocess：重生底图时 composeBase 不施加（由 fadedCanvasBase 承担）
+        }
+        // base_（resize 前缀的物化重放缓存）依赖底图源（baseSession_ 色彩步 + baseOpacity_）：
+        //   本函数直接改写二者却不经 setImage，不会自动作废 base_。若遗留旧 base_，随后任一带 resize 前缀的
+        //   commitPipeline 会因 baseDirtyFor 只比 resize 前缀而 baseDirty=false → 复用旧基准 → 像素错（撤销/重做/回放场景）。
+        doc.preprocess_.clearBase();
     }
+    // 画布级整体透明度：§7 顶层 opacity 键还原（缺省已由 engineConfigFromJson 夹为 255）。与底图独立，恒还原。
+    doc.canvasOpacity_ = static_cast<std::uint8_t>(std::clamp(cfg.canvasOpacity, 0, 255));
     bool layersRestored = false;
     if (cfg.layers.has_value()) {
         doc.layersActive_ = true;
-        doc.canvasWidth_ = cfg.source.width;
-        doc.canvasHeight_ = cfg.source.height;
+        // 画布宽高与底图同属 preserveBase 保护范围：当前已有打开图时导入配置不改画布尺寸，
+        //   沿用既有 canvasWidth_/canvasHeight_（＝打开图尺寸），令叠加层落在当前底图/画布上；
+        //   仅空文档（!preserveBase）才据配置 source 尺寸设定画布框（与底图重生同口径）。
+        if (!preserveBase) {
+            doc.canvasWidth_ = cfg.source.width;
+            doc.canvasHeight_ = cfg.source.height;
+        }
         doc.imageLayersVisible_ = true;   // 显隐不入配置（纯运行态）：重载/快照回退默认可见。
         std::vector<canvas::ImageLayer> restored = *cfg.layers;
         // 配置/快照重载：旧会话与物化缓存整体作废，按新层集重建每层声明态会话（位图随后由控制器按需重烤）。
@@ -196,7 +209,10 @@ void ConfigCodec::applyEngineConfig(Document& doc, const engine::EngineConfig& c
         if (doc.selectedLayerId_ && doc.layerById(*doc.selectedLayerId_) == nullptr) doc.selectedLayerId_.reset();
         layersRestored = true;
     } else {
-        doc.clearLayers();   // 配置无 layers：回退到非图层态（单一载入图）。
+        // 有底图即图层画布——配置无 layers 仅表示零叠加层：clearLayers 仅清叠加层、保留 layersActive_/baseImage_；
+        //   结构变→下方 layersChanged→recompose 以「仅底图」重出 original_/working_（免撤销到无叠加层态时残留旧叠层）。
+        doc.clearLayers();
+        layersRestored = doc.layersActive_;   // 图层画布态需重组；空文档（base 缺省）交 changed 刷新即可。
     }
 
     emit doc.changed();

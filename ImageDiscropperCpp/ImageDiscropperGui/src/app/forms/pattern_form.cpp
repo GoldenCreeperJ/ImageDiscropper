@@ -19,6 +19,7 @@
 
 #include "core/color.h"
 #include "util/gui_nums.h"
+#include "util/widget_factory.h"   // makeSpin
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 
@@ -72,17 +73,14 @@ PatternFormWidget::PatternFormWidget(QWidget* parent) : QWidget(parent) {
 
     // ---- 图案参数 ----
     periodLabel_ = new QLabel(IDC_GTR(label, kPeriodFieldLabel), this);
-    periodSpin_ = new QSpinBox(this);
-    periodSpin_->setRange(core::nums::generate::kMinPeriod, nums::dialog::kPatternPeriodMaxPx);
+    periodSpin_ = makeSpin(this, core::nums::generate::kMinPeriod, nums::dialog::kPatternPeriodMaxPx,
+                           QStringLiteral(" px"));
     periodSpin_->setValue(core::nums::generate::kDefaultPeriod);
-    periodSpin_->setSuffix(QStringLiteral(" px"));
     lineWidthLabel_ = new QLabel(IDC_GTR(label, kLineWidthColonLabel), this);
-    lineWidthSpin_ = new QSpinBox(this);
-    lineWidthSpin_->setRange(core::nums::generate::kMinLineWidth, nums::dialog::kPatternParamMaxPx);
+    lineWidthSpin_ = makeSpin(this, core::nums::generate::kMinLineWidth, nums::dialog::kPatternParamMaxPx);
     lineWidthSpin_->setValue(core::nums::generate::kDefaultLineWidth);
     dotRadiusLabel_ = new QLabel(IDC_GTR(label, kDotRadiusColonLabel), this);
-    dotRadiusSpin_ = new QSpinBox(this);
-    dotRadiusSpin_->setRange(core::nums::generate::kMinDotRadius, nums::dialog::kPatternParamMaxPx);
+    dotRadiusSpin_ = makeSpin(this, core::nums::generate::kMinDotRadius, nums::dialog::kPatternParamMaxPx);
     dotRadiusSpin_->setValue(core::nums::generate::kDefaultDotRadius);
     grid->addWidget(periodLabel_, row, 0);
     grid->addWidget(periodSpin_, row, 1);
@@ -95,8 +93,7 @@ PatternFormWidget::PatternFormWidget(QWidget* parent) : QWidget(parent) {
 
     // ---- 噪声专属参数（仅 Noise 图案显隐）：种子 + 配色模式 ----
     seedLabel_ = new QLabel(IDC_GTR(label, kSeedFieldLabel), this);
-    seedSpin_ = new QSpinBox(this);
-    seedSpin_->setRange(0, 2147483647);
+    seedSpin_ = makeSpin(this, 0, 2147483647);
     seedSpin_->setValue(0);
     seedSpin_->setToolTip(IDC_GTR(tooltip, kPatternSeedSpin));
     noiseModeLabel_ = new QLabel(IDC_GTR(label, kNoiseModeFieldLabel), this);

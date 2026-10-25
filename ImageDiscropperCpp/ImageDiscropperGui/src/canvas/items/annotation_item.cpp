@@ -4,7 +4,8 @@
 // 分块依据：
 //   1. 几何重建    setAnnotation / rebuildPath —— 由 Core Shape::worldPath 经适配器翻译为 QPainterPath
 //   2. 绘制        boundingRect / shape / paint —— 描边 + 可选填充；Text 直接绘字形；选中叠加 OBB 与手柄
-//   3. 拖动平移    mousePress/Move/Release —— setPos 实时反馈，释放先复位再发 moveRequested（拖拽安全）
+//   3. 平移送达    onDragFinished —— 手势循环在基类（setPos 反馈、释放先复位再送达），本图元翻译成
+//                 clicked / moveRequested 信号（拖拽安全）
 //   4. 手柄变换    computeObb / hitHandle / begin|updateHandleDrag —— 定向包围盒 8 手柄缩放 + 旋转手柄，
 //                  拖拽中仅本地矢量预览（Core obbPreviewTransform），释放发 transformRequested（拖拽安全）
 // 说明：颜色/坐标翻译走 util/path_qt_adapter；包围盒手柄坐标、缩放/旋转矩阵均由 Core 提供（CONTRIBUTING.md「分层纪律」）。
@@ -37,7 +38,7 @@ double clampScale(double f) {
 } // namespace
 
 // 构造：z 序固定为标注层；默认不接受悬停，仅左键用于拖动。
-AnnotationItem::AnnotationItem(QGraphicsItem* parent) : QGraphicsObject(parent) {
+AnnotationItem::AnnotationItem(QGraphicsItem* parent) : DraggableCanvasItem(parent) {
     setZValue(zorder::kAnnotation);
     setAcceptedMouseButtons(Qt::LeftButton);
 }
@@ -78,11 +79,13 @@ void AnnotationItem::setHandleSize(const qreal sceneUnits) {
 QRectF AnnotationItem::boundingRect() const { return bounds_; }
 
 // 命中轮廓：填充形状返回路径本身（含内部），否则返回按线宽加粗的描边轮廓；
+// 文字特判：其可见内容是包围盒内的字形（toPath 仅给不可见的矩形边框），故抓取区取整个包围盒内部
+//（与 Core TextShape::contains / 本图元 colorAtScene 的 bbox 口径一致），否则按描边只会落在不可见边框上、点中字形无效。
 // 选中时额外并入 OBB 手柄的抓取区（手柄在包围盒上、可能远离笔画，否则点不到）。
 QPainterPath AnnotationItem::shape() const {
     QPainterPath s;
     if (!path_.isEmpty()) {
-        if (ann_.style.fill && ann_.shape->type() != geometry::ShapeType::Line) {
+        if (const bool isText = ann_.shape->type() == geometry::ShapeType::Text; isText || (ann_.style.fill && ann_.shape->type() != geometry::ShapeType::Line)) {
             s = path_;
         } else {
             QPainterPathStroker stroker;
@@ -211,36 +214,27 @@ AnnotationItem::Handle AnnotationItem::hitHandle(const QPointF& scenePos, const 
 }
 
 // 按下：已选中时优先检测 OBB 手柄（命中则进入缩放/旋转拖拽）；否则上报场景坐标交上层用
-// Core hitTest 选中（同步骤回灌 selected_），并进入拖动平移预备态。
+// Core hitTest 决定选中项——平移拖动由场景转发给选中图元（beginTranslationDrag），本图元不自起拖动。
 void AnnotationItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     if (event->button() != Qt::LeftButton) { event->ignore(); return; }
     if (selected_ && ann_.shape) {
         const ObbFrame f = computeObb(ann_.shape->transform());
         if (const Handle h = hitHandle(event->scenePos(), f); h != Handle::None) { beginHandleDrag(h, event->scenePos()); event->accept(); return; }
     }
-    emit pressed(event->scenePos());   // 同步链路：上层 selectAt → updateAnnotations → setSelectedState
-    dragging_ = true;
-    lastScenePos_ = event->scenePos();
-    accumDelta_ = QPointF();
+    emit pressed(event->scenePos());   // 同步链路：上层 selectAt → 场景 beginAnnotationDrag（选中项）→ 本图元 beginTranslationDrag
     event->accept();
 }
 
-// 移动：手柄拖拽时走缩放/旋转预览（不改 Core，仅重绘）；否则累计位移并 setPos 实时反馈。
+// 移动：手柄拖拽走缩放/旋转预览（本图元自身处理）；平移手势已交场景转发（dragMoveTo），此处放行
+// 让事件落到场景（被按项与选中项不同图元时，场景才能把移动转发给选中项）。
 void AnnotationItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
-    if (!dragging_ || !selected_) { event->ignore(); return; }
     if (activeHandle_ != Handle::None) { updateHandleDrag(event->scenePos()); event->accept(); return; }
-    const QPointF d = event->scenePos() - lastScenePos_;
-    lastScenePos_ = event->scenePos();
-    accumDelta_ += d;
-    setPos(accumDelta_);
-    event->accept();
+    event->ignore();
 }
 
-// 释放：手柄拖拽——复位预览态后发 transformRequested（拖拽安全：此后不触碰 this，上层改 Core 后回灌）；
-// 平移——先复位 pos（几何由模型重建后回灌）再发 moveRequested。
+// 释放：手柄拖拽在本图元收尾；平移手势交场景（endTranslationDrag 由场景的 mouseReleaseEvent 调用，
+// 故此处放行——被按项 accept 了按下、释放恒先到本图元，ignore 后落到场景）。
 void AnnotationItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
-    if (!dragging_) { event->ignore(); return; }
-    dragging_ = false;
     if (activeHandle_ != Handle::None) {
         const double sx = previewSx_, sy = previewSy_, rot = previewRot_;
         activeHandle_ = Handle::None;
@@ -253,20 +247,26 @@ void AnnotationItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
         }
         return;
     }
-    const QPointF d = accumDelta_;
-    accumDelta_ = QPointF();
-    setPos(0.0, 0.0);
-    event->accept();
-    if (selected_ && !d.isNull()) emit moveRequested(d.x(), d.y());
+    event->ignore();
+}
+
+// ---- 场景驱动的平移拖拽：手势循环在基类 DraggableCanvasItem，本图元只做送达翻译 ----
+// 收尾数据翻译：原地点击→clicked(scenePos)（交上层推进同点连击循环，不触发平移）；
+// 拖动→moveRequested(dx,dy)（仅选中且净位移非零时；上层委托 Core 重建几何）。
+void AnnotationItem::onDragFinished(const bool wasClick, const QPointF& scenePos,
+                                    const double dx, const double dy) {
+    if (wasClick) {
+        emit clicked(scenePos);
+        return;
+    }
+    if (selected_ && (dx != 0.0 || dy != 0.0)) emit moveRequested(dx, dy);
 }
 
 // 进入手柄拖拽：捕获起点参考（世界中心；旋转手柄额外记起点方向），复位预览参数。
+// 手柄手势期间 isDragging()==true（见头文件覆盖），上层据此跳过对本图元的几何回设。
 void AnnotationItem::beginHandleDrag(const Handle h, const QPointF& scenePos) {
     Q_UNUSED(scenePos);
     activeHandle_ = h;
-    dragging_ = true;                 // 复用：令 updateAnnotations 在手势期间跳过对本图元的几何回设
-    accumDelta_ = QPointF();
-    setPos(0.0, 0.0);
     previewSx_ = 1.0; previewSy_ = 1.0; previewRot_ = 0.0;
     const auto [x, y, width, height] = ann_.shape->bounds();
     const core::Point2D cw =

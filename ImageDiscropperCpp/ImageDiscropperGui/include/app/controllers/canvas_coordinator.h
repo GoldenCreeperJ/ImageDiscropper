@@ -70,6 +70,8 @@ public slots:
     void onCellsSelectAll() const;                         // L3 全选单元（编辑菜单）。
     void onCellsInvert() const;                            // L3 反选单元（编辑菜单）。
     void onCellsClear() const;                             // L3 清空单元选择集（编辑菜单）。
+    void onGridParamsEdited(int originX, int originY, int cellWidth, int cellHeight) const;
+                                                           // L3 网格基准手柄释放：一次性写回 x0/y0/cw/ch。
 
 private:
     Document* doc_{nullptr};

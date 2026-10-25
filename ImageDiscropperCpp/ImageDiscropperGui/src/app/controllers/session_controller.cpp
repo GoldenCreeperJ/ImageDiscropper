@@ -69,7 +69,7 @@ void SessionController::connectSignals() {
                 doc_->setCanvasOpacity(opacity);
                 preprocess_->replayCanvasPreprocess();   // 重算 working_（画布级透明度经 commitPipeline 产出边界施加）。
             });
-    // 「图层」面板图片图层单开关：显示 → Document::setImageLayersVisible（落运行态标志 imageLayersVisible_，发 layersChanged 重组）。
+    // 「图层」面板图片图层单开关：显示 → Document::setImageLayersVisible（落运行态标志 imageLayersVisible_，发 imageLayersVisibleChanged 纯显隐切换，不重组）。
     connect(layerPanel_, &LayerPanel::imageLayerVisibilityChanged, this,
             [this](const bool visible) { doc_->setImageLayersVisible(visible); });
 }
@@ -86,7 +86,7 @@ void SessionController::onOpen() const {
 
 // 新建：**非破坏性**——以对话框生成的扁平画布为新底图（input 生态位），保留现有图层/标注/色彩预处理，
 //   仅剥除会改变尺寸的 resize+几何预处理（防重放改变新底图尺寸）。同尺寸新建不清空图层/标注/预处理。
-//   注入链路：捕获标注 → Document::resetBaseWith（换底图/剥 resize+几何/尺寸变则清框选）→ 单图态补重放色彩预处理
+//   注入链路：捕获标注 → Document::resetBaseWith（换底图/剥 resize+几何/尺寸变则清框选）→ layersChanged→recompose 展平重放色彩预处理
 //   → 复位标注会话到新工作图 → 回填原标注（始终保留）→ 换撤销会话。新建图无文件路径，imagePath_ 置空。
 void SessionController::onNew() const {
     NewCanvasDialog dlg(dialogParent_);
@@ -96,17 +96,15 @@ void SessionController::onNew() const {
     if (img.empty()) { status_->notify(IDC_GTR(status, kSessionNewFailedBadSize), true); return; }
 
     auto captured = anno_->annotations();   // 复制当前标注（矢量坐标，独立于底图像素）。
-    const bool hadLayers = doc_->hasLayers();
-    doc_->resetBaseWith(std::move(img), dlg.resultBaseLayer());   // 换底图、留存底图声明（图案/附图片落位）、保留图层/色彩预处理、剥 resize+几何；图层态发 layersChanged 自动重组。
-    if (!hadLayers) preprocess_->replayCanvasPreprocess();     // 单图态：底图换后补算保留的色彩预处理（图层态已由 recompose 完成）。
+    // 有图恒图层画布——resetBaseWith 换 baseImage_ 后发 layersChanged → recompose 自动展平 + 重放色彩预处理产出 working_。
+    doc_->resetBaseWith(std::move(img), dlg.resultBaseLayer());   // 换底图、留存底图声明（图案/附图片落位）、保留图层/色彩预处理、剥 resize+几何。
     anno_->setBaseImage(doc_->working());                 // 复位标注会话到新工作图（会清空集合）。
     if (!captured.empty()) anno_->replaceAnnotations(std::move(captured));   // 回填原标注（始终保留，尺寸变亦留）。
     history_->reset();                        // 换底图开新撤销会话。
     // 附加图片底（新建画布内选源图）也接入 MRU：与「打开图像」同口径——仅本地可再开路径登记、跳过 content://
     //（Android SAF 原始 URI 不可复用，provenance 另存的私有副本亦不入最近列表）。
-    if (const auto& base = dlg.resultBaseLayer(); base && base->sourceKind == canvas::LayerSourceKind::File) {
-        const QString& src = dlg.imageSourceOriginalPath();
-        if (!src.isEmpty() && !src.startsWith(QString::fromUtf8(texts::ident::kContentUriScheme))) {
+    if (const auto& base = dlg.resultBaseLayer(); base && !base->recipe.has_value() && !base->decodedPixels.empty()) {
+        if (const QString& src = dlg.imageSourceOriginalPath(); !src.isEmpty() && !src.startsWith(QString::fromUtf8(texts::ident::kContentUriScheme))) {
             UiPrefs::instance().addRecentFile(src);
             UiPrefs::instance().setLastOpenDir(QFileInfo(src).absolutePath());
         }
@@ -115,7 +113,7 @@ void SessionController::onNew() const {
 }
 
 // 图层编辑「添加图片」：复用「新建画布」对话框采参，往现有画布追加一个图片图层（SPEC §8.2：不撑大，
-// 超出画布部分合成时自然裁剪）。无图层画布但已有单图时先起图层画布（ensureLayerCanvas）。
+// 超出画布部分合成时自然裁剪）。有图即图层画布；ensureLayerCanvas 仅作空文档兜底。
 //   · 勾选附加图片 路 → File 层：携「适应 + 图片相对图层」内层落位烘进图层框的像素（图层内容）+ 外层「图层相对底图」落位作 transform，另携源图相对名 provenance（位图不入配置、无法由配方复现）。
 //   · 未勾选（纯图案）路 → Recipe 层：携 PatternParams，合成时按 transform 尺寸经 makePattern 现算（配方入 config、可导出、可复现）。
 // id / zOrder 由 Document::addImageLayer 统一分配。
@@ -124,7 +122,7 @@ void SessionController::onAddImageLayer() const {
         status_->notify(IDC_GTR(status, kSessionNeedImageForLayer), true);
         return;
     }
-    doc_->ensureLayerCanvas();   // 单图→图层画布（已有图层时无操作）。
+    doc_->ensureLayerCanvas();   // 兜底确保图层画布（有图恒真、无操作）。
     NewCanvasDialog dlg(dialogParent_);
     dlg.setAddLayerMode(doc_->canvasWidth(), doc_->canvasHeight());   // 宽高预填真实画布（可改＝图层扁平尺寸）。
     dlg.setBusyOverlayMode(preprocess_->busyOverlayMode());
@@ -137,12 +135,12 @@ void SessionController::onAddImageLayer() const {
         if (const QString& srcPath = dlg.imageSourcePath(); !srcPath.isEmpty())
             layer.fileName = QFileInfo(srcPath).fileName().toStdString();
     } else {
-        // 未勾附加图片的程序化图案：作 Recipe 层——recipe 可序列化供 config 导出、合成时 makePattern 现算（与对话框预览逐像素一致）。
-        layer.sourceKind = canvas::LayerSourceKind::Recipe;
+        // 未勾附加图片的程序化图案：作配方层——recipe 可序列化供 config 导出、合成时 makePattern 现算（与对话框预览逐像素一致）。
         layer.recipe = dlg.resultParams();
         const core::Image& generated = dlg.resultImage();
         layer.transform.width = generated.width();    // 目标尺寸＝对话框生成的图案尺寸。
         layer.transform.height = generated.height();
+        layer.transform.opacity = dlg.resultOpacity();   // 整体不透明度（对话框采集）：与附加图片 File 层同口径走 transform.opacity。
     }
     const int newId = doc_->addImageLayer(std::move(layer));   // → layersChanged → recomposeLayerCanvas → working_ → 落位框刷新。
     doc_->selectLayer(newId);                                  // 新层设为当前预处理/编辑目标。
@@ -150,7 +148,7 @@ void SessionController::onAddImageLayer() const {
     status_->notify(IDC_GTR(status, kSessionLayerAdded), false);
 }
 
-// 清空全部图片图层：弹确认后回退为单图底图态（保留底图/标注/预处理声明），随后在新基准上重放色彩预处理。
+// 清空全部叠加图片图层：弹确认后仅留底图（保留图层画布/标注/预处理声明），layersChanged→recompose 重放色彩预处理。
 void SessionController::onClearAllLayers() const {
     if (!doc_->hasLayers()) { status_->notify(IDC_GTR(status, kSessionNoLayersToClear), true); return; }
     if (const auto ret = QMessageBox::question(dialogParent_, IDC_GTR(msg, kClearLayersTitle),
@@ -158,8 +156,7 @@ void SessionController::onClearAllLayers() const {
                 .arg(doc_->layerCount()),
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
         ret != QMessageBox::Yes) return;
-    doc_->clearAllLayersToBase();            // original_ 还原为纯底图 + 清栈；发 imageChanged。
-    preprocess_->replayCanvasPreprocess();   // 在还原后的底图上重放保留的色彩预处理。
+    doc_->clearAllLayersToBase();            // 仅清叠加层、保留图层画布；发 layersChanged → recompose 以仅底图重出 working_（含色彩预处理重放）。
     if (doc_->selectedLayerId()) doc_->selectLayer(std::nullopt);
     toolPanel_->setMode(CanvasMode::Marquee);   // 离开图片拾取态。
     status_->notify(IDC_GTR(status, kSessionLayersCleared), false);
@@ -172,7 +169,7 @@ void SessionController::onDestroyAll() const {
             IDC_GTR(msg, kResetAllAsk),
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
         ret != QMessageBox::Yes) return;
-    if (doc_->hasLayers()) doc_->clearAllLayersToBase();   // 回退单图底（original_=base）。
+    if (doc_->hasLayers()) doc_->clearAllLayersToBase();   // 仅清叠加层、保留底图为图层画布（layersChanged→recompose 以仅底图重出）。
     doc_->resetPreprocess();                              // 清画布预处理（含 resize/几何），working_=original_。
     anno_->setBaseImage(doc_->working());            // 复位标注会话＝清空全部标注 + 重置重做栈。
     doc_->clearRect();

@@ -45,10 +45,10 @@ void DocHistory::reset() {
 }
 
 // 加载配置的中间步骤：先冲刷未落定的防抖变更，保证「栈顶＝载入前当前态」，使加载配置可一步撤销回去。
-void DocHistory::recordConfigLoad(const engine::EngineConfig& cfg) {
+void DocHistory::recordConfigLoad(const engine::EngineConfig& cfg, const bool preserveBase) {
     flush();
     suppress_ = true;
-    doc_->applyEngineConfig(cfg);   // 触发 changed → refreshPreview + syncPanels（还原期间不采集历史）。
+    doc_->applyEngineConfig(cfg, preserveBase);   // 触发 changed → refreshPreview + syncPanels（还原期间不采集历史）。
     suppress_ = false;
     history_.push(doc_->buildSerializableConfig()); // 新态压栈（其下即载入前态），维持「栈顶＝当前态」不变式。
     updateEnabled();

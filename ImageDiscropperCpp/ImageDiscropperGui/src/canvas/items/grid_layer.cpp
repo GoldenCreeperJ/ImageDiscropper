@@ -12,6 +12,7 @@
 #include <QGraphicsScene>
 #include <QPen>
 
+#include "canvas/items/grid_handle_item.h"
 #include "canvas/items/z_order.h"
 #include "app/palette.h"
 
@@ -38,12 +39,20 @@ QPen cutLinePen() {
 
 } // namespace
 
+// 析构：手柄是本层持有的独立图元（不在 lineItems_ 内，不随 rebuild 重建），故在此释放；
+// QGraphicsItem 析构会自动从所属场景移除。
+GridLayer::~GridLayer() {
+    delete originHandle_;
+    delete cellHandle_;
+}
+
 // 依 Core 网格重建线：收集单元边界的唯一 x/y（裁剪到图像内、忽略越界的残缺单元边），
 // 在每个坐标画一条贯穿全图的竖线 / 横线。asCutLines=true 时用橙色切割线样式，否则灰色虚线网格。
+// 图元恒按最新网格构建，visible 只决定其可见性：显隐开关切换无需重建，也不会因隐藏期重建而丢失图元。
 void GridLayer::rebuild(QGraphicsScene& scene, const engine::Grid& grid,
                         const int width, const int height, const bool visible, const bool asCutLines) {
-    clear();
-    if (!visible || width <= 0 || height <= 0 || grid.cellCount() == 0) return;
+    clearLines();   // 只清线：手柄不在其中（拖拽预览逐帧重建时不能把正在拖的手柄抽掉）。
+    if (width <= 0 || height <= 0 || grid.cellCount() == 0) return;
 
     // 单元边界坐标去重升序；仅保留严格落在图像内部 (0,W)/(0,H) 的边（图像外轮廓不画）。
     std::set<int> xs;
@@ -65,6 +74,7 @@ void GridLayer::rebuild(QGraphicsScene& scene, const engine::Grid& grid,
         QGraphicsLineItem* it = scene.addLine(fx, 0.0, fx, H, pen);
         it->setZValue(zorder::kGrid);
         it->setAcceptedMouseButtons(Qt::NoButton); // 纯显示，不遮挡单元点选/选区交互。
+        it->setVisible(visible);
         lineItems_.push_back(it);
     }
     for (const int y : ys) {
@@ -72,15 +82,19 @@ void GridLayer::rebuild(QGraphicsScene& scene, const engine::Grid& grid,
         QGraphicsLineItem* it = scene.addLine(0.0, fy, W, fy, pen);
         it->setZValue(zorder::kGrid);
         it->setAcceptedMouseButtons(Qt::NoButton);
+        it->setVisible(visible);
         lineItems_.push_back(it);
     }
+    // 切割线样式（L2 多矩形诱导）不承载基准手柄：基准只在 L3 有意义，故一并退场。
+    if (asCutLines) setHandlesVisible(false);
 }
 
-// 显隐切换（不重建）。
+// 显隐切换（不重建）：线图元与基准手柄同口径随开关走。
 void GridLayer::setVisible(const bool visible) const {
     for (QGraphicsLineItem* it : lineItems_) {
         if (it) it->setVisible(visible);
     }
+    setHandlesVisible(visible);
 }
 
 // 改色后重新取笔触并回设到全部线图元（pen 在 rebuild 期烘焙进 QGraphicsLineItem，不随 update() 变色）。
@@ -93,9 +107,69 @@ void GridLayer::recolor() const {
 }
 
 // 清空全部网格线图元。QGraphicsItem 析构会自动从所属场景移除。
+// 基准手柄不删（保留连接，下次 L3 直接复用）但退场：非 L3 时不应看到/拖到基准手柄。
 void GridLayer::clear() {
+    clearLines();
+    setHandlesVisible(false);
+}
+
+// 只清线图元（不动手柄）：rebuild 用它重建线，避免拖拽预览把正在拖的手柄一并隐藏。
+void GridLayer::clearLines() {
     for (const QGraphicsLineItem* it : lineItems_) delete it;
     lineItems_.clear();
+}
+
+// ===========================================================================
+// L3 网格基准手柄
+// ===========================================================================
+
+// 惰性创建两个手柄并置顶（z 高于单元点选图元，否则按下会被点选图元吃掉）。
+// 信号连接不在本层做（本层不认识 CanvasScene），由场景在创建后自行 connect。
+void GridLayer::createHandles(QGraphicsScene& scene) {
+    if (handlesReady()) return;
+    originHandle_ = new GridHandleItem(GridHandleItem::Role::Origin);
+    cellHandle_ = new GridHandleItem(GridHandleItem::Role::Cell);
+    for (GridHandleItem* it : {originHandle_, cellHandle_}) {
+        it->setZValue(zorder::kGridHandle);
+        scene.addItem(it);
+    }
+}
+
+// 按给定参数落位两个手柄并切显隐：拖拽预览时传草稿参数，使两手柄随网格线一起跟手。
+// 每轴是否周期先于落位下发：分割数/比例轴无基准点与单元尺寸可调，手柄在该轴不参与拖动
+// （两轴皆非周期时两道手柄整体退场）。
+void GridLayer::syncHandles(const engine::GridParams& params, const int width, const int height,
+                            const bool visible) const {
+    const bool pitchX = engine::effectiveAxis(params, true).mode == engine::GridAxisMode::Pitch;
+    const bool pitchY = engine::effectiveAxis(params, false).mode == engine::GridAxisMode::Pitch;
+    for (GridHandleItem* it : {originHandle_, cellHandle_}) {
+        if (!it) continue;
+        it->setImageBounds(width, height);
+        it->setPitchAxes(pitchX, pitchY);
+        it->setParams(params);
+        it->setEditable(visible);
+    }
+}
+
+// 仅切显隐（不动参数/可交互）：可交互另由 setHandlesInteractive 按四态模式收紧。
+void GridLayer::setHandlesVisible(const bool visible) const {
+    for (GridHandleItem* it : {originHandle_, cellHandle_}) {
+        if (it) it->setEditable(visible);
+    }
+}
+
+// 四态模式门控：图片拾取 / 标注选取态让位（手柄仍可见，只不吃鼠标），避免跟那两态的图元抢按下。
+void GridLayer::setHandlesInteractive(const bool on) const {
+    for (GridHandleItem* it : {originHandle_, cellHandle_}) {
+        if (it) it->setInteractive(on);
+    }
+}
+
+// 手柄边长随视图缩放下发（恒约 8 屏幕px）。
+void GridLayer::setHandleSize(const qreal sceneUnits) const {
+    for (GridHandleItem* it : {originHandle_, cellHandle_}) {
+        if (it) it->setHandleSize(sceneUnits);
+    }
 }
 
 } // namespace idc::gui

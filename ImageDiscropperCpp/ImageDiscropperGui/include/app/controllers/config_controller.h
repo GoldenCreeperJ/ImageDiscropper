@@ -9,6 +9,8 @@
 
 #include <QObject>
 
+#include "core/percent.h"   // core::PercentHints（载入的百分比几何字段，保存时原样回写）
+
 class QWidget;
 
 namespace idc::gui {
@@ -46,6 +48,9 @@ private:
     DocHistory* history_{nullptr};
     StatusBar* status_{nullptr};
     QWidget* dialogParent_{nullptr};
+    // 当前文档配置中「以百分比书写」的几何字段（载入时收集、保存时回写）：值未被编辑且基准尺寸未变
+    //   则原样写回 "N%"，否则写像素（判定全在 Core，本层只做搬运）。
+    core::PercentHints percentHints_;
 };
 
 } // namespace idc::gui

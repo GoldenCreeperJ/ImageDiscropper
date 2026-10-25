@@ -132,13 +132,14 @@ bool EngineBridge::exportResult(const core::Image& work, const engine::EngineCon
 // ---- 配置文件存取：逐个委托 Core saveEngineConfig/loadEngineConfig，不自实现 JSON（CONTRIBUTING.md「分层纪律」）----
 
 // 保存配置：委托 Core saveEngineConfig（SPEC §7 schema、缩进美化）；path 空或写盘失败透传中文错误。
+// percentHints 让仍未被编辑的百分比几何字段原样写回 "N%"（比例语义随尺寸变化时由 Core 退回像素）。
 bool EngineBridge::saveConfig(const QString& path, const engine::EngineConfig& cfg, QString& err,
-                              const annotation::AnnotationSet* annotations) {
+                              const annotation::AnnotationSet* annotations, const core::PercentHints* percentHints) {
     if (path.isEmpty()) {
         err = IDC_GTR(msg, kBridgeNoConfigPath);
         return false;
     }
-    if (!idc::engine::saveEngineConfig(path.toStdString(), cfg, annotations)) {
+    if (!idc::engine::saveEngineConfig(path.toStdString(), cfg, annotations, percentHints)) {
         err = IDC_GTR(msg, kBridgeWriteConfigFailed).arg(path);
         return false;
     }
@@ -146,14 +147,18 @@ bool EngineBridge::saveConfig(const QString& path, const engine::EngineConfig& c
 }
 
 // 加载配置：委托 Core loadEngineConfig；path 空、读盘或解析失败透传中文错误，成功填充 out。
+// percentHints 收集本档以百分比书写的几何字段，供后续保存时原样回写。
 bool EngineBridge::loadConfig(const QString& path, engine::EngineConfig& out, QString& err,
-                              annotation::AnnotationSet* annotations) {
+                              annotation::AnnotationSet* annotations, core::PercentHints* percentHints) {
     if (path.isEmpty()) {
         err = IDC_GTR(msg, kBridgeNoConfigPath);
         return false;
     }
-    if (!idc::engine::loadEngineConfig(path.toStdString(), out, annotations)) {
-        err = IDC_GTR(msg, kBridgeReadConfigFailed).arg(path);
+    if (const auto res = idc::engine::loadEngineConfig(path.toStdString(), out, annotations, nullptr, percentHints); !res) {
+        // §7 严格校验新增：Core 对 schema 值非法 / 标注非法会填入 CoreError.message（携 JSON 路径定位报因），
+        //   直接透传供弹窗展示；文件级通用失败（语法 / 根非对象 / IO）message 为空，回退本层本地化文案。
+        if (!res.error().message.empty()) err = QString::fromStdString(res.error().message);
+        else err = IDC_GTR(msg, kBridgeReadConfigFailed).arg(path);
         return false;
     }
     return true;

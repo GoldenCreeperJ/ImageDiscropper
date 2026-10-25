@@ -1,20 +1,20 @@
 // ============================================================================
 // 文件：canvas/items/image_layer_item.cpp
 // 作用：实现 ImageLayerItem（见同名头文件说明）——落位框绘制 + 拾取拖拽手势。
-// 分块依据：渲染（boundingRect/paint）与交互（press/move/release）各成一块；无任何落位几何计算
-//          （矩形来自 Core layerPlacement，经场景下发），符合「图元只渲染并拖动它」的分层纪律。
+// 分块依据：渲染（boundingRect/paint）与送达翻译（onDragFinished）各成一块；无任何落位几何计算
+//          （矩形来自 Core layerPlacement，经场景下发），手势循环在基类 DraggableCanvasItem，
+//          符合「图元只渲染并拖动它」的分层纪律。
 // ============================================================================
 #include "canvas/items/image_layer_item.h"
 
 #include <cmath>
 
-#include <QGraphicsSceneMouseEvent>
 #include <QPainter>
 #include <QPen>
 
 namespace idc::gui {
 
-ImageLayerItem::ImageLayerItem(QGraphicsItem* parent) : QGraphicsObject(parent) {
+ImageLayerItem::ImageLayerItem(QGraphicsItem* parent) : DraggableCanvasItem(parent) {
     setAcceptedMouseButtons(Qt::NoButton);   // 默认不可交互：不抢既有框选 / 选区 / 标注交互。
     setFlag(ItemIsSelectable, false);
 }
@@ -61,28 +61,12 @@ void ImageLayerItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, Q
     painter->drawRect(rect_);
 }
 
-void ImageLayerItem::beginDrag(const QPointF& scenePos) {
-    dragging_ = true;
-    lastScenePos_ = scenePos;
-    accumDelta_ = QPointF(0, 0);
-    setPos(QPointF(0, 0));   // 复位任何遗留位移，从零开始本次拖拽的视觉偏移。
-    emit pressed(id_);       // 交上层选中该图层。
-}
-
-void ImageLayerItem::dragMove(const QPointF& scenePos) {
-    if (!dragging_) return;
-    accumDelta_ += scenePos - lastScenePos_;
-    lastScenePos_ = scenePos;
-    setPos(accumDelta_);     // 仅视觉位移，不逐帧回写模型（释放时一次性提交）。
-}
-
-void ImageLayerItem::dragEnd(const QPointF& /*scenePos*/) {
-    if (!dragging_) return;
-    dragging_ = false;
-    setPos(QPointF(0, 0));   // 复位视觉位移：真正位置由上层改 transform 后重组刷新。
-    const int dx = static_cast<int>(std::lround(accumDelta_.x()));
-    if (const int dy = static_cast<int>(std::lround(accumDelta_.y())); dx != 0 || dy != 0) emit moved(id_, dx, dy);
-    update();
+// 平移手势送达（基类钩子）：非原地点击→一次性发 moved(id, dxPx, dyPx) 交上层累加进 transform
+//（先复位视觉位移再送达，由基类 endTranslationDrag 保证）；原地点击仅推进循环选层、不发 moved。
+void ImageLayerItem::onDragFinished(const bool wasClick, const QPointF&, const double dx, const double dy) {
+    if (!wasClick && (dx != 0.0 || dy != 0.0)) {
+        emit moved(id_, static_cast<int>(std::lround(dx)), static_cast<int>(std::lround(dy)));
+    }
 }
 
 } // namespace idc::gui

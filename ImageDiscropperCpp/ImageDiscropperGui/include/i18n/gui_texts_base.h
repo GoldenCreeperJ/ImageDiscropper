@@ -62,7 +62,7 @@ inline constexpr char kGalleryAppDir[] = "ImageDiscropper"; // 本应用子目�
 // 本 GUI 自己的命令行位置参数（app/main.cpp：文件关联 / 拖放启动入口，与用户脚本同 CLI 一样逐字依赖）。
 inline constexpr char kCliArgImageName[]   = "image";   // 位置参数名（--help 里显示）。
 inline constexpr char kCliArgImageSyntax[] = "[image]";  // 位置参数写法（可选，故带方括号）。
-// Android 相册 URI 前缀（历史手输路径的识别闸：当它出现在输出目录 / 文件框里即视同「留空走相册默认」）：
+// Android 相册 URI 前缀（手输相册路径的识别闸：当它出现在输出目录 / 文件框里即视同「留空走相册默认」）：
 // 写在四处（app/app_prefs.cpp、app/controllers/export_controller.cpp、session_controller 等），同一契约单点定形。
 inline constexpr char kContentUriScheme[] = "content://";
 // 配置自存目录与命名（app/controllers/config_controller.cpp，仅 Q_OS_ANDROID：移动端免 SAF 框，直接存应用文档目录）。
@@ -99,9 +99,9 @@ inline constexpr char kFileRecentEmpty[]   = "（无最近记录）";      // �
 inline constexpr char kFileRecentClear[]   = "清除最近记录";
 inline constexpr char kFileExport[]        = "导出(&S)";
 inline constexpr char kFileExportSettings[]= "导出设置";           // 与导出面板镜像的子菜单（输出方式 / 格式 / 烧录）。
-inline constexpr char kEmitSeparate[]      = "分离";               // EmitMode 三项，互斥勾选。
-inline constexpr char kEmitCollapse[]      = "坍缩";
-inline constexpr char kEmitRearrange[]     = "重排";
+inline constexpr char kExportSeparate[]      = "分离";               // ExportMode 三项，互斥勾选。
+inline constexpr char kExportCollapse[]      = "坍缩";
+inline constexpr char kExportRearrange[]     = "重排";
 inline constexpr char kBurnAnnotation[]    = "烧录标注";
 inline constexpr char kBurnImageLayers[]   = "烧录图片图层";
 inline constexpr char kConfirmRearrange[]  = "重排前二次确认";      // 开关态存 UiPrefs（ui/confirmRearrange）。
@@ -133,6 +133,9 @@ inline constexpr char kL1ShapeSub[]         = "形状";          // 以下四个
 inline constexpr char kL2MethodSub[]        = "方式";
 inline constexpr char kL3SortSub[]          = "排序";
 inline constexpr char kL3RemainderSub[]     = "余量";
+inline constexpr char kL3DefineSub[]        = "网格定义";       // 两级子菜单：横向 / 纵向 各带三态定义方式。
+inline constexpr char kGridAxisHorizontal[] = "横向";
+inline constexpr char kGridAxisVertical[]   = "纵向";
 // 下面四组（L1 形状 / L2 方式 / 排序 / 余量）与参数面板的三个下拉框逐字同形
 //（src/panels/param_panel_pages.cpp 直接复用本组常量），故只此一份；菜单与面板任一侧改词都会同时改到另一侧。
 inline constexpr char kL1Rect[]             = "矩形";             // L1 形状三项。工具面板形状项同字见 label::kToolRect（菜单项 / 工具项角色不同，各立一条）。
@@ -150,6 +153,9 @@ inline constexpr char kSortSnake[]          = "蛇形排序";         // 面板�
 inline constexpr char kRemainderDiscard[]   = "丢弃残缺";         // 余量策略三项，按枚举序入表。
 inline constexpr char kRemainderKeep[]      = "保留残缺";
 inline constexpr char kRemainderPad[]       = "补白";
+inline constexpr char kGridModePitch[]      = "周期";             // 单轴定义方式三项（按 Core GridAxisMode 枚举序入表）。
+inline constexpr char kGridModeCount[]      = "分割数";
+inline constexpr char kGridModeWeights[]    = "比例";
 // ——预处理（main_window_menus.cpp::buildPreprocessMenu，菜单名带「图像」助记符而类名为 preprocess）——
 inline constexpr char kMenuPreprocess[]   = "预处理(&I)";
 inline constexpr char kRotLeft90[]        = "左转 90°";
@@ -202,12 +208,11 @@ inline constexpr char kZoomIn[]          = "放大";
 inline constexpr char kZoomOut[]         = "缩小";
 inline constexpr char kFitToWindow[]     = "适应窗口";
 inline constexpr char kResetView[]       = "重置视图 (1:1)";
-inline constexpr char kShowBase[]        = "底图";               // 以下八项为图层显隐开关（与左侧面板逐行双向镜像）。
+inline constexpr char kShowBase[]        = "底图";               // 以下七项为图层显隐开关（与左侧面板逐行双向镜像）。
 inline constexpr char kShowImageLayer[]  = "图片图层";   // 面板分组框标题与预处理目标三元名同字见 label::kImageLayerName。
 inline constexpr char kShowAnnotation[]  = "标注";       // 属性面板分区标题同字见 label::kSecAnnotation。
 inline constexpr char kShowMask[]        = "遮罩（保留/删除预览）";
-inline constexpr char kShowGrid[]        = "网格线";     // 取色行标签同字见 label::kSwatchGridLine。
-inline constexpr char kShowCutLine[]     = "切割线";
+inline constexpr char kShowGrid[]        = "网格线/切割线";   // 同一开关按模式各司其职：L3 为灰色网格线、L1/L2 为贯穿切割线；取色行标签见 label::kSwatchGridLine。
 inline constexpr char kShowSelection[]   = "选区边框";
 inline constexpr char kShowCellNumber[]  = "单元编号";
 inline constexpr char kSnapToggle[]      = "选区吸附";            // 运行时开关，状态存 canvas/snap。
@@ -230,13 +235,19 @@ namespace label {
 // 主窗口标题（桌面 app/main_window.cpp 与移动 mobile/mobile_shell.cpp 两处同源）：
 // 前半 "ImageDiscropper GUI" 是产品名 + 形态名（与 msg::kAboutBody 首行同字），%1 由 CMake 注入的 IDC_GUI_VERSION 填入。
 inline constexpr char kWindowTitleFmt[]      = "ImageDiscropper GUI %1";
-// 文件对话框标题（桌面分支；同一标题在控制器与面板两处各写一份的已归一）。
+// 文件对话框标题（桌面分支；控制器与面板两处入口共用同串）。
 inline constexpr char kDlgTitleSaveConfig[]   = "保存配置";      // app/controllers/config_controller.cpp。与工具栏短名 label::kTbSaveConfig 同字不同角色（对话框标题 / 动作按钮），各立一条。
 inline constexpr char kDlgTitleLoadConfig[]   = "加载配置";      // app/controllers/config_controller.cpp。同上（label::kTbLoadConfig / kTbLoadConfigEllipsis）。
 inline constexpr char kDlgTitleOpenImage[]    = "打开图像";      // app/controllers/session_controller.cpp。
 inline constexpr char kDlgTitleExportAs[]     = "导出为";        // app/controllers/export_controller.cpp 与 panels/export_panel.cpp（同一动作两处入口）。
 inline constexpr char kDlgTitleChooseOutDir[] = "选择输出目录";   // 同上两处，另 app/appearance_dialog.cpp（默认输出目录）同题共用，共三处。
 inline constexpr char kDlgTitlePickSourceImage[] = "选择源图";   // app/new_canvas_dialog.cpp（附加图片选源）。
+inline constexpr char kDlgTitlePickAssetDir[] = "选择资产目录";    // app/forms/config_io_dialog.cpp（打包去向 / 导入来源）。
+inline constexpr char kConfigAssetBoxTitle[] = "图层资产";       // 同上（保存 / 加载配置对话框的资产分组标题）。
+inline constexpr char kConfigBundleAssets[] = "打包图层资产";     // 同上（是否导出：把 file 层像素按相对名写盘进资产目录）。
+inline constexpr char kConfigImportAssets[] = "导入图层资产（解析 file 层像素）";   // 同上（是否导入：按资产来源解析 file 层像素，不勾则全部降级占位）。
+inline constexpr char kConfigAssetDirPlaceholder[] = "默认：<配置名>.assets/";      // 同上（导出到哪里为空时的约定目录）。
+inline constexpr char kConfigAssetSourcePlaceholder[] = "自动：配置声明 → <配置名>.assets/ → 配置所在目录";   // 同上（从哪里导入为空时的自动查找链）。
 inline constexpr char kDlgLabelChooseConfig[]  = "选择配置";     // app/controllers/config_controller.cpp——Android 加载列表的 QInputDialog 标签。
 // 过滤器：前半段是人看的描述、后半段是扩展名契约（两边须同步改），故整串集中一份。
 inline constexpr char kFilterExportImage[]  = "图像 (*.png *.jpg *.jpeg *.bmp *.webp)";                       // 导出另存为（不含 Qt 未支持的 gif/tga）。
@@ -272,9 +283,9 @@ inline constexpr char kDirBottomRight[] = "右下";
 inline constexpr char kExportBoxTitle[]    = "导出";        // 四处共用：导出面板分组框标题、面板导出按钮、
                                                            // 桌面工具栏与移动条带的导出动作、折叠栏/抽屉「导出」页签。
 inline constexpr char kOutModeLabel[]      = "输出模式";
-inline constexpr char kEmitSeparateItem[]  = "分离导出";     // 下拉三项（与 menu::kEmit* 同义异词）。
-inline constexpr char kEmitCollapseItem[]  = "合并坍缩";
-inline constexpr char kEmitRearrangeItem[] = "合并重排";
+inline constexpr char kExportSeparateItem[]  = "分离导出";     // 下拉三项（与 menu::kExport* 同义异词）。
+inline constexpr char kExportCollapseItem[]  = "合并坍缩";
+inline constexpr char kExportRearrangeItem[] = "合并重排";
 inline constexpr char kBrowseButton[]      = "浏览…";       // 导出面板目录行/文件行与外观对话框默认输出目录行三处共用。
 inline constexpr char kOutDirLabel[]       = "目录";
 inline constexpr char kNamingLabel[]       = "命名";
@@ -325,6 +336,12 @@ inline constexpr char kCellWidthLabel[]      = "单元宽 cw";
 inline constexpr char kCellHeightLabel[]     = "单元高 ch";
 inline constexpr char kRemainderFieldLabel[] = "余量策略";
 inline constexpr char kDerivedScaleLabel[]   = "派生规模";
+// L3 按轴三形态（周期环内沿用上方四条基准点/单元尺寸行标签）。
+inline constexpr char kGridDefineXLabel[]    = "横向定义";
+inline constexpr char kGridDefineYLabel[]    = "纵向定义";
+inline constexpr char kGridCountLabel[]      = "份数";
+inline constexpr char kGridWeightsLabel[]    = "权重";
+inline constexpr char kGridWeightsPlaceholder[] = "1,2,1 或 25%,50%,25%";   // 权重输入框占位符（提示两种写法皆可）。
 inline constexpr char kStrategyFieldLabel[]  = "策略";
 // 注：x1 / y1 / x2 / y2 四个坐标行标签**不上提**——纯技术记号，任何语言同一写法，且在 L1/L2 两页各出现一次属「表单字段名」而非文案。
 // 按钮与复选框。
@@ -427,14 +444,13 @@ inline constexpr char kPadColorTransparent[]   = "透明";   // 色块按钮在 
 // 工具面板（src/panels/mode_tool_panel.cpp）：分组框标题。四态模式名与形状名不本组重复定义：
 // 模式名复用 menu::kCanvas*（同字），形状名复用 label::kTool*（同字）。
 inline constexpr char kInteractionModeBox[]  = "交互模式";   // 与菜单入口 menu::kCanvasMode（「画布模式」）措辞不同，各自逐字保留。
-// 图层面板（src/panels/layer_panel.cpp）：分组框与八行显示开关（名称与「显示」中间为两个空格，原文如此）。
+// 图层面板（src/panels/layer_panel.cpp）：分组框与七行显示开关（名称与「显示」中间为两个空格，原文如此）。
 inline constexpr char kLayerPanelBox[]       = "图层";
 inline constexpr char kShowBaseCheck[]       = "底图  显示";
 inline constexpr char kShowImageCheck[]      = "图片  显示";
 inline constexpr char kShowAnnoCheck[]       = "标注  显示";
 inline constexpr char kShowMaskCheck[]       = "遮罩  显示";
-inline constexpr char kShowGridCheck[]       = "网格线  显示";
-inline constexpr char kShowCutLineCheck[]    = "切割线  显示";
+inline constexpr char kShowGridCheck[]       = "网格线/切割线  显示";
 inline constexpr char kShowSelectionCheck[]  = "选取边框  显示";
 inline constexpr char kShowNumberCheck[]     = "单元编号  显示";
 // 左侧模式面板分组框与移动抽屉页签的同名区（src/panels/left_panel.cpp、src/mobile/mobile_shell_ui.cpp）。
@@ -462,10 +478,10 @@ inline constexpr char kTbStepPad[]           = "步进";     // 仅移动：8 �
 inline constexpr char kTbMore[]              = "更多";     // 仅移动：低频项集合菜单。
 inline constexpr char kTbExit[]              = "退出";     // 仅移动「更多」菜单（桌面见 menu::kFileExit，带助记符）。
 inline constexpr char kPanelToggle[]         = "面板";     // 仅移动：抽屉窗口标题与开合按钮两处共用（标题因空标题栏隐藏而不可见，仍需一个名字）。
-// 落位行（src/app/forms/placement_row.cpp，新建对话框与图层落位面板共用组件）的行标签（带全角冒号）。
+// 落位行（src/app/forms/placement_row.cpp，新建对话框与图层落位面板共用组件）的行标签（带全角冒号；用词与图层编辑面板对齐）。
 inline constexpr char kAnchorColonLabel[]    = "锚点：";
 inline constexpr char kPivotColonLabel[]     = "枢轴：";
-inline constexpr char kPositionColonLabel[]  = "位置：";
+inline constexpr char kPositionColonLabel[]  = "偏移：";
 // 左侧面板的极性开关（src/panels/left_panel.cpp）：菜单同名项带助记符（menu::kPolarity*），本组为按钮无助记符版本。
 inline constexpr char kPolarityGroupBox[]     = "保留 / 删除";
 inline constexpr char kPolarityKeepButton[]   = "保留框内";
@@ -480,7 +496,7 @@ inline constexpr char kSwatchKeepMask[]      = "保留块遮罩";
 inline constexpr char kSwatchDeleteMask[]    = "删除块遮罩";
 inline constexpr char kSwatchSelectionCut[]  = "选区 / 切割线";
 inline constexpr char kSwatchAnnoSelected[]  = "标注选中";
-inline constexpr char kSwatchGridLine[]      = "网格线";   // 与显隐开关 menu::kShowGrid 同字不同角色（颜色行标签 / 开关项），各立一条。
+inline constexpr char kSwatchGridLine[]      = "网格线";   // 配色行只指网格线色（切割线色见 kSwatchSelectionCut），与显隐开关 menu::kShowGrid 的措辞分立、不共用。
 inline constexpr char kSwatchCanvasBg[]      = "画布背景";
 // 三项填充 alpha（0–255）的行标签。
 inline constexpr char kAlphaKeepSpin[]       = "保留遮罩浓度";

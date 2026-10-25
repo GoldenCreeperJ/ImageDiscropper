@@ -226,24 +226,37 @@ void MainWindowUi::syncUi(const MainWindow& w) {
     if (w.aSortCustom_) w.aSortCustom_->setChecked(w.doc_.order().strategy == engine::SortStrategy::Custom);
     if (w.aSortReverse_) w.aSortReverse_->setChecked(w.doc_.order().reverse);
     if (w.aSortSnake_) w.aSortSnake_->setChecked(w.doc_.order().snake);
-    // L3 余量策略：仅 L3 启用 + 勾选态回同步（「参数」页余量下拉为真相源，菜单仅镜像）。
-    if (w.mRemainder_) w.mRemainder_->setEnabled(l3);
+    // L3 余量策略：仅 L3 且至少一个周期轴时启用（分割数/比例恰好铺满、无残缺单元）+ 勾选态回同步
+    //（「参数」页余量下拉为真相源，菜单仅镜像；置灰口径与面板一致）。
+    if (w.mRemainder_)
+        w.mRemainder_->setEnabled(l3 && (w.doc_.gridAxisIsPitch(true) || w.doc_.gridAxisIsPitch(false)));
     for (std::size_t i = 0; i < w.remainderActions_.size(); ++i)
         if (w.remainderActions_[i])
             w.remainderActions_[i]->setChecked(
                 static_cast<int>(i) == static_cast<int>(w.doc_.gridParams().remainder));
-    // 导出设置：输出方式/格式/烧录开关勾选态（面板为真相源，菜单仅镜像）。
-    // 置灰规则与导出面板 refreshModeItemStates 一致：坍缩依 Core 坍缩可行性，重排仅 L3（Core 硬约束）。
-    if (w.aEmitSep_) w.aEmitSep_->setChecked(w.doc_.emitMode() == engine::EmitMode::Separate);
-    if (w.aEmitCol_) {
-        w.aEmitCol_->setChecked(w.doc_.emitMode() == engine::EmitMode::Merged
-                                && w.doc_.layout() == engine::MergeLayout::Collapse);
-        w.aEmitCol_->setEnabled(w.exportPanel_->collapsible());
+    // L3 网格定义子菜单：仅 L3 启用；两轴三态勾选态从 Document 回同步（参数页为真相源）。
+    if (w.mGridDefine_) w.mGridDefine_->setEnabled(l3);
+    for (std::size_t i = 0; i < w.gridModeActionsH_.size(); ++i) {
+        if (w.gridModeActionsH_[i])
+            w.gridModeActionsH_[i]->setChecked(static_cast<int>(i)
+                                               == static_cast<int>(w.doc_.gridAxis(true).mode));
+        if (i < w.gridModeActionsV_.size() && w.gridModeActionsV_[i])
+            w.gridModeActionsV_[i]->setChecked(static_cast<int>(i)
+                                               == static_cast<int>(w.doc_.gridAxis(false).mode));
     }
-    if (w.aEmitRear_) {
-        w.aEmitRear_->setChecked(w.doc_.emitMode() == engine::EmitMode::Merged
+    // 导出设置：输出方式/格式/烧录开关勾选态（面板为真相源，菜单仅镜像）。
+    // 置灰规则与导出面板 refreshModeItemStates 同一判据：坍缩依 Core 坍缩可行性，重排依
+    // ExportPanel::rearrangeAvailable（仅 L3 且保留块长宽全等，Core 硬约束）。
+    if (w.aExportSep_) w.aExportSep_->setChecked(w.doc_.exportMode() == engine::ExportMode::Separate);
+    if (w.aExportCol_) {
+        w.aExportCol_->setChecked(w.doc_.exportMode() == engine::ExportMode::Merged
+                                && w.doc_.layout() == engine::MergeLayout::Collapse);
+        w.aExportCol_->setEnabled(w.exportPanel_->collapsible());
+    }
+    if (w.aExportRear_) {
+        w.aExportRear_->setChecked(w.doc_.exportMode() == engine::ExportMode::Merged
                                  && w.doc_.layout() == engine::MergeLayout::Rearrange);
-        w.aEmitRear_->setEnabled(w.doc_.mode() == engine::Tier::Grid);
+        w.aExportRear_->setEnabled(w.exportPanel_->rearrangeAvailable());
     }
     if (w.aFmtPng_) w.aFmtPng_->setChecked(w.doc_.format() == engine::ExportFormat::Png);
     if (w.aFmtJpg_) w.aFmtJpg_->setChecked(w.doc_.format() == engine::ExportFormat::Jpeg);
@@ -275,6 +288,8 @@ void MainWindowUi::syncUi(const MainWindow& w) {
     if (w.aCellsAll_) w.aCellsAll_->setEnabled(l3);
     if (w.aCellsInvert_) w.aCellsInvert_->setEnabled(l3);
     if (w.aCellsClear_) w.aCellsClear_->setEnabled(l3);
+    // 图片/标注图层隐藏 → 模式入口、属性面板与整域菜单一并置灰（「隐藏图层=不可交互」）。
+    syncLayerAvailability(w);
 }
 
 // 画布四态菜单勾选态回同步（读视图当前模式；applyCanvasMode 落地后由 MainWindow::connectAll 第二条连接调用）。
@@ -303,6 +318,36 @@ void MainWindowUi::syncAnnoSelActions(const MainWindow& w) {
     if (w.aZFront_) w.aZFront_->setEnabled(sel);
     if (w.aZBack_) w.aZBack_->setEnabled(sel);
     if (w.aFill_) w.aFill_->setChecked(w.annoBridge_.displayFill());
+}
+
+// 图层可用性门控：图片/标注图层隐藏时，其交互入口（画布四态中的图片拾取 / 标注选取 / 标注绘制）、
+// 属性面板与整域菜单一并置灰——「隐藏图层=不可交互」贯穿到入口层，不留能进却画不出结果的空模式。
+// 显隐开关本身在视图菜单与图层面板，不在被禁菜单内，故恒可恢复；若当前正处被禁模式，回落「框选」（
+// 否则会停在一个点不出任何反馈的模式里）。
+void MainWindowUi::syncLayerAvailability(const MainWindow& w) {
+    const bool imgOn = w.doc_.imageLayersVisible();
+    const bool annoOn = w.annoBridge_.layerVisible();
+    // 模式入口：菜单动作 + 工具面板按钮同口径置灰。
+    if (w.aCanvasImage_) w.aCanvasImage_->setEnabled(imgOn);
+    if (w.aCanvasAnnoSel_) w.aCanvasAnnoSel_->setEnabled(annoOn);
+    if (w.aCanvasAnnoCreate_) w.aCanvasAnnoCreate_->setEnabled(annoOn);
+    if (w.toolPanel_) {
+        w.toolPanel_->setModeEnabled(CanvasMode::ImagePick, imgOn);
+        w.toolPanel_->setModeEnabled(CanvasMode::AnnoSelect, annoOn);
+        w.toolPanel_->setModeEnabled(CanvasMode::AnnoCreate, annoOn);
+    }
+    // 面板与整域菜单：隐藏即整域停用（标注属性页 / 图片（图层编辑）页与各自菜单）。
+    if (w.annoPropPanel_) w.annoPropPanel_->setEnabled(annoOn);
+    if (w.mAnno_) w.mAnno_->setEnabled(annoOn);
+    if (w.layerEditPanel_) w.layerEditPanel_->setEnabled(imgOn);
+    if (w.mLayers_) w.mLayers_->setEnabled(imgOn);
+    // 当前模式被禁 → 回落框选（经工具面板走正常 modeChanged 落地链）。
+    if (w.view_ && w.toolPanel_) {
+        const CanvasMode m = w.view_->canvasMode();
+        const bool blocked = (m == CanvasMode::ImagePick && !imgOn) ||
+                             ((m == CanvasMode::AnnoSelect || m == CanvasMode::AnnoCreate) && !annoOn);
+        if (blocked) w.toolPanel_->setMode(CanvasMode::Marquee);
+    }
 }
 
 } // namespace idc::gui

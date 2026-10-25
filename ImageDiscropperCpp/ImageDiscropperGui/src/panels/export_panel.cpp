@@ -24,7 +24,9 @@
 
 #include "engine/engine.h"
 #include "model/document.h"
+#include "util/coord_spin.h"
 #include "util/gui_nums.h"
+#include "util/widget_factory.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 
@@ -32,13 +34,10 @@ namespace idc::gui {
 
 // 构建导出面板布局。
 ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
-    auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx,
-                             nums::panels::kPanelMarginPx, nums::panels::kPanelMarginPx);
+    auto* root = makePanelLayout(this);
     root->setSpacing(nums::panels::kPanelSpacingPx);
 
-    auto* box = new QGroupBox(this);
-    i18n::bindTitle(retranslator_, box, IDC_GT(label, kExportBoxTitle));
+    auto* box = makeGroupBox(retranslator_, this, IDC_GT(label, kExportBoxTitle));
     auto* form = new QVBoxLayout(box);
     form->setSpacing(nums::panels::kPanelSpacingPx);
 
@@ -47,8 +46,8 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     i18n::bindText(retranslator_, outModeLbl, IDC_GT(label, kOutModeLabel));
     form->addWidget(outModeLbl);
     modeCombo_ = new QComboBox(box);
-    i18n::addItemsI18n(retranslator_, modeCombo_, {IDC_GT(label, kEmitSeparateItem), IDC_GT(label, kEmitCollapseItem),
-                                                   IDC_GT(label, kEmitRearrangeItem)});
+    i18n::addItemsI18n(retranslator_, modeCombo_, {IDC_GT(label, kExportSeparateItem), IDC_GT(label, kExportCollapseItem),
+                                                   IDC_GT(label, kExportRearrangeItem)});
     i18n::bindToolTip(retranslator_, modeCombo_, IDC_GT(tooltip, kExportModeCombo));
     form->addWidget(modeCombo_);
 
@@ -58,8 +57,7 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     dh->setContentsMargins(0, 0, 0, 0);
     dirEdit_ = new QLineEdit(dirRow_);
     i18n::bindPlaceholder(retranslator_, dirEdit_, IDC_GT(label, kPhOutDir));
-    dirBtn_ = new QPushButton(dirRow_);
-    i18n::bindButton(retranslator_, dirBtn_, IDC_GT(label, kBrowseButton));
+    dirBtn_ = makeButton(retranslator_, dirRow_, IDC_GT(label, kBrowseButton));
     auto* outDirLbl = new QLabel(dirRow_);
     i18n::bindText(retranslator_, outDirLbl, IDC_GT(label, kOutDirLabel));
     dh->addWidget(outDirLbl);
@@ -84,14 +82,27 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     auto* fh = new QHBoxLayout(fileRow_);
     fh->setContentsMargins(0, 0, 0, 0);
     fileEdit_ = new QLineEdit(fileRow_);
-    fileBtn_ = new QPushButton(fileRow_);
-    i18n::bindButton(retranslator_, fileBtn_, IDC_GT(label, kBrowseButton));
+    fileBtn_ = makeButton(retranslator_, fileRow_, IDC_GT(label, kBrowseButton));
     auto* outFileLbl = new QLabel(fileRow_);
     i18n::bindText(retranslator_, outFileLbl, IDC_GT(label, kOutFileLabel));
     fh->addWidget(outFileLbl);
     fh->addWidget(fileEdit_, 1);
     fh->addWidget(fileBtn_);
     form->addWidget(fileRow_);
+
+    // 填充色行：合并画布底色（重排空位、坍缩下的越界部分）、Pad 余量策略下的越界单元补白
+    // （分离与合并导出同一语义，见 Core exportSeparate）、有损格式（JPEG/WebP/BMP）压平透明
+    // 像素的背景色。三模式恒可见——切换模式时整行消失会让人误以为参数丢失。
+    padRow_ = new QWidget(box);
+    auto* ph = new QHBoxLayout(padRow_);
+    ph->setContentsMargins(0, 0, 0, 0);
+    auto* padLbl = new QLabel(padRow_);
+    i18n::bindText(retranslator_, padLbl, IDC_GT(label, kPadColorLabel));
+    padColorBtn_ = new QPushButton(padRow_);
+    i18n::bindToolTip(retranslator_, padColorBtn_, IDC_GT(tooltip, kPadColor));
+    ph->addWidget(padLbl);
+    ph->addWidget(padColorBtn_, 1);
+    form->addWidget(padRow_);
 
     // 移动端禁用「浏览…」（SPEC §8.3 形态差异）：SAF 自定义目录真机不可靠——文件管理器
     // 建的目录 other 无权限、华为 Downloads 提供者拒绝 open/delete/查询，自定义路径无法
@@ -115,9 +126,10 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     rf->setSpacing(nums::panels::kPanelTightSpacingPx);
     mergeCols_ = new QSpinBox(rearrangeRow_);
     mergeRows_ = new QSpinBox(rearrangeRow_);
-    mergeCellW_ = new QSpinBox(rearrangeRow_);
-    mergeCellH_ = new QSpinBox(rearrangeRow_);
-    for (QSpinBox* s : {mergeCols_, mergeRows_, mergeCellW_, mergeCellH_}) {
+    mergeCellW_ = new CoordSpinBox(rearrangeRow_);
+    mergeCellH_ = new CoordSpinBox(rearrangeRow_);
+    for (QSpinBox* s : {mergeCols_, mergeRows_, static_cast<QSpinBox*>(mergeCellW_),
+                        static_cast<QSpinBox*>(mergeCellH_)}) {
         s->setRange(0, nums::panels::kMergeValueLimitPx);
         s->setValue(0);
         s->setKeyboardTracking(false);          // 提交才触发，避免逐键刷新。
@@ -127,10 +139,19 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     i18n::bindToolTip(retranslator_, mergeRows_, IDC_GT(tooltip, kMergeRows));
     i18n::bindToolTip(retranslator_, mergeCellW_, IDC_GT(tooltip, kMergeCellW));
     i18n::bindToolTip(retranslator_, mergeCellH_, IDC_GT(tooltip, kMergeCellH));
+    // 单元宽/高另接受百分比串（SPEC §2.1）：基准＝画布宽/高（§7 export.merge 以画布为基准）；
+    // 尚无画布时退回工作图尺寸，均无图则基准 <= 0、只认整数像素。“0%”换算为 0，即“自动”。
+    const auto mergeCellBasis = [this](const bool horizontal) {
+        if (!doc_) return 0;
+        if (doc_->canvasWidth() > 0 && doc_->canvasHeight() > 0)
+            return horizontal ? doc_->canvasWidth() : doc_->canvasHeight();
+        return horizontal ? doc_->width() : doc_->height();
+    };
+    mergeCellW_->setBasisProvider([mergeCellBasis] { return mergeCellBasis(true); });
+    mergeCellH_->setBasisProvider([mergeCellBasis] { return mergeCellBasis(false); });
     i18n::bindFormRow(retranslator_, rf, mergeCols_, IDC_GT(label, kMergeColsLabel));
     i18n::bindFormRow(retranslator_, rf, mergeRows_, IDC_GT(label, kMergeRowsLabel));
-    autoGridBtn_ = new QPushButton(rearrangeRow_);
-    i18n::bindButton(retranslator_, autoGridBtn_, IDC_GT(label, kAutoGridButton));
+    autoGridBtn_ = makeButton(retranslator_, rearrangeRow_, IDC_GT(label, kAutoGridButton));
     i18n::bindToolTip(retranslator_, autoGridBtn_, IDC_GT(tooltip, kAutoGrid));
     rf->addRow(QString(), autoGridBtn_);
     i18n::bindFormRow(retranslator_, rf, mergeCellW_, IDC_GT(label, kMergeCellWLabel));
@@ -139,11 +160,9 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     mergeSortCombo_ = new QComboBox(rearrangeRow_);
     i18n::addItemsI18n(retranslator_, mergeSortCombo_, {IDC_GT(label, kMergeRowMajor), IDC_GT(label, kMergeColMajor)});
     i18n::bindToolTip(retranslator_, mergeSortCombo_, IDC_GT(tooltip, kMergeOrder));
-    mergeSnake_ = new QCheckBox(rearrangeRow_);
-    i18n::bindButton(retranslator_, mergeSnake_, IDC_GT(label, kMergeSnakeLabel));
+    mergeSnake_ = makeCheckBox(retranslator_, rearrangeRow_, IDC_GT(label, kMergeSnakeLabel));
     i18n::bindToolTip(retranslator_, mergeSnake_, IDC_GT(tooltip, kMergeSnake));
-    mergeReverse_ = new QCheckBox(rearrangeRow_);
-    i18n::bindButton(retranslator_, mergeReverse_, IDC_GT(label, kMergeReverseLabel));
+    mergeReverse_ = makeCheckBox(retranslator_, rearrangeRow_, IDC_GT(label, kMergeReverseLabel));
     i18n::bindToolTip(retranslator_, mergeReverse_, IDC_GT(tooltip, kMergeReverse));
     auto* orderRow = new QWidget(rearrangeRow_);
     auto* oh = new QHBoxLayout(orderRow);
@@ -153,9 +172,6 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     oh->addWidget(mergeReverse_);
     oh->addStretch(1);
     i18n::bindFormRow(retranslator_, rf, orderRow, IDC_GT(label, kMergeOrderLabel));
-    padColorBtn_ = new QPushButton(rearrangeRow_);
-    i18n::bindToolTip(retranslator_, padColorBtn_, IDC_GT(tooltip, kPadColor));
-    i18n::bindFormRow(retranslator_, rf, padColorBtn_, IDC_GT(label, kPadColorLabel));
     // 内联警告（红字）：cols*rows < 保留块数 或 cw/ch < 网格单元尺寸时提示（导出前另弹窗确认）。
     rearrangeWarn_ = new QLabel(rearrangeRow_);
     rearrangeWarn_->setWordWrap(true);
@@ -177,8 +193,7 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     qualityLabel_ = new QLabel(box);
     i18n::bindText(retranslator_, qualityLabel_, IDC_GT(label, kQualityLabel));
     form->addWidget(qualityLabel_);
-    quality_ = new QSpinBox(box);
-    quality_->setRange(nums::panels::kQualityMinPercent, nums::panels::kQualityMaxPercent);
+    quality_ = makeSpin(box, nums::panels::kQualityMinPercent, nums::panels::kQualityMaxPercent);
     quality_->setValue(nums::panels::kQualityDefaultPercent);
     form->addWidget(quality_);
 
@@ -205,15 +220,13 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     root->addWidget(infoLabel_);
 
     // 导出时烧录标注：勾选后导出把标注合成进像素（随像素一起被切割）。
-    burnIn_ = new QCheckBox(this);
-    i18n::bindButton(retranslator_, burnIn_, IDC_GT(label, kBurnInCheck));
+    burnIn_ = makeCheckBox(retranslator_, this, IDC_GT(label, kBurnInCheck));
     burnIn_->setChecked(false);
     i18n::bindToolTip(retranslator_, burnIn_, IDC_GT(tooltip, kBurnInHint));
 
     // 导出时烧录图片图层（对标「导出时烧录标注」）：勾选后导出把叠加图片图层并入像素（随图像一起被切割）。
     // 与图层面板的「显示」开关正交——后者仅控画布预览，本开关只影响导出结果。默认勾选（保持“导出含图层”的现有行为）。
-    layersBurnIn_ = new QCheckBox(this);
-    i18n::bindButton(retranslator_, layersBurnIn_, IDC_GT(label, kLayersBurnInCheck));
+    layersBurnIn_ = makeCheckBox(retranslator_, this, IDC_GT(label, kLayersBurnInCheck));
     layersBurnIn_->setChecked(true);
     i18n::bindToolTip(retranslator_, layersBurnIn_, IDC_GT(tooltip, kLayersBurnInHint));
     // 两个烧录开关并排 1×2（各自信号绑定不动）。
@@ -224,8 +237,7 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     root->addLayout(burnRow);
 
     // 导出按钮。
-    exportBtn_ = new QPushButton(this);
-    i18n::bindButton(retranslator_, exportBtn_, IDC_GT(label, kExportBoxTitle));
+    exportBtn_ = makeButton(retranslator_, this, IDC_GT(label, kExportBoxTitle));
     i18n::bindToolTip(retranslator_, exportBtn_, IDC_GT(tooltip, kExportButton));
     root->addWidget(exportBtn_);
     root->addStretch(1);
@@ -252,6 +264,9 @@ ExportPanel::ExportPanel(QWidget* parent) : QWidget(parent) {
     connect(mergeSortCombo_, &QComboBox::currentIndexChanged, this, &ExportPanel::onMergeSortChanged);
     connect(mergeSnake_, &QCheckBox::toggled, this, &ExportPanel::onMergeSnakeToggled);
     connect(mergeReverse_, &QCheckBox::toggled, this, &ExportPanel::onMergeReverseToggled);
+
+    // 初次布局按默认模式收敛显隐（构造时 combo 停在“分离导出”，绑定 Document 前也保持一致）。
+    updateFieldVisibility();
 }
 
 // 绑定 Document 并同步一次。
@@ -266,7 +281,7 @@ void ExportPanel::syncFromDocument() {
 
     // 输出模式：Separate→0；Merged+Collapse→1；Merged+Rearrange→2。
     int idx = 0;
-    if (doc_->emitMode() == engine::EmitMode::Merged) {
+    if (doc_->exportMode() == engine::ExportMode::Merged) {
         idx = doc_->layout() == engine::MergeLayout::Collapse ? 1 : 2;
     }
     modeCombo_->blockSignals(true);
@@ -290,12 +305,16 @@ void ExportPanel::syncFromDocument() {
     fileEdit_->setText(doc_->outputFile());
 
     // 重排参数回填（blockSignals 防回环）。
-    for (QSpinBox* s : {mergeCols_, mergeRows_, mergeCellW_, mergeCellH_}) s->blockSignals(true);
+    for (QSpinBox* s : {mergeCols_, mergeRows_, static_cast<QSpinBox*>(mergeCellW_),
+                        static_cast<QSpinBox*>(mergeCellH_)})
+        s->blockSignals(true);
     mergeCols_->setValue(doc_->mergeCols());
     mergeRows_->setValue(doc_->mergeRows());
     mergeCellW_->setValue(doc_->mergeCellW());
     mergeCellH_->setValue(doc_->mergeCellH());
-    for (QSpinBox* s : {mergeCols_, mergeRows_, mergeCellW_, mergeCellH_}) s->blockSignals(false);
+    for (QSpinBox* s : {mergeCols_, mergeRows_, static_cast<QSpinBox*>(mergeCellW_),
+                        static_cast<QSpinBox*>(mergeCellH_)})
+        s->blockSignals(false);
     updatePadColorSwatch();
 
     // 重排填充顺序回填（MergeOrder；blockSignals 防回环）。
@@ -324,10 +343,10 @@ void ExportPanel::setCollapsible(const bool collapsible) {
     collapsible_ = collapsible;
     emit collapsibleChanged(collapsible);
     refreshModeItemStates();
-    // 当前选中「坍缩」但不可坍缩：回退到重排（仅 L3 可用），否则退回分离导出。
+    // 当前选中「坍缩」但不可坍缩：回退到重排（仅 L3 且块尺寸全等时可用），否则退回分离导出。
     if (!collapsible && modeCombo_->currentIndex() == 1) {
         const bool isL3 = doc_ && doc_->mode() == engine::Tier::Grid;
-        modeCombo_->setCurrentIndex(isL3 ? 2 : 0); // 触发 onModeChanged → 写回 Document。
+        modeCombo_->setCurrentIndex(isL3 && uniformBlocks_ ? 2 : 0); // 触发 onModeChanged → 写回 Document。
     }
 }
 
@@ -376,7 +395,7 @@ void ExportPanel::setLayersBurnInChecked(const bool on) const {
 
 // 输出模式变更 → 写回 Document + 切换字段可见性。
 // 外部（文件菜单「导出设置」）选输出方式：与用户点 combo 同一路径（含重排 auto-grid 与警告刷新）。
-void ExportPanel::selectEmitMode(const int index) const {
+void ExportPanel::selectExportMode(const int index) const {
     if (index < 0 || index >= modeCombo_->count()) return;
     if (modeCombo_->currentIndex() != index) modeCombo_->setCurrentIndex(index); // 触发 onModeChanged
 }
@@ -390,9 +409,9 @@ void ExportPanel::selectFormat(const int index) const {
 void ExportPanel::onModeChanged(const int index) {
     if (!doc_) return;
     switch (index) {
-        case 0: doc_->setEmit(engine::EmitMode::Separate, engine::MergeLayout::Collapse); break;
-        case 1: doc_->setEmit(engine::EmitMode::Merged, engine::MergeLayout::Collapse); break;
-        case 2: doc_->setEmit(engine::EmitMode::Merged, engine::MergeLayout::Rearrange); break;
+        case 0: doc_->setExport(engine::ExportMode::Separate, engine::MergeLayout::Collapse); break;
+        case 1: doc_->setExport(engine::ExportMode::Merged, engine::MergeLayout::Collapse); break;
+        case 2: doc_->setExport(engine::ExportMode::Merged, engine::MergeLayout::Rearrange); break;
         default: break;
     }
     // 进入重排：若用户未手动指定 cols/rows，依保留块数开方自动填入具体值。
@@ -471,6 +490,8 @@ void ExportPanel::updateFieldVisibility() const {
 #endif
     namingRow_->setVisible(separate);
     fileRow_->setVisible(!separate);
+    // 填充色行三模式恒可见：合并画布底色 / Pad 补白 / 有损压平共用该值；分离导出仅在没有
+    // Pad 残缺单元时无从体现（完整单元无空位），但隐藏整行会让人误以为参数丢失。
     rearrangeRow_->setVisible(idx == 2); // 仅「合并重排」显示重排参数。
 }
 
@@ -487,13 +508,17 @@ QString ExportPanel::saveFilter() const {
 }
 
 // 依 Core 坍缩可行性与 Document 模式，刷新「合并坍缩」「合并重排」两项的可用性：
-// 坍缩项依 collapsible_；重排项仅 L3 可用（Core runEngine 硬约束，非 L3 重排会报错）。
+// 坍缩项依 collapsible_；重排项依 rearrangeAvailable（L3 且保留块长宽全等，Core runEngine 硬约束）。
 void ExportPanel::refreshModeItemStates() const {
     const auto* m = qobject_cast<QStandardItemModel*>(modeCombo_->model());
     if (!m) return;
-    const bool isL3 = doc_ && doc_->mode() == engine::Tier::Grid;
     if (QStandardItem* it = m->item(1)) it->setEnabled(collapsible_);
-    if (QStandardItem* it = m->item(2)) it->setEnabled(isL3);
+    if (QStandardItem* it = m->item(2)) it->setEnabled(rearrangeAvailable());
+}
+
+// 重排项可用性：仅 L3 且保留块长宽全等。面板置灰与菜单「导出设置·重排」共用同一判据。
+bool ExportPanel::rearrangeAvailable() const {
+    return doc_ && doc_->mode() == engine::Tier::Grid && uniformBlocks_;
 }
 
 } // namespace idc::gui

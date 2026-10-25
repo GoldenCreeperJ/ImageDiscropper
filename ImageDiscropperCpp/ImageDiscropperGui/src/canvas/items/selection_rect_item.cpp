@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 #include <QColor>
 #include <QGraphicsSceneMouseEvent>
@@ -39,6 +40,26 @@ qreal snap1(const qreal v, const qreal th, const std::array<qreal, 3>& targets) 
 QPointF clampPoint(const QPointF& p, const int w, const int h) {
     return {std::clamp(p.x(), 0.0, static_cast<qreal>(w)),
                    std::clamp(p.y(), 0.0, static_cast<qreal>(h))};
+}
+
+// 整数像素量化：四边各取最近像素边界（左闭右开，宽高由边界差得出），
+// 并保底 1px、越界回推，保证手势结束时 rect_ 必为图内整数几何。
+// 必要性：释放时的边缘/中线磁吸可能落在半像素（如 W/2 为 x.5），而 L2 多矩形只靠
+// Document::updateRect 写回后的 changed 回设选框图元；若该整数与上一帧相同则早退不发信号，
+// 图元会停在浮点位置（松手后框边不贴合像素网格）。故量化须在发 rectChanged 之前于本图元完成。
+QRectF quantizeRect(const QRectF& in, const int w, const int h) {
+    const QRectF r = in.normalized();
+    qreal l = std::round(r.left());
+    qreal t = std::round(r.top());
+    qreal rr = std::round(r.right());
+    qreal b = std::round(r.bottom());
+    if (rr - l < 1.0) rr = l + 1.0;   // 两边界并到一起时保底 1px（不退化）。
+    if (b - t < 1.0) b = t + 1.0;
+    if (w > 0 && rr > w) { l -= rr - w; rr = w; }
+    if (h > 0 && b > h) { t -= b - h; b = h; }
+    if (l < 0) { rr -= l; l = 0; }
+    if (t < 0) { b -= t; t = 0; }
+    return {l, t, rr - l, b - t};
 }
 
 } // namespace
@@ -359,13 +380,16 @@ void SelectionRectItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     event->accept();
 }
 
-// 释放：应用吸附、先退出拖拽态再发最终信号（使上层这一次做完整回设与面板回同步）。
+// 释放：应用吸附、整数像素量化、先退出拖拽态再发最终信号（使上层这一次做完整回设与面板回同步）。
 void SelectionRectItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
     const bool wasDragging = mode_ != DragMode::None;
     // 整体移动须保持宽高：吸附时只平移不逐边独立吸附（否则移动会变成尺寸突变）。
     const bool preserveSize = mode_ == DragMode::Move;
     if (wasDragging && snapEnabled_) applySnap(preserveSize);
     prepareGeometryChange();
+    // 手势结果恒为整数像素：吸附可能停在半像素，且 L2 多矩形写回后可能因值未变而不回设本图元，
+    // 故在发信号前就地量化（拖拽中仍跟手，只有松手这一刻落到像素网格）。
+    if (wasDragging) rect_ = quantizeRect(rect_, hasBounds_ ? imgW_ : 0, hasBounds_ ? imgH_ : 0);
     // 先置拖拽态为 None、再 emit：这样释放这一次 isDragging()==false，上层会照常回设选区框
     // 并同步面板；而拖拽过程中（mouseMoveEvent 的 emit）isDragging()==true，上层跳过回设。
     mode_ = DragMode::None;

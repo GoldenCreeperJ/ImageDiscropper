@@ -65,17 +65,22 @@ public:
 
     // 多层画布重组（接 Document::layersChanged）：图层栈/画布尺寸声明变时，由 EngineBridge::composeCanvas
     // 按新栈展平得画布底图 → setOriginalImage（失效画布 base_）→ 在新基准上重放画布级预处理产出 working_。
-    // 非图层画布（单一载入图）早退，不触碰既有链路。由 MainWindow 将 Document::layersChanged 接入。
+    // 无叠加层（含空文档）时早退：重组只针对叠加层栈变化，此时展平回灌无意义。由 MainWindow 将 Document::layersChanged 接入。
     void recomposeLayerCanvas();
 
-    // 导出用「图片图层是否并入」的画布现算（对标标注烧录：导出侧独立于「显示」预览开关）：
-    // 依 includeOverlays 重跑 composeCanvas（叠加层含 / 不含）+ 施加当前画布级有效管线，**无副作用**（不改 Document）。
-    // 与当前预览态（imageLayersVisible）一致时直接复用 working_ 免二次合成；非图层画布恒返回 working_。
+    // 导出用「图片图层是否并入」的画布现算（与图层面板「显示」开关正交：后者纯预览显隐、不影响工作图）：
+    // includeOverlays=true 直接复用 working_（恒为全量合成）；false 现算「仅底图」形态（传空 layers）+ 施加当前画布级有效管线，
+    // **无副作用**（不改 Document）；无叠加层（含空文档）恒返回 working_。
     core::Image composeLayerCanvasForExport(bool includeOverlays) const;
 
+    // 画布预览侧「图层于透明底」现算（解耦渲染专用）：供 CanvasScene 把图层像素作独立图元与底图分离叠加，
+    //   使底图显隐与图层显隐互不连带。传空 base + 全层走 composeCanvas，再施加画布级有效管线与透明度，**无副作用**。
+    //   无叠加层（含空文档）返回空图。与 composeLayerCanvasForExport 同走图层物化缓存。
+    core::Image composeLayersForDisplay() const;
+
     // 在当前 original_ 基准上重放现有画布级预处理声明（steps_ + resize_）产出 working_：
-    //   供「新建画布」（单图态）与「清空图层」（回退单图底）替换底图后补算色彩预处理，与常规提交同走 commitPipeline
-    //   （几何签名前后一致→不误清选区/标注）。非图态且无预处理声明时仍会重算（空队列→original_ 副本）。
+    //   供画布级不透明度等改值后重算 working_，与常规提交同走 commitPipeline（几何签名前后一致→不误清选区/标注）。
+    //   无预处理声明时仍会重算（空队列→original_ 副本）。
     void replayCanvasPreprocess();
 
 public slots:

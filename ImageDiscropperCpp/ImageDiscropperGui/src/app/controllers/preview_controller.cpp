@@ -8,7 +8,10 @@
 // ============================================================================
 #include "app/controllers/preview_controller.h"
 
+#include "app/controllers/preprocess_controller.h"
+
 #include <algorithm>
+#include <utility>
 
 #include <QStackedWidget>
 #include <QTabWidget>
@@ -67,6 +70,7 @@ void PreviewController::setStatusBar(StatusBar* status) { status_ = status; }
 void PreviewController::setAnnotationBridge(AnnotationBridge* anno) { anno_ = anno; }
 void PreviewController::setMultiPageContainer(QWidget* tabs) { rightTabs_ = tabs; }
 void PreviewController::setLayerPanel(LayerPanel* panel) { layerPanel_ = panel; }
+void PreviewController::setPreprocessController(PreprocessController* preprocess) { preprocess_ = preprocess; }
 
 // 切到「导出」页时补渲染输出预览（A：不可见时不渲染，切回时若已脏则重算）。
 // 多型分发：桌面 AccordionPanel::sectionToggled / 移动端 QStackedWidget::currentChanged 各自接线（另兼容 QTabWidget）。
@@ -81,50 +85,61 @@ void PreviewController::connectSignals() {
     if (view_) connect(view_, &CanvasView::toggleMasksRequested, this, &PreviewController::onToggleMasks);
 }
 
-// 切换预览遮罩显隐（视图菜单 / 画布右键）；同步图层面板的遮罩复选框。
+// 切换预览遮罩显隐（画布右键）：本方法直接落地场景，再静默镜像图层面板的遮罩复选框（不走前向驱动，防重复落地）。
 void PreviewController::onToggleMasks() {
     if (!scene_ || !layerPanel_) return;
     const bool v = !scene_->masksVisible();
     scene_->setMasksVisible(v);
-    layerPanel_->setMaskVisible(v);   // 反向同步面板（blockSignals 防回环）。
+    layerPanel_->syncMaskVisible(v);   // 反向同步面板勾选态（blockSignals 防回环）。
     refreshPreview();
     status_->notify(v ? IDC_GTR(status, kMaskShown)
                       : IDC_GTR(status, kMaskHidden), false);
 }
 
 // 依工作图重建降采样预览底图（NFR-3）。
+// 解耦渲染：底图（仅底图形态）与图片图层（图层于透明底）各作**独立像素图元**叠放，图层显隐与底图显隐互不连带；
+//   工作图（含图层的引擎真相）不被显示态污染。输出预览小源图另按「烧录图片图层」开关现算（与显示正交）。
 void PreviewController::rebuildPreviewPixmap() {
     if (!doc_->hasImage()) {
         scene_->clearAll();
         exportSrcPixmap_ = QPixmap();   // 无图像：清空输出预览小源图。
+        displayBaseImage_ = core::Image{};   // 无底图可取：清空取色真相源。
+        displayLayersImage_ = core::Image{}; // 无图层可取：清空取色真相源（与底图侧对称）。
         lastFitW_ = lastFitH_ = -1;     // 清空后复位尺寸追踪，下次载入必然 fit。
         return;
     }
-    // 预览底图：工作图最长边已在限制内（绝大多数图）时**直接转换**，跳过 makePreview 的整幅深拷贝；
-    // 仅超长边大图才走 makePreview 降采样（轻编辑每次都要重跑，省一次整图拷贝可显著降低卡顿，需求③）。
-    const core::Image& working = doc_->working();
-    const int srcLongest = std::max(working.width(), working.height());
-    QPixmap pm;
-    double scaleX = 1.0;
-    double scaleY = 1.0;
-    if (previewMaxDim_ > 0 && srcLongest > previewMaxDim_) {
-        const auto [image, sx, sy] = makePreview(working, previewMaxDim_);
-        pm = toPixmap(image);
-        scaleX = sx;
-        scaleY = sy;
-    } else {
-        pm = toPixmap(working);
-    }
+    // core::Image → 预览 pixmap：最长边在 previewMaxDim_ 内直接转换（免整幅深拷贝），仅超长边大图才降采样（需求③）。
+    // 返回预览→原图放大系数 sx/sy（底图与图层覆盖同尺寸画布，坐标对齐）。
+    auto toPreview = [this](const core::Image& img, double& sx, double& sy) -> QPixmap {
+        sx = sy = 1.0;
+        if (img.empty()) return QPixmap();
+        if (previewMaxDim_ > 0 && std::max(img.width(), img.height()) > previewMaxDim_) {
+            const auto [image, x, y] = makePreview(img, previewMaxDim_);
+            sx = x;
+            sy = y;
+            return toPixmap(image);
+        }
+        return toPixmap(img);
+    };
+
+    // 底图：非图层画布→working_（全量即底图）；图层画布→仅底图合成（不含叠加层，故隐藏底图时图层覆盖不受牵连）。
+    core::Image baseOnly = doc_->hasLayers() ? preprocess_->composeLayerCanvasForExport(false) : doc_->working();
+    double bsx = 1.0, bsy = 1.0;
     // 场景坐标 = 原图像素坐标；底图用放大系数把预览 pixmap 铺到原图尺寸。
-    scene_->setBaseImage(pm, scaleX, scaleY, doc_->width(), doc_->height());
-    // 输出预览专用小源图：把底图再降到最长边 ≤ kExportSrcMaxDim，使缩略图只在小图上 blit。
-    const int longest = std::max(pm.width(), pm.height());
-    exportSrcPixmap_ = longest > kExportSrcMaxDim
-        ? pm.scaled(kExportSrcMaxDim, kExportSrcMaxDim, Qt::KeepAspectRatio, Qt::SmoothTransformation)
-        : pm;
-    // working（原图）→ 小源图 的放大系数（供 util::composeOutputThumbnail 把 Composition 源区域映射到小图坐标）。
-    exportSrcScaleX_ = exportSrcPixmap_.width()  > 0 ? static_cast<double>(doc_->width())  / exportSrcPixmap_.width()  : 1.0;
-    exportSrcScaleY_ = exportSrcPixmap_.height() > 0 ? static_cast<double>(doc_->height()) / exportSrcPixmap_.height() : 1.0;
+    scene_->setBaseImage(toPreview(baseOnly, bsx, bsy), bsx, bsy, doc_->width(), doc_->height());
+    // 留存全分辨率底图（与场景底图 item 同源）：图层隐藏时状态栏取色的真相源（本函数已算出，仅转存、零额外重算）。
+    displayBaseImage_ = std::move(baseOnly);
+
+    // 图层覆盖：图层于透明底合成（非图层画布返回空 → 清空覆盖）；可见性由场景 imageLayersVisible 落地（纯显示切换）。
+    double osx = 1.0, osy = 1.0;
+    core::Image layers = doc_->hasLayers() ? preprocess_->composeLayersForDisplay() : core::Image{};
+    scene_->setImageLayerOverlay(toPreview(layers, osx, osy), osx, osy, doc_->width(), doc_->height());
+    // 留存全分辨率「仅图层」合成（与场景覆盖 item 同源）：底图隐藏时状态栏取色的真相源（本函数已算出，仅转存）。
+    displayLayersImage_ = std::move(layers);
+
+    // 输出预览专用小源图：按当前「烧录图片图层」决定含层/仅底图（与显示正交）。
+    rebuildExportSourcePixmap();
+
     // 仅当输出尺寸变化（换图 / resize）才 fitToWindow 复位缩放；轻编辑尺寸不变则保持用户当前缩放（需求③）。
     if (const int ow = doc_->width(), oh = doc_->height(); ow != lastFitW_ || oh != lastFitH_) {
         view_->fitToWindow();
@@ -132,18 +147,39 @@ void PreviewController::rebuildPreviewPixmap() {
         lastFitH_ = oh;
     }
 
-    // 多层画布：刷新各图片图层的落位框（渲染于底图之上、标注之下；拾取拖拽的目标）。
+    // 多层画布：刷新各图片图层的落位框（渲染于图层像素覆盖之上、标注之下；拾取拖拽的目标）。
     // 落位几何由 Core canvas::layerPlacement 现算（此处按当前图层栈 + 画布尺寸 + 选中层下发）；
-    // canvasGeom＝画布级有效管线（[resize?]+轻队列）：落位框需经其几何步正向映射到工作图坐标系，
-    //   与底图（working＝composeCanvas 再过画布级管线）对齐，否则画布级旋转/翻转/缩放后选框不跟随。
-    // 非图层画布（单一载入图）或图片图层整体隐藏（Document::imageLayersVisible()==false）则清空落位框。
-    if (doc_->hasLayers() && doc_->imageLayersVisible()) {
+    // canvasGeom＝画布级有效管线（[resize?]+轻队列）：落位框需经其几何步正向映射到工作图坐标系，与底图/图层覆盖对齐。
+    // 恒按图层栈重建落位框（不随 imageLayersVisible 增删）；其可见性由场景 setImageLayersVisible 统一切换。
+    if (doc_->hasLayers()) {
         const auto canvasGeom = PreprocessSession::makeEffective(doc_->resizeTarget(), doc_->steps());
         scene_->updateImageLayers(doc_->layerStack(), doc_->canvasWidth(), doc_->canvasHeight(),
                                   canvasGeom, doc_->selectedLayerId());
     } else {
         scene_->clearImageLayers();
     }
+    // 新图/重建后把场景图层显隐旗标回同步到 Document（换图默认可见），保证图层像素覆盖与落位框可见性一致。
+    scene_->setImageLayersVisible(doc_->imageLayersVisible());
+}
+
+// 依当前「烧录图片图层」开关重算导出预览小源图（含层→复用 working_；不含→仅底图合成）并降到 ≤ kExportSrcMaxDim。
+void PreviewController::rebuildExportSourcePixmap() {
+    if (!doc_->hasImage()) { exportSrcPixmap_ = QPixmap(); return; }
+    // 烧录开：working_ 即全量合成，直接复用；烧录关（且图层画布）：现算仅底图形态。
+    const core::Image burnSrc = doc_->hasLayers() && !doc_->layersBurnIn()
+                                    ? preprocess_->composeLayerCanvasForExport(false)
+                                    : doc_->working();
+    // 降到最长边 ≤ kExportSrcMaxDim（makePreview 内置不超阈原样返回），缩略图只在这张小图上 blit。
+    exportSrcPixmap_ = toPixmap(makePreview(burnSrc, kExportSrcMaxDim).image);
+    // working（原图）→ 小源图 的放大系数（供 util::composeOutputThumbnail 把 Composition 源区域映射到小图坐标）。
+    exportSrcScaleX_ = exportSrcPixmap_.width()  > 0 ? static_cast<double>(doc_->width())  / exportSrcPixmap_.width()  : 1.0;
+    exportSrcScaleY_ = exportSrcPixmap_.height() > 0 ? static_cast<double>(doc_->height()) / exportSrcPixmap_.height() : 1.0;
+}
+
+// 「烧录图片图层」开关切换：小源图含层/不含层随之变化，重算后轻量重渲染输出预览（不重跑 Core 几何）。
+void PreviewController::refreshExportSource() {
+    rebuildExportSourcePixmap();
+    refreshExportPreviewFromCache();
 }
 
 // 跑 Core 预览并刷新画布与状态（CONTRIBUTING.md「分层纪律」 实时预览）。
@@ -188,8 +224,20 @@ void PreviewController::refreshPreview() {
         const int kept = ok ? static_cast<int>(res.kept.size()) : 0;
         status_->setHint(ok ? IDC_GTR(status, kStatusReady) : errText);
         exportPanel_->setCollapsible(res.collapsible);
-        // 回灌重排上下文：保留块数 + 网格单元尺寸（供自动 cols/rows 与画布/单元尺寸警告）。
-        exportPanel_->setRearrangeContext(kept, doc_->gridParams().cellWidth, doc_->gridParams().cellHeight);
+        // 回灌重排上下文：保留块数 + 单元尺寸（供自动 cols/rows 与画布/单元尺寸警告）。
+        // 单元尺寸取该轴的有效周期；分割数/比例轴无固定周期，取 Core 产出首单元的实际尺寸
+        // （行主序首单元即首列/首行，GUI 不自算等分几何）。
+        const auto renderCell = [&grid](const engine::GridParams& params, const bool horizontal) {
+            if (const engine::GridAxisSpec axis = engine::effectiveAxis(params, horizontal); axis.mode == engine::GridAxisMode::Pitch) return axis.cell > 0 ? axis.cell : 1;
+            if (grid.cells().empty()) return 1;
+            const engine::RectRegion& first = grid.cells().front().area;
+            return horizontal ? first.width() : first.height();
+        };
+        exportPanel_->setRearrangeContext(kept, renderCell(doc_->gridParams(), true),
+                                          renderCell(doc_->gridParams(), false),
+                                          !ok || res.uniformBlocks);
+        // 重排准入门限：块尺寸不全等时 Core 已把布局回退为坍缩/分离，面板同步回退（可坍缩→坍缩，
+        // 否则→分离）使导出路径与产出形式一致；引擎失败时不动用户选择。
         if (ok) {
             exportPanel_->setPreviewInfo(IDC_GTR(status, kGridPreviewFmt)
                 .arg(grid.rowCount()).arg(grid.colCount())

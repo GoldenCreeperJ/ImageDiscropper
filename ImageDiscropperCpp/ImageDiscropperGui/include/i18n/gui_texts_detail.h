@@ -17,7 +17,7 @@ namespace idc::gui::texts {
 namespace tooltip {
 // 以下为 src/app/main_window_menus.cpp 的菜单项悬停说明（与面板同名控件同源）。
 inline constexpr char kNewCanvas[] = "新建空白或程序生成画布（尺寸、底色、图案）。";
-inline constexpr char kEmitRearrange[] = "按 cols×rows 重排输出；面板可调行列与单元尺寸。";
+inline constexpr char kExportRearrange[] = "按 cols×rows 重排输出；面板可调行列与单元尺寸。";
 inline constexpr char kBurnAnnotation[] = "导出时把标注合成进像素（标注随切割被切开）。";
 inline constexpr char kBurnImageLayers[] = "导出时并入图片图层（与图层面板「显示」仅预览正交）。";
 inline constexpr char kConfirmRearrange[] = "重排有风险时导出前二次确认；关则直接导出。";
@@ -37,7 +37,7 @@ inline constexpr char kCanvasAnnoCreate[] = "用「标注→工具」所选形�
 inline constexpr char kSortReverse[] = "填充路径整体倒序（可与横/竖优先叠加）。";
 inline constexpr char kSortSnake[] = "隔行（行优先）/隔列（列优先）反向。";
 inline constexpr char kAddImageLayer[] = "从文件添加图片图层到画布。";
-inline constexpr char kClearAllImageLayers[] = "清空全部图片图层，回退单图底图态。";   // 两处落点：图像菜单项（app/main_window_menus.cpp）、图层编辑面板按钮（panels/layer_edit_panel.cpp）——同值同角色，合一。
+inline constexpr char kClearAllImageLayers[] = "清空全部叠加图片图层，仅保留底图。";   // 两处落点：图像菜单项（app/main_window_menus.cpp）、图层编辑面板按钮（panels/layer_edit_panel.cpp）——同值同角色，合一。
 inline constexpr char kLayerUp[] = "把当前拾取的图片图层上移一层（向顶层）。";
 inline constexpr char kLayerDown[] = "把当前拾取的图片图层下移一层（向底层）。";
 inline constexpr char kLayerRemove[] = "删除当前拾取的图片图层。";
@@ -56,7 +56,7 @@ inline constexpr char kAutoGrid[] = "依保留块数自动推算行列数（接�
 inline constexpr char kMergeOrder[] = "重排填充顺序：行优先（逐行）或列优先（逐列）。";
 inline constexpr char kMergeSnake[] = "蛇形铺排：隔行（行优先）或隔列（列优先）反向填充。";
 inline constexpr char kMergeReverse[] = "倒序：从最后一个块开始反向填充。";
-inline constexpr char kPadColor[] = "空位与余量填充色（默认透明）；点击选择。";
+inline constexpr char kPadColor[] = "合并画布底色、Pad 余量补白（分离 / 合并导出一致）与有损格式（JPEG/WebP/BMP）压平透明像素的背景色，默认透明；点击选择。";
 inline constexpr char kPreviewThumb[] = "输出图低分辨率预览（仅示意，导出为原分辨率）。";
 inline constexpr char kBurnInHint[] = "勾选则导出时把标注画进图像；否则不含。";
 inline constexpr char kLayersBurnInHint[] = "导出时把图片图层并入像素；与面板「显示」独立。";
@@ -71,6 +71,9 @@ inline constexpr char kGridOriginYSpin[]   = "基准点 y0：横切割线的起�
 inline constexpr char kCellWidthSpin[]     = "单元宽 cw：相邻竖切割线的间距（像素）。";
 inline constexpr char kCellHeightSpin[]    = "单元高 ch：相邻横切割线的间距（像素）。";
 inline constexpr char kRemainderCombo[]    = "边缘残缺单元：丢弃、保留或补白。";
+inline constexpr char kGridModeCombo[]     = "该轴的定义方式：周期（基准点 + 单元尺寸）/ 分割数（等分）/ 比例（权重）；两轴可各用各的。";
+inline constexpr char kGridCountSpin[]     = "份数：把该方向等分成若干份（基准点恒 0），末份吸收取整误差；不得超过该方向像素数。";
+inline constexpr char kGridWeightsEdit[]   = "权重：逗号分隔的正数或百分比，如 1,2,1 或 25%,50%,25%；只取相对比例，末份吸收取整误差。";
 inline constexpr char kSortCombo[]         = "输出顺序：行优先 / 列优先 / 自定义。";
 // 以下为图层编辑面板（src/panels/layer_edit_panel.cpp）各控件悬停说明。
 inline constexpr char kLayerAddImage[]     = "添加图片图层（生成图案或导入图）；超出画布部分合成时裁剪。";
@@ -139,13 +142,12 @@ inline constexpr char kToolLineBtn[]        = "两点拖拽绘制直线段";
 inline constexpr char kToolPolylineBtn[]    = "连续单击追加顶点，Esc 或切换工具收笔";
 inline constexpr char kToolTextBtn[]        = "单击落点，输入文字内容后添加";
 inline constexpr char kToolBrushBtn[]       = "按住拖动绘制自由路径，Esc 或切换工具收笔";
-// 以下为图层面板（src/panels/layer_panel.cpp）八行显示开关的悬停说明（与视图菜单同名开关措辞不同，各自逐字保留）。
+// 以下为图层面板（src/panels/layer_panel.cpp）七行显示开关的悬停说明（与视图菜单同名开关措辞不同，各自逐字保留）。
 inline constexpr char kLayerShowBase[]      = "显示 / 隐藏底图（仅影响画布预览，不影响导出）";
 inline constexpr char kLayerShowImage[]     = "显示/隐藏图片图层（隐藏则不参与合成与导出）";
 inline constexpr char kLayerShowAnno[]      = "显示/隐藏标注图层（矢量叠加，不改底图）";
 inline constexpr char kLayerShowMask[]      = "显示/隐藏保留(绿)/删除(红)预览遮罩（不影响导出）";
-inline constexpr char kLayerShowGrid[]      = "显示 / 隐藏网格线（网格分割与多矩形并集时出现）";
-inline constexpr char kLayerShowCutLine[]   = "显示 / 隐藏贯穿全图的橙色切割线（即选区边的延伸）";
+inline constexpr char kLayerShowGrid[]      = "显示 / 隐藏网格线与切割线（同一开关：L3 为网格线，L1/L2 为贯穿全图的橙色切割线即选区边的延伸）";
 inline constexpr char kLayerShowSelection[] = "显示/隐藏选区边框与手柄；隐藏后选区不可编辑";
 inline constexpr char kLayerShowNumber[]    = "显示 / 隐藏单元编号角标（仅自定义排序时出现）";
 // 移动端专属控件（src/mobile/mobile_step_pad.cpp）：8 向步进盘的倍率切换按钮。
@@ -218,11 +220,16 @@ inline constexpr char kConfigSaved[]        = "配置已保存：%1";
 inline constexpr char kConfigSaveFailed[]   = "保存配置失败：%1";
 inline constexpr char kConfigLoaded[]       = "配置已加载：%1";
 inline constexpr char kConfigLoadFailed[]   = "加载配置失败：%1";
+inline constexpr char kDegradedBase[] = "，底图引用的位图未能载入（已按白/透明底显示）";   // 追在 kConfigLoaded 之后：空文档重载 File/placement 底但位图不可得（配置不含位图、GUI 无 --input 通道）。
+inline constexpr char kDegradedLayersFmt[] = "，其中 %1 个图层资源未能载入（已按空占位降级）";   // 追在 kConfigLoaded 之后：File 层源缺失/越界/解码失败计数（%1 失败数）。
+inline constexpr char kConfigBundledFmt[] = "，图层资产已打包至 %1";   // 追在 kConfigSaved 之后：保存配置时勾选打包且成功。
+inline constexpr char kConfigBundleFailed[] = "打包图层资产失败：%1";  // 保存配置打包失败（越界名 / 缺像素 / 写盘失败），配置 JSON 已写出。
 inline constexpr char kConfigNoneSaved[]    = "没有已保存的配置，请先在「更多」中保存配置。";   // Android 列表为空。
 // 右侧参数面板的只读回显（src/panels/param_panel.cpp）：模板携占位符，由 Document 实时数值填入。
 inline constexpr char kGridDerivedInfo[]   = "网格：%1 行 × %2 列 · 共 %3 单元";   // 行列数由 Core 依图像边界推导。
 inline constexpr char kGridPendingInfo[]   = "网格：待计算";                        // 尚未能推导出行列时的初值。
 inline constexpr char kGridSelectedInfo[]  = "已选：%1 单元";                        // 面板初值与同步回显均取本模板（初值传 0）。
+inline constexpr char kGridNoPitchHint[]   = "两轴均为分割数/比例：恰好铺满、无残缺单元，余量策略不生效。";   // 余量策略组合框置灰时的同屏说明。
 inline constexpr char kRectListItem[]      = "矩形 %1：(%2,%3)-(%4,%5)";           // 多矩形列表行文本（列表重建与单行刷新两处同源）。
 inline constexpr char kCollapseHintInit[]  = "坍缩可行性：请先框选选区。";         // PreviewController 回灌前的占位提示。
 inline constexpr char kCollapseHintOk[]    = "坍缩可行：剩余块可紧贴拼成一张图。";
@@ -271,8 +278,8 @@ inline constexpr char kLayerRecomposeBusy[]   = "正在重组画布，请稍候�
 inline constexpr char kStatusReady[]       = "就绪";                 // 提示标签初值（无任何回报时）；预览刷新成功时的 setHint 三处共用（preview_controller.cpp）。
 inline constexpr char kCoordInit[]         = "坐标: (-, -)";
 inline constexpr char kCoordFmt[]          = "坐标: (%1, %2)";
-inline constexpr char kColorInit[]         = "RGB(-,-,-)";         // 两处落点：构造初值与 clearColor（鼠标移出图像）。
-inline constexpr char kColorFmt[]          = "RGB(%1,%2,%3)";
+inline constexpr char kColorInit[]         = "RGBA(-,-,-,-)";      // 两处落点：构造初值与 clearColor（鼠标移出图像）。
+inline constexpr char kColorFmt[]          = "RGBA(%1,%2,%3,%4)";  // 四值依次为红/绿/蓝/透明度。
 inline constexpr char kZoomInit[]          = "缩放: 100%";
 inline constexpr char kZoomFmt[]           = "缩放: %1%";
 // 参数撤销 / 重做回报（src/app/controllers/doc_history.cpp）：「已撤销 / 已重做」与菜单同名项同义不同长度，本组只收回报句。
@@ -323,7 +330,7 @@ inline constexpr char kShortcutConflictBody[]  = "该组合已被「%1」占用�
 inline constexpr char kShortcutResetConflictBody[] = "恢复默认后检测到快捷键冲突（下列命令两两占用同一键），请到对应行自行调整：\n%1";   // %1 为冲突命令名对列表。
 // 图层与会话的破坏性操作确认（app/controllers/session_controller.cpp，均为 Yes/No、默认 No）：
 inline constexpr char kClearLayersTitle[] = "清空全部图层";
-inline constexpr char kClearLayersAsk[]   = "确定要清空全部 %1 个图片图层吗？将回退为单图底图态（保留底图、标注与预处理）。";
+inline constexpr char kClearLayersAsk[]   = "确定要清空全部 %1 个图片图层吗？将仅保留底图（标注与预处理保留）。";
 inline constexpr char kResetAllTitle[]    = "重置全部";   // 工具栏动作短名同字见 label::kTbResetAll（对话框标题 / 控件文字角色不同，各立一条）。
 inline constexpr char kResetAllAsk[]      = "将清空：图片图层（回退底图）、全部标注、全部预处理、选区。\n保留：底图本身。确定继续？";
 // 清除全部标注的二次确认（app/controllers/annotation_coordinator.cpp::onAnnoClearAll，Yes/No、默认 No）。
@@ -369,8 +376,7 @@ inline constexpr char kHelpUsageBody[] =
     "9) 文件→保存配置/加载配置：整套参数（含标注与图层）可保存/加载、可复用、可撤销。\n\n"
     "快捷键（模式/极性/清除/删除、撤销重做、打开/新建/导出、缩放）均可在「视图→外观/交互…」对话框的\n"
     "「快捷键」页查看与自定义（改绑即时生效、跨会话保存），此处不再罗列以免改绑后失效。\n"
-    "方向键微调选区（Shift 大步）、绘制态按 Esc 收笔为固定操作键，不在自定义之列。\n\n"
-    "完整操作手册见程序目录下的 README.md。";
+    "方向键微调选区（Shift 大步）、绘制态按 Esc 收笔为固定操作键，不在自定义之列。";
 // 移动「更多」菜单的使用说明正文（src/mobile/mobile_shell_ui.cpp）：与桌面正文同构但把手势替代了快捷键；
 // 标题与「关于」正文复用 menu::kUsageGuide / msg::kAboutBody（逐字同形）。
 inline constexpr char kMobileHelpBody[] =
@@ -383,10 +389,9 @@ inline constexpr char kMobileHelpBody[] =
     "7) 「导出」页设输出方式/格式/烧录开关，工具条「导出」出图。\n"
     "8) 「更多」：加载/保存配置、选区吸附、外观/交互、重排前二次确认、重置全部、退出。\n\n"
     "手势：双指捏合缩放、双击适应窗口、长按＝右键（绘制时长按收笔、菜单可清除切割线）；\n"
-    "「步进」盘替代方向键微调选区。\n\n"
-    "完整操作手册见程序目录下的 README.md。";
+    "「步进」盘替代方向键微调选区。";
 inline constexpr char kAboutBody[] =
-    "ImageDiscropper GUI %1\n一款图像切割工具（内核 %2）。\n"
-    "各模式共用同一处理路径，模式只是参数预设。";   // %1/%2 由 IDC_GUI_VERSION / IDC_CORE_VERSION 填入。
+    "ImageDiscropper GUI %1(内核 %2)\n"
+    "    -- 一款图像区域提取 / 反向剔除 / 网格分割工具。";   // %1/%2 由 IDC_GUI_VERSION / IDC_CORE_VERSION 填入。
 } // namespace msg
 } // namespace idc::gui::texts

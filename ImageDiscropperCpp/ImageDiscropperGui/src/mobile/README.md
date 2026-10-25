@@ -47,13 +47,13 @@
 - 底部工具条窄屏可滑动：全部按钮住在 `QScrollArea` 条带里（藏滚动条），移动端由
   `TouchScrollFilter` 接管触摸——全程消费触摸事件、位移超 6px 即滚动（滚动条钳制，无过冲
   无回弹）、轻点人工合成一次点击（滑动与点击互斥，QScroller 的 click-through 误投与
-  Android 过冲属性失效问题由此根治）；文本输入类控件（输入框/数字框/下拉框）放行原生触摸
+  Android 过冲属性失效均借此规避）；文本输入类控件（输入框/数字框/下拉框）放行原生触摸
   （文字选择/删除不受劫持）；桌面预览鼠标左键拖（QScroller LeftMouseButtonGesture）。
   鼠标滚轮经 `WheelToHScrollFilter` 重定向为横滚（QScrollArea 默认滚轮驱动垂直条，
   横条带里会错乱成上下滚）；`QToolBar` 原生溢出「>>」问题由此消除。
-- 工具条方向自适应（实测修复）：竖屏＝底部横向单行（高 `nums::mobile::kStripHeightPx`），横屏＝右侧竖向单列（
+- 工具条方向自适应：竖屏＝底部横向单行（高 `nums::mobile::kStripHeightPx`），横屏＝右侧竖向单列（
   `applyOrientationLayout` 迁移停靠区并重排同一批 widget，零重建、状态无损）。
-- 抽屉最小尺寸＝设计下限而非内容自然 hint 回压（实测修复）：页区 `QStackedWidget` 显式取
+- 抽屉最小尺寸＝设计下限而非内容自然 hint 回压：页区 `QStackedWidget` 显式取
   `nums::mobile::kDrawerMinWidthPx` / `kDrawerMinHeightPx`（320×240，宽贴合竖屏手机常态可用宽下限），
   窗口下限可控且真机横/竖屏均放得下；
   六页各套纵向 `QScrollArea`（横向 AlwaysOff，内容随宽自适应），
@@ -78,20 +78,20 @@
 - 产物形态（双可执行）：桌面一次构建产出 `idc_gui`（纯桌面，不含任何移动码）与
   `idc_gui_mobile`（本目录源 + `IDC_GUI_HAS_MOBILE`/`IDC_GUI_FORCE_MOBILE` 宏，双击即移动骨架，
   无需命令行）；是否额外产出 `idc_gui_mobile` 由 CMake 开关 `IDC_GUI_MOBILE` 控制（默认 ON）。
-  Android/iOS 不读该开关：只出单目标 `idc_gui`（common+移动壳合体），打包脚本零改动
-  （androiddeployqt 流程不变；包源目录经 `QT_ANDROID_PACKAGE_SOURCE_DIR` 指向 `packaging/android`）。
+  Android/iOS 不读该开关：只出单目标 `idc_gui`（common+移动壳合体），打包沿用既有
+  androiddeployqt 流程（包源目录经 `QT_ANDROID_PACKAGE_SOURCE_DIR` 指向 `packaging/android`）。
   两目标共享 `idc_gui_common`（OBJECT 库，main.cpp 各编一份）；切换开关后若 mocs 残留
   LNK2019，删构建目录 `ImageDiscropperGui/idc_gui*_autogen` 重建。
 - 运行时选壳：`idc_gui_mobile`/Android 恒为移动骨架；`idc_gui` 恒为桌面——无命令行分支，
-  桌面既有路径零改动；拖 `idc_gui_mobile` 窗口跨越宽高比 1:1 即可验证方向翻转重排。
+  桌面目标不含任何移动码；拖 `idc_gui_mobile` 窗口跨越宽高比 1:1 即可验证方向翻转重排。
 
 ## 移动端实现状态与遗留事项
 
 行为基线见 **SPEC §8.3**（移动端契约）；本节只记实现状态，不重复行为条文。
 
 **已实现并真机验证（华为 Android 12）**：移动骨架（`MobileShell`/`MobileShellUi`/`StepPadWidget`）安装启动与日常操作；
-触控适配器（`TouchInputAdapter`：双击适应 / 长按菜单 / 捏合缩放，捏合与合成鼠标的冲突已由首次 pinch
-`gestureCancelCurrent()` 作废进行中手势修复）；滚动区 `TouchScrollFilter`（无过冲回弹、滑动不误触按钮、
+触控适配器（`TouchInputAdapter`：双击适应 / 长按菜单 / 捏合缩放，首次 pinch 时以
+`gestureCancelCurrent()` 作废进行中的合成鼠标手势，规避捏合与合成鼠标冲突）；滚动区 `TouchScrollFilter`（无过冲回弹、滑动不误触按钮、
 文本输入放行原生触摸）；导出写相册公共目录 `Pictures/ImageDiscropper`（MediaStore IS_PENDING 三段式 + fd 写入，
 Java 侧关 fd 防 fdsan；文件名可自定义、留空自动命名、同名加时间戳后缀；失败兜底复制到应用文档目录）。
 SAF 自定义目录不适用（「浏览…」移动端禁用，导出恒写固定相册目录）；min API 29；CI 移动腿与 APK alpha 签名链全绿。

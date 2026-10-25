@@ -12,6 +12,8 @@
 // ============================================================================
 #pragma once
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -19,6 +21,7 @@
 #include <vector>
 
 #include "annotation/annotation_set.h"
+#include "canvas/pick_cycle.h"   // 同点连击循环选层状态机（零 Qt；与图片图层拾取共用同实现）
 #include "core/color.h"
 #include "core/image.h"
 #include "core/point.h"
@@ -84,6 +87,23 @@ public:
     // 命中检测：委托集合（顶层优先，填充判内部、其余判轮廓邻近），未命中 nullopt。
     std::optional<std::size_t> hitTest(const core::Point2D& p) const { return set_.hitTest(p); }
 
+    // 拾取（按下语义）：命中栈自顶向下，委托 PickCycle::resolveOnPress——当前选中项仍在命中栈内 →
+    // 保持选中（拖动跟随选中项、不因按下换选）；否则选最顶。**纯查询不碰循环态**（只由 cycleAt 维护），
+    // 否则一次点击（按下 pickAt + 释放 cycleAt）会推进两位。
+    std::optional<std::size_t> pickAt(const core::Point2D& p) const {
+        return PickCycle<std::size_t>::resolveOnPress(set_.hitTestAll(p), selectedIndex_);
+    }
+
+    // 同点连击循环（原地点击语义）：委托 PickCycle::advanceOnClick——与上次命中同点（容差内）且候选栈不变
+    // → 沿栈下探一位（到底回顶）；换点 / 栈变化 → 重置为最顶。未命中清循环态返回 nullopt。
+    std::optional<std::size_t> cycleAt(const core::Point2D& p) {
+        return pickCycle_.advanceOnClick(p.x, p.y, set_.hitTestAll(p), nums::canvas::kPickSamePointTolScenePx);
+    }
+
+    // 清循环态（拖动提交时调用）：拖拽不推进循环，其后的同点单击应从「无历史」重新起算，
+    // 避免沿陈旧游标续推或误判 sameSpot。
+    void resetPickCycle() { pickCycle_.reset(); }
+
     void selectAnnotation(const std::optional<std::size_t> idx) { selectedIndex_ = idx; }
     std::optional<std::size_t> selectedAnnotationIndex() const { return selectedIndex_; }
     annotation::Annotation* selectedAnnotation();
@@ -128,6 +148,9 @@ private:
     double currentCornerRadius_{nums::model::kDefaultCornerRadiusPx};
 
     std::optional<std::size_t> selectedIndex_;
+
+    // 同点连击循环态：委托 PickCycle（存基准点 / 上次栈 / 游标；命中栈由 set_.hitTestAll 现算传入）。
+    PickCycle<std::size_t> pickCycle_;
 };
 
 } // namespace idc::gui

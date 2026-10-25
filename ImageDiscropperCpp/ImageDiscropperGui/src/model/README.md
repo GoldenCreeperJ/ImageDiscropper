@@ -18,9 +18,9 @@
 
 持有：原图 `original_`（不可变）/ **预处理会话 `preprocess_`（`PreprocessSession`：组合声明式轻队列 `steps_` + 独立 `resize_` + `base_` 重放缓存，详见下「PreprocessSession」小节）** / 工作图 `working_`（＝在 `preprocess_` 有效管线上重放的物化产物；新载入图时会话清空、`working_`≡`original_`）、模式 `Tier`（默认 L1）、
 极性 `Polarity`（默认 Keep）、L1 形状 / L2 子功能、选区矩形 `RectRegion` + `hasRect_`、
-**L2 多矩形列表 `rects_`（仅 `MultiRect` 生效，其余子功能恒空）**、
-导出参数（`EmitMode`/`MergeLayout`/`ExportFormat`/质量/命名/输出目录/输出文件）、
-**重排合并参数 `mergeCols/Rows/CellW/CellH`（0=未指定，交 Core 自动推导）+ `padColor`（空位/余量填充色，默认透明）**、
+**L2 多矩形列表 `rects_`（仅 `MultiRect` 生效；进入该子功能时把现有单选区带入空列表，切出后内容保留但不参与切割）**、
+导出参数（`ExportMode`/`MergeLayout`/`ExportFormat`/质量/命名/输出目录/输出文件）、
+**重排合并参数 `mergeCols/Rows/CellW/CellH`（0=未指定，交 Core 自动推导）+ `padColor`（合并画布底色、Pad 余量补白与有损格式压平透明像素的背景色，默认透明）**、
 **重排填充顺序 `MergeOrder mergeOrder_`（行/列优先 + 蛇形? + 倒序?，与选择排序正交）**、
 L3 网格参数 `GridParams`（默认单元 100×100，避免 `GridParams` 默认 1×1 在大图产生海量单元）、
 派生行列数（只读回显）、排序 `SequenceParams`、选择集 `selectedCells`（L1/L2 恒空，由 Core 自动推导）。
@@ -30,23 +30,25 @@ L3 网格参数 `GridParams`（默认单元 100×100，避免 `GridParams` 默�
   `MultiRect` 时 `buildCutConfig` 另把 `rects_` 搬运进 `CutConfig::rects`（Core 对每个矩形诱导十字带后取并集，方案 A）。
 - `buildCutConfig()` / `buildEngineConfig()`：**纯字段搬运 + 枚举映射**，不含任何几何/极性判定。`buildEngineConfig` 为**运行配置**（送预览/导出，`cfg.preprocess` 恒空——队列已物化进 `working_`）。
 - `buildSerializableConfig()`：**序列化配置**（供保存配置）——与 `buildEngineConfig` 同构但携带 `preprocess_.effectivePipeline()`（`[resize?]+steps_`）、`source` 取**原图尺寸**（与加载时重放基准一致）。
-- 预处理访问（均**转委托 `preprocess_`**、公开签名不变）：`steps()`/`setSteps(pipeline)`（回灌整条轻队列）、`resizeTarget()`/`setResize()`、`geomSig()`（`preprocess_.geomSig(original_.w, original_.h)`→尺寸/净旋转象限，供 `PreprocessController` 尺寸门）、`hasPreprocess()`/`hasResize()`/`preprocessProducesGray()`、base 缓存系列（`hasBase`/`base`/`basePrefix`/`setBase`/`clearBase`/`baseDirtyFor`）。`setImage`/`resetPreprocess` 走 `preprocess_.clear()` 使会话失效。
+- 预处理访问（均**转委托 `preprocess_`**）：`steps()`/`setSteps(pipeline)`（回灌整条轻队列）、`resizeTarget()`/`setResize()`、`geomSig()`（`preprocess_.geomSig(original_.w, original_.h)`→尺寸/净旋转象限，供 `PreprocessController` 尺寸门）、`hasPreprocess()`/`hasResize()`/`preprocessProducesGray()`、base 缓存系列（`hasBase`/`base`/`basePrefix`/`setBase`/`clearBase`/`baseDirtyFor`）。`setImage`/`resetPreprocess` 走 `preprocess_.clear()` 使会话失效。
 - `applyEngineConfig(cfg)`：`buildEngineConfig` 的**互逆反向映射**（配置加载与撤销重做共用）——生成器+tier 还原 L1 形状/L2 子功能，搬运几何/选择集/排序/导出参数（optional 画布/单元尺寸 nullopt↔0）；直接改字段后只发一次 `changed()`；不还原 source 尺寸（图像不随配置/快照变）；守卫「非 L3 不得重排」「网格单元尺寸为正」不变式。
 - 信号：`imageChanged()`（换图，需重建预览 pixmap）、`changed()`（任意参数变更，仅需刷新预览）。
 - `setMode()` 套用模式定义极性（L1→Keep、L2→Remove；L1≡keep、L2≡remove）；**切入 L3 保留当前极性不变**（L3 极性独立，从 L2 进 L3 沿用 remove）；**离开 L3 时若 `layout_==Rearrange` 自动复位为 Collapse**（模型层维持「重排仅 L3」不变式）。
 - `setPolarity()` 反向耦合：在 L1/L2 下切换极性会同步切换模式（Keep→L1、Remove→L2）；L3 极性独立、不改模式。
-- L3 网格：`setGridOrigin`/`setCellSize`（拒绝非正值）/`setRemainder` 改值后发 `changed`；`setDerivedGridSize(rows,cols)`
+- L3 网格：`setGridParams(x,y,w,h)`（画布拖基准/单元尺寸的唯一一次性写回口：拒绝非正尺寸、值未变早退、几何变则清空选择集后发 `changed`）/`setGridOrigin`/`setCellSize`（两个单参入口均转发它）/`setRemainder` 改值后发 `changed`；`setDerivedGridSize(rows,cols)`
   由 `PreviewController` 依 Core `Grid` 回灌、**不发 `changed`**（避免回环），仅供面板只读显示。
 - L3 选择集：`setSelectedCells`/`selectAllCells`/`invertCells`/`clearCells`（全选/反选依派生行列数）；
   `selectedCells` 的顺序在 Custom 排序下即自定义序列（Core `runEngine` 约定）。
 - L3 排序：`setSortStrategy`/`setSortReverse`/`setSortSnake` → `SequenceParams`（FR-L3.5）。
 - L2 多矩形：`addRect`/`updateRect(index,r)`/`removeRect(index)`/`clearRects`（增删改均拒绝退化矩形、发 `changed`）；
   `rects()` 只读访问。GUI 只维护列表并搬运进 `CutConfig::rects`，**不做任何并集/几何计算**。
+- 进入多矩形（`setL2Sub(MultiRect)`，或切入 L2 时子功能已是多矩形）：`adoptRectIntoMultiRects()` 在列表为空且有有效单选区时
+  把该矩形作为首个多矩形——该模式下单选区框不显示，选区改由列表表示，带入后切换瞬间即有一个可拖选框与其诱导切割线。
 - L2→L3 转换：`convertRectToGrid()` 以当前选区左上为基准点、宽高为单元尺寸切到 L3（清空选择集、极性置 Keep，纯字段搬运）；若无有效单选区但多矩形列表（MultiRect）非空，则取其**包围盒**作为单元基准。
 - 重排合并：`setMergeGrid(cols,rows)`/`setMergeCellSize(w,h)`（负值钳 0）/`setPadColor(c)`；`buildEngineConfig` 中
   `>0` 才写入 `CompositionParams` 的 `cols/rows/cellWidth/cellHeight`（optional），否则保持 `nullopt` 交 Core 自动推导。
 - 重排填充顺序：`setMergeOrderStrategy(s)`（仅 RowMajor/ColumnMajor，Custom 按行优先）/`setMergeOrderReverse(on)`/`setMergeOrderSnake(on)`
-  改值后发 `changed`；`buildEngineConfig` 中透传 `cfg.emitParams.mergeOrder = mergeOrder_`。
+  改值后发 `changed`；`buildEngineConfig` 中透传 `cfg.exportParams.mergeOrder = mergeOrder_`。
 
 ## PreprocessSession（纯 C++、零 Qt）
 

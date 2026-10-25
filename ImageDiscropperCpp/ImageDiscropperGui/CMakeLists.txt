@@ -110,6 +110,8 @@ set(IDC_GUI_UTIL_SRC
         include/util/path_qt_adapter.h
         include/util/preview_scaler.h
         include/util/scrollable_dialog.h
+        include/util/widget_factory.h
+        include/util/color_picker.h
         include/mobile/touch_scroll.h
         src/util/annotation_qt_painter.cpp
         src/util/theme.cpp
@@ -126,6 +128,7 @@ set(IDC_GUI_MODEL_SRC
         include/model/annotation_bridge.h
         include/model/annotation_editor.h
         include/model/config_codec.h
+        include/model/config_assets.h
         include/model/document.h
         include/model/engine_bridge.h
         include/model/layer_session_store.h
@@ -134,6 +137,7 @@ set(IDC_GUI_MODEL_SRC
         src/model/annotation_bridge_pending.cpp
         src/model/annotation_editor.cpp
         src/model/config_codec.cpp
+        src/model/config_assets.cpp
         src/model/document_canvas.cpp
         src/model/document.cpp
         src/model/engine_bridge.cpp
@@ -151,8 +155,11 @@ set(IDC_GUI_CANVAS_SRC
         include/canvas/canvas_touch_input_adapter.h
         include/canvas/canvas_scene.h
         include/canvas/canvas_view.h
+        include/canvas/drag_gesture.h
+        include/canvas/items/draggable_canvas_item.h
         include/canvas/items/mask_layer.h
         include/canvas/items/grid_layer.h
+        include/canvas/items/grid_handle_item.h
         include/canvas/items/cell_picker_item.h
         include/canvas/items/selection_rect_item.h
         include/canvas/items/annotation_item.h
@@ -165,8 +172,10 @@ set(IDC_GUI_CANVAS_SRC
         src/canvas/canvas_view.cpp
         src/canvas/items/mask_layer.cpp
         src/canvas/items/grid_layer.cpp
+        src/canvas/items/grid_handle_item.cpp
         src/canvas/items/cell_picker_item.cpp
         src/canvas/items/selection_rect_item.cpp
+        src/canvas/items/draggable_canvas_item.cpp
         src/canvas/items/annotation_item.cpp
         src/canvas/items/image_layer_item.cpp
 )
@@ -215,6 +224,7 @@ set(IDC_GUI_APP_SRC
         include/app/new_canvas_dialog.h
         include/app/forms/pattern_form.h
         include/app/forms/placement_row.h
+        include/app/forms/config_io_dialog.h
         include/app/controllers/preprocess_controller.h
         include/app/controllers/preview_controller.h
         include/app/controllers/session_controller.h
@@ -234,6 +244,7 @@ set(IDC_GUI_APP_SRC
         src/app/main_window_menus.cpp
         src/app/forms/pattern_form.cpp
         src/app/forms/placement_row.cpp
+        src/app/forms/config_io_dialog.cpp
         src/app/main_window_ui.cpp
         src/app/new_canvas_dialog.cpp
         src/app/controllers/preprocess_controller.cpp

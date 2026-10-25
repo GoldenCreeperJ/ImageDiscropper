@@ -6,21 +6,22 @@
 //       （拖角越过对边产生负缩放＝翻转），拖拽中实时矢量预览、释放发 transformRequested(sx,sy,deg)；
 //       拖形状本体则平移，释放发 moveRequested(dx,dy)。二者均交上层委托 Core（本图元不自算几何，CONTRIBUTING.md「分层纪律」）。
 // 分块依据：
-//   - 仿 SelectionRectItem 的 QGraphicsObject 范式（Q_OBJECT + 自绘 paint + 自管拖拽），
-//     但只处理「渲染一条既有形状 + 拖动它」，形状几何全在 Core（buildShape/toPath）。
-//   - 拖拽安全：拖动期间只做 setPos 视觉反馈，释放时先复位 pos 再发信号，
+//   - 继承 DraggableCanvasItem：平移手势循环与 setPos 视觉反馈在基类（见 canvas/items/draggable_canvas_item.h），
+//     本图元只留送达翻译 onDragFinished（clicked / moveRequested 信号）；手柄拖拽（缩放/旋转）自管。
+//   - 形状几何全在 Core（buildShape/toPath），本图元只做「渲染一条既有形状 + 拖动它」。
+//   - 拖拽安全：拖动期间只做 setPos 视觉反馈，释放时先复位 pos 再发信号（基类保证），
 //     且场景以增量方式刷新（数量不变→不删除正在拖动的图元），避免自删崩溃。
-// 说明：z 序 = zorder::kAnnotation(20)，位于底图之上、遮罩/网格/选区之下（本目录 README「图层 z 序」）。
+// 说明：z 序 = zorder::kAnnotation，位于底图之上、遮罩/网格/选区之下（本目录 README「图层 z 序」）。
 // ============================================================================
 #pragma once
 
-#include <QGraphicsObject>
 #include <QPainterPath>
 #include <QPointF>
 
 #include <optional>
 
 #include "annotation/annotation_set.h"
+#include "canvas/items/draggable_canvas_item.h"   // 平移拖拽手势基类（手势循环 + setPos 视觉反馈；本类留送达翻译）
 #include "core/color.h"            // core::Color（colorAtScene 返回值：标注自身显示色）
 #include "geometry/shapes.h"   // AffineTransform / BoundingBox（OBB 手柄拖拽预览用）
 #include "util/gui_nums.h"     // nums::canvas（手柄尺寸的场景口径兜底初值）
@@ -30,7 +31,7 @@ namespace idc::gui {
 // ---------------------------------------------------------------------------
 // AnnotationItem：单个标注的矢量渲染图元（可拖动平移）。
 // ---------------------------------------------------------------------------
-class AnnotationItem : public QGraphicsObject {
+class AnnotationItem : public DraggableCanvasItem {
     Q_OBJECT
 public:
     explicit AnnotationItem(QGraphicsItem* parent = nullptr);
@@ -45,8 +46,14 @@ public:
     // 控制点手柄边长（场景单位）；由 CanvasView 依缩放换算，使其屏幕观感恒定。
     void setHandleSize(qreal sceneUnits);
 
-    // 是否正处于拖动平移手势中（供上层在拖拽期间跳过对该图元的几何回设）。
-    bool isDragging() const { return dragging_; }
+    // 是否处于任意手势中：平移拖拽（基类手势）或手柄拖拽（activeHandle_）均计——
+    // 上层据此在拖拽期跳过对本图元的几何回设（updateAnnotations 护栏）。
+    bool isDragging() const override {
+        return DraggableCanvasItem::isDragging() || activeHandle_ != Handle::None;
+    }
+
+    // 平移拖拽由场景驱动（按下归属与移动/释放转发都在 CanvasScene）：手势循环在基类
+    // DraggableCanvasItem，本图元经 onDragFinished 收到收尾数据并翻译成自身信号。
 
     // 命中场景坐标处「本标注的显示色」（供状态栏取色优先于底图像素——标注是矢量叠加、不进 working()）：
     // 依渲染规则判定——描边叠于填充之上故先描边后填充；文字取其描边色（近似，按字形包围盒）。
@@ -55,13 +62,15 @@ public:
 
     // QGraphicsItem 接口。
     QRectF boundingRect() const override;
-    QPainterPath shape() const override;   // 描边轮廓（填充形状则含内部），改善拖动抓取手感
+    QPainterPath shape() const override;   // 抓取轮廓（填充形状与文字含整个内部，余取描边带），改善拖动手感
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
 signals:
     // 左键按下本图元：上报场景坐标，交上层用 Core hitTest 决定选中项（几何命中在 Core，CONTRIBUTING.md「分层纪律」）。
-    // 选中会同步骤回灌 setSelectedState(true)，于是本次手势即可接着拖动平移（单击选中 + 同手势移动）。
+    // 选中会同步骤回灌 setSelectedState(true)，拖动由场景转发给选中图元（单击选中 + 同手势移动）。
     void pressed(const QPointF& scenePos);
+    // 原地点击（按下-释放无移动）：交上层推进同点连击循环（重叠标注轮流选中），不触发平移。
+    void clicked(const QPointF& scenePos);
     // 拖动平移结束：请求把该标注平移 (dx,dy) 个场景（原图）像素。上层委托 Core 重建几何。
     void moveRequested(double dx, double dy);
     // 拖拽定向包围盒手柄结束：请求对选中标注施加缩放(sx,sy)+旋转(rotateDeg)（相对手势起点，
@@ -75,6 +84,9 @@ protected:
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
     void mouseMoveEvent(QGraphicsSceneMouseEvent* event) override;
     void mouseReleaseEvent(QGraphicsSceneMouseEvent* event) override;
+    // 平移手势送达（基类钩子）：wasClick→clicked(scenePos)（交上层推进同点连击循环）；
+    //   否则→moveRequested(dx,dy)（仅选中且净位移非零时）。
+    void onDragFinished(bool wasClick, const QPointF& scenePos, double dx, double dy) override;
 
 private:
     void rebuildPath();   // 由 ann_.shape 重建 path_ 与 bounds_
@@ -100,10 +112,6 @@ private:
 
     bool selected_{false};
     qreal handleSize_{nums::canvas::kFallbackHandleScenePx};   // 视图下发前的场景兜底初值（见 util/gui_nums.h canvas 组）。
-
-    bool dragging_{false};
-    QPointF lastScenePos_{};   // 上一次场景坐标（平移增量用）
-    QPointF accumDelta_{};     // 本次手势累计平移量（setPos 视觉反馈）
 
     // 手柄拖拽（缩放/旋转）状态：与平移互斥（activeHandle_ != None 时走预览分支）。
     Handle activeHandle_{Handle::None};

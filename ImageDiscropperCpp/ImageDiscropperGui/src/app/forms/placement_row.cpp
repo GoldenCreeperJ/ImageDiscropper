@@ -13,6 +13,7 @@
 #include <QLabel>
 #include <QSpinBox>
 
+#include "util/coord_spin.h"   // makeCoordSpin（偏移另接受百分比串）
 #include "util/gui_nums.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
@@ -62,12 +63,10 @@ PlacementRow::PlacementRow(const QString& groupTitle, QWidget* parent) : QWidget
     ++row;
 
     auto* posLabel = new QLabel(IDC_GTR(label, kPositionColonLabel), this);
-    posXSpin_ = new QSpinBox(this);
-    posXSpin_->setRange(-nums::model::kTransformCoordLimitPx, nums::model::kTransformCoordLimitPx);
+    posXSpin_ = makeCoordSpin(this, -nums::model::kTransformCoordLimitPx, nums::model::kTransformCoordLimitPx);
     posXSpin_->setSuffix(QStringLiteral(" ,"));
     posXSpin_->setToolTip(IDC_GTR(tooltip, kPlaceOffsetXTip));
-    posYSpin_ = new QSpinBox(this);
-    posYSpin_->setRange(-nums::model::kTransformCoordLimitPx, nums::model::kTransformCoordLimitPx);
+    posYSpin_ = makeCoordSpin(this, -nums::model::kTransformCoordLimitPx, nums::model::kTransformCoordLimitPx);
     posYSpin_->setSuffix(QStringLiteral(" px"));
     posYSpin_->setToolTip(IDC_GTR(tooltip, kPlaceOffsetYTip));
     grid->addWidget(posLabel, row, 0);
@@ -92,5 +91,11 @@ generate::ImageAnchor PlacementRow::pivot() const {
 
 int PlacementRow::offsetX() const { return posXSpin_->value(); }
 int PlacementRow::offsetY() const { return posYSpin_->value(); }
+
+// 百分比输入基准：X 用宽、Y 用高（SPEC §2.1 分方向取基准），只改输入语法，回读仍是整数像素。
+void PlacementRow::setOffsetBasisProvider(const std::function<int(bool)>& provider) const {
+    posXSpin_->setBasisProvider([provider] { return provider(true); });
+    posYSpin_->setBasisProvider([provider] { return provider(false); });
+}
 
 } // namespace idc::gui

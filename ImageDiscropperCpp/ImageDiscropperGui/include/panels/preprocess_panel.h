@@ -32,6 +32,7 @@ class QVBoxLayout;
 namespace idc::gui {
 
 class Document;
+class CoordSpinBox;   // 画布尺寸输入框（整数像素 + "50%" 百分比输入，见 include/util/coord_spin.h）
 
 // ---------------------------------------------------------------------------
 // PreprocessPanel：独立画布尺寸区 + 几何 / 色彩两个独立「配置区 + 列表」。
@@ -118,8 +119,8 @@ private:
     Document* doc_{nullptr};
 
     // 「画布尺寸（Resize）」独立区（常驻、有图即可用；不入队列）。
-    QSpinBox*  resizeW_{nullptr};         // 目标宽（像素）。
-    QSpinBox*  resizeH_{nullptr};         // 目标高（像素）。
+    CoordSpinBox* resizeW_{nullptr};      // 目标宽（像素；另接受百分比，基准当前工作图宽）。
+    CoordSpinBox* resizeH_{nullptr};      // 目标高（像素；另接受百分比，基准当前工作图高）。
     QCheckBox* resizeKeepRatio_{nullptr}; // 保持宽高比：改宽联动算高。
     QPushButton* applySizeBtn_{nullptr};  // 应用尺寸。
     QSpinBox*  resizeScalePct_{nullptr};  // 按比例缩放百分比（1..1000）。
