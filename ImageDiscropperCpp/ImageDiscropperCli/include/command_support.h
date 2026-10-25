@@ -20,6 +20,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "core/path_utf8.h"       // core::pathFromUtf8（readFileText 的宽字符路径解析）
@@ -116,19 +117,19 @@ inline CommandArgs makeCommandArgs(const std::initializer_list<std::string> core
     for (const std::string& name : core) ca.accepted.insert(name);
     for (const std::string& name : repeatable) { ca.accepted.insert(name); ca.repeatable.insert(name); }
     if (mix & MixGenerate) {
-        for (const std::string& g : {o::kSize, o::kPattern, o::kOrientation, o::kBg, o::kFg, o::kPeriod,
-                                     o::kLineWidth, o::kDotRadius, o::kSeed, o::kNoise}) ca.accepted.insert(g);
+        for (const std::string_view g : {o::kSize, o::kPattern, o::kOrientation, o::kBg, o::kFg, o::kPeriod,
+                                         o::kLineWidth, o::kDotRadius, o::kSeed, o::kNoise}) ca.accepted.insert(std::string(g));
     }
     if (mix & MixAnnotation) {
-        for (const std::string& a : {o::kAnnotation, o::kAnnotations}) {
-            ca.accepted.insert(a);
-            ca.repeatable.insert(a);
+        for (const std::string_view a : {o::kAnnotation, o::kAnnotations}) {
+            ca.accepted.insert(std::string(a));
+            ca.repeatable.insert(std::string(a));
         }
     }
     if (mix & MixLayers) {
-        for (const std::string& l : {o::kLayer, o::kLayers}) {
-            ca.accepted.insert(l);
-            ca.repeatable.insert(l);
+        for (const std::string_view l : {o::kLayer, o::kLayers}) {
+            ca.accepted.insert(std::string(l));
+            ca.repeatable.insert(std::string(l));
         }
     }
     if (mix & MixAssets) {
@@ -137,7 +138,7 @@ inline CommandArgs makeCommandArgs(const std::initializer_list<std::string> core
         ca.repeatable.insert(o::kAssetsDir);
     }
     if (mix & MixExport) {
-        for (const std::string& e : {o::kFormat, o::kQuality, o::kNaming}) ca.accepted.insert(e);
+        for (const std::string_view e : {o::kFormat, o::kQuality, o::kNaming}) ca.accepted.insert(std::string(e));
     }
     ca.allowPositional = allowPositional;
     return ca;

@@ -40,7 +40,7 @@ void anchorFraction(const generate::ImageAnchor a, double& fx, double& fy) {
 //   offset = round(画布锚点 − 图层枢轴点) + (x,y)。center/center/(0,0) → 居中。
 void placementOffset(const ImageTransform& t, const int canvasW, const int canvasH,
                      const int layerW, const int layerH, int& ox, int& oy) {
-    double cfx, cfy, pfx, pfy;
+    double cfx = 0.0, cfy = 0.0, pfx = 0.0, pfy = 0.0;   // 入参锚点来自枚举解析恒合法；显式初始化兼做未覆盖枚举值的兜底（消除 GCC 未初始化告警）
     anchorFraction(t.inCanvasAnchor, cfx, cfy);
     anchorFraction(t.layerPivot, pfx, pfy);
     const double ax = cfx * canvasW;

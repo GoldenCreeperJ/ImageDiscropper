@@ -12,7 +12,7 @@
 //       （include/i18n/cli_texts.h），本层不直接写常量名，也不写字面量——键由预处理器拼出，
 //       常量改名即未声明标识符，编译期按落点直接报回（zh-CN 下表为空，逐字节回退常量层字面输出）。
 //       未提取项：后缀 L".assets"（宽字面量，与 char[] 类型不符；GUI 侧同契约读的是
-//       gui_texts.h ident::kAssetsDirSuffix，两处必须同字）、比较用的 ".."、以及语言中性的
+//       gui_texts.h ident::kAssetsDirSuffix，两处必须同字）、逐分量比较的 ".."（path 分量相等判定）、以及语言中性的
 //       "x" / " → " 格式碎片（随语句局部阅读更直观）；尺寸括注的全角「（）」属 msg 组供译。
 // ============================================================================
 #include "job.h"
@@ -102,7 +102,11 @@ std::string relativizeAssetsDirForSave(const std::string& saveConfigPath, const 
     const std::filesystem::path canon = std::filesystem::weakly_canonical(ov, ec);
     if (ec) return {};
     const std::filesystem::path rel = canon.lexically_relative(std::filesystem::weakly_canonical(saveDir));
-    if (rel.empty() || rel.native().find(L"..") != std::wstring::npos) return {};
+    if (rel.empty()) return {};
+    // 逐分量查越界（path::native() 平台间 wchar_t/char 类型不一，不能写死宽字面量比较）
+    for (const auto& part : rel) {
+        if (part == "..") return {};
+    }
     return core::pathToUtf8(rel);
 }
 

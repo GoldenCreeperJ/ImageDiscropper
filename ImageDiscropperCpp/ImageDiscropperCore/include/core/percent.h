@@ -10,9 +10,11 @@
 // ============================================================================
 #pragma once
 
-#include <charconv>
 #include <cmath>
 #include <cstddef>
+#include <clocale>
+#include <cstdio>
+#include <cstdlib>
 #include <limits>
 #include <optional>
 #include <string>
@@ -26,22 +28,40 @@ namespace idc::core {
 inline constexpr std::size_t kPercentTokenMaxLen = 32;
 
 // "N%" → 比例（"50%" → 0.5）；非百分比串 / 语法非法 / 非有限值 → nullopt。
+//   浮点解析不用 std::from_chars：Android NDK libc++ 直接删除浮点重载、iOS 低部署目标标记 unavailable，
+//   改用 std::strtod + C locale（localeconv 千分位/小数点）手工校验整串消费。
 inline std::optional<double> parsePercent(const std::string_view token) {
     if (token.size() < 2 || token.size() > kPercentTokenMaxLen || token.back() != '%') return std::nullopt;
-    const std::string_view body = token.substr(0, token.size() - 1);
+    const std::string body(token.substr(0, token.size() - 1));
     if (body.empty()) return std::nullopt;
-    double value = 0.0;
-    const auto [ptr, ec] = std::from_chars(body.data(), body.data() + body.size(), value);
-    if (ec != std::errc{} || ptr != body.data() + body.size() || !std::isfinite(value)) return std::nullopt;
+    const std::lconv* const lc = std::localeconv();
+    const char dec = lc && lc->decimal_point ? lc->decimal_point[0] : '.';   // 串已限长，多字符小数点按首字符认
+    std::size_t consumed = 0;
+    for (const char c : body) {
+        if (!(c >= '0' && c <= '9') && c != dec && c != '+' && c != '-') return std::nullopt; // 拒 inf/nan/e/空白
+        ++consumed;
+    }
+    if (consumed != body.size()) return std::nullopt;
+    // 平台间唯一差异：小数点字符。C locale 默认 '.' 时零拷贝直解；否则物化替换。
+    std::string normalized;
+    std::string_view digits = body;
+    if (dec != '.') {
+        normalized = body;
+        for (char& c : normalized) if (c == dec) c = '.';
+        digits = normalized;
+    }
+    char* end = nullptr;
+    const double value = std::strtod(digits.data(), &end);   // digits 经 std::string 物化，data()[size]=='\0' 可安全终止
+    if (end != digits.data() + digits.size() || !std::isfinite(value)) return std::nullopt;
     return value / 100.0;
 }
 
 // 比例 → 规范化 token（0.5 → "50%"、0.125 → "12.5%"、-0.25 → "-25%"）：定点 4 位小数、去尾零。
+//   浮点格式化不用 std::to_chars（平台可用性同上），改用 std::snprintf("%.4f")——按 C locale 恒用 '.'，全平台一致。
 inline std::string formatPercent(const double ratio) {
     char buf[64];
     const double pct = ratio * 100.0;
-    const auto [ptr, ec] = std::to_chars(buf, buf + sizeof(buf), pct, std::chars_format::fixed, 4);
-    std::string s = ec == std::errc{} ? std::string(buf, ptr) : std::string("0");
+    std::string s = std::snprintf(buf, sizeof(buf), "%.4f", pct) > 0 ? std::string(buf) : std::string("0");
     if (const auto dot = s.find('.'); dot != std::string::npos) {
         while (!s.empty() && s.back() == '0') s.pop_back();
         if (!s.empty() && s.back() == '.') s.pop_back();
