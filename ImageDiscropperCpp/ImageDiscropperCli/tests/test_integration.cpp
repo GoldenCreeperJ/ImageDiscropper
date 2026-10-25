@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：tests/test_integration.cpp
-// 作用：集成测试 IT-1~IT-53——进程内直接调用 cliMain，端到端验证
+// 作用：集成测试 IT-1~IT-60——进程内直接调用 cliMain，端到端验证
 //       三层命令 + config + 全局选项的「退出码 / 输出尺寸 / 像素落位 / 错误文本」。
 //       不启动子进程（链接 idc_cli_lib），用 rdbuf 重定向捕获 stdout/stderr。
 // 分块依据：一测试关注点一文件（严禁上帝文件）；复用共享 CHECK 宏（cli_test_harness.h）。
@@ -21,12 +21,13 @@
 
 #include "core/color.h"
 #include "core/image.h"
-#include "engine/composition.h"       // EmitMode / MergeLayout / ExportFormat
+#include "engine/composition.h"       // ExportMode / MergeLayout / ExportFormat
 #include "engine/engine.h"            // EngineConfig / Tier / CutGenerator / Polarity / GridParams
 #include "engine/engine_config_json.h" // saveEngineConfig
 #include "engine/grid.h"              // RemainderPolicy
 #include "io/image_io.h"              // readImageFile / writeImageFile
 #include "engine/region.h"            // RectRegion
+#include "annotation/annotation_set.h" // AnnotationSet（--save-config 往返段 IT）
 #include "canvas/layer.h"             // ImageLayer / composeCanvas（layers 段 IT）
 #include "generate/pattern.h"         // PatternParams（配方层 recipe）
 #include "preprocess/preprocess_config.h" // 底图色彩预处理步类型（IT-51 用 preprocess::InvertOp）
@@ -92,7 +93,7 @@ bool readDims(const std::string& path, int& w, int& h) {
 
 } // namespace
 
-// 集成测试段：IT-1~IT-53。
+// 集成测试段：IT-1~IT-60。
 void testIntegration() {
     using idc::engine::EngineConfig;
 
@@ -260,8 +261,8 @@ void testIntegration() {
         cfg.cut.generator = idc::engine::CutGenerator::Rect;
         cfg.cut.polarity = idc::engine::Polarity::Remove;
         cfg.cut.rect = idc::engine::RectRegion(50, 40, 150, 120);
-        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
-        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
+        cfg.exportParams.mode = idc::engine::ExportMode::Merged;
+        cfg.exportParams.layout = idc::engine::MergeLayout::Collapse;
         cfg.source.width = 200;
         cfg.source.height = 150;
         const std::string cfgPath = (root / "it12.json").string();
@@ -293,6 +294,24 @@ void testIntegration() {
         CHECK(r.out.find("grid") != std::string::npos);
         CHECK(r.out.find("new") != std::string::npos);
         CHECK(r.out.find("config") != std::string::npos);
+    }
+
+    // ---- IT-14.5：--help 目标分派——命令 → 命令帮助；主题 → 主题页；未知目标退出码 1。----
+    {
+        const Captured a1 = runCli({"--help", "annotations"});
+        CHECK(a1.code == 0 && a1.out.find("--annotation") != std::string::npos);
+        const Captured a2 = runCli({"--help", "layers"});
+        CHECK(a2.code == 0 && a2.out.find("--layer") != std::string::npos);
+        const Captured a3 = runCli({"--help", "generate"});
+        CHECK(a3.code == 0 && a3.out.find("--size") != std::string::npos);   // 生成源页保留 --size 语义（图案参数与矩阵指向 new 页）
+        const Captured cmd = runCli({"--help", "extract"});
+        CHECK(cmd.code == 0 && cmd.out.find("--rect") != std::string::npos);   // 命令名 → 命令帮助
+        const Captured bad = runCli({"--help", "nope"});
+        CHECK(bad.code == 1 && bad.err.find("annotations") != std::string::npos);
+        const Captured after = runCli({"extract", "--help"});   // 命令后 -h/--help → 本命令不接受（1）
+        CHECK(after.code == 1);
+        const Captured before = runCli({"--help", "extract"});  // 命令前 → 命令帮助
+        CHECK(before.code == 0 && before.out.find("--rect") != std::string::npos);
     }
 
     // ---- IT-15：extract 缺几何参数（--rect/--hband/--vband 三选一未给）→ 退出码 1，stderr 有 `idc: error:` 错误前缀。----
@@ -335,8 +354,8 @@ void testIntegration() {
         cfg.cut.grid.cellHeight = 75;
         cfg.cut.grid.remainder = idc::engine::RemainderPolicy::Discard;
         cfg.selectedCells.push_back(0); // 仅删 cell0 → 保留 {1,2,3} 不构成整行/整列补集
-        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
-        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
+        cfg.exportParams.mode = idc::engine::ExportMode::Merged;
+        cfg.exportParams.layout = idc::engine::MergeLayout::Collapse;
         cfg.source.width = 200;
         cfg.source.height = 150;
         const std::string cfgPath = (root / "it18.json").string();
@@ -441,7 +460,7 @@ void testIntegration() {
     // ---- IT-25：--annotation + --save-config → dry-run 序列化保留 annotations 段。----
     {
         const std::string cfgOut = (root / "it25.json").string();
-        const Captured r = runCli({"--save-config", cfgOut, "extract", "--input", in,
+        const Captured r = runCli({"extract", "--input", in, "--save-config", cfgOut,
                                    "--rect", "0,0,200,150",
                                    "--annotation",
                                    R"ANN({"type":"text","x":50,"y":50,"text":"hi","fontSize":24,"color":"#FFFFFFFF"})ANN",
@@ -492,13 +511,18 @@ void testIntegration() {
         CHECK(isRed(o.getPixel(50, 40)));
     }
 
-    // ---- IT-29：--input 与 --size 互斥 → 退出码 1。----
+    // ---- IT-29：--input 与 --size 同给 → 画布尺寸由 --size 定，位图居中铺入（原生尺寸；越界裁、不足露底）。----
     {
         const std::string out = (root / "it29.png").string();
-        const Captured r = runCli({"extract", "--input", in, "--size", "200x150",
-                                   "--rect", "50,40,150,120", "--output", out});
-        CHECK(r.code == 1);
-        CHECK(r.err.find("--size") != std::string::npos);
+        const Captured r = runCli({"extract", "--input", in, "--size", "300x200",
+                                   "--rect", "0,0,300,200", "--output", out});
+        CHECK(r.code == 0);
+        Image o;
+        CHECK(idc::io::readImageFile(out, o));
+        CHECK(o.width() == 300 && o.height() == 200);
+        CHECK(o.getPixel(10, 10) == Color(255, 255, 255, 255));   // 画布左上留默认白底
+        CHECK(isRed(o.getPixel(60, 35)));                         // 位图内容居中（偏移 (50,25)：画布 (60,35) → 位图 (10,10) 红）
+        CHECK(o.getPixel(250, 180) == Color(255, 255, 255, 255)); // 右下超出位图 → 露默认白底
     }
 
     // ---- IT-30：new --pattern 非法名 → 退出码 1。----
@@ -572,7 +596,7 @@ void testIntegration() {
     {
         const std::string cfgIn = (root / "it35.json").string();
         const std::string cfgOut = (root / "it36.json").string();
-        const Captured r = runCli({"--save-config", cfgOut, "config", "--load", cfgIn});
+        const Captured r = runCli({"config", "--load", cfgIn, "--save-config", cfgOut});
         CHECK(r.code == 0);
         std::ifstream ifs(cfgOut);
         const std::string text((std::istreambuf_iterator(ifs)), std::istreambuf_iterator<char>());
@@ -590,7 +614,7 @@ void testIntegration() {
   "source": {"width": 200, "height": 150},
   "generate": {"kind": "solid", "background": "#FFFF0000", "foreground": "#FF000000"},
   "cut": {"tier": "extract", "generator": "rect", "polarity": "keep", "params": {"x1": 50, "y1": 40, "x2": 150, "y2": 120}},
-  "emit": {"mode": "merged", "merge": {"layout": "collapse"}}
+  "export": {"mode": "merged", "merge": {"layout": "collapse"}}
 })";
         }
         const std::string out = (root / "it37.png").string();
@@ -659,7 +683,7 @@ void testIntegration() {
         const Captured r = runCli({"new", "--size", "16x16", "--pattern", "image", "--output", out});
         CHECK(r.code == 1);
         CHECK(r.err.find("不支持的图案类型") != std::string::npos);
-        // --pattern-image / --image-anchor / --image-scale 亦不受理（搭配 --pattern image 仍退出码 1）。
+        // --pattern-image / --image-anchor / --image-scale 不存在：按未知选项拒绝（退出码 1）。
         CHECK(runCli({"new", "--size", "16x16", "--pattern", "image", "--pattern-image", out,
                       "--image-anchor", "center", "--image-scale", "original", "--output", out}).code == 1);
     }
@@ -686,7 +710,6 @@ void testIntegration() {
         cfg.source = idc::engine::SourceInfo{40, 40};
         std::vector<idc::canvas::ImageLayer> st;
         idc::canvas::ImageLayer l;
-        l.sourceKind = idc::canvas::LayerSourceKind::Recipe;
         idc::generate::PatternParams pp;
         pp.kind = idc::generate::PatternKind::Solid;
         pp.background = Color(255, 0, 0, 255);
@@ -700,8 +723,8 @@ void testIntegration() {
         cfg.cut.generator = idc::engine::CutGenerator::Rect;
         cfg.cut.polarity = idc::engine::Polarity::Keep;
         cfg.cut.rect = idc::engine::RectRegion(0, 0, 40, 40);
-        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
-        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
+        cfg.exportParams.mode = idc::engine::ExportMode::Merged;
+        cfg.exportParams.layout = idc::engine::MergeLayout::Collapse;
         const std::string cfgPath = (root / "it44.json").string();
         CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
         const std::string out = (root / "it44.png").string();
@@ -715,7 +738,7 @@ void testIntegration() {
         CHECK(isRed(o.getPixel(20, 20)));
     }
 
-    // ---- IT-45：File 图层解码 + --bundle-assets 复制——源图写盘后由 config 目录相对名解析；打包进 <配置名>.assets/。----
+    // ---- IT-45：File 图层解码 + --assets-dir 打包——源图写盘后由 config 目录相对名解析；打包进 <配置名>.assets/。----
     {
         fs::create_directories(root / "sub", ec);
         Image a(20, 20, idc::core::ImageFormat::Rgba);
@@ -727,7 +750,6 @@ void testIntegration() {
         cfg.source = idc::engine::SourceInfo{40, 40};
         std::vector<idc::canvas::ImageLayer> st;
         idc::canvas::ImageLayer l;
-        l.sourceKind = idc::canvas::LayerSourceKind::File;
         l.fileName = "sub/a.png"; // 相对配置目录
         l.zOrder = 0;             // 原生尺寸 20×20，居中
         st = {l};
@@ -737,8 +759,8 @@ void testIntegration() {
         cfg.cut.generator = idc::engine::CutGenerator::Rect;
         cfg.cut.polarity = idc::engine::Polarity::Keep;
         cfg.cut.rect = idc::engine::RectRegion(0, 0, 40, 40);
-        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
-        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
+        cfg.exportParams.mode = idc::engine::ExportMode::Merged;
+        cfg.exportParams.layout = idc::engine::MergeLayout::Collapse;
         const std::string cfgPath = (root / "it45.json").string();
         CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
 
@@ -754,11 +776,481 @@ void testIntegration() {
         CHECK(isBlue(o.getPixel(20, 20)));
         CHECK(o.getPixel(0, 0).a == 0);
 
-        // --bundle-assets：把 File 层源图按相对名复制进 <配置名>.assets/。
+        // --assets-dir（flag）：把 File 层源图按相对名复制进 <配置名>.assets/。
         const std::string bundleCfg = (root / "it45_bundle.json").string();
-        const Captured rb = runCli({"--save-config", bundleCfg, "--bundle-assets", "config", "--load", cfgPath});
+        const Captured rb = runCli({"config", "--load", cfgPath, "--save-config", bundleCfg, "--assets-dir"});
         CHECK(rb.code == 0);
         CHECK(fs::exists(root / "it45_bundle.assets" / "sub" / "a.png", ec));
+    }
+
+    // ---- IT-45.5：--assets-dir 三态——=path 打包 + 写 assetsDir 字段 + 同路径幂等跳过 + 加载侧 =path 插查找链最前。----
+    {
+        const fs::path d = root / "it455";
+        fs::create_directories(d / "sub", ec);
+        fs::create_directories(d / "ov" / "sub", ec);
+        Image red(20, 20, idc::core::ImageFormat::Rgba);
+        red.fill(Color(255, 0, 0, 255));
+        Image green(20, 20, idc::core::ImageFormat::Rgba);
+        green.fill(Color(0, 255, 0, 255));
+        CHECK(idc::io::writeImageFile((d / "sub" / "a.png").string(), red, idc::engine::ExportFormat::Png, 90, idc::core::kTransparent).has_value());
+        CHECK(idc::io::writeImageFile((d / "ov" / "sub" / "a.png").string(), green, idc::engine::ExportFormat::Png, 90, idc::core::kTransparent).has_value());
+
+        EngineConfig cfg;
+        cfg.source = idc::engine::SourceInfo{40, 40};
+        idc::canvas::ImageLayer l;
+        l.fileName = "sub/a.png";
+        cfg.layers = std::vector{l};
+        cfg.cut = idc::engine::CutConfig{};
+        cfg.cut.tier = idc::engine::Tier::Standard;
+        cfg.cut.generator = idc::engine::CutGenerator::Rect;
+        cfg.cut.polarity = idc::engine::Polarity::Keep;
+        cfg.cut.rect = idc::engine::RectRegion(0, 0, 40, 40);
+        cfg.exportParams.mode = idc::engine::ExportMode::Merged;
+        cfg.exportParams.layout = idc::engine::MergeLayout::Collapse;
+        const std::string cfgPath = (d / "it455.json").string();
+        CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
+
+        // =path 打包：输出到 custom/，保存配置目录之内 → 写 assetsDir 字段。
+        const std::string outCfg = (d / "out.json").string();
+        const Captured r1 = runCli({"config", "--load", cfgPath, "--save-config", outCfg, "--assets-dir=custom"});
+        CHECK(r1.code == 0);
+        CHECK(fs::exists(d / "custom" / "sub" / "a.png", ec));
+        EngineConfig back;
+        CHECK(idc::engine::loadEngineConfig(outCfg, back).has_value());
+        CHECK(back.assetsDir == "custom");
+
+        // 同路径幂等：再打包一次 src==dst 跳过（不报自复制错误）。
+        const Captured r2 = runCli({"config", "--load", cfgPath, "--save-config", outCfg, "--assets-dir=custom"});
+        CHECK(r2.code == 0);
+
+        // 加载侧 =path 插最前：ov/sub/a.png（绿）盖过 custom/sub/a.png（红）。
+        const std::string png = (d / "it455.png").string();
+        const Captured r3 = runCli({"config", "--load", outCfg, "--assets-dir=ov", "--output", png});
+        CHECK(r3.code == 0);
+        Image o;
+        CHECK(idc::io::readImageFile(png, o));
+        CHECK(isGreen(o.getPixel(20, 20)));
+    }
+
+    // ---- IT-46.5：命令行 --layer/--layers 追加到 layers 段（config 专属；zOrder 未给自增续尾；非法 JSON 退出码 1）----
+    {
+        EngineConfig cfg;
+        cfg.source = idc::engine::SourceInfo{40, 40};
+        idc::canvas::ImageLayer own;
+        own.recipe = idc::generate::PatternParams{};
+        own.recipe->kind = idc::generate::PatternKind::Solid;
+        own.recipe->background = Color(255, 0, 0, 255);
+        own.zOrder = 5;
+        cfg.layers = std::vector{own};
+        cfg.cut = idc::engine::CutConfig{};
+        cfg.cut.tier = idc::engine::Tier::Standard;
+        cfg.cut.generator = idc::engine::CutGenerator::Rect;
+        cfg.cut.polarity = idc::engine::Polarity::Keep;
+        cfg.cut.rect = idc::engine::RectRegion(0, 0, 40, 40);
+        cfg.exportParams.mode = idc::engine::ExportMode::Merged;
+        cfg.exportParams.layout = idc::engine::MergeLayout::Collapse;
+        const std::string cfgPath = (root / "it465.json").string();
+        CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
+
+        // --layers 文件：根为数组的 1 条图层（zOrder 未给）。
+        const std::string layersPath = (root / "it465_layers.json").string();
+        {
+            std::ofstream ofs(layersPath);
+            ofs << R"J([{"source":{"recipe":{"kind":"solid","background":"#FF00FF00"}}}])J";
+        }
+        // 内联 --layer（zOrder 未给）+ 文件 --layers：dry-run 保存后读回，验证追加与 zOrder 自增。
+        const std::string outCfg = (root / "it465_out.json").string();
+        const Captured r = runCli({"config", "--load", cfgPath,
+                                   "--layer", R"J({"source":{"recipe":{"kind":"solid","background":"#FF0000FF"}}})J",
+                                   "--layers", layersPath,
+                                   "--save-config", outCfg});
+        CHECK(r.code == 0);
+        EngineConfig back;
+        CHECK(idc::engine::loadEngineConfig(outCfg, back).has_value());
+        CHECK(back.layers.has_value() && back.layers->size() == 3);
+        CHECK((*back.layers)[0].zOrder == 5);
+        CHECK((*back.layers)[1].zOrder == 6);   // 内联未给 zOrder → 5+1
+        CHECK((*back.layers)[2].zOrder == 7);   // 文件层未给 zOrder → 续尾
+
+        // 非法 --layer JSON → 参数错误（1）。
+        const Captured bad = runCli({"config", "--load", cfgPath, "--layer", "not json", "--output",
+                                     (root / "it465_x.png").string()});
+        CHECK(bad.code == 1);
+        CHECK(bad.err.find("图层") != std::string::npos);
+    }
+
+    // ---- IT-46.6：extract 命令行 --layer（四命令通用）——recipe 图层铺满生成画布，整图保留导出即图层色。----
+    {
+        const std::string out = (root / "it466.png").string();
+        const Captured r = runCli({"extract", "--size", "20x20", "--rect", "0,0,20,20",
+                                   "--layer", R"J({"source":{"recipe":{"kind":"solid","background":"#FF00FF00"}},"transform":{"width":20,"height":20}})J",
+                                   "--output", out});
+        CHECK(r.code == 0);
+        Image o;
+        CHECK(idc::io::readImageFile(out, o));
+        CHECK(isGreen(o.getPixel(10, 10)));   // 图层色覆盖生成画布
+    }
+
+    // ---- IT-46.7：new --annotation 烧入生成画布（坐标基准＝画布尺寸）。----
+    {
+        const std::string out = (root / "it467.png").string();
+        const Captured r = runCli({"new", "--size", "40x40", "--bg", "#FFFF0000",
+                                   "--annotation",
+                                   R"ANN({"type":"rectangle","x1":10,"y1":10,"x2":30,"y2":30,"color":"#FF00FF00","fillColor":"#FF00FF00","fill":true,"strokeWidth":2})ANN",
+                                   "--output", out});
+        CHECK(r.code == 0);
+        Image o;
+        CHECK(idc::io::readImageFile(out, o));
+        CHECK(o.width() == 40 && o.height() == 40);
+        CHECK(isGreen(o.getPixel(20, 20))); // 标注内部被填充
+        CHECK(isRed(o.getPixel(35, 35)));   // 未被标注覆盖，仍为底色红
+    }
+
+    // ---- IT-46.8：new --layer（recipe 铺满）→ 图层色覆盖生成画布。----
+    {
+        const std::string out = (root / "it468.png").string();
+        const Captured r = runCli({"new", "--size", "20x20", "--bg", "#FFFF0000",
+                                   "--layer", R"J({"source":{"recipe":{"kind":"solid","background":"#FF00FF00"}},"transform":{"width":20,"height":20}})J",
+                                   "--output", out});
+        CHECK(r.code == 0);
+        Image o;
+        CHECK(idc::io::readImageFile(out, o));
+        CHECK(isGreen(o.getPixel(10, 10)));   // 图层色覆盖生成画布
+    }
+
+    // ---- IT-46.9：new --save-config 往返——annotations / layers 段与 assetsDir 字段透写。----
+    {
+        const std::string cfgPath = (root / "it469.json").string();
+        const Captured r = runCli({"new", "--size", "30x30",
+                                   "--annotation", R"ANN({"type":"line","points":[[0,0],[10,10]],"color":"#FF000000"})ANN",
+                                   "--layer", R"J({"source":{"recipe":{"kind":"solid","background":"#FF0000FF"}}})J",
+                                   "--assets-dir=custom", "--save-config", cfgPath});
+        CHECK(r.code == 0);
+        EngineConfig back;
+        idc::annotation::AnnotationSet backAnnos;
+        std::string annoErr;
+        const auto loaded = idc::engine::loadEngineConfig(cfgPath, back, &backAnnos, &annoErr);
+        CHECK(loaded.has_value());
+        CHECK(back.base.has_value() && back.base->recipe.has_value()); // generate 段
+        CHECK(back.layers.has_value() && back.layers->size() == 1);    // layers 段
+        CHECK(backAnnos.annotations().size() == 1);                    // annotations 段
+        CHECK(back.assetsDir == "custom");                             // =path 相对化写字段
+    }
+
+    // ---- IT-46.10：extract --naming → 未知选项退出码 1（输出恒单图，命名模板无消费点）。----
+    {
+        const Captured r = runCli({"extract", "--input", in, "--rect", "0,0,200,150",
+                                   "--naming", "x", "--output", (root / "it4610.png").string()});
+        CHECK(r.code == 1);
+        CHECK(r.err.find("--naming") != std::string::npos);
+    }
+
+    // ---- IT-46.11：--keep/--remove 分号列表（单值 r,c;r,c）≡ 多个可重复旗标；非法项 / 空列表退出码 1。----
+    {
+        // 单值列表 ≡ 两个旗标：分离导出 2 张。
+        const std::string dirA = (root / "it4611a").string();
+        const Captured r1 = runCli({"grid", "--input", in, "--grid", "0,0,100,75",
+                                    "--keep", "0,0;0,1", "--output-dir", dirA});
+        CHECK(r1.code == 0);
+        int n = 0;
+        for (const auto& e : fs::directory_iterator(dirA))
+            if (e.is_regular_file()) ++n;
+        CHECK(n == 2);
+        // 尾随分号容忍；--remove 同形。
+        const Captured r2 = runCli({"grid", "--input", in, "--grid", "0,0,100,75",
+                                    "--remove", "1,0;", "--output-dir", (root / "it4611b").string()});
+        CHECK(r2.code == 0);
+        // 列表内非法项 → 1。
+        const Captured bad1 = runCli({"grid", "--input", in, "--grid", "0,0,100,75",
+                                      "--keep", "0,0;bad", "--output-dir", (root / "it4611c").string()});
+        CHECK(bad1.code == 1);
+        // 全空列表 → 1。
+        const Captured bad2 = runCli({"grid", "--input", in, "--grid", "0,0,100,75",
+                                      "--keep", ";", "--output-dir", (root / "it4611d").string()});
+        CHECK(bad2.code == 1);
+    }
+
+    // ---- IT-46.12：--layer 严格校验（与标注同级）——锚点拼错 / 浮点 / opacity 越界 / 图案键拼错 → 退出码 1，报因定位到字段。----
+    {
+        const auto badLayer = [&](const char* layer) {
+            return runCli({"extract", "--size", "20x20", "--rect", "0,0,20,20",
+                           "--layer", layer, "--output", (root / "it4612.png").string()});
+        };
+        const Captured r1 = badLayer(R"J({"transform":{"inCanvasAnchor":"bogus"}})J");
+        CHECK(r1.code == 1);
+        CHECK(r1.err.find("inCanvasAnchor") != std::string::npos);
+        const Captured r2 = badLayer(R"J({"zOrder":1.5})J");
+        CHECK(r2.code == 1);
+        CHECK(r2.err.find("zOrder") != std::string::npos);
+        const Captured r3 = badLayer(R"J({"transform":{"opacity":999}})J");
+        CHECK(r3.code == 1);
+        const Captured r4 = badLayer(R"J({"source":{"recipe":{"kind":"bogus"}}})J");
+        CHECK(r4.code == 1);
+        // 合法形态不受影响：空 file（占位层）+ 负 zOrder（最底层）→ 正常执行。
+        const Captured ok = badLayer(R"J({"source":{"file":""},"zOrder":-2})J");
+        CHECK(ok.code == 0);
+    }
+
+    // ---- IT-46.13：--assets-dir 打包顶层 File 层——目标 .assets/ 目录须被创建（顶层资产无子目录分支）。----
+    {
+        Image a(16, 16, idc::core::ImageFormat::Rgba);
+        a.fill(Color(255, 0, 0, 255));
+        const std::string asset = (root / "topbadge.png").string();
+        CHECK(idc::io::writeImageFile(asset, a, idc::engine::ExportFormat::Png, 90, idc::core::kTransparent));
+
+        EngineConfig cfg;
+        cfg.source = idc::engine::SourceInfo{40, 40};
+        idc::canvas::ImageLayer l;
+        l.fileName = "topbadge.png";   // 顶层资产：打包须直接落 <保存配置名>.assets/
+        l.zOrder = 0;
+        cfg.layers = std::vector{l};
+        cfg.cut = idc::engine::CutConfig{};
+        cfg.cut.tier = idc::engine::Tier::Standard;
+        cfg.cut.generator = idc::engine::CutGenerator::Rect;
+        cfg.cut.polarity = idc::engine::Polarity::Keep;
+        cfg.cut.rect = idc::engine::RectRegion(0, 0, 40, 40);
+        cfg.exportParams.mode = idc::engine::ExportMode::Merged;
+        cfg.exportParams.layout = idc::engine::MergeLayout::Collapse;
+        const std::string cfgPath = (root / "it4613.json").string();
+        CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
+
+        const std::string outCfg = (root / "it4613_bundle.json").string();
+        const Captured r = runCli({"config", "--load", cfgPath, "--save-config", outCfg, "--assets-dir"});
+        CHECK(r.code == 0);
+        CHECK(fs::exists(root / "it4613_bundle.assets" / "topbadge.png", ec));   // 顶层资产落包
+    }
+
+    // ---- IT-46.14：输出目标与 --save-config 至少其一——三命令 dry-run 可省 --output / --output-dir。----
+    {
+        const Captured r1 = runCli({"extract", "--input", in, "--rect", "0,0,100,75",
+                                    "--save-config", (root / "it4614a.json").string()});
+        CHECK(r1.code == 0);
+        CHECK(fs::exists(root / "it4614a.json", ec));
+        const Captured r2 = runCli({"erase", "--input", in, "--rect", "0,0,100,75", "--merge", "collapse",
+                                    "--save-config", (root / "it4614b.json").string()});
+        CHECK(r2.code == 0);
+        const Captured r3 = runCli({"grid", "--input", in, "--grid", "0,0,100,75", "--keep", "0,0",
+                                    "--compose", "--canvas", "1x1", "--save-config", (root / "it4614c.json").string()});
+        CHECK(r3.code == 0);
+        const Captured r4 = runCli({"grid", "--input", in, "--grid", "0,0,100,75", "--keep", "0,0",
+                                    "--save-config", (root / "it4614d.json").string()});
+        CHECK(r4.code == 0);
+        // 两者皆无 → 1。
+        const Captured bad = runCli({"extract", "--input", in, "--rect", "0,0,100,75"});
+        CHECK(bad.code == 1);
+    }
+
+    // ---- IT-46.15：new --save-config 含全幅 keep cut 段 → config --load 直接复现画布。----
+    {
+        const std::string cfg = (root / "it4615.json").string();
+        const Captured r1 = runCli({"new", "--size", "20x20", "--bg", "#FFFF0000", "--save-config", cfg});
+        CHECK(r1.code == 0);
+        std::ifstream ifs(cfg);
+        std::ostringstream ss;
+        ss << ifs.rdbuf();
+        CHECK(ss.str().find("\"polarity\": \"keep\"") != std::string::npos);   // cut 段全幅保留
+        const std::string out = (root / "it4615.png").string();
+        const Captured r2 = runCli({"config", "--load", cfg, "--output", out});
+        CHECK(r2.code == 0);
+        Image o;
+        CHECK(idc::io::readImageFile(out, o));
+        CHECK(o.width() == 20 && o.height() == 20);
+        CHECK(isRed(o.getPixel(5, 5)));   // 复现纯色画布
+    }
+
+    // ---- IT-46.16：--replace-annotations / --replace-layers 替换语义（含清空 / 移除）。----
+    {
+        const std::string cfg = (root / "it4616.json").string();
+        const Captured r0 = runCli({"extract", "--input", in, "--rect", "0,0,100,75",
+                                    "--annotation", R"ANN({"type":"line","points":[[0,0],[10,10]],"color":"#FF000000"})ANN",
+                                    "--layer", R"J({"source":{"recipe":{"kind":"solid","background":"#FF0000FF"}}})J",
+                                    "--save-config", cfg});
+        CHECK(r0.code == 0);
+        EngineConfig back;
+        idc::annotation::AnnotationSet backAnnos;
+        std::string annoErr;
+        CHECK(idc::engine::loadEngineConfig(cfg, back, &backAnnos, &annoErr).has_value());
+        CHECK(backAnnos.annotations().size() == 1);
+        CHECK(back.layers.has_value() && back.layers->size() == 1);
+
+        // 替换：各自给新条目 → 只留新条目。
+        const std::string out1 = (root / "it4616b.json").string();
+        const Captured r1 = runCli({"config", "--load", cfg, "--replace-annotations", "--replace-layers",
+                                    "--annotation", R"ANN({"type":"circle","x1":10,"y1":10,"x2":10,"y2":15,"color":"#FF00FF00"})ANN",
+                                    "--layer", R"J({"source":{"recipe":{"kind":"solid","background":"#FF00FF00"}}})J",
+                                    "--save-config", out1});
+        CHECK(r1.code == 0);
+        EngineConfig back1;
+        idc::annotation::AnnotationSet backAnnos1;
+        CHECK(idc::engine::loadEngineConfig(out1, back1, &backAnnos1, &annoErr).has_value());
+        CHECK(backAnnos1.annotations().size() == 1);
+        CHECK(back1.layers.has_value() && back1.layers->size() == 1);
+
+        // 替换且无命令行输入 → 标注清空、layers 段移除。
+        const std::string out2 = (root / "it4616c.json").string();
+        const Captured r2 = runCli({"config", "--load", cfg, "--replace-annotations", "--replace-layers",
+                                    "--save-config", out2});
+        CHECK(r2.code == 0);
+        EngineConfig back2;
+        idc::annotation::AnnotationSet backAnnos2;
+        CHECK(idc::engine::loadEngineConfig(out2, back2, &backAnnos2, &annoErr).has_value());
+        CHECK(backAnnos2.annotations().empty());
+        CHECK(!back2.layers.has_value());
+
+        // 默认追加不受影响：+1 条标注 → 2 条。
+        const std::string out3 = (root / "it4616d.json").string();
+        const Captured r3 = runCli({"config", "--load", cfg,
+                                    "--annotation", R"ANN({"type":"line","points":[[0,0],[5,5]],"color":"#FF000000"})ANN",
+                                    "--save-config", out3});
+        CHECK(r3.code == 0);
+        EngineConfig back3;
+        idc::annotation::AnnotationSet backAnnos3;
+        CHECK(idc::engine::loadEngineConfig(out3, back3, &backAnnos3, &annoErr).has_value());
+        CHECK(backAnnos3.annotations().size() == 2);
+
+        // flag 不吞后续裸值（isFlagOption 三处登记回归）：裸值按游离位置参数拒绝。
+        const Captured stray = runCli({"config", "--load", cfg, "--replace-annotations", "stray.json",
+                                       "--save-config", (root / "it4616e.json").string()});
+        CHECK(stray.code == 1);
+        CHECK(stray.err.find("多余参数") != std::string::npos);
+    }
+
+    // ---- IT-46.17：--input 与 --size 同给——画布尺寸由 --size 定，位图左上无位移铺入（越界裁、不足露底）。----
+    {
+        const std::string out = (root / "it4617.png").string();
+        const Captured r = runCli({"extract", "--input", in, "--size", "300x200", "--bg", "#FFFFFFFF",
+                                   "--rect", "0,0,300,200", "--output", out});
+        CHECK(r.code == 0);
+        Image o;
+        CHECK(idc::io::readImageFile(out, o));
+        CHECK(o.width() == 300 && o.height() == 200);
+        CHECK(o.getPixel(10, 10) == Color(255, 255, 255, 255));   // 画布左上留 --bg 白底
+        CHECK(isRed(o.getPixel(60, 35)));                         // 位图内容居中（偏移 (50,25)：(60,35) → 位图 (10,10) 红）
+        CHECK(isYellow(o.getPixel(240, 165)));                    // (240,165) → 位图 (190,140) 黄
+        CHECK(o.getPixel(250, 180) == Color(255, 255, 255, 255)); // 画布右下超出位图 → 露 --bg 白底
+        // erase / grid 同给冒烟。
+        const Captured r2 = runCli({"erase", "--input", in, "--size", "300x200", "--bg", "#FFFFFFFF",
+                                    "--rect", "10,10,100,100", "--merge", "collapse", "--output", (root / "it4617b.png").string()});
+        CHECK(r2.code == 0);
+        const Captured r3 = runCli({"grid", "--input", in, "--size", "300x200", "--bg", "#FFFFFFFF",
+                                    "--grid", "0,0,100,100", "--keep", "0,0", "--output-dir", (root / "it4617c").string()});
+        CHECK(r3.code == 0);
+        // 至少其一守卫保留：皆无 → 1。
+        const Captured bad = runCli({"extract", "--rect", "0,0,10,10", "--output", (root / "it4617d.png").string()});
+        CHECK(bad.code == 1);
+        // 图案参数无 --size → 1（杜绝静默忽略）。
+        const Captured bad2 = runCli({"extract", "--input", in, "--pattern", "checkerboard",
+                                      "--rect", "0,0,10,10", "--output", (root / "it4617e.png").string()});
+        CHECK(bad2.code == 1);
+        CHECK(bad2.err.find("--size") != std::string::npos);
+    }
+
+    // ---- IT-46.18：config 字段覆盖族——CLI 值覆盖配置对应字段，--save-config 落盘与执行同样生效。----
+    {
+        const std::string cfg = (root / "it4618.json").string();
+        const Captured r0 = runCli({"extract", "--input", in, "--rect", "0,0,100,75", "--save-config", cfg});
+        CHECK(r0.code == 0);
+
+        const std::string outCfg = (root / "it4618b.json").string();
+        const Captured r1 = runCli({"config", "--load", cfg,
+                                    "--tier", "erase", "--polarity", "remove",
+                                    "--rect", "10,10,60,60",
+                                    "--export-mode", "separate", "--format", "jpeg",
+                                    "--quality", "70", "--naming", "ov_{index}",
+                                    "--save-config", outCfg});
+        CHECK(r1.code == 0);
+        EngineConfig back;
+        CHECK(idc::engine::loadEngineConfig(outCfg, back).has_value());
+        CHECK(back.cut.tier == idc::engine::Tier::Erase);
+        CHECK(back.cut.polarity == idc::engine::Polarity::Remove);
+        CHECK(back.cut.generator == idc::engine::CutGenerator::Rect);
+        CHECK(back.cut.rect.left == 10 && back.cut.rect.top == 10 && back.cut.rect.right == 60 && back.cut.rect.bottom == 60);
+        CHECK(back.exportParams.mode == idc::engine::ExportMode::Separate);
+        CHECK(back.exportParams.format == idc::engine::ExportFormat::Jpeg);
+        CHECK(back.exportParams.quality == 70);
+        CHECK(back.exportParams.naming == "ov_{index}");
+
+        // 非法枚举值 → 1。
+        const Captured bad = runCli({"config", "--load", cfg, "--tier", "bogus",
+                                     "--save-config", (root / "it4618c.json").string()});
+        CHECK(bad.code == 1);
+        // band 覆盖与 --save-config 同用 → 1。
+        const Captured bad2 = runCli({"config", "--load", cfg, "--hband", "10,20",
+                                      "--save-config", (root / "it4618d.json").string()});
+        CHECK(bad2.code == 1);
+        // band 覆盖执行路径：横带保留 → 全幅宽 200、高 10。
+        const std::string out = (root / "it4618e.png").string();
+        const Captured r2 = runCli({"config", "--load", cfg, "--input", in, "--hband", "10,20", "--output", out});
+        CHECK(r2.code == 0);
+        Image o;
+        CHECK(idc::io::readImageFile(out, o));
+        CHECK(o.width() == 200 && o.height() == 10);
+    }
+
+    // ---- IT-46.19：--fit 位图→画布适应——stretch 拉伸铺满；未与 --input+--size 同给 → 1；非法值 → 1。----
+    {
+        const std::string outS = (root / "it4619s.png").string();
+        const Captured rs = runCli({"extract", "--input", in, "--size", "200x200", "--bg", "#FFFFFFFF",
+                                    "--fit", "stretch", "--rect", "0,0,200,200", "--output", outS});
+        CHECK(rs.code == 0);
+        Image os;
+        CHECK(idc::io::readImageFile(outS, os));
+        CHECK(os.width() == 200 && os.height() == 200);
+        CHECK(isYellow(os.getPixel(199, 199)));   // 位图右下（黄）拉伸到画布右下
+        CHECK(isRed(os.getPixel(5, 5)));          // 位图左上（红）拉伸到画布左上
+        // --fit 只与 --input 同给（无 --size）→ 1。
+        const Captured bad = runCli({"extract", "--input", in, "--fit", "stretch",
+                                     "--rect", "0,0,100,75", "--output", (root / "it4619b.png").string()});
+        CHECK(bad.code == 1);
+        // 非法 fit 值 → 1。
+        const Captured bad2 = runCli({"extract", "--input", in, "--size", "200x200", "--fit", "bogus",
+                                      "--rect", "0,0,200,200", "--output", (root / "it4619c.png").string()});
+        CHECK(bad2.code == 1);
+    }
+
+    // ---- IT-46.20：百分比回写与编辑判定——未编辑原样回写；覆盖 / 替换后不得因值巧合错写百分比。----
+    {
+        const std::string cfg = (root / "it4620.json").string();
+        const Captured r0 = runCli({"extract", "--input", in, "--rect", "0,0,100,75", "--save-config", cfg});
+        CHECK(r0.code == 0);
+        // 把 x1 改成 "10%"（图宽 200 → 20px）。
+        {
+            std::ifstream ifs(cfg);
+            std::ostringstream ss;
+            ss << ifs.rdbuf();
+            std::string text = ss.str();
+            const std::string needle = "\"x1\": 0";
+            const auto pos = text.find(needle);
+            CHECK(pos != std::string::npos);
+            text.replace(pos + needle.size() - 1, 1, "\"10%\"");
+            std::ofstream ofs(cfg);
+            ofs << text;
+        }
+        // 未编辑往返 → 原样回写 "10%"。
+        const std::string rt1 = (root / "it4620b.json").string();
+        const Captured r1 = runCli({"config", "--load", cfg, "--save-config", rt1});
+        CHECK(r1.code == 0);
+        std::string t1;
+        {
+            std::ifstream ifs(rt1);
+            std::ostringstream ss;
+            ss << ifs.rdbuf();
+            t1 = ss.str();
+        }
+        CHECK(t1.find("\"x1\": \"10%\"") != std::string::npos);
+        // --rect 覆盖为同值 20 → 必须固化整数（不得错写百分比）。
+        const std::string rt2 = (root / "it4620c.json").string();
+        const Captured r2 = runCli({"config", "--load", cfg, "--rect", "20,0,100,75", "--save-config", rt2});
+        CHECK(r2.code == 0);
+        std::string t2;
+        {
+            std::ifstream ifs(rt2);
+            std::ostringstream ss;
+            ss << ifs.rdbuf();
+            t2 = ss.str();
+        }
+        CHECK(t2.find("\"x1\": 20") != std::string::npos);
+        CHECK(t2.find("\"x1\": \"10%\"") == std::string::npos);
     }
 
     // ---- IT-46：File 层越界路径（含 ..）→ config 执行时 InputError(3)。----
@@ -767,7 +1259,6 @@ void testIntegration() {
         cfg.source = idc::engine::SourceInfo{40, 40};
         std::vector<idc::canvas::ImageLayer> st;
         idc::canvas::ImageLayer l;
-        l.sourceKind = idc::canvas::LayerSourceKind::File;
         l.fileName = "../evil.png";
         l.zOrder = 0;
         st = {l};
@@ -777,8 +1268,8 @@ void testIntegration() {
         cfg.cut.generator = idc::engine::CutGenerator::Rect;
         cfg.cut.polarity = idc::engine::Polarity::Keep;
         cfg.cut.rect = idc::engine::RectRegion(0, 0, 40, 40);
-        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
-        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
+        cfg.exportParams.mode = idc::engine::ExportMode::Merged;
+        cfg.exportParams.layout = idc::engine::MergeLayout::Collapse;
         const std::string cfgPath = (root / "it46.json").string();
         CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
         const std::string out = (root / "it46.png").string();
@@ -793,7 +1284,6 @@ void testIntegration() {
         cfg.source = idc::engine::SourceInfo{20, 20};
         std::vector<idc::canvas::ImageLayer> st;
         idc::canvas::ImageLayer l;
-        l.sourceKind = idc::canvas::LayerSourceKind::Recipe;
         idc::generate::PatternParams pp;
         pp.kind = idc::generate::PatternKind::Solid;
         pp.background = Color(0, 255, 0, 255);
@@ -807,8 +1297,8 @@ void testIntegration() {
         cfg.cut.generator = idc::engine::CutGenerator::Rect;
         cfg.cut.polarity = idc::engine::Polarity::Keep;
         cfg.cut.rect = idc::engine::RectRegion(0, 0, 20, 20);
-        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
-        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
+        cfg.exportParams.mode = idc::engine::ExportMode::Merged;
+        cfg.exportParams.layout = idc::engine::MergeLayout::Collapse;
         const std::string cfgPath = (root / "it47.json").string();
         CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
         const std::string out = (root / "it47.png").string();
@@ -827,7 +1317,6 @@ void testIntegration() {
         cfg.source = idc::engine::SourceInfo{40, 40};
         std::vector<idc::canvas::ImageLayer> st;
         idc::canvas::ImageLayer l;
-        l.sourceKind = idc::canvas::LayerSourceKind::Recipe;
         idc::generate::PatternParams pp;
         pp.kind = idc::generate::PatternKind::Solid;
         pp.background = Color(255, 0, 0, 255);
@@ -841,8 +1330,8 @@ void testIntegration() {
         cfg.cut.generator = idc::engine::CutGenerator::Rect;
         cfg.cut.polarity = idc::engine::Polarity::Keep;
         cfg.cut.rect = idc::engine::RectRegion(0, 0, 40, 40);
-        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
-        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
+        cfg.exportParams.mode = idc::engine::ExportMode::Merged;
+        cfg.exportParams.layout = idc::engine::MergeLayout::Collapse;
         const std::string cfgPath = (root / "it48.json").string();
         CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
         const std::string out = (root / "it48.png").string();
@@ -863,7 +1352,6 @@ void testIntegration() {
         EngineConfig cfg;
         cfg.source = idc::engine::SourceInfo{40, 40};
         idc::canvas::ImageLayer base;
-        base.sourceKind = idc::canvas::LayerSourceKind::File;
         base.fileName = "sub49/base.png";   // 相对配置目录（位图不入配置）
         base.hasImagePlacement = true;
         base.boxWidth = 40; base.boxHeight = 40;
@@ -880,8 +1368,8 @@ void testIntegration() {
         cfg.cut.generator = idc::engine::CutGenerator::Rect;
         cfg.cut.polarity = idc::engine::Polarity::Keep;
         cfg.cut.rect = idc::engine::RectRegion(0, 0, 40, 40);
-        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
-        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
+        cfg.exportParams.mode = idc::engine::ExportMode::Merged;
+        cfg.exportParams.layout = idc::engine::MergeLayout::Collapse;
         const std::string cfgPath = (root / "it49.json").string();
         CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
 
@@ -899,7 +1387,7 @@ void testIntegration() {
 
         // --save-config 回写：generate 段仅带落位键 + backdrop（底图同构序列化），**不写文件路径**（配置＝可跨输入复用的纯配方）。
         const std::string cfgOut = (root / "it49_out.json").string();
-        CHECK(runCli({"--save-config", cfgOut, "config", "--load", cfgPath}).code == 0);
+        CHECK(runCli({"config", "--load", cfgPath, "--save-config", cfgOut}).code == 0);
         std::ifstream ifs(cfgOut);
         const std::string text((std::istreambuf_iterator(ifs)), std::istreambuf_iterator<char>());
         CHECK(text.find("\"generate\"") != std::string::npos);
@@ -917,7 +1405,6 @@ void testIntegration() {
         EngineConfig cfg;
         cfg.source = idc::engine::SourceInfo{40, 40};
         idc::canvas::ImageLayer base;
-        base.sourceKind = idc::canvas::LayerSourceKind::Recipe;
         idc::generate::PatternParams p;
         p.kind = idc::generate::PatternKind::Solid;
         p.background = Color(0, 0, 255, 255);   // 不透明蓝底
@@ -929,8 +1416,8 @@ void testIntegration() {
         cfg.cut.generator = idc::engine::CutGenerator::Rect;
         cfg.cut.polarity = idc::engine::Polarity::Keep;
         cfg.cut.rect = idc::engine::RectRegion(0, 0, 40, 40);
-        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
-        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
+        cfg.exportParams.mode = idc::engine::ExportMode::Merged;
+        cfg.exportParams.layout = idc::engine::MergeLayout::Collapse;
         const std::string cfgPath = (root / "it50.json").string();
         CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
         const std::string out = (root / "it50.png").string();
@@ -948,7 +1435,6 @@ void testIntegration() {
         EngineConfig cfg;
         cfg.source = idc::engine::SourceInfo{40, 40};
         idc::canvas::ImageLayer base;
-        base.sourceKind = idc::canvas::LayerSourceKind::Recipe;
         idc::generate::PatternParams p;
         p.kind = idc::generate::PatternKind::Solid;
         p.background = Color(255, 0, 0, 255);   // 不透明红底
@@ -962,8 +1448,8 @@ void testIntegration() {
         cfg.cut.generator = idc::engine::CutGenerator::Rect;
         cfg.cut.polarity = idc::engine::Polarity::Keep;
         cfg.cut.rect = idc::engine::RectRegion(0, 0, 40, 40);
-        cfg.emitParams.mode = idc::engine::EmitMode::Merged;
-        cfg.emitParams.layout = idc::engine::MergeLayout::Collapse;
+        cfg.exportParams.mode = idc::engine::ExportMode::Merged;
+        cfg.exportParams.layout = idc::engine::MergeLayout::Collapse;
         const std::string cfgPath = (root / "it51.json").string();
         CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
         // 回写检查：底图色彩预处理与顶层 / generate 段 opacity 均入档。
@@ -1016,7 +1502,7 @@ void testIntegration() {
             ofs << R"({
   "source": {"width": 200, "height": 150},
   "cut": {"tier": "extract", "generator": "rect", "polarity": "keep", "params": {"x1": 10, "y1": 10, "x2": 90, "y2": 60}},
-  "emit": {"mode": "merged", "merge": {"layout": "collapse"}},
+  "export": {"mode": "merged", "merge": {"layout": "collapse"}},
   "annotations": [{"x": 10, "y": 10, "text": "no type"}]
 })";
         }
@@ -1027,7 +1513,7 @@ void testIntegration() {
         CHECK(r.err.find("第 1 个标注元素") != std::string::npos);          // 逐条定位信息未丢
         CHECK(r.err.find("缺少 type 字段") != std::string::npos);
         CHECK(r.err.find("无法按配置 JSON schema 解析") == std::string::npos); // 未退化为通用详情
-        CHECK(r.err.find("标注须为 SPEC §7") != std::string::npos);       // 提示取标注语法
+        CHECK(r.err.find("标注须为标注对象 JSON") != std::string::npos);       // 提示取标注语法
 
         // 对照：纯语法错误（json::parse 直接抛，根本没走到标注段校验）→ annoErr 为空，
         //   仍走通用 schema 详情与提示。
@@ -1040,6 +1526,251 @@ void testIntegration() {
         CHECK(g.code == 1);
         CHECK(g.err.find("无法按配置 JSON schema 解析") != std::string::npos);
         CHECK(g.err.find("annotations 段存在非法条目") == std::string::npos);
+    }
+
+    // ---- IT-54：File 层缺文件（默认）→ 降级占位、退出码 0，stderr 出一条 WARN 汇总（无人值守可见）。----
+    //      含一层实色配方（保证画布非空）+ 一层缺失文件（合法相对名、文件不存在 → 占位分支）。
+    {
+        EngineConfig cfg;
+        cfg.source = idc::engine::SourceInfo{40, 40};
+        std::vector<idc::canvas::ImageLayer> st;
+        idc::canvas::ImageLayer solid;
+        idc::generate::PatternParams pp;
+        pp.kind = idc::generate::PatternKind::Solid;
+        pp.background = Color(255, 0, 0, 255);
+        solid.recipe = pp;
+        solid.transform.width = 40; solid.transform.height = 40;
+        solid.zOrder = 0;
+        idc::canvas::ImageLayer ghost;
+        ghost.fileName = "ghost_missing.png";   // 合法相对名，但磁盘上不存在 → 缺文件分支
+        ghost.zOrder = 1;
+        st = {solid, ghost};
+        cfg.layers = st;
+        cfg.cut = idc::engine::CutConfig{};
+        cfg.cut.tier = idc::engine::Tier::Standard;
+        cfg.cut.generator = idc::engine::CutGenerator::Rect;
+        cfg.cut.polarity = idc::engine::Polarity::Keep;
+        cfg.cut.rect = idc::engine::RectRegion(0, 0, 40, 40);
+        cfg.exportParams.mode = idc::engine::ExportMode::Merged;
+        cfg.exportParams.layout = idc::engine::MergeLayout::Collapse;
+        const std::string cfgPath = (root / "it54.json").string();
+        CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
+        const std::string out = (root / "it54.png").string();
+        const Captured r = runCli({"config", "--load", cfgPath, "--output", out});
+        CHECK(r.code == 0);                                     // 缺文件降级占位，仍成功
+        CHECK(r.err.find("idc: warn:") != std::string::npos);   // WARN 汇总走 stderr，前缀语言中性
+    }
+
+    // ---- IT-55：同一缺文件配置 + --strict → 报错退出码 3（不降级）。----
+    {
+        const std::string cfgPath = (root / "it54.json").string();   // 复用 IT-54 配置
+        const std::string out = (root / "it55.png").string();
+        const Captured r = runCli({"--strict", "config", "--load", cfgPath, "--output", out});
+        CHECK(r.code == 3);
+        CHECK(r.err.find("idc: error:") != std::string::npos);
+    }
+
+    // ---- IT-56：拼错的选项名（--strct）被命令层拒绝 → 退出码 1，stderr 报「无法识别的选项」（G1，杜绝静默失效）。----
+    {
+        const std::string out = (root / "it56.png").string();
+        const Captured r = runCli({"extract", "--input", in, "--rect", "50,40,150,120",
+                                   "--strct", "--output", out});
+        CHECK(r.code == 1);
+        CHECK(r.err.find("无法识别的选项") != std::string::npos);
+        CHECK(r.err.find("--strct") != std::string::npos);
+    }
+
+    // ---- IT-57：config --input 裸图尺寸（200×150）≠ 声明 source（100×100）、无 resize 预处理。----
+    //      默认：静默按交集裁切、退出码 0，但 stderr 出一条尺寸错配 WARN；--strict → 输入错误退出码 3（G2）。----
+    {
+        EngineConfig cfg;
+        cfg.source = idc::engine::SourceInfo{100, 100};   // 声明 100×100，实际输入 200×150
+        cfg.cut = idc::engine::CutConfig{};
+        cfg.cut.tier = idc::engine::Tier::Standard;
+        cfg.cut.generator = idc::engine::CutGenerator::Rect;
+        cfg.cut.polarity = idc::engine::Polarity::Keep;
+        cfg.cut.rect = idc::engine::RectRegion(0, 0, 100, 100);
+        cfg.exportParams.mode = idc::engine::ExportMode::Merged;
+        cfg.exportParams.layout = idc::engine::MergeLayout::Collapse;
+        const std::string cfgPath = (root / "it57.json").string();
+        CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
+
+        // 默认：裁切继续、退出码 0，出 WARN（含 source）。WARN 恒写 stderr（与 verbose 无关，与报错对偶）。
+        const std::string out = (root / "it57.png").string();
+        const Captured w = runCli({"config", "--load", cfgPath, "--input", in, "--output", out});
+        CHECK(w.code == 0);
+        CHECK(w.err.find("idc: warn:") != std::string::npos);
+        CHECK(w.err.find("source") != std::string::npos);
+
+        // --strict：尺寸错配升级为报错，退出码 3（不产出）。
+        const std::string outS = (root / "it57s.png").string();
+        const Captured s = runCli({"--strict", "config", "--load", cfgPath, "--input", in, "--output", outS});
+        CHECK(s.code == 3);
+        CHECK(s.err.find("idc: error:") != std::string::npos);
+    }
+
+    // ---- IT-58：跳命令误用选项——extract 传 grid 专属 --keep（合法选项但不属本命令）→ 退出码 1（A）。----
+    {
+        const std::string out = (root / "it58.png").string();
+        const Captured r = runCli({"extract", "--input", in, "--rect", "50,40,150,120",
+                                   "--keep", "0,0", "--output", out});
+        CHECK(r.code == 1);
+        CHECK(r.err.find("无法识别的选项") != std::string::npos);
+        CHECK(r.err.find("--keep") != std::string::npos);
+    }
+
+    // ---- IT-59：重复给出的单值选项——--input 两次（第二个不被静默吞掉）→ 退出码 1（B）。----
+    {
+        const std::string out = (root / "it59.png").string();
+        const Captured r = runCli({"extract", "--input", in, "--input", in, "--rect", "50,40,150,120",
+                                   "--output", out});
+        CHECK(r.code == 1);
+        CHECK(r.err.find("重复给出的取值选项") != std::string::npos);
+        CHECK(r.err.find("--input") != std::string::npos);
+    }
+
+    // ---- IT-60：游离位置参数——命令后多余裸 token（无命令读它）→ 退出码 1（C）。----
+    {
+        const std::string out = (root / "it60.png").string();
+        const Captured r = runCli({"extract", "--input", in, "--rect", "50,40,150,120",
+                                   "--output", out, "stray"});
+        CHECK(r.code == 1);
+        CHECK(r.err.find("无法接受的多余参数") != std::string::npos);
+        CHECK(r.err.find("stray") != std::string::npos);
+    }
+
+    // ---- IT-61：grid 分离模式（无 --compose）却给出合并专属 --canvas → 退出码 1（模式级对称守卫）。----
+    {
+        const fs::path dir = root / "it61";
+        const Captured r = runCli({"grid", "--input", in, "--grid", "0,0,100,75",
+                                   "--keep", "0,0", "--canvas", "2x2", "--output-dir", dir.string()});
+        CHECK(r.code == 1);
+        CHECK(r.err.find("合并专属选项") != std::string::npos);
+        CHECK(r.err.find("--compose") != std::string::npos);
+    }
+
+    // ---- IT-62：grid 分离模式（无 --compose）却给出合并目标 --output → 退出码 1（模式级对称守卫）。----
+    {
+        const fs::path dir = root / "it62";
+        const Captured r = runCli({"grid", "--input", in, "--grid", "0,0,100,75",
+                                   "--keep", "0,0", "--output", (root / "it62.png").string(),
+                                   "--output-dir", dir.string()});
+        CHECK(r.code == 1);
+        CHECK(r.err.find("合并专属选项") != std::string::npos);
+        CHECK(r.err.find("--output") != std::string::npos);
+    }
+
+    // ---- IT-63：erase 分离模式（无 --merge）却给出合并目标 --output → 退出码 1（模式级对称守卫）。----
+    {
+        const fs::path dir = root / "it63";
+        const Captured r = runCli({"erase", "--input", in, "--rect", "50,40,150,120",
+                                   "--output", (root / "it63.png").string(), "--output-dir", dir.string()});
+        CHECK(r.code == 1);
+        CHECK(r.err.find("--merge") != std::string::npos);
+        CHECK(r.err.find("--output") != std::string::npos);
+    }
+
+    // ---- IT-64：config 反向输出键——配置为分离导出却同时给 --output → 退出码 1（模式级对称守卫）。----
+    {
+        EngineConfig cfg;
+        cfg.source = idc::engine::SourceInfo{200, 150};
+        cfg.cut = idc::engine::CutConfig{};
+        cfg.cut.tier = idc::engine::Tier::Standard;
+        cfg.cut.generator = idc::engine::CutGenerator::Rect;
+        cfg.cut.polarity = idc::engine::Polarity::Keep;
+        cfg.cut.rect = idc::engine::RectRegion(0, 0, 100, 75);
+        cfg.exportParams.mode = idc::engine::ExportMode::Separate;
+        const std::string cfgPath = (root / "it64.json").string();
+        CHECK(idc::engine::saveEngineConfig(cfgPath, cfg, nullptr));
+
+        // 分离模式：--output-dir 必填且已给，多余反向 --output 触发模式级对称守卫。
+        const fs::path dir = root / "it64";
+        const Captured r = runCli({"config", "--load", cfgPath, "--input", in,
+                                   "--output-dir", dir.string(), "--output", (root / "it64.png").string()});
+        CHECK(r.code == 1);
+        CHECK(r.err.find("导出模式不符") != std::string::npos);
+    }
+
+    // ---- IT-65：百分比坐标——--rect / --grid 的坐标段可写百分比（按输入图宽 / 高换算）；
+    //      非整数也非百分比的段仍退出码 1。----
+    {
+        // 画布 200x150：0%,0%,50%,50% → (0,0,100,75)。
+        const std::string out = (root / "it65.png").string();
+        const Captured r = runCli({"extract", "--size", "200x150", "--pattern", "solid",
+                                   "--bg", "#FFFF0000", "--rect", "0%,0%,50%,50%", "--output", out});
+        CHECK(r.code == 0);
+        int w = 0, h = 0;
+        CHECK(readDims(out, w, h));
+        CHECK(w == 100 && h == 75);
+
+        // 网格：单元 50%×50% → 2×2；保留左上重排为 1×1 → 100×75。
+        const std::string gridOut = (root / "it65_grid.png").string();
+        const Captured g = runCli({"grid", "--size", "200x150", "--pattern", "solid",
+                                   "--bg", "#FFFF0000", "--grid", "0,0,50%,50%", "--keep", "0,0",
+                                   "--compose", "--canvas", "1x1", "--output", gridOut});
+        CHECK(g.code == 0);
+        CHECK(readDims(gridOut, w, h));
+        CHECK(w == 100 && h == 75);
+
+        // 形如 "10pt" 的段既非整数也非百分比 → 参数错误。
+        const Captured bad = runCli({"extract", "--size", "200x150", "--rect", "10pt,0,100,100",
+                                     "--output", out});
+        CHECK(bad.code == 1);
+        CHECK(bad.err.find("百分比") != std::string::npos);
+    }
+
+    // ---- IT-66：命令行标注 / 图层的几何坐标同样接受百分比（段级入口按基准换算；>100% 合法）----
+    // 画布 200×150：标注 0%,0%,50%,50% → (0,0)-(100,75) 绿；图层框 50%×50%（=100×75）以左上锚点 + 偏移
+    //   (50%,50%)=(100,75) 落位 → (100,75)-(200,150) 蓝（transform.x/y 是锚点落位之上的自由偏移）。
+    {
+        const std::string out = (root / "it66.png").string();
+        const Captured r = runCli({"extract", "--size", "200x150", "--pattern", "solid",
+                                   "--bg", "#FFFF0000", "--rect", "0,0,200,150",
+                                   "--annotation",
+                                   R"ANN({"type":"rectangle","x1":"0%","y1":"0%","x2":"50%","y2":"50%","fillColor":"#FF00FF00","fill":true})ANN",
+                                   "--layer",
+                                   R"J({"source":{"recipe":{"kind":"solid","background":"#FF0000FF"}},"transform":{"inCanvasAnchor":"top-left","layerPivot":"top-left","x":"50%","y":"50%","width":"50%","height":"50%"}})J",
+                                   "--output", out});
+        CHECK(r.code == 0);
+        Image o;
+        CHECK(idc::io::readImageFile(out, o));
+        CHECK(o.width() == 200 && o.height() == 150);
+        CHECK(isGreen(o.getPixel(40, 30)));    // 标注左上区
+        CHECK(isBlue(o.getPixel(120, 90)));    // 图层左上区（不重叠标注）
+        CHECK(isBlue(o.getPixel(190, 140)));   // 图层右下区
+        CHECK(isRed(o.getPixel(190, 20)));     // 标注右侧、图层上方
+        CHECK(isRed(o.getPixel(20, 140)));     // 标注下方、图层左侧
+
+        // 既非整数也非百分比串的几何字段 → 仍为参数错误（1）。
+        const Captured bad = runCli({"extract", "--size", "8x8", "--rect", "0,0,8,8",
+                                     "--annotation", R"ANN({"type":"line","points":[["wide%","0%"],["1","1"]]})ANN",
+                                     "--output", out});
+        CHECK(bad.code == 1);
+        CHECK(bad.err.find("数值字段") != std::string::npos);
+    }
+
+    // ---- IT-67：config 命令行标注的百分比按“解出的画布”换算（而非配置声明的 source）----
+    // 配置 source 100×100，实际跑 --input 200×150：标注 0%,0%,50%,50% 应按 200×150 → (0,0)-(100,75)；
+    //   若误按配置 source 换算会得 (0,0)-(50,50)，像素 (70,60) 就不会变绿。
+    {
+        const fs::path cfgPath = root / "it67.json";
+        {
+            std::ofstream ofs(cfgPath);
+            ofs << R"J({"source":{"width":100,"height":100},
+                    "cut":{"tier":"extract","generator":"rect","polarity":"keep",
+                           "params":{"x1":0,"y1":0,"x2":100,"y2":100}},
+                    "export":{"mode":"merged","merge":{"layout":"collapse"},"format":"png"}})J";
+        }
+        const std::string out = (root / "it67.png").string();
+        const Captured r = runCli({"config", "--load", cfgPath.string(), "--input", in,
+                                   "--annotation",
+                                   R"ANN({"type":"rectangle","x1":"0%","y1":"0%","x2":"50%","y2":"50%","fillColor":"#FF00FF00","fill":true})ANN",
+                                   "--output", out});
+        CHECK(r.code == 0);
+        Image o;
+        CHECK(idc::io::readImageFile(out, o));
+        CHECK(o.width() == 100 && o.height() == 100);
+        CHECK(isGreen(o.getPixel(70, 60)));
     }
 
     // ---- 清理临时目录（不污染仓库 / 系统临时区）。----

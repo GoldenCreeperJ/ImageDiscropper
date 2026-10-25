@@ -26,36 +26,55 @@ void testValueParser() {
     using namespace idc::cli;
     std::string err;
 
-    // ---- parseRect："x1,y1,x2,y2"（左闭右开）；成功写 RectRegion，失败于字段数 / 非整数。----
+    // ---- parseRectCoords / resolveRectCoords："x1,y1,x2,y2"（左闭右开）；各段可为整数像素或百分比。----
     {
+        RectCoords c;
         idc::engine::RectRegion r;
-        CHECK(parseRect("50,40,150,120", r, err));
+        CHECK(parseRectCoords("50,40,150,120", c, err));
+        CHECK(resolveRectCoords(c, 1000, 1000, r, err));            // 全整数：与基准无关
         CHECK(r.left == 50 && r.top == 40 && r.right == 150 && r.bottom == 120);
         CHECK(r.width() == 100 && r.height() == 80);
-        CHECK(!parseRect("1,2,3", r, err) && !err.empty());       // 字段不足
-        CHECK(!parseRect("1,2,3,4,5", r, err));                    // 字段过多
-        CHECK(!parseRect("a,b,c,d", r, err));                      // 非整数
+        CHECK(parseRectCoords("10%,20%,90%,100%", c, err));
+        CHECK(c.x1.ratio.has_value() && !c.x1.px);                  // 百分比段只存比例
+        CHECK(resolveRectCoords(c, 200, 100, r, err));             // x 用宽、y 用高
+        CHECK(r.left == 20 && r.top == 20 && r.right == 180 && r.bottom == 100);
+        CHECK(parseRectCoords("10%,40,150,120", c, err) && !c.x2.ratio.has_value()); // 整数 / 百分比可混写
+        CHECK(!parseRectCoords("1,2,3", c, err) && !err.empty());  // 字段不足
+        CHECK(!parseRectCoords("1,2,3,4,5", c, err));             // 字段过多
+        CHECK(!parseRectCoords("a,b,c,d", c, err));               // 非整数也非百分比
+        CHECK(!parseRectCoords("50%,b,1,2", c, err));             // 单段非法
+        // 基准未知（<= 0）而含百分比 → 无法换算。
+        CHECK(parseRectCoords("10%,20,30,40", c, err));
+        CHECK(!resolveRectCoords(c, 0, 100, r, err) && !err.empty());
     }
 
-    // ---- parseBand："a,b"（起始, 结束）。----
+    // ---- parseBandCoords / resolveBandCoords："a,b"（起始, 结束）；两段同为百分比时同基准换算。----
     {
+        BandCoords c;
         int a = 0, b = 0;
-        CHECK(parseBand("40,120", a, b, err));
+        CHECK(parseBandCoords("40,120", c, err) && resolveBandCoords(c, 500, a, b, err));
         CHECK(a == 40 && b == 120);
-        CHECK(!parseBand("40", a, b, err) && !err.empty());        // 字段不足
-        CHECK(!parseBand("40,x", a, b, err));                      // 非整数
+        CHECK(parseBandCoords("25%,75%", c, err) && resolveBandCoords(c, 400, a, b, err));
+        CHECK(a == 100 && b == 300);
+        CHECK(!parseBandCoords("40", c, err) && !err.empty());     // 字段不足
+        CHECK(!parseBandCoords("40,x", c, err));                  // 非整数也非百分比
     }
 
-    // ---- parseGridGeo："x0,y0,cw,ch"；单元尺寸必须为正（SPEC §3.4.3）。----
+    // ---- parseGridCoords / resolveGridCoords："x0,y0,cw,ch"；x 类用宽、y 类用高；单元尺寸换算后必须为正（SPEC §3.4.3）。----
     {
-        int x0 = 0, y0 = 0, cw = 0, ch = 0;
-        CHECK(parseGridGeo("0,0,100,75", x0, y0, cw, ch, err));
-        CHECK(x0 == 0 && y0 == 0 && cw == 100 && ch == 75);
-        CHECK(parseGridGeo("-5,-7,10,20", x0, y0, cw, ch, err));   // 基准点可为负
-        CHECK(x0 == -5 && y0 == -7 && cw == 10 && ch == 20);
-        CHECK(!parseGridGeo("0,0,0,75", x0, y0, cw, ch, err) && !err.empty()); // cw<=0
-        CHECK(!parseGridGeo("0,0,100,0", x0, y0, cw, ch, err));    // ch<=0
-        CHECK(!parseGridGeo("0,0,100", x0, y0, cw, ch, err));      // 字段不足
+        GridCoords c;
+        idc::engine::GridParams gp;
+        CHECK(parseGridCoords("0,0,100,75", c, err) && resolveGridCoords(c, 640, 480, gp, err));
+        CHECK(gp.originX == 0 && gp.originY == 0 && gp.cellWidth == 100 && gp.cellHeight == 75);
+        CHECK(parseGridCoords("-5,-7,10,20", c, err) && resolveGridCoords(c, 640, 480, gp, err)); // 基准点可为负
+        CHECK(gp.originX == -5 && gp.originY == -7 && gp.cellWidth == 10 && gp.cellHeight == 20);
+        CHECK(parseGridCoords("25%,50%,25%,12.5%", c, err) && resolveGridCoords(c, 640, 480, gp, err));
+        CHECK(gp.originX == 160 && gp.originY == 240 && gp.cellWidth == 160 && gp.cellHeight == 60);
+        CHECK(parseGridCoords("0,0,0,75", c, err));                // 形态合法，换算后 cw<=0
+        CHECK(!resolveGridCoords(c, 640, 480, gp, err) && !err.empty());
+        CHECK(parseGridCoords("0,0,100,0", c, err) && !resolveGridCoords(c, 640, 480, gp, err)); // ch<=0
+        CHECK(!parseGridCoords("0,0,100", c, err));               // 字段不足
+        CHECK(!parseGridCoords("0,0,1x,2", c, err));               // 非法字符
     }
 
     // ---- parseCell："r,c"（行, 列，从 0 起，不可为负）。----
