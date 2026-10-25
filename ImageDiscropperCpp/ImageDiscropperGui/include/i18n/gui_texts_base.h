@@ -475,6 +475,7 @@ inline constexpr char kTbLoadConfigEllipsis[] = "加载配置…";   // 移动�
 inline constexpr char kTbSaveConfigEllipsis[] = "保存配置…";
 inline constexpr char kTbResetAll[]          = "重置全部";   // 与 msg::kResetAllTitle（确认框标题）同字但角色不同，各自一条。
 inline constexpr char kTbStepPad[]           = "步进";     // 仅移动：8 向步进盘弹出按钮。
+inline constexpr char kTbFinish[]            = "完成";     // 仅移动：标注绘制态常驻收笔按钮（与右键/长按收笔同走 annoFinish；非绘制态按下为空操作）。
 inline constexpr char kTbMore[]              = "更多";     // 仅移动：低频项集合菜单。
 inline constexpr char kTbExit[]              = "退出";     // 仅移动「更多」菜单（桌面见 menu::kFileExit，带助记符）。
 inline constexpr char kPanelToggle[]         = "面板";     // 仅移动：抽屉窗口标题与开合按钮两处共用（标题因空标题栏隐藏而不可见，仍需一个名字）。

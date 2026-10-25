@@ -138,12 +138,17 @@ void DesktopInputAdapter::onWheel(CanvasView& view, QWheelEvent* event) {
 
 // 右键：绘制态＝收笔（不弹菜单）；普通＝弹上下文菜单（清除切割线 / 重置视图 / 切换遮罩），
 // 菜单项命中后转发为视图的既有意图信号。
+// 移动端长按＝先落一段合成左键 press（Marquee 态已起框选 / AnnoSelect 空白已起反选 / 图元已抓取），
+//   紧随才到本 context 事件；QMenu::exec() 是嵌套阻塞循环，可能吃掉随后的合成 Release，令 rubber_ 等
+//   状态永久悬置。故 exec 前显式 gestureCancelCurrent() 收掉 press 起的副作用，exec 返回后再清一次兜底
+//   （Release 若已被循环吞掉，这里补复位；正常桌面右键时二者近似 no-op，不改桌面行为）。
 void DesktopInputAdapter::onContextMenu(CanvasView& view, QContextMenuEvent* event) {
     if (view.annotationDrawActive()) {
         view.gestureStrokeFinish();
         event->accept();
         return;
     }
+    view.gestureCancelCurrent();   // exec 前：收拾长按合成左键 press 已起的框选/反选/图元抓取。
     QMenu menu(view.viewport());
     const QAction* aClear = menu.addAction(IDC_GTR(menu, kCtxClearCutLine));
     const QAction* aReset = menu.addAction(IDC_GTR(menu, kCtxResetView));
@@ -154,6 +159,7 @@ void DesktopInputAdapter::onContextMenu(CanvasView& view, QContextMenuEvent* eve
     if (const QAction* chosen = menu.exec(event->globalPos()); chosen == aClear) view.requestClearCut();
     else if (chosen == aReset) view.requestResetView();
     else if (chosen == aToggle) view.requestToggleMasks();
+    view.gestureCancelCurrent();   // exec 后：菜单阻塞循环吞掉 Release 时补复位框选/平移态，防橡皮筋卡死。
 }
 
 } // namespace idc::gui

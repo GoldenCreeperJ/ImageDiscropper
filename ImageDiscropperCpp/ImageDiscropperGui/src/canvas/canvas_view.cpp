@@ -376,9 +376,11 @@ void CanvasView::requestClearCut() { emit clearCutRequested(); }
 void CanvasView::requestResetView() { emit resetViewRequested(); }
 void CanvasView::requestToggleMasks() { emit toggleMasksRequested(); }
 
-// 无键盘补偿：步进盘/取消按钮与键盘同一信号链路（方向键微调 → nudgeSelection；
-// 绘制态 Esc → annoEscape），移动端不新增任何行为分支（SPEC §8.3）。
+// 无键盘补偿：步进盘/取消/完成按钮与键盘、右键同一信号链路（方向键微调 → nudgeSelection；
+// 绘制态 Esc → annoEscape；绘制态右键/长按收笔与移动端「完成」按钮 → annoFinish），
+// 移动端不新增任何行为分支（SPEC §8.3）。
 void CanvasView::requestNudge(const int dx, const int dy) { emit nudgeSelection(dx, dy); }
 void CanvasView::requestAnnoEscape() { emit annoEscape(); }
+void CanvasView::requestAnnoFinish() { emit annoFinish(); }
 
 } // namespace idc::gui

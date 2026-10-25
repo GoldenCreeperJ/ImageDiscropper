@@ -366,6 +366,7 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"label::kTbSaveConfigEllipsis", "Save config…"},
     {"label::kTbResetAll", "Reset all"},
     {"label::kTbStepPad", "Step"},
+    {"label::kTbFinish", "Done"},
     {"label::kTbMore", "More"},
     {"label::kTbExit", "Exit"},
     {"label::kPanelToggle", "Panel"},

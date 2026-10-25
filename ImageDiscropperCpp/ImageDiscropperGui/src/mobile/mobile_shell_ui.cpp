@@ -314,6 +314,10 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
     addLambda(IDC_GT(menu, kZoomIn), [w] { w->view_->zoomIn(); });
     addLambda(IDC_GT(label, kTbFit), [w] { w->view_->fitToWindow(); });   // 与双击适应同源。
 
+    // 常驻「完成」：标注绘制态收笔（折线在此结束）。与右键/长按收笔同走 annoFinish 同一条链路，
+    // 使多段线结束不再只依赖长按（QContextMenuEvent 合成随 Qt 版本而异、真机不稳）；非绘制态按下为空操作（onAnnoFinish 走 cancelPending），故常驻无害。
+    addLambda(IDC_GT(label, kTbFinish), [w] { w->view_->requestAnnoFinish(); });
+
     // 「面板」：开合抽屉（置于「步进」「更多」之前，高频开合更靠手侧）。尺寸按当前方向：
     // 竖屏取高、横屏取宽，比例见 nums::mobile::kDrawerPortraitHeightNum / kDrawerLandscapeWidthNum / kDrawerRatioDen；画布仍为主。
     addLambda(IDC_GT(label, kPanelToggle), [w] {
@@ -336,9 +340,11 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
     // 模式切换与极性不设工具条按钮（移动端「一个功能一个地方」纪律，见 src/mobile/README）：
     // 常驻抽屉「模式」页（LeftPanel 模式/极性开关，与桌面左栏同面板同链路、勾选回显同源）。
 
-    // 删标注/取消不设工具条按钮（移动端「一个功能一个地方」纪律）：删除选中标注在抽屉
-    // 「标注」页「删除选中标注」按钮（与桌面 Delete 键/标注菜单同槽）；取消（绘制态收笔/
-    // 清选区）由长按手势覆盖——绘制态长按＝收笔，普通态长按菜单「清除切割线」（等价右键）。
+    // 删标注不设工具条按钮（移动端「一个功能一个地方」纪律）：删除选中标注在抽屉
+    // 「标注」页「删除选中标注」按钮（与桌面 Delete 键/标注菜单同槽）。取消：绘制态收笔已有条带
+    // 常驻「完成」按钮（与长按同源 annoFinish）；普通态清选区仍由长按菜单「清除切割线」（等价右键）。
+    // （「完成」按钮不违反「一个功能一个地方」：长按受 QPA 版本行为左右，真机不可靠，故给绘制态
+    //  收笔补一个与版本解耦的常驻入口，二者同信号链路、非重复实现。）
 
     // 8 向步进盘（替代方向键）：QMenu + QWidgetAction 弹出，nudge → requestNudge 同链路。
     auto* padButton = new QToolButton(host);

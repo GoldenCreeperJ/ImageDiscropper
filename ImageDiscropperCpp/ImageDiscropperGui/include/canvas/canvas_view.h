@@ -109,6 +109,7 @@ public:
     // 与键盘同一条信号链路——方向键微调与绘制态 Esc 的触控等价物。
     void requestNudge(int dx, int dy);
     void requestAnnoEscape();
+    void requestAnnoFinish();   // 移动端常驻「完成」按钮：与右键/长按收笔同走 annoFinish（折线在此结束），不再只吊在长按一条 QPA 通道上。
 
 signals:
     // 光标在场景（原图）坐标中的位置，供状态栏显示。
