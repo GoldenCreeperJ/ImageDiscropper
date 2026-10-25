@@ -11,7 +11,7 @@ cmake_minimum_required(VERSION 3.28)
 # 版本单一来源：作为子工程时由根 CMakeLists 透传 IDC_CORE_VERSION（发版只改根 project()）；
 # 独立配置本子目录时回退占位，避免空 project VERSION。
 if(NOT DEFINED IDC_CORE_VERSION)
-    set(IDC_CORE_VERSION "1.0.1")   # 独立构建回退（正常发版走根工程，勿在此维护版本）
+    set(IDC_CORE_VERSION "1.0.2")   # 独立构建回退（正常发版走根工程，勿在此维护版本）
 endif()
 project(ImageDiscropperCore LANGUAGES CXX VERSION ${IDC_CORE_VERSION})
 
