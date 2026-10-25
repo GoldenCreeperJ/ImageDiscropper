@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：src/engine/selection.cpp
-// 作用：实现选择/极性阶段（Grid-Selection-Emit 阶段③④）——Selection::resolve 按极性
+// 作用：实现选择/极性阶段（Grid-Selection-Export 阶段③④）——Selection::resolve 按极性
 //       解析保留序号，applyPolarity 据此从全集过滤出保留集 R（SPEC §1 / §3.3 / §3.4）。
 // 分块依据：极性（keep/remove）是 L1/L2/L3 三层共用的同一开关；本文件只做“集合取补”，
 //       不涉及像素，切分见 split.cpp，合成见 composition.cpp。

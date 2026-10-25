@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：include/engine/cut_line.h
-// 作用：定义切割线（cut line）与切割线集合 CutLineSet——Grid-Selection-Emit
+// 作用：定义切割线（cut line）与切割线集合 CutLineSet——Grid-Selection-Export
 //       流水线阶段 ①（SPEC §1）的数据载体。
 // 分块依据：
 //   - 切割线是本工具区别于常规裁剪的公理：贯穿全图的“直线”，而非线段（SPEC §2.2）。

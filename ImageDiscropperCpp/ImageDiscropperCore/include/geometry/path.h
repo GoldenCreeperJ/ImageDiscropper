@@ -97,6 +97,11 @@ public:
     // 内部先扁平化，再做经典扫描线判定。
     bool contains(double px, double py, double flatness = core::nums::geometry::kHitFlatnessPx) const;
 
+    // 填充语义用：若路径未闭合（末段非 Close 且末点 ≠ 首点），追加一条回到首点的直线段。
+    // 对齐 Qt 对开放路径「填充时隐式闭合」的语义——fill 的 contains / 命中 / 光栅化一律用它；
+    // 描边保持原路径（开放描边不画闭合边）。已闭合 / 空路径原样返回副本。
+    Path closedForFill() const;
+
     // 计算点到路径最近线段的距离（扁平化后按线段距离取最小）。
     // 用于命中检测：返回实际距离，由调用方自行与容差比较。
     double distanceToOutline(double px, double py, double flatness = core::nums::geometry::kHitFlatnessPx) const;

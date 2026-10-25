@@ -94,7 +94,7 @@ set(IDC_CANVAS_SRC
         src/canvas/layer.cpp
 )
 
-# engine：Grid-Selection-Emit 统一引擎（SPEC §1）——切割线 / 网格 / 切分 /
+# engine：Grid-Selection-Export 统一引擎（SPEC §1）——切割线 / 网格 / 切分 /
 #         选择极性 / 排序 / 合成 / 导出 / JSON 配置 / 顶层编排。
 set(IDC_ENGINE_SRC
         src/engine/cut_line.cpp
@@ -149,11 +149,14 @@ if(IDC_BUILD_TESTS)
             tests/test_engine_pipeline.cpp
             tests/test_engine_export.cpp
             tests/test_engine_boundary.cpp
+            tests/test_engine_grid_axis.cpp  # L3 网格单轴三态（分割数 / 比例）：取整律 / 混合轴 / 报因 / JSON 双形态
             tests/test_engine_config_json.cpp
             tests/test_i18n_core.cpp        # i18n 机制内核（零 Qt）：表登记 / 语言码归一 / 缺译回退 / 占位符替换断言
             tests/test_i18n_catalog.cpp     # i18n 目录对账（零 Qt）：孤儿键 / 重复键 / 跨层撞键 / 契约组越界 / %N 占位符一致 + 覆盖率
             # 跨模块直编：GUI 的标注编辑会话（零 Qt 依赖）——供会话语义（撤销/重做/选中跟随）回归。
             ../ImageDiscropperGui/src/model/annotation_editor.cpp
+            # 跨模块直编：GUI 的配置资产助手（零 Qt 依赖）——供查找链/解码注入/打包回归。
+            ../ImageDiscropperGui/src/model/config_assets.cpp
             # 跨模块直编：GUI 的预处理会话（零 Qt 依赖）——供 geo→color 不变式/归一化/baseDirty/签名回归。
             ../ImageDiscropperGui/src/model/preprocess_session.cpp
             # 跨模块直编：GUI 的图层会话库（零 Qt 依赖）——供每层会话路由/物化签名比对/按 id 生命周期回收回归。

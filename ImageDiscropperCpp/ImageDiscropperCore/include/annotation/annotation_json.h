@@ -19,9 +19,14 @@ namespace idc::annotation {
 //   根为对象＝单条标注；根为数组＝多条标注。逐条重建并**追加**到 out（调用方可多次累积）。
 //   强制校验：逐条重建，任一条非法即整体失败（不静默丢弃、out 保持不变），err 逐条列出序号与原因；
 //   几何由 type 分派：双锚点图元（约束多边形：矩形/正方形/菱形/四种三角 + 圆/椭圆）经 buildShape(p1,p2) 派生、恒合法；line/polyline 直连顶点、path/text 直连参数。
+//   几何坐标可写百分比串（"50%"，与 §7 annotations 段同口径）：给定 basisWidth/basisHeight（标注坐标
+//   所在图像的宽高，缺省 0＝基准未知）时该类值先按分方向基准换算为像素，再参与重建；写百分比而基准
+//   未知（<= 0）报错而非归零。
 //   用途：命令行内联 --annotation '{...}'（单条对象）与 --annotations file.json（根为数组）的段级解析。
 bool parseAnnotationsFromJsonText(const std::string& text,
                                   std::vector<Annotation>& out,
-                                  std::string& err);
+                                  std::string& err,
+                                  int basisWidth = 0,
+                                  int basisHeight = 0);
 
 } // namespace idc::annotation

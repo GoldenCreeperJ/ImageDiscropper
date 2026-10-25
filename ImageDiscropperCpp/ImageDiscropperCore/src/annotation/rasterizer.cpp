@@ -190,8 +190,13 @@ void rasterize(core::Image& image, const geometry::Shape& shape, const PaintStyl
     const int strokeW = std::max(nums::annotation::kMinStrokeWidth, style.strokeWidth);
 
     // 2. 填充（Line 不填充；用独立 fillColor 填内部）
+    //    开放路径按 Qt 语义隐式闭合后填充（补首尾边），与预览一致；描边仍用原折线（不画闭合边）。
     if (style.fill && !isLine) {
-        fillPolygon(image, polys, style.fillColor);
+        auto fillPolys = polys;
+        for (auto& poly : fillPolys)
+            if (poly.size() > 1 && (poly.back().x != poly.front().x || poly.back().y != poly.front().y))
+                poly.push_back(poly.front());
+        fillPolygon(image, fillPolys, style.fillColor);
     }
 
     // 3. 描边（始终按 color 绘制边框；填充形状因此也带边框色，与画布预览一致）

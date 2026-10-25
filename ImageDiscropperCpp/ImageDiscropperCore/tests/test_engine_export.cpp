@@ -17,6 +17,7 @@
 
 #include "core/image.h"
 #include "engine/engine.h"
+#include "io/image_io.h"
 
 namespace fs = std::filesystem;
 
@@ -77,7 +78,7 @@ void testEngineExport() {
     cfg.cut.generator = CutGenerator::Rect;
     cfg.cut.rect = RectRegion(30, 20, 70, 60);
     cfg.cut.polarity = Polarity::Remove;
-    cfg.emitParams.mode = EmitMode::Separate; // 分离
+    cfg.exportParams.mode = ExportMode::Separate; // 分离
     {
         const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
@@ -104,8 +105,8 @@ void testEngineExport() {
     }
 
     // ---- 合并坍缩 → 单图，校验画布尺寸 (W−Δx)×(H−Δy) 落盘。----
-    cfg.emitParams.mode = EmitMode::Merged;
-    cfg.emitParams.layout = MergeLayout::Collapse;
+    cfg.exportParams.mode = ExportMode::Merged;
+    cfg.exportParams.layout = MergeLayout::Collapse;
     {
         const auto r = toTest(runEngine(img, cfg));
         CHECK(r.ok);
@@ -142,6 +143,36 @@ void testEngineExport() {
               && b[8] == 'W' && b[9] == 'E' && b[10] == 'B' && b[11] == 'P');
     }
 
+    // ---- Pad 余量：分离导出按完整单元尺寸补白，越界部分填 padColor。----
+    {
+        const Image big = makeImage(250, 150);   // 250×150 + cw=ch=100 → 3 列 × 2 行，右列/下行残缺。
+        EngineConfig g;
+        g.source = SourceInfo{250, 150};
+        g.cut.tier = Tier::Grid;
+        g.cut.generator = CutGenerator::Grid;
+        g.cut.grid = GridParams{.originX = 0, .originY = 0, .cellWidth = 100, .cellHeight = 100, .remainder = RemainderPolicy::Pad};
+        g.cut.polarity = Polarity::Keep;
+        g.exportParams.mode = ExportMode::Separate;
+        g.exportParams.padColor = idc::core::Color(255, 0, 0, 255);   // 不透明红：补白可逐像素校验。
+        const auto r = toTest(runEngine(big, g));
+        CHECK(r.ok);
+        CHECK(r.kept.size() == 6);   // 残缺单元仍被保留（Pad 不丢弃）。
+        const fs::path outDir = dir / "padded";
+        CHECK(exportImage(r.composition, big, outDir.string()));
+        // 每张都应是完整单元 100×100（而不是被 crop 夹小后的交集尺寸）。
+        Image first;
+        CHECK(idc::io::readImageFile((outDir / "padded_000.png").string(), first).has_value());
+        CHECK(first.width() == 100 && first.height() == 100);
+        // 末块（行 1 列 2）：图内仅 [200,250)×[100,150)，右下应被 padColor 补齐、左上仍为图内容。
+        Image last;
+        CHECK(idc::io::readImageFile((outDir / "padded_005.png").string(), last).has_value());
+        CHECK(last.width() == 100 && last.height() == 100);
+        const idc::core::Color corner = last.getPixel(99, 99);
+        CHECK(corner.r == 255 && corner.g == 0 && corner.b == 0 && corner.a == 255);
+        const idc::core::Color inside = last.getPixel(0, 0);
+        CHECK(inside.b == 100);   // makeImage 的 b 通道恒为 100（未被补白覆盖）。
+    }
+
     // ---- 坍缩不可行 → 自动降级重排（L3 对角选择集）。----
     {
         const Image big = makeImage(300, 300);
@@ -152,8 +183,8 @@ void testEngineExport() {
         g.cut.grid = GridParams{.originX = 0, .originY = 0, .cellWidth = 100, .cellHeight = 100, .remainder = RemainderPolicy::Discard}; // 300/100 → 3×3 自动推导
         g.cut.polarity = Polarity::Keep;
         g.selectedCells = {0, 4, 8}; // 对角：非整行整列 → 不可坍缩。
-        g.emitParams.mode = EmitMode::Merged;
-        g.emitParams.layout = MergeLayout::Collapse; // 请求坍缩，但应被降级为重排。
+        g.exportParams.mode = ExportMode::Merged;
+        g.exportParams.layout = MergeLayout::Collapse; // 请求坍缩，但应被降级为重排。
         const auto r = toTest(runEngine(big, g));
         CHECK(r.ok);
         CHECK(!r.collapsible); // 判定为不可坍缩。

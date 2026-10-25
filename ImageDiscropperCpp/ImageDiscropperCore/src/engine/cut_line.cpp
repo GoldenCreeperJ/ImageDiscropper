@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：src/engine/cut_line.cpp
-// 作用：实现切割线阶段（Grid-Selection-Emit 阶段①）——切割线归一化 normalizeCutLines
+// 作用：实现切割线阶段（Grid-Selection-Export 阶段①）——切割线归一化 normalizeCutLines
 //       与由切割配置生成贯穿全图切割线的 generateCutLines（SPEC §1 / §3.2 / §3.3 / §3.4）。
 // 分块依据：切割线是“贯穿全图的直线”这一公理的载体；本文件只负责线的生成与归一化，
 //       网格铺设见 grid.cpp，二者解耦。

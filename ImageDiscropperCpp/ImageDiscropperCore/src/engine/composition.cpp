@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：src/engine/composition.cpp
-// 作用：实现合成阶段（Grid-Selection-Emit 阶段⑤）——isCollapsible 判定坍缩可行性
+// 作用：实现合成阶段（Grid-Selection-Export 阶段⑤）——isCollapsible 判定坍缩可行性
 //       （SPEC §4.4 定理），compose 依据输出模式生成合成描述（分离 / 坍缩 / 重排，SPEC §4.1-§4.3）。
 // 分块依据：本文件只计算“怎么摆”（画布尺寸 + 各片段落位），不搬运像素；
 //       落盘见 export.cpp，序列见 sequence.cpp。
@@ -134,7 +134,7 @@ Composition compose(const RegionSet& kept, const Sequence& sequence,
 
     // ---- 分离模式：每块独立成图，dest 从各自 (0,0) 起，无统一画布。----
     // 按 sequence 排序，落盘顺序即排序结果。
-    if (params.mode == EmitMode::Separate) {
+    if (params.mode == ExportMode::Separate) {
         comp.canvasWidth = 0;
         comp.canvasHeight = 0;
         const std::vector<const Fragment*> ordered = orderBySequence(frags, sequence);
@@ -182,7 +182,8 @@ Composition compose(const RegionSet& kept, const Sequence& sequence,
 
     // ---- 重排合并（SPEC §4.3）：块列表按 sequence 序（L3 选择排序），再按 mergeOrder 的填充路径
     //      （行/列优先 + 蛇形 + 倒序）落入 cols×rows 画布，空位补 padColor。两者正交。----
-    // 单元尺寸缺省取 kept 区域的最大宽/高（不缩放，纯像素搬运，NFR-2）。
+    // 单元尺寸缺省取 kept 区域的最大宽/高（不缩放，纯像素搬运，NFR-2）——runEngine 的准入门限
+    // 保证重排只在 kept 块长宽全等时发生，故该最大宽/高即统一格尺寸，画布恒为 cols×rows 整数格。
     int cw = 0, ch = 0;
     for (const Fragment& f : frags) {
         cw = std::max(cw, f.region.width());

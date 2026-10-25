@@ -109,6 +109,8 @@ bool ensureDirectory(const fs::path& dir) {
 }
 
 // 分离模式导出：把每个保留片段裁剪编码后写入目标文件夹（不压缩打包）。
+// Pad 余量策略下单元可越出图像边界：按完整单元尺寸（p.dest）另建画布、以 padColor 补白后
+// 再写盘，与合并导出的「补白至完整单元」语义一致（FR-L3.2）。
 // outputDir 不存在则自动创建（含多级父目录）；创建失败返回 false（E-8）。
 bool exportSeparate(const Composition& composition, const core::Image& source,
                     const std::string& outputDir) {
@@ -124,11 +126,24 @@ bool exportSeparate(const Composition& composition, const core::Image& source,
 
     bool allOk = true;
     int i = 0;
-    for (const Placement& p : composition.placements) {
+    for (const auto&[sourcep , dest, index, row, col] : composition.placements) {
         const core::Image sub =
-            source.crop(p.source.left, p.source.top, p.source.right, p.source.bottom);
-        const int idx = p.index >= 0 ? p.index : i; // 优先用单元序号命名。
-        if (const fs::path file = dir / core::pathFromUtf8(applyNaming(composition.naming, name, idx, p.row, p.col) + ext); !io::writeImageFile(core::pathToUtf8(file), sub, fmt, composition.quality, core::kTransparent))
+            source.crop(sourcep .left, sourcep .top, sourcep .right, sourcep .bottom);
+        // Pad 余量策略下 cell.area 可越出图像边界，而 Image::crop 会把越界区间夹到图内；
+        // 故按未裁剪的完整单元尺寸（p.dest 宽高来自 cell.area）另建 RGBA 画布、以 padColor
+        // 填充，再把子图按越界量回贴（左侧/上方越界时落点右/下移），实现与合并导出同一补白语义。
+        // 无越界时子图尺寸已等于 p.dest，直接写盘（不复制像素）。
+        core::Image padded;
+        const core::Image* tile = &sub;
+        const int dw = dest.width();
+        if (const int dh = dest.height(); dw > 0 && dh > 0 && (sub.width() != dw || sub.height() != dh)) {
+            padded = core::Image(dw, dh, core::ImageFormat::Rgba);
+            padded.fill(composition.padColor);
+            padded.blit(sub, std::max(0, -sourcep .left), std::max(0, -sourcep .top));
+            tile = &padded;
+        }
+        const int idx = index >= 0 ? index : i; // 优先用单元序号命名。
+        if (const fs::path file = dir / core::pathFromUtf8(applyNaming(composition.naming, name, idx, row, col) + ext); !io::writeImageFile(core::pathToUtf8(file), *tile, fmt, composition.quality, composition.padColor))
             allOk = false;
         ++i;
     }

@@ -19,6 +19,7 @@
 | `pipeline.h`        | 泛型有序步骤队列 `Pipeline<T>`：`add` / `insert` / `remove` / `replaceAt` / `moveUp` / `moveDown` / `clear` + `size` / `empty` / `items` / `operator==`（纯模板头实现，与元素类型无关的「按序增删移改 + 越界钳制/忽略」容器骨架；由 `preprocess::PreprocessPipeline` 公开继承复用） |
 | `core_nums.h`       | **常量层 · 数字**：Core 各模块「会被人工调」的阈值 / 范围上下限 / 出厂默认值，按来源模块分组（`nums::engine` / `preprocess` / `annotation` / `canvas` / `generate` / `geometry`），header-only                                                                          |
 | `path_utf8.h`       | **路径契约助手**：`pathFromUtf8` / `pathToUtf8`——UTF-8 `std::string` ↔ `std::filesystem::path` 互转（全仓「路径按 UTF-8 解析」契约的单一实现点），header-only                                                                                                |
+| `percent.h`         | **百分比坐标**：`parsePercent`（`"50%"` → `0.5`）/ `formatPercent`（`0.5` → `"50%"`）/ `resolvePercent`（“比例 × 基准，四舍五入”）与 `PercentHint(s)`（JSON Pointer + 比例 + 换算像素，供保存时原样回写），header-only；§7 配置与 CLI 几何选项共用同一换算口径                          |
 | `i18n/`（子目录）        | **常量层 · 字符串** `core_texts.h`（`jsonkey`/`defaults` 不可译 + `msg` 可译）与**三层共用 i18n 内核** `core_i18n.h`（`IDC_KTR`/`IDC_KTRF` + `formatPattern` + 语言决议，零 Qt）位于 [`include/i18n/`](../i18n/README.md)，逐文件职责见该目录说明                         |
 
 > 语义：`push` 追加新条目并清空重做栈（新操作切断「未来」）；`popToRedo` 撤销、
@@ -30,7 +31,9 @@
 > 边界钳制/忽略：`insert` 越界（`>= size`）钳制为追加队尾、`remove`/`replaceAt` 越界忽略、`moveUp` 首位忽略、`moveDown` 末位忽略；
 > `moveUp/moveDown` 只做相邻单格机械换序，不感知跨元素不变式（geo→color 分区那类不变式属上层会话职责）。由 `preprocess::PreprocessPipeline` 以其存储 + CRUD 骨架公开继承复用（LSP 成立：Core 侧无跨方法守卫不变式可绕过）。
 
-> 坐标与像素约定遵循 SPEC §2.1：整数像素、原点左上、`x` 向右 `y` 向下。
+> 坐标与像素约定遵循 SPEC §2.1：整数像素、原点左上、`x` 向右 `y` 向下。有基准尺寸的几何量另可写百分比串
+> （`"50%"` → `round(0.5 × 基准)`，横向取宽、纵向取高）；接受字段白名单、基准取何者与不接受清单均以 SPEC §2.1 为准，
+> 换算常数与报因不另设第二份。
 
 ## 常量层（`core_nums.h` · 本目录 / `core_texts.h` · [`i18n/`](../i18n/README.md)）
 

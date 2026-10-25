@@ -10,13 +10,13 @@
 - `view_transform.cpp` 只关心屏幕 / 逻辑坐标换算与视图适配。
 - `annotation_json.cpp` 只关心 SPEC §7 `annotations` **段元素**的 JSON ↔ `Annotation`：段级重建与逐条校验在此（不拼装整档文档）。
   对内供 `engine_config_json` 调用（`annotationsSegmentToJson` / `annotationsFromSegmentJson`），对外实现 `annotation_json.h` 的
-  `parseAnnotationsFromJsonText`；非法条目的报因文案走 `IDC_KTR` / `IDC_KTRF` 取 Core 常量层（可译），拼接后的逐条串经
+  `parseAnnotationsFromJsonText`（几何坐标可写百分比串：按传入基准先就地换算为像素再重建，缺基准遇百分比报错）；非法条目的报因文案走 `IDC_KTR` / `IDC_KTRF` 取 Core 常量层（可译），拼接后的逐条串经
   `loadEngineConfig` 的第 4 出参 `annoErr` 上抛给 CLI。
 
-| 文件                    | 职责                                                                                                                                                                        |
-|-----------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `shape_factory.cpp`   | 依据 `ShapeType` 与锚点构造 `Shape`                                                                                                                                              |
-| `rasterizer.cpp`      | 光栅化：边框色 / 填充色分离、描边、填充、Alpha 混合                                                                                                                                            |
-| `annotation_set.cpp`  | 标注集合：结构操作（`add`/`removeAt`/`moveItem`/`popBack`/`restore`）、zOrder 不变式、命中（`hitTest`）、烧录合成（`burnIn(base)`）                                                                  |
-| `annotation_json.cpp` | 标注段 JSON：`annotationsSegmentToJson` / `annotationsFromSegmentJson`（段级重建 + 逐条校验，报因经 `annoErr` 上抛）与 `parseAnnotationsFromJsonText`（CLI `--annotation` / `--annotations` 入口） |
-| `view_transform.cpp`  | 屏幕 / 逻辑坐标换算，以指定点缩放，图像适配视口                                                                                                                                                 |
+| 文件                    | 职责                                                                                                                                                                                       |
+|-----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `shape_factory.cpp`   | 依据 `ShapeType` 与锚点构造 `Shape`                                                                                                                                                             |
+| `rasterizer.cpp`      | 光栅化：边框色 / 填充色分离、描边、填充、Alpha 混合                                                                                                                                                           |
+| `annotation_set.cpp`  | 标注集合：结构操作（`add`/`removeAt`/`moveItem`/`popBack`/`restore`）、zOrder 不变式、命中（`hitTest`）、烧录合成（`burnIn(base)`）                                                                                 |
+| `annotation_json.cpp` | 标注段 JSON：`annotationsSegmentToJson` / `annotationsFromSegmentJson`（段级重建 + 逐条校验，报因经 `annoErr` 上抛）与 `parseAnnotationsFromJsonText`（CLI `--annotation` / `--annotations` 入口，几何坐标按传入基准换算百分比） |
+| `view_transform.cpp`  | 屏幕 / 逻辑坐标换算，以指定点缩放，图像适配视口                                                                                                                                                                |

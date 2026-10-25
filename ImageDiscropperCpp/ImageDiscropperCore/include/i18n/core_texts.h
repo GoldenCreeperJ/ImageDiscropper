@@ -8,7 +8,7 @@
 // 分块依据：jsonkey 按 SPEC §7 的段归属（每组注释标明实现来源文件，即这些键的实际读写处）：
 //       · common —— 跨段复用的同名键（width/height/x/y/kind/opacity/…）只定义一次，
 //         避免同一键名在写出侧与读取侧各写一份而漂移（这是本文件存在的核心理由）。
-//       · config —— §7 顶层与 source/cut/select/order/emit/merge/arrange 段（src/engine/engine_config_json.cpp）。
+//       · config —— §7 顶层与 source/cut/select/order/export/merge/arrange 段（src/engine/engine_config_json.cpp）。
 //       · layer  —— generate 段与 layers[i] 的 source/transform/imagePlacement（同上 + engine_config_json_internal.h）。
 //       · anno   —— annotations 段逐条元素（src/annotation/annotation_json.cpp）。
 //       · pre    —— 预处理步骤 {op, ...params}（engine_config_json_internal.h / engine_config_json.cpp）。
@@ -18,7 +18,7 @@
 // 提取判据（与另五文件同）：键名一律提取；§7 回退默认值按「出厂默认」提取；枚举 ↔ 串的**成对映射表**
 //       内值串不提取（映射表本身即该 token 的唯一定义点，如 "row-major" / "keep-partial"，再抽常量只会增加跳转）；
 //       例外：面向人的**显示名**不属此列——generate::patternKindName 虽也是枚举分派，但它返回的中文要进 GUI
-//       下拉与提示（落盘用的是 defaults 的 patternKind 串与 gen*Token 两套无关的 token），故已提取进 msg 组。
+//       下拉与提示（落盘用的是 defaults 的 patternKind 串与 gen*Token 两套无关的 token），故收在 msg 组。
 //       msg 内由多段拼接而成的句子一律收为**单条整句 + %N 占位符**（如 "第 %1 个标注元素：%2"），
 //       不拆成连接片段——拆开后译者无法重组语序；只以「'」收尾的前段仍只存前段，
 //       后接的原值与尾引号由调用点拼接（那部分是数据，不是句子成分）。
@@ -44,7 +44,7 @@ inline constexpr char kY1[] = "y1";                   // 同上。
 inline constexpr char kX2[] = "x2";                   // 矩形锚点右下 / 标注双锚点第二点（圆/椭圆编码半轴）。
 inline constexpr char kY2[] = "y2";                   // 同上。
 inline constexpr char kType[] = "type";               // 标注形状类型（annotations[i].type）。
-inline constexpr char kKind[] = "kind";               // 图案类型（generate.kind）/ 图层来源（layers[i].source.kind）。
+inline constexpr char kKind[] = "kind";               // 图案类型（generate/base 段与 recipe 内的 kind）。
 inline constexpr char kOpacity[] = "opacity";         // §7 顶层画布级 / 图层与底图合成期 alpha 乘子。
 inline constexpr char kPreprocess[] = "preprocess";   // §7 顶层、图层、底图三处同名的步骤数组。
 inline constexpr char kTransform[] = "transform";     // 图层变换段 / 标注几何变换段（同名不同义，值仍一致）。
@@ -57,39 +57,39 @@ inline constexpr char kFile[] = "file";               // 图层来源的相对�
 } // namespace common
 
 // ---------------------------------------------------------------------------
-// config：§7 顶层与 cut / select / order / emit 段（src/engine/engine_config_json.cpp）。
+// config：§7 顶层与 cut / order（含 select）/ export 段（src/engine/engine_config_json.cpp）。
 // ---------------------------------------------------------------------------
 namespace config {
 inline constexpr char kSource[] = "source";           // 顶层：原图尺寸段。
 inline constexpr char kCut[] = "cut";                 // 顶层：切割段（层级 / 生成器 / 几何 / 极性）。
-inline constexpr char kSelect[] = "select";           // 顶层：网格模式显式选择集（单元序号数组）。
-inline constexpr char kOrder[] = "order";             // 顶层：排序策略段。
-inline constexpr char kEmit[] = "emit";               // 顶层：输出段。
+inline constexpr char kOrder[] = "order";             // 顶层：排序段（内含选择集 select + 策略 strategy/reverse/snake）。
+inline constexpr char kExport[] = "export";           // 顶层：输出段。
 inline constexpr char kGenerate[] = "generate";       // 顶层：底图描述段（键名与 CLI 选项名同源，属契约不可改）。
 inline constexpr char kLayers[] = "layers";           // 顶层：多层画布数组。
+inline constexpr char kAssetsDir[] = "assetsDir";     // 顶层：资产目录声明（generate 与 layers 之间，可选）。
 inline constexpr char kAnnotations[] = "annotations"; // 顶层：标注数组。
 inline constexpr char kTier[] = "tier";               // cut.tier（"extract"/"erase"/"grid"）。
 inline constexpr char kGenerator[] = "generator";     // cut.generator。
 inline constexpr char kPolarity[] = "polarity";       // cut.polarity（keep/remove）。
 inline constexpr char kParams[] = "params";           // cut.params（随 generator 形态异构）。
 inline constexpr char kRects[] = "rects";             // cut.params.rects（MultiRect）。
-inline constexpr char kStrategy[] = "strategy";       // order.strategy / emit.merge.arrange.strategy。
+inline constexpr char kStrategy[] = "strategy";       // order.strategy / export.merge.arrange.strategy。
 inline constexpr char kReverse[] = "reverse";         // 逆序标志（两处同名字段）。
 inline constexpr char kSnake[] = "snake";             // 蛇形标志（两处同名字段）。
-inline constexpr char kSequence[] = "sequence";       // 自定义序预留位（写出恒 null）。
-inline constexpr char kMode[] = "mode";               // emit.mode（merged/separate）。
-inline constexpr char kMerge[] = "merge";             // emit.merge 段。
-inline constexpr char kFormat[] = "format";           // emit.format。
-inline constexpr char kNaming[] = "naming";           // emit.naming（命名模板串，值为数据非文案）。
-inline constexpr char kQuality[] = "quality";         // emit.quality。
-inline constexpr char kKeepMetadata[] = "keepMetadata"; // emit.keepMetadata。
-inline constexpr char kLayout[] = "layout";           // emit.merge.layout（collapse/rearrange）。
-inline constexpr char kCols[] = "cols";               // emit.merge.cols。
-inline constexpr char kRows[] = "rows";               // emit.merge.rows。
-inline constexpr char kCellWidth[] = "cellWidth";     // emit.merge.cellWidth / grid.cellWidth（同名复用）。
+inline constexpr char kSelect[] = "select";           // order.select：网格模式显式选择集（单元序号数组）；strategy=custom 时数组序即自定义输出序。
+inline constexpr char kMode[] = "mode";               // export.mode（merged/separate）。
+inline constexpr char kMerge[] = "merge";             // export.merge 段。
+inline constexpr char kFormat[] = "format";           // export.format。
+inline constexpr char kNaming[] = "naming";           // export.naming（命名模板串，值为数据非文案）。
+inline constexpr char kQuality[] = "quality";         // export.quality。
+inline constexpr char kKeepMetadata[] = "keepMetadata"; // export.keepMetadata。
+inline constexpr char kLayout[] = "layout";           // export.merge.layout（collapse/rearrange）。
+inline constexpr char kCols[] = "cols";               // export.merge.cols。
+inline constexpr char kRows[] = "rows";               // export.merge.rows。
+inline constexpr char kCellWidth[] = "cellWidth";     // export.merge.cellWidth / grid.cellWidth（同名复用）。
 inline constexpr char kCellHeight[] = "cellHeight";   // 同上，纵向。
-inline constexpr char kPadColor[] = "padColor";       // emit.merge.padColor（十六进制串）。
-inline constexpr char kArrange[] = "arrange";         // emit.merge.arrange 段（重排填充顺序）。
+inline constexpr char kPadColor[] = "padColor";       // export.merge.padColor（十六进制串）。
+inline constexpr char kArrange[] = "arrange";         // export.merge.arrange 段（重排填充顺序）。
 } // namespace config
 
 // ---------------------------------------------------------------------------
@@ -106,9 +106,15 @@ inline constexpr char kLineWidth[] = "lineWidth";     // 图案线宽。
 inline constexpr char kDotRadius[] = "dotRadius";     // 图案点半径。
 inline constexpr char kSeed[] = "seed";               // 噪声随机种子。
 inline constexpr char kNoiseMode[] = "noiseMode";     // 噪声配色模式。
-inline constexpr char kOriginX[] = "originX";         // grid 基准点（SPEC §3.4.3）。
+inline constexpr char kOriginX[] = "originX";         // grid 基准点（平铺形态；SPEC §3.4.3）。
 inline constexpr char kOriginY[] = "originY";         // 同上。
 inline constexpr char kRemainder[] = "remainder";     // grid 余量策略（discard/keep-partial/pad）。
+inline constexpr char kAxisX[] = "x";                 // grid 分轴定义：横轴（与 originX/cellWidth 互斥）。
+inline constexpr char kAxisY[] = "y";                 // grid 分轴定义：纵轴（与 originY/cellHeight 互斥）。
+inline constexpr char kAxisOrigin[] = "origin";        // 分轴周期形态：基准点。
+inline constexpr char kAxisCell[] = "cell";            // 分轴周期形态：单元尺寸（周期）。
+inline constexpr char kAxisCount[] = "count";          // 分轴分割数形态：份数。
+inline constexpr char kAxisWeights[] = "weights";      // 分轴比例形态：权重数组。
 inline constexpr char kInCanvasAnchor[] = "inCanvasAnchor"; // transform：层在画布内的锚点。
 inline constexpr char kLayerPivot[] = "layerPivot";   // transform：层旋转枢轴。
 inline constexpr char kImagePlacement[] = "imagePlacement"; // 图层内层两级落位段（可选）。
@@ -165,7 +171,7 @@ inline constexpr char kMaskAllOn[] = "111";   // 全通道：SplitOp/InvertOp �
 inline constexpr char kMaskAllOff[] = "000";  // 无通道：融合累加器初值的另一端；灰度图上代表「空操作」。
 
 // 导出命名模板（SPEC §4.1）。
-inline constexpr char kNamingTemplate[] = "{name}_{index:03d}";  // 出厂模板：CompositionParams / EmitParams 两处成员初值、
+inline constexpr char kNamingTemplate[] = "{name}_{index:03d}";  // 出厂模板：CompositionParams / ExportParams 两处成员初值、
                                                                 // §7 读取回退、模板为空时的兜底均引此（GUI 命名框初值不在此列：跨层 char[] 无法转引，另立 gui_texts.h ident::kNamingDefaultTemplate，两处必须同字）。
 inline constexpr char kRegionFallbackName[] = "region";         // {name} 取不到目标文件夹名时的回退占位名（分离导出）。
 
@@ -173,10 +179,10 @@ inline constexpr char kRegionFallbackName[] = "region";         // {name} 取不
 inline constexpr char kTierErase[] = "erase";                    // 缺 cut.tier：默认反向剔除（Tier::Erase）。
 inline constexpr char kGeneratorRect[] = "rect";                 // 缺 cut.generator。
 inline constexpr char kPolarityRemove[] = "remove";              // 缺 cut.polarity。
-inline constexpr char kStrategyRowMajor[] = "row-major";         // 缺 order.strategy 与 emit.merge.arrange.strategy（两处）。
-inline constexpr char kEmitModeMerged[] = "merged";              // 缺 emit.mode。
-inline constexpr char kFormatPng[] = "png";                      // 缺 emit.format。
-inline constexpr char kLayoutCollapse[] = "collapse";            // 缺 emit.merge.layout。
+inline constexpr char kStrategyRowMajor[] = "row-major";         // 缺 order.strategy 与 export.merge.arrange.strategy（两处）。
+inline constexpr char kExportModeMerged[] = "merged";              // 缺 export.mode。
+inline constexpr char kFormatPng[] = "png";                      // 缺 export.format。
+inline constexpr char kLayoutCollapse[] = "collapse";            // 缺 export.merge.layout。
 inline constexpr char kRemainderDiscard[] = "discard";           // 缺 cut.params.grid.remainder。
 inline constexpr char kPatternKindSolid[] = "solid";             // 缺 generate.kind / 图层 recipe.kind。
 inline constexpr char kPatternBackground[] = "#FFFFFFFF";        // 缺配方 background：白底不透明。
@@ -188,8 +194,7 @@ inline constexpr char kAnchorCenter[] = "center";                // 缺层在画
 inline constexpr char kImageFitCrop[] = "crop";                  // 缺 fit：源图→图层框的适应方式（图层与底图两处）。
 inline constexpr char kFlipAxisHorizontal[] = "horizontal";      // 缺 preprocess 步的 axis。与 kPatternOrientation 同字不同义，
                                                                   // 分开定义以免两处日后被误当作同一条修改。
-inline constexpr char kLayerSourceEmpty[] = "empty";             // 缺 layers[i].source.kind：降级为空占位层。
-inline constexpr char kPadColorTransparent[] = "#00000000";      // 缺 emit.merge.padColor：拼贴余量全透明。
+inline constexpr char kPadColorTransparent[] = "#00000000";      // 缺 export.merge.padColor：拼贴余量全透明。
 inline constexpr char kAnnotationColor[] = "#FF000000";          // 缺 annotations[i] 的 color 与 fillColor（两处同值）。
                                                                   // 与 defaults::kPatternForeground 同字不同义，各立一条以免日后误当同一条修改。
 inline constexpr char kAnnotationText[] = "A";                   // 缺 text 时的占位文字（保证 TEXT 标注不会因空串而不可见）。
@@ -212,6 +217,9 @@ inline constexpr char kEngineSourceEmpty[] = "源图像为空，无法切割";  
 inline constexpr char kEngineRectDegenerate[] = "选框无效：矩形宽高需为正，无法生成切割线";
 inline constexpr char kEngineMultiRectEmpty[] = "多矩形为空：没有可用矩形";
 inline constexpr char kEngineNoGrid[] = "切割未产生有效网格：单元尺寸或图像尺寸需为正";
+inline constexpr char kEngineGridCountInvalid[] = "网格分割数无效：横向 / 纵向份数须为正，且不得超过该方向的像素数";
+inline constexpr char kEngineGridWeightsInvalid[] = "网格比例无效：权重须为正数，且份数不得超过该方向的像素数";
+inline constexpr char kEngineGridCellInvalid[] = "网格单元无效：单元尺寸须为正，且分割不得产生零宽单元";
 inline constexpr char kEngineDeleteSetEmpty[] = "删除区为空：没有单元被选中剔除";
 inline constexpr char kEngineKeepSetEmpty[] = "保留集为空：删除区覆盖了全图，或没有选中单元";
 inline constexpr char kEngineRearrangeNeedsL3[] = "合并重排仅网格模式支持：请改用合并坍缩或分离导出";
@@ -250,7 +258,34 @@ inline constexpr char kErrAnnoTextEmpty[] = "标注 JSON 为空";
 inline constexpr char kErrAnnoRootType[] = "标注 JSON 根须为对象（单条标注）或数组（多条标注）";
 inline constexpr char kErrAnnoValidationFailed[] = "标注校验失败：";
 inline constexpr char kErrAnnoNoValidEntry[] = "标注 JSON 无有效条目";
+inline constexpr char kErrLayerTextEmpty[] = "图层 JSON 为空";
+inline constexpr char kErrLayerRootType[] = "图层 JSON 根须为对象（单条图层）或数组（多条图层）";
+inline constexpr char kErrLayerNoValidEntry[] = "图层 JSON 无有效条目";
+// 段级入口（CLI --layer / --layers）写百分比但画布尺寸未知（基准 <= 0）：换算不出像素。
+inline constexpr char kErrLayerPercentNoBasis[] = "图层字段 '%1' 使用了百分比，但画布尺寸未知（须先确定画布宽高）";
 inline constexpr char kErrAnnoParseFailed[] = "标注 JSON 解析失败：";  // 后接异常 what()。
+// 段级入口（CLI --annotation / --annotations）写百分比但基准尺寸未知（<= 0）：换算不出像素。
+inline constexpr char kErrAnnoPercentNoBasis[] = "标注几何 '%1' 使用了百分比，但坐标基准尺寸未知（须先确定工作图宽高）";
+
+// §7 配置 schema 严格校验报因（src/engine/engine_config_json.cpp::validateSchema）：
+//   仅当键「显式写出且值非 null」而类型/取值非法时才报错；缺失/null 仍走默认（向后兼容不变）。
+//   %1＝JSON 路径（如 cut.tier / layers[0].source.recipe.kind），%2＝原值——皆数据，不译。
+inline constexpr char kErrConfigNotObject[] = "配置字段 '%1' 须为对象";
+inline constexpr char kErrConfigNotArray[] = "配置字段 '%1' 须为数组";
+inline constexpr char kErrConfigNotInteger[] = "配置字段 '%1' 须为整数";
+// 坐标键专有：整数或百分比串（几何量有明确基准尺寸，可用 "50%" 表达相对位置/尺寸）。
+inline constexpr char kErrConfigNotCoord[] = "配置字段 '%1' 须为整数或百分比串（如 \"50%\"），实际为 %2";
+// 百分比已给出但基准尺寸未知（source 宽高缺失 / 非正）：无法换算成像素。
+inline constexpr char kErrConfigPercentNoBasis[] = "配置字段 '%1' 使用了百分比，但基准尺寸未知（source 宽高须为正整数）";
+inline constexpr char kErrConfigRange[] = "配置字段 '%1' 须在 %2..%3 之间";
+inline constexpr char kErrConfigNotBool[] = "配置字段 '%1' 须为布尔值";
+inline constexpr char kErrConfigNotString[] = "配置字段 '%1' 须为字符串";
+inline constexpr char kErrConfigBadEnum[] = "配置字段 '%1' 的取值 '%2' 无法识别";
+inline constexpr char kErrConfigBadColor[] = "配置字段 '%1' 不是合法的十六进制颜色 '%2'";
+// 网格参数两种形态不可混写（平铺四键 vs 分轴 x/y），且分轴内的三态互斥。
+inline constexpr char kErrConfigGridMixed[] = "配置字段 '%1' 与 '%2' 不可混用：网格参数要么用 originX/originY/cellWidth/cellHeight，要么用 x/y 分轴定义";
+inline constexpr char kErrConfigGridAxisMode[] = "配置字段 '%1' 的键冲突：origin/cell/remainder、count、weights 三选一";
+inline constexpr char kErrConfigGridWeight[] = "配置字段 '%1' 的权重 '%2' 须为正数或百分比串";
 
 // 逐条报因的裹句（整句 + 占位符：%1＝序号、%2＝上一批各条报因）。
 // 收为单条而非拼接碎片：拆开后译者无法重组语序（英语把序号放句尾）；

@@ -19,12 +19,13 @@ Core 只保留「无头侧也成立」的数据与合成能力。
    **不持底图、不含交互态**：`burnIn` 须由调用方显式传 base；编辑模式 / 属性模板 / 选中 / 撤销重做等会话态归 GUI `AnnotationEditor`（其组合本集合并自行编排条目级撤销）。
 4. `view_transform.h` —— 屏幕坐标 ↔ 逻辑坐标换算、以指定点缩放、图像适配视口；Core 提供的 Qt 无关视口工具，由 examples/tests 使用（GUI 用 QGraphicsView 自带变换，未直接用本类）。
 5. `annotation_json.h` —— SPEC §7 `annotations` **段元素语法**的文本解析入口 `parseAnnotationsFromJsonText`（根为对象＝单条、根为数组＝多条，逐条重建并**追加**到 out）；
+   几何坐标可写百分比串（§2.1），调用方传入 `basisWidth` / `basisHeight`（标注坐标所在图像 / 工作图尺寸）即按分方向基准先换算为像素再重建；缺省基准（0）遇到百分比串报错而非归零。
    只暴露 std 级 API，**不泄漏第三方 JSON 类型**（nlohmann 不进公共头纪律）。整档 §7 组装仍归 `engine/engine_config_json.h`，两者共用同一套重建逻辑。
 
-| 文件                  | 职责                                                                                                                     |
-|---------------------|------------------------------------------------------------------------------------------------------------------------|
-| `shape_factory.h`   | 依据 `ShapeType` 与锚点构造 `Shape`（`buildShape`）                                                                             |
-| `rasterizer.h`      | 光栅化：边框色 / 填充色分离、描边、填充、Alpha 混合（`rasterize` / `PaintStyle`）                                                             |
-| `annotation_set.h`  | 标注集合 `AnnotationSet` 与标注记录 `Annotation`（数据 + zOrder 不变式 + 命中 / 合成；会话态见 GUI `AnnotationEditor`）                         |
-| `annotation_json.h` | 标注段 JSON 文本解析 `parseAnnotationsFromJsonText`（CLI `--annotation` / `--annotations` 的段级入口；任一条非法即整体失败、out 保持不变，逐条列出序号与原因） |
-| `view_transform.h`  | 视图坐标变换 `ViewTransform`                                                                                                 |
+| 文件                  | 职责                                                                                                                                       |
+|---------------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| `shape_factory.h`   | 依据 `ShapeType` 与锚点构造 `Shape`（`buildShape`）                                                                                               |
+| `rasterizer.h`      | 光栅化：边框色 / 填充色分离、描边、填充、Alpha 混合（`rasterize` / `PaintStyle`）                                                                               |
+| `annotation_set.h`  | 标注集合 `AnnotationSet` 与标注记录 `Annotation`（数据 + zOrder 不变式 + 命中 / 合成；会话态见 GUI `AnnotationEditor`）                                           |
+| `annotation_json.h` | 标注段 JSON 文本解析 `parseAnnotationsFromJsonText`（CLI `--annotation` / `--annotations` 的段级入口；几何坐标含百分比串，按传入基准换算；任一条非法即整体失败、out 保持不变，逐条列出序号与原因） |
+| `view_transform.h`  | 视图坐标变换 `ViewTransform`                                                                                                                   |

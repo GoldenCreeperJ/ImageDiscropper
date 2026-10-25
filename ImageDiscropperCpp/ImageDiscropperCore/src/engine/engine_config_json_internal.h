@@ -1,7 +1,7 @@
 // ============================================================================
 // 文件：src/engine/engine_config_json_internal.h（Core 私有内部头，仅 engine_config_json.cpp 包含）
 // 作用：EngineConfig ↔ SPEC §7 JSON 的「枚举 ↔ 串 / 颜色 / 宽容读取」助手区：
-//       tierName/generatorName/remainderName 等枚举串映射 + cut/sequence/generate/preprocess
+//       tierName/generatorName/remainderName 等枚举串映射 + cut/generate/preprocess
 //       各段 toJson/fromJson 小助手。单消费者内部头（同 json_common.h 先例：仅 Core 内部 .cpp
 //       以相对路径包含，绝不外泄公共头）。
 // 常量层：本头内的 keys:: / defs:: / nums:: 三个别名是 §7 键名 / 兜底默认串 / 数字兜底的
@@ -14,17 +14,19 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cmath>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "engine/engine.h"
 #include "core/core_nums.h"  // §7 兜底默认数字单一真相源（常量层）
+#include "core/percent.h"    // 权重可写百分比串（"25%"）
 #include "i18n/core_texts.h" // §7 JSON 键名与兜底默认串单一真相源（常量层）
 
 namespace idc::engine::detail {
 
-using json = nlohmann::json;
+using json = jsonutil::json; // 与 json_common.h 单一类型对齐（ordered_json，保插入序）。
 
 // §7 JSON 键名别名（单一真相源见 include/i18n/core_texts.h）：本头与 engine_config_json.cpp
 //（经 `using namespace detail`）共用同一个 `keys::`，避免两处各引一份而漂移。
@@ -100,12 +102,12 @@ inline SortStrategy strategyFromName(const std::string& s) {
     return SortStrategy::RowMajor;
 }
 
-inline const char* emitModeName(const EmitMode m) {
-    return m == EmitMode::Separate ? "separate" : "merged";
+inline const char* exportModeName(const ExportMode m) {
+    return m == ExportMode::Separate ? "separate" : "merged";
 }
 
-inline EmitMode emitModeFromName(const std::string& s) {
-    return s == "separate" ? EmitMode::Separate : EmitMode::Merged;
+inline ExportMode exportModeFromName(const std::string& s) {
+    return s == "separate" ? ExportMode::Separate : ExportMode::Merged;
 }
 
 inline const char* layoutName(const MergeLayout l) {
@@ -302,18 +304,86 @@ inline RectRegion rectFromJson(const json& v) {
                       jInt(at(v, keys::common::kX2), 0), jInt(at(v, keys::common::kY2), 0));
 }
 
-// 网格参数 ↔ JSON：仅「基准点 + 单元尺寸 + 余量策略」（SPEC §3.4.3）；
-// 行列数由图像边界自动推导，不作为配置字段（无 gap / cols / rows）。
+// 网格参数 ↔ JSON（SPEC §3.4.3）。两种形态互斥：
+//   ① 平铺形态（两轴皆为周期）：平铺 originX/originY/cellWidth/cellHeight + remainder；
+//   ② 分轴形态（分轴定义）：x / y 两个子对象，各自三选一（周期 origin/cell/remainder、分割数 count、比例 weights）。
+// 行列数仍不作为配置字段——分割数与比例都据此导出的切割线定位，不落行列值。
+inline json axisWeightToJson(const double w) {
+    return std::round(w) == w ? json(static_cast<long long>(w)) : json(w);
+}
+
+inline json axisToJson(const GridAxisSpec& a) {
+    switch (a.mode) {
+        case GridAxisMode::Count:
+            return json{{keys::layer::kAxisCount, a.count}};
+        case GridAxisMode::Weights: {
+            json arr = json::array();
+            for (const double w : a.weights) arr.push_back(axisWeightToJson(w));
+            return json{{keys::layer::kAxisWeights, arr}};
+        }
+        case GridAxisMode::Pitch:
+            break;
+    }
+    return json{{keys::layer::kAxisOrigin, a.origin}, {keys::layer::kAxisCell, a.cell},
+                {keys::layer::kRemainder, remainderName(a.remainder)}};
+}
+
+// 权重元素：整数 / 小数 → 原值；百分比串 → 折成百分数量级（"25%" → 25），只取相对比例。
+inline double axisWeightFromJson(const json& v) {
+    if (v.is_number()) return v.get<double>();
+    if (v.is_string()) {
+        if (const auto ratio = core::parsePercent(v.get_ref<const std::string&>()); ratio.has_value()) return *ratio * 100.0;
+    }
+    return 0.0;
+}
+
+// 按键组判别三态（校验已在 validateAxisObj 先行完成，此处只管读取）：
+//   含 count → 分割数；含 weights → 比例；否则周期（缺省值 origin 0 / cell 1 / discard）。
+inline GridAxisSpec axisFromJson(const json& v) {
+    GridAxisSpec a;
+    if (v.contains(keys::layer::kAxisCount)) {
+        a.mode = GridAxisMode::Count;
+        a.count = jInt(at(v, keys::layer::kAxisCount), 1);
+        return a;
+    }
+    if (v.contains(keys::layer::kAxisWeights)) {
+        a.mode = GridAxisMode::Weights;
+        if (const json& arr = at(v, keys::layer::kAxisWeights); arr.is_array()) {
+            for (const json& w : arr) a.weights.push_back(axisWeightFromJson(w));
+        }
+        return a;
+    }
+    a.mode = GridAxisMode::Pitch;
+    a.origin = jInt(at(v, keys::layer::kAxisOrigin), 0);
+    a.cell = jInt(at(v, keys::layer::kAxisCell), 1);
+    a.remainder = remainderFromName(jStr(at(v, keys::layer::kRemainder), defs::kRemainderDiscard));
+    return a;
+}
+
 inline json gridToJson(const GridParams& g) {
-    return json{
-        {keys::layer::kOriginX, g.originX}, {keys::layer::kOriginY, g.originY},
-        {keys::config::kCellWidth, g.cellWidth}, {keys::config::kCellHeight, g.cellHeight},
-        {keys::layer::kRemainder, remainderName(g.remainder)},
-    };
+    // 两轴皆为隐式周期 → 保持平铺形态（旧配置往返逐字节可比）。
+    if (!g.axisX.has_value() && !g.axisY.has_value()) {
+        return json{
+            {keys::layer::kOriginX, g.originX}, {keys::layer::kOriginY, g.originY},
+            {keys::config::kCellWidth, g.cellWidth}, {keys::config::kCellHeight, g.cellHeight},
+            {keys::layer::kRemainder, remainderName(g.remainder)},
+        };
+    }
+    // 任一分轴显式定义 → 两轴都写子对象（缺省轴即「整轴 1 份」），避免与平铺键混写。
+    const GridAxisSpec x = g.axisX.has_value() ? *g.axisX : [] { GridAxisSpec s; s.mode = GridAxisMode::Count; s.count = 1; return s; }();
+    const GridAxisSpec y = g.axisY.has_value() ? *g.axisY : [] { GridAxisSpec s; s.mode = GridAxisMode::Count; s.count = 1; return s; }();
+    return json{{keys::layer::kAxisX, axisToJson(x)}, {keys::layer::kAxisY, axisToJson(y)}};
 }
 
 inline GridParams gridFromJson(const json& v) {
     GridParams g;
+    if (v.contains(keys::layer::kAxisX) || v.contains(keys::layer::kAxisY)) {
+        // 分轴形态：缺省轴即「整轴 1 份」（不作周期缺省——那会按默认 cell=1 切成像素行）。
+        GridAxisSpec one; one.mode = GridAxisMode::Count; one.count = 1;
+        g.axisX = v.contains(keys::layer::kAxisX) ? axisFromJson(at(v, keys::layer::kAxisX)) : one;
+        g.axisY = v.contains(keys::layer::kAxisY) ? axisFromJson(at(v, keys::layer::kAxisY)) : one;
+        return g;
+    }
     g.originX = jInt(at(v, keys::layer::kOriginX), 0); g.originY = jInt(at(v, keys::layer::kOriginY), 0);
     g.cellWidth = jInt(at(v, keys::config::kCellWidth), 1); g.cellHeight = jInt(at(v, keys::config::kCellHeight), 1);
     g.remainder = remainderFromName(jStr(at(v, keys::layer::kRemainder), defs::kRemainderDiscard));

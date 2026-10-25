@@ -83,6 +83,8 @@ public:
     // ------ 查询与合成 ------
     // 命中检测：从顶层开始返回第一个命中的索引（填充形状优先判内部，其余按轮廓邻近判定），未命中 nullopt。
     std::optional<std::size_t> hitTest(const core::Point2D& p) const;
+    // 全部命中：从顶层向底层返回所有命中索引（判定规则同 hitTest）——供同点连击循环选中。
+    std::vector<std::size_t> hitTestAll(const core::Point2D& p) const;
     // 以传入底图为基准逐条光栅化全部标注（后入列表者覆盖先入者），返回新 RGBA 图像；
     // 底图为空时退化为 1×1 透明图。不修改集合自身。
     core::Image burnIn(const core::Image& base) const;

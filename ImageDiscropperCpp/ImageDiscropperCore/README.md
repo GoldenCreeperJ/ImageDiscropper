@@ -4,7 +4,7 @@
 （纯逻辑静态库，命名空间 `idc`）。它是功能规格 [`../SPEC.md`](../../SPEC.md) 所述三层架构
 （Core / CLI / GUI）中的 **Core**，不依赖任何 GUI，可被上层 CLI 与 GUI 直接引用。
 
-> Grid-Selection-Emit 统一引擎的完整实现落于此库；三层模式（L1/L2/L3）共用同一条代码路径（NFR-0）。
+> Grid-Selection-Export 统一引擎的完整实现落于此库；三层模式（L1/L2/L3）共用同一条代码路径（NFR-0）。
 
 ---
 
@@ -19,7 +19,7 @@
 
 | 模块           | 命名空间              | 层         | 职责（细节见各子目录 README）                                                                                                                                        | 对应规格                          |
 |--------------|-------------------|-----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------|
-| `engine`     | `idc::engine`     | ★ 核心      | Grid-Selection-Emit 统一引擎：切割线 / 网格 / 切分 / 选择极性 / 排序 / 合成 / 导出 / 配置 JSON / 顶层编排 `runEngine`。                                                                | SPEC §1 全部核心概念                |
+| `engine`     | `idc::engine`     | ★ 核心      | Grid-Selection-Export 统一引擎：切割线 / 网格 / 切分 / 选择极性 / 排序 / 合成 / 导出 / 配置 JSON / 顶层编排 `runEngine`。                                                              | SPEC §1 全部核心概念                |
 | `core`       | `idc::core`       | 支撑（地基）    | 基础数据类型 `Color` / `Point2D` / `Image`（含 `resized`/`scaled`/`colorAt` 等通用像素原语）与 `compositeOver`；header-only 泛型撤销栈 `HistoryManager<T>`、有序步骤队列 `Pipeline<T>`。 | SPEC §2.2 / FR-1.5 / NFR-4    |
 | `io`         | `idc::io`         | 支撑（基础 IO） | 图像编解码：`readImageFile` / `writeImageFile` / 内存编码。底层 stb（PNG/JPEG/BMP）+ libwebp（WebP），第三方类型不经公共头扩散。                                                         | SPEC §4.5 / §5 E-8            |
 | `geometry`   | `idc::geometry`   | 支撑        | 标注图形几何：`ShapeType` / `Shape` / `Path` / `AffineTransform`。                                                                                                | FR-1.3 标注几何                   |
@@ -37,20 +37,20 @@
 
 SPEC §1 流水线概念在本库中的落点如下（✅ 表示数据结构与算法均已落地）：
 
-| 规格概念                   | 本库类型 / 接口                                                                                                                     | 头文件                                |
-|------------------------|-------------------------------------------------------------------------------------------------------------------------------|------------------------------------|
-| `Image`                | `idc::core::Image`                                                                                                            | `core/image.h`                     |
-| `Region` / `RegionSet` | `idc::engine::RectRegion` / `RegionKind` / `RegionSet` / `Fragment`                                                           | `engine/region.h` / `region_set.h` |
-| 切割线（cut line）          | `idc::engine::CutLine` / `CutLineSet`                                                                                         | `engine/cut_line.h`                |
-| `Grid`                 | `idc::engine::Grid` / `Cell` / `GridParams`（`build()` / `induceGrid()`）                                                       | `engine/grid.h`                    |
-| `Selection`            | `idc::engine::Selection` / `Polarity`（`resolve()` / `applyPolarity()`）                                                        | `engine/selection.h`               |
-| `Sequence`             | `idc::engine::Sequence` / `SortStrategy`（`build()`）                                                                           | `engine/sequence.h`                |
-| `Composition`          | `idc::engine::Composition` / `MergeLayout` / `MergeOrder`（`isCollapsible()` / `compose()`）                                    | `engine/composition.h`             |
-| 流水线编排                  | `generateCutLines` / `induceGrid` / `split` / `applyPolarity` / `compose` / `exportImage` / `runEngine` / `runEngineGeometry` | `engine/engine.h`                  |
-| 图像编解码 I/O              | `readImageFile` / `writeImageFile` / 内存编码（stb + libwebp，路径按 UTF-8 解析）                                                         | `io/image_io.h`                    |
-| 多层画布图层                 | `idc::canvas::ImageLayer` / `materializeLayer` / `composeCanvas` / `composeBase`                                              | `canvas/layer.h`                   |
-| 配置 JSON                | `saveEngineConfig` / `loadEngineConfig`（SPEC §7 整档往返，可选 `annotations` 段随配置读写）                                                 | `engine/engine_config_json.h`      |
-| 标注图层（burn-in）          | `idc::annotation::AnnotationSet::burnIn(base)` / `restore`                                                                    | `annotation/annotation_set.h`      |
+| 规格概念                   | 本库类型 / 接口                                                                                                                                      | 头文件                                |
+|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|
+| `Image`                | `idc::core::Image`                                                                                                                             | `core/image.h`                     |
+| `Region` / `RegionSet` | `idc::engine::RectRegion` / `RegionKind` / `RegionSet` / `Fragment`                                                                            | `engine/region.h` / `region_set.h` |
+| 切割线（cut line）          | `idc::engine::CutLine` / `CutLineSet`                                                                                                          | `engine/cut_line.h`                |
+| `Grid`                 | `idc::engine::Grid` / `Cell` / `GridParams` / `GridAxisSpec`（单轴三态）/ `GridAxisMode` / `effectiveAxis` / `checkAxis`（`build()` / `induceGrid()`） | `engine/grid.h`                    |
+| `Selection`            | `idc::engine::Selection` / `Polarity`（`resolve()` / `applyPolarity()`）                                                                         | `engine/selection.h`               |
+| `Sequence`             | `idc::engine::Sequence` / `SortStrategy`（`build()`）                                                                                            | `engine/sequence.h`                |
+| `Composition`          | `idc::engine::Composition` / `MergeLayout` / `MergeOrder`（`isCollapsible()` / `compose()`）                                                     | `engine/composition.h`             |
+| 流水线编排                  | `generateCutLines` / `induceGrid` / `split` / `applyPolarity` / `compose` / `exportImage` / `runEngine` / `runEngineGeometry`                  | `engine/engine.h`                  |
+| 图像编解码 I/O              | `readImageFile` / `writeImageFile` / 内存编码（stb + libwebp，路径按 UTF-8 解析）                                                                          | `io/image_io.h`                    |
+| 多层画布图层                 | `idc::canvas::ImageLayer` / `materializeLayer` / `composeCanvas` / `composeBase`                                                               | `canvas/layer.h`                   |
+| 配置 JSON                | `saveEngineConfig` / `loadEngineConfig`（SPEC §7 整档往返，可选 `annotations` 段随配置读写）                                                                  | `engine/engine_config_json.h`      |
+| 标注图层（burn-in）          | `idc::annotation::AnnotationSet::burnIn(base)` / `restore`                                                                                     | `annotation/annotation_set.h`      |
 
 三种模式即引擎的不同参数预设（SPEC §1）：
 
@@ -58,7 +58,7 @@ SPEC §1 流水线概念在本库中的落点如下（✅ 表示数据结构与�
 - **反向剔除**：`split → select → remove → export`（`Polarity::Remove`）
 - **网格重组**：`grid → select → sequence → compose → export`
 
-> **合并重排的两个"顺序"正交**：`Sequence`（选择排序）决定保留块的先后列表；`MergeOrder`（行/列优先 + 蛇形 + 倒序）决定该列表铺进输出画布的路径。合并重排**仅 L3 网格模式支持**，其余显式请求重排直接报错（不自动降级）。
+> **合并重排的两个"顺序"正交**：`Sequence`（选择排序）决定保留块的先后列表；`MergeOrder`（行/列优先 + 蛇形 + 倒序）决定该列表铺进输出画布的路径。合并重排**仅 L3 网格模式支持**，其余显式请求重排直接报错（不自动降级）；重排另有准入门限（SPEC §4.3）：**保留块长宽全等**才可重排，不全等时按「可坍缩 → 坍缩，否则 → 分离导出」逐级回退（结果见 `EngineResult::uniformBlocks`）。
 
 ---
 
@@ -70,7 +70,7 @@ CutLineSet lines = generateCutLines(cfg.cut, cfg.source);   // ①
 Grid grid        = induceGrid(lines, cfg.source);           // ②
 RegionSet all    = split(image, grid);                      // split
 RegionSet kept   = applyPolarity(all, selection);           // ③④
-Composition comp = compose(kept, sequence, cfg.emitParams); // ⑤
+Composition comp = compose(kept, sequence, cfg.exportParams); // ⑤
 exportImage(comp, image, outputPath);                       // export
 // 或一次跑通（不落盘，返回保留集 + 合成描述）：
 EngineResult r = runEngine(image, cfg);
@@ -95,7 +95,7 @@ ImageDiscropperCore/
 │   ├── preprocess/           预处理流水线：PreprocessConfig / PreprocessPipeline（像素核 pixel_kernels 为 src 私有）
 │   ├── canvas/               多层画布数据模型与合成：ImageLayer / composeCanvas（零 GUI、无 IO）
 │   ├── generate/             程序化图案生成：makePattern / PatternKind / PatternParams
-│   └── engine/               ★ Grid-Selection-Emit 统一引擎接口
+│   └── engine/               ★ Grid-Selection-Export 统一引擎接口
 ├── src/                      对应 include 的实现（含私有内部头 json_common.h、engine_config_json_internal.h、pixel_kernels.h）
 ├── examples/                 演示程序 demo_main.cpp（真正跑通引擎并导出到 demo_output/）
 └── tests/                    自测 test_main.cpp + test_engine_*.cpp（引擎验收）+ test_i18n_*.cpp（i18n 内核与目录对账）
@@ -114,7 +114,7 @@ ImageDiscropperCore/
 - **libwebp**：WebP 编解码（补齐 stb 不支持的格式）—— `find_package(WebP CONFIG REQUIRED)` 链接 `WebP::webp`，仅 `src/io/image_io.cpp` 使用。
 - **nlohmann/json**（单头）：配置与标注 JSON 存取 —— `find_package(nlohmann_json CONFIG REQUIRED)` 链接 `nlohmann_json::nlohmann_json`，仅 `engine_config_json.cpp` 与 `annotation/annotation_json.cpp` 使用。
 
-先安装依赖（`vcpkg install stb libwebp nlohmann-json`），再配置构建：
+依赖由 vcpkg 清单模式自动安装（清单 [`../vcpkg.json`](../vcpkg.json) 在 `ImageDiscropperCpp/` 根，设置 `VCPKG_ROOT` 指向 vcpkg 即可，无需手动 `vcpkg install`）；配置构建：
 
 ```bash
 cmake -S . -B build
@@ -131,9 +131,10 @@ cmake --build build --config Release
 
 ## 6. 本库特有约定
 
-- **坐标约定**（SPEC §2.1）：整数像素、原点左上、`x` 向右 `y` 向下、区间左闭右开 `[a, b)`。
+- **坐标约定**（SPEC §2.1）：整数像素、原点左上、`x` 向右 `y` 向下、区间左闭右开 `[a, b)`。有基准尺寸的几何量另可写**百分比串** `"50%"`：换算为 `round(比例 × 基准)`（横向取宽、纵向取高），`core/percent.h` 是唯一换算口径；§7 载入时把百分比就地换成像素并记 `PercentHint`（JSON Pointer + 比例 + 像素），保存时对「未被编辑」的字段原样回写 `"N%"`（`saveEngineConfig` 第 5 参 / `loadEngineConfig` 第 4 参）。段级入口（`parseAnnotationsFromJsonText` / `parseImageLayersFromJsonText`）不作回写：调用方传入基准尺寸（标注＝工作图、图层 `transform`＝画布），写百分比而基准未知报错而非归零。
 - **像素存储**：`Image` 支持 `RGB` / `RGBA` / `GRAY` 三种模式，行主序、通道交错。
 - **引擎实现**：三层模式（L1/L2/L3）共用同一条代码路径，仅为参数预设（NFR-0）；导出编码支持 PNG/JPEG/BMP（stb）与 WebP（libwebp）。
+- **L3 网格定义三态**（SPEC §3.4.3）：单轴 `GridAxisSpec` 三选一——**周期**（`origin` / `cell` / `remainder`）/ **分割数**（`count`）/ **比例**（`weights`，整数比与百分比串都只取相对比例、不换算像素）；两轴可各用各的。`effectiveAxis` 取有效定义（`axisX`/`axisY` 显式优先，否则由平铺字段 + 网格级余量策略合成周期），`checkAxis` 给出精确报因，`Grid::build` 逐轴展开后笛卡尔积。**分割数是比例的等权特例**（`count = n` ≡ `weights = [1, …, 1]`）；分割数 / 比例恰好铺满、不产生残缺单元，故余量策略仅周期轴生效。旧配置的平铺四键语义与行为逐字节不变（两轴皆为周期）。
 - **路径编码**：所有文件打开（读写图像、配置、导出）以 **UTF-8** 解析路径（`core::pathFromUtf8` / `pathToUtf8`，取代 C++23 已移除的 `u8path`），中文 / 非 ASCII 路径可读写；上游须传 UTF-8。
 - **多层画布是画布层**：`runEngine` 永远只收一张展平的画布图 + 空 preprocess；图层栈合成与逐层预处理在 Core 内完成、不入引擎。图层资源以相对名引用、位图不入配置（缺文件降级为占位）。
 - **i18n 内核住本层、译文表不住**：`i18n/core_i18n.h`（零 Qt）持有唯一的进程级语言状态（已装语言表 + 当前语言），GUI / CLI / Core 三层共用同一张扁平表（键 = `分组::常量名`）；Core 只放自己的报因与图案名表（`src/i18n/lang_en.cpp`），GUI / CLI 的文案仍住各自层的 `lang_en.cpp`。源语言 zh-CN 不建表（回退常量层原文）。机制详见根 [`../README.md`](../README.md)「三层共用的 i18n」与 [include/i18n/README.md](include/i18n/README.md)。

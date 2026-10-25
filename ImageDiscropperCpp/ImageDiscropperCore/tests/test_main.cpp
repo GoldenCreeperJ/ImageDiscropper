@@ -8,6 +8,7 @@
 // ============================================================================
 #include <array>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <random>
 #include <string>
@@ -29,8 +30,13 @@
 #include "preprocess/preprocess_pipeline.h"
 #include "generate/pattern.h"
 #include "canvas/layer.h"   // 多层画布：ImageLayer / composeCanvas / materializeLayer
+#include "engine/engine_config_json.h"   // saveEngineConfig / loadEngineConfig（配置资产字段往返）
+#include "io/image_io.h"   // readImageFile / writeImageFile（资产解码 / 打包测试）
 // 跨模块直编（unit_tests 已将 GUI annotation_editor.cpp 编入）：恢复标注会话态断言。
 #include "model/annotation_editor.h"
+#include "model/config_assets.h"   // GUI 配置资产助手（零 Qt，跨模块直编回归）：查找链 / 解码注入 / 打包
+#include "canvas/drag_gesture.h"   // 平移拖拽手势（零 Qt，跨模块直编回归；见 canvas/pick_cycle.h 同纪律）
+#include "canvas/pick_cycle.h"     // 同点连击循环选层（零 Qt，跨模块直编回归）
 // 跨模块直编（unit_tests 已将 GUI preprocess_session.cpp 编入）：预处理会话（零 Qt）的不变式/归一化/缓存断言。
 #include "model/preprocess_session.h"
 
@@ -522,7 +528,294 @@ static void testAnnotation() {
         CHECK(burned.width() == 1 && burned.height() == 1);
     }
 
+    // ---- AnnotationEditor：重叠连击循环（pickAt / cycleAt / hitTestAll / closedForFill）回归 ----
+    {
+        using gui::AnnotationEditor;
+        auto makeRect = [](const double x0, const double y0, const double x1, const double y1, const bool) {
+            annotation::ShapeRequest r;
+            r.type = geometry::ShapeType::Rectangle;
+            r.p1 = {x0, y0};
+            r.p2 = {x1, y1};
+            auto s = annotation::buildShape(r);
+            return s;
+        };
+
+        AnnotationEditor ed;
+        std::vector<annotation::Annotation> items;
+        for (int i = 0; i < 3; ++i) {   // 三矩形同区域叠放：zOrder 0/1/2
+            annotation::Annotation a;
+            a.shape = makeRect(100, 100, 200, 200, true);
+            a.style.fill = true;
+            items.push_back(std::move(a));
+        }
+        ed.restoreAnnotations(std::move(items));
+        const core::Point2D p{150, 150};
+
+        // hitTestAll：自顶向下（2=最顶）返回全部命中；hitTest 返回最顶。
+        //   （hitTestAll 在 AnnotationSet 上，编辑器经同构集合验证顺序）
+        const auto all = [&] {
+            annotation::AnnotationSet probe;
+            std::vector<annotation::Annotation> copy;
+            for (const auto& a : ed.annotations()) copy.push_back(a);
+            probe.restore(std::move(copy));
+            return probe.hitTestAll(p);
+        }();
+        CHECK(all.size() == 3);
+        CHECK(all[0] == 2 && all[1] == 1 && all[2] == 0);
+        CHECK(ed.hitTest(p).has_value() && *ed.hitTest(p) == 2);
+
+        // pickAt：未选中 → 选最顶；选中项在命中栈内 → 保持（拖动跟随选中项）。
+        CHECK(*ed.pickAt(p) == 2);
+        ed.selectAnnotation(1);
+        CHECK(*ed.pickAt(p) == 1);
+        ed.selectAnnotation(std::nullopt);
+
+        // 一次点击 = pickAt + cycleAt：每次只推进一位；自顶向下循环并回绕。
+        auto clickOnce = [&](const core::Point2D& pt) {
+            ed.selectAnnotation(ed.pickAt(pt));
+            ed.selectAnnotation(ed.cycleAt(pt));
+            return ed.selectedAnnotationIndex();
+        };
+        CHECK(*clickOnce(p) == 2);   // 首击选最顶
+        CHECK(*clickOnce(p) == 1);   // 同点续击下探一位
+        CHECK(*clickOnce(p) == 0);
+        CHECK(*clickOnce(p) == 2);   // 到底回顶
+
+        // 换点 → 游标重置为最顶。
+        const core::Point2D q{110, 110};
+        CHECK(*clickOnce(q) == 2);
+
+        // closedForFill：开放折线补闭合边后 contains 覆盖靠闭合边一侧区域（左瓣）。
+        geometry::Path bow;
+        bow.moveTo(0, 0);
+        bow.lineTo(100, 0);
+        bow.lineTo(0, 100);
+        bow.lineTo(100, 100);        // 未闭合
+        const geometry::Path closed = bow.closedForFill();
+        CHECK(!bow.contains(50, 50));             // 开路径偶奇溢区不含交叉点附近
+        (void)closed;
+        CHECK(closed.contains(50, 75));           // 闭合后下瓣内部可判内
+        CHECK(closed.contains(50, 25));           // 上瓣内部可判内
+    }
+
     std::cout << "[annotation] OK\n";
+}
+
+// ---------------------------------------------------------------------------
+// 平移拖拽手势（零 Qt 值类型，跨模块直编）测试：点击/拖动判定与位移累积
+// ---------------------------------------------------------------------------
+static void testDragGesture() {
+    using namespace idc;
+    gui::DragGesture g;
+
+    // 纯点击（起手后直接 end）：wasClick==true、零位移；end 复位后可再次起手势。
+    g.start(10.0, 20.0);
+    {
+        const auto [wasClick, dx, dy] = g.end();
+        CHECK(wasClick);
+        CHECK(dx == 0.0 && dy == 0.0);
+        CHECK(!g.active());
+    }
+
+    // 拖动：moved 由「收到过非零位移」判定（与缩放/设备像素阈值无关），净位移正确累计。
+    g.start(0.0, 0.0);
+    g.moveTo(3.0, 0.0);
+    g.moveTo(5.0, -2.0);
+    {
+        const auto [wasClick, dx, dy] = g.end();
+        CHECK(!wasClick);
+        CHECK(dx == 5.0 && dy == -2.0);
+    }
+
+    // 折返归零：发生位移但净位移为零 → 仍判拖动（wasClick==false，不推进连击循环）、零提交量。
+    g.start(100.0, 100.0);
+    g.moveTo(105.0, 102.0);
+    g.moveTo(100.0, 100.0);
+    {
+        const auto [wasClick, dx, dy] = g.end();
+        CHECK(!wasClick);
+        CHECK(dx == 0.0 && dy == 0.0);
+    }
+
+    // 未起手势时 moveTo 忽略（安全护栏，与图元层 if (!active) return 语义一致）。
+    g.moveTo(999.0, 999.0);
+    {
+        const auto [wasClick, dx, dy] = g.end();
+        CHECK(wasClick);   // 空手势 end 视为原地点击（不触发任何提交路径）
+        CHECK(dx == 0.0 && dy == 0.0);
+    }
+
+    std::cout << "[drag_gesture] OK\n";
+}
+
+// ---------------------------------------------------------------------------
+// 同点连击循环选层（零 Qt 值类型，跨模块直编）测试：按下解析纯查询 / 点击推进 / 复位
+// ---------------------------------------------------------------------------
+static void testPickCycle() {
+    using namespace idc;
+    using Cycle = gui::PickCycle<int>;
+    constexpr double tol = 5.0;
+
+    // resolveOnPress（纯查询）：当前选中仍在栈内 → 保持（拖动跟随选中项）；不在 → 栈顶；空栈 → nullopt。
+    {
+        const std::vector stack{3, 2, 1};
+        CHECK(Cycle::resolveOnPress(stack, std::optional{2}) == std::optional{2});
+        CHECK(Cycle::resolveOnPress(stack, std::optional{9}) == std::optional{3});
+        CHECK(Cycle::resolveOnPress(stack, std::nullopt) == std::optional{3});
+        CHECK(!Cycle::resolveOnPress({}, std::optional{1}).has_value());
+    }
+
+    // advanceOnClick：首次点击复位到栈顶（不推进）；同点同栈续击下探一位，到底回顶。
+    {
+        Cycle c;
+        const std::vector stack{3, 2, 1};
+        CHECK(c.advanceOnClick(10, 10, stack, tol) == std::optional{3});   // 首击：栈顶
+        CHECK(c.advanceOnClick(10, 10, stack, tol) == std::optional{2});
+        CHECK(c.advanceOnClick(10, 10, stack, tol) == std::optional{1});
+        CHECK(c.advanceOnClick(10, 10, stack, tol) == std::optional{3});   // 到底回顶
+    }
+
+    // 换点 → 复位栈顶：容差内视作同点（距(0,0)=5 恰在边界），超出即换点。
+    {
+        Cycle c;
+        const std::vector stack{3, 2, 1};
+        CHECK(c.advanceOnClick(0, 0, stack, tol) == std::optional{3});
+        CHECK(c.advanceOnClick(3, 4, stack, tol) == std::optional{2});   // 容差边界内：续击
+        CHECK(c.advanceOnClick(30, 30, stack, tol) == std::optional{3}); // 换点：复位栈顶
+    }
+
+    // 命中栈变化（与位置无关）→ 复位栈顶。
+    {
+        Cycle c;
+        const std::vector a{3, 2, 1};
+        const std::vector b{9, 8};
+        CHECK(c.advanceOnClick(10, 10, a, tol) == std::optional{3});
+        CHECK(c.advanceOnClick(10, 10, a, tol) == std::optional{2});
+        CHECK(c.advanceOnClick(10, 10, b, tol) == std::optional{9});
+    }
+
+    // 空栈 → 清循环态返回 nullopt；其后同点同栈从栈顶重新起算（不沿旧游标续推）。
+    {
+        Cycle c;
+        const std::vector stack{3, 2, 1};
+        CHECK(c.advanceOnClick(10, 10, stack, tol) == std::optional{3});
+        CHECK(c.advanceOnClick(10, 10, stack, tol) == std::optional{2});
+        CHECK(!c.advanceOnClick(10, 10, {}, tol).has_value());
+        CHECK(c.advanceOnClick(10, 10, stack, tol) == std::optional{3});
+    }
+
+    // reset（拖动提交后清历史）：同点同栈也回到栈顶，不续推陈旧游标。
+    {
+        Cycle c;
+        const std::vector stack{3, 2, 1};
+        CHECK(c.advanceOnClick(10, 10, stack, tol) == std::optional{3});
+        CHECK(c.advanceOnClick(10, 10, stack, tol) == std::optional{2});
+        c.reset();
+        CHECK(c.advanceOnClick(10, 10, stack, tol) == std::optional{3});
+    }
+
+    std::cout << "[pick_cycle] OK\n";
+}
+
+// ---------------------------------------------------------------------------
+// GUI 配置资产助手（零 Qt，跨模块直编）测试：越界判定 / 查找链 / 解码注入 / 打包 / assetsDir 往返
+// ---------------------------------------------------------------------------
+static void testConfigAssets() {
+    using namespace idc;
+    namespace fs = std::filesystem;
+    std::error_code ec;
+
+    // isSafeLayerAsset：相对名安全判定（与 CLI 同规）。
+    CHECK(gui::isSafeLayerAsset("a.png"));
+    CHECK(gui::isSafeLayerAsset("sub/a.png"));
+    CHECK(!gui::isSafeLayerAsset(""));
+    CHECK(!gui::isSafeLayerAsset("../a.png"));
+    CHECK(!gui::isSafeLayerAsset("sub/../../a.png"));
+
+    // 临时目录骨架：dir/cfg.json；dir/sub/a.png（配置目录层）；dir/cfg.assets/sub/b.png（约定层）；
+    //   dir/custom/c.png（assetsDir 声明层）；dir/override/d.png（显式来源层）。
+    const fs::path dir = fs::temp_directory_path() / "idc_cfgassets_test";
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir / "sub", ec);
+    fs::create_directories(dir / "cfg.assets" / "sub", ec);
+    fs::create_directories(dir / "custom", ec);
+    fs::create_directories(dir / "override", ec);
+    core::Image one(2, 2, core::ImageFormat::Rgba);
+    one.fill(core::kWhite);
+    CHECK(io::writeImageFile((dir / "sub" / "a.png").string(), one, engine::ExportFormat::Png, 90, core::kTransparent).has_value());
+    CHECK(io::writeImageFile((dir / "cfg.assets" / "sub" / "b.png").string(), one, engine::ExportFormat::Png, 90, core::kTransparent).has_value());
+    CHECK(io::writeImageFile((dir / "custom" / "c.png").string(), one, engine::ExportFormat::Png, 90, core::kTransparent).has_value());
+    CHECK(io::writeImageFile((dir / "override" / "d.png").string(), one, engine::ExportFormat::Png, 90, core::kTransparent).has_value());
+    const std::string cfgPath = (dir / "cfg.json").string();
+
+    // 查找链：约定 .assets → 配置目录；声明目录（config.assetsDir）优于约定；显式来源最优先。
+    CHECK(gui::resolveLayerAsset(cfgPath, /*declared=*/"", /*override=*/"", "sub/b.png") == dir / "cfg.assets" / "sub" / "b.png");
+    CHECK(gui::resolveLayerAsset(cfgPath, "", "", "sub/a.png") == dir / "sub" / "a.png");
+    CHECK(gui::resolveLayerAsset(cfgPath, "custom", "", "c.png") == dir / "custom" / "c.png");
+    CHECK(gui::resolveLayerAsset(cfgPath, "", (dir / "override").string(), "d.png") == dir / "override" / "d.png");
+    CHECK(gui::resolveLayerAsset(cfgPath, "", "", "nope.png").empty());
+
+    // decodeFileLayers：file 层按链解码注入（含子目录相对名）；缺文件计数、保持空像素；recipe 层不动。
+    {
+        engine::EngineConfig cfg;
+        std::vector<canvas::ImageLayer> layers(3);
+        layers[0].fileName = "sub/a.png";
+        layers[1].fileName = "missing.png";
+        layers[2].recipe = generate::PatternParams{};
+        cfg.layers = std::move(layers);
+        int missing = 0;
+        std::string err;
+        CHECK(gui::decodeFileLayers(cfg, cfgPath, "", missing, err));
+        CHECK(missing == 1);
+        CHECK(!(*cfg.layers)[0].decodedPixels.empty());
+        CHECK((*cfg.layers)[1].decodedPixels.empty());
+        CHECK((*cfg.layers)[2].recipe.has_value());
+    }
+
+    // decodeFileLayers：越界名 → 拒绝（false + err 非空）。
+    {
+        engine::EngineConfig cfg;
+        std::vector<canvas::ImageLayer> layers(1);
+        layers[0].fileName = "../evil.png";
+        cfg.layers = std::move(layers);
+        int missing = 0;
+        std::string err;
+        CHECK(!gui::decodeFileLayers(cfg, cfgPath, "", missing, err));
+        CHECK(!err.empty());
+    }
+
+    // bundleFileLayers：像素写盘进目标目录（保留相对子路径）；缺像素 / 越界名 → 拒绝。
+    {
+        engine::EngineConfig cfg;
+        std::vector<canvas::ImageLayer> layers(2);
+        layers[0].fileName = "sub/a.png";
+        layers[0].decodedPixels = one;
+        layers[1].fileName = "empty.png";   // 缺像素：不静默。
+        cfg.layers = std::move(layers);
+        std::string err;
+        CHECK(!gui::bundleFileLayers(cfg, dir / "out", err));
+
+        cfg.layers = std::vector<canvas::ImageLayer>(1);
+        (*cfg.layers)[0].fileName = "sub/a.png";
+        (*cfg.layers)[0].decodedPixels = one;
+        CHECK(gui::bundleFileLayers(cfg, dir / "out", err));
+        CHECK(fs::exists(dir / "out" / "sub" / "a.png", ec));
+    }
+
+    // assetsDir 字段往返：保存 → 重载保留（§7 键序不碍字段值）。
+    {
+        engine::EngineConfig cfg;
+        cfg.source = engine::SourceInfo{4, 4};
+        cfg.assetsDir = "custom";
+        const std::string f = (dir / "round.json").string();
+        CHECK(engine::saveEngineConfig(f, cfg).has_value());
+        engine::EngineConfig back;
+        CHECK(engine::loadEngineConfig(f, back).has_value());
+        CHECK(back.assetsDir == "custom");
+    }
+
+    fs::remove_all(dir, ec);
+    std::cout << "[config-assets] OK\n";
 }
 
 // ---------------------------------------------------------------------------
@@ -1046,7 +1339,7 @@ static void testPipeline() {
 }
 
 // ---------------------------------------------------------------------------
-// engine 模块测试：Grid-Selection-Emit 引擎的数据结构骨架（不含算法逻辑）
+// engine 模块测试：Grid-Selection-Export 引擎的数据结构骨架（不含算法逻辑）
 // ---------------------------------------------------------------------------
 static void testEngine() {
     using namespace idc::engine;
@@ -1099,8 +1392,8 @@ static void testEngine() {
     cfg.cut.generator = CutGenerator::Rect;
     cfg.cut.rect = RectRegion(300, 200, 900, 700);
     cfg.cut.polarity = Polarity::Remove;
-    cfg.emitParams.mode = EmitMode::Merged;
-    cfg.emitParams.layout = MergeLayout::Collapse;
+    cfg.exportParams.mode = ExportMode::Merged;
+    cfg.exportParams.layout = MergeLayout::Collapse;
     CHECK(cfg.source.width == 1920 && cfg.cut.tier == Tier::Erase);
     CHECK(cfg.cut.polarity == Polarity::Remove);
 
@@ -1272,8 +1565,8 @@ static void testCanvas() {
     // ---- z 序：顶层不透明覆盖底层（B 2×2 居中盖住 A 4×4 的中央）----
     {
         std::vector<ImageLayer> st;
-        ImageLayer a; a.sourceKind = LayerSourceKind::File; a.decodedPixels = solid(4, 4, red); a.zOrder = 0; a.id = 1;
-        ImageLayer b; b.sourceKind = LayerSourceKind::File; b.decodedPixels = solid(2, 2, blue); b.zOrder = 1; b.id = 2;
+        ImageLayer a; a.decodedPixels = solid(4, 4, red); a.zOrder = 0; a.id = 1;
+        ImageLayer b; b.decodedPixels = solid(2, 2, blue); b.zOrder = 1; b.id = 2;
         st = {b, a};   // 故意乱序存入，验证合成按 zOrder 而非内存序
         const core::Image out = composeCanvas(st, 4, 4);
         CHECK(out.width() == 4 && out.height() == 4);
@@ -1284,8 +1577,8 @@ static void testCanvas() {
 
     // ---- 图片图层整体显隐由调用方处理：传空 layers → 仅底图（透明）；传全层 → 顶层覆盖中央 ----
     {
-        ImageLayer a; a.sourceKind = LayerSourceKind::File; a.decodedPixels = solid(4, 4, red); a.zOrder = 0; a.id = 1;
-        ImageLayer b; b.sourceKind = LayerSourceKind::File; b.decodedPixels = solid(2, 2, blue); b.zOrder = 1; b.id = 2;
+        ImageLayer a; a.decodedPixels = solid(4, 4, red); a.zOrder = 0; a.id = 1;
+        ImageLayer b; b.decodedPixels = solid(2, 2, blue); b.zOrder = 1; b.id = 2;
         const std::vector layers{a, b};
         const core::Image hidden = composeCanvas({}, 4, 4);            // GUI 隐藏态传空 → 仅透明底
         CHECK(hidden.getPixel(1, 1).a == 0);
@@ -1300,8 +1593,8 @@ static void testCanvas() {
         const core::Color composited = core::compositeOver(red, semi);
         CHECK(composited.r == 127 && composited.g == 0 && composited.b == 0 && composited.a == 255);
         std::vector<ImageLayer> st;
-        ImageLayer a; a.sourceKind = LayerSourceKind::File; a.decodedPixels = solid(4, 4, red); a.zOrder = 0;
-        ImageLayer b; b.sourceKind = LayerSourceKind::File; b.decodedPixels = solid(4, 4, semi); b.zOrder = 1;
+        ImageLayer a; a.decodedPixels = solid(4, 4, red); a.zOrder = 0;
+        ImageLayer b; b.decodedPixels = solid(4, 4, semi); b.zOrder = 1;
         st = {a, b};
         const core::Image out = composeCanvas(st, 4, 4);
         CHECK(out.getPixel(0, 0) == core::Color(127, 0, 0, 255));
@@ -1310,8 +1603,8 @@ static void testCanvas() {
     // ---- 越界裁剪：图层整体落在画布外（自由偏移 +10,+10）→ 不写入、不崩溃 ----
     {
         std::vector<ImageLayer> st;
-        ImageLayer a; a.sourceKind = LayerSourceKind::File; a.decodedPixels = solid(4, 4, red); a.zOrder = 0;
-        ImageLayer c; c.sourceKind = LayerSourceKind::File; c.decodedPixels = solid(2, 2, green); c.zOrder = 1;
+        ImageLayer a; a.decodedPixels = solid(4, 4, red); a.zOrder = 0;
+        ImageLayer c; c.decodedPixels = solid(2, 2, green); c.zOrder = 1;
         c.transform.inCanvasAnchor = generate::ImageAnchor::TopLeft;   // 锚左上，枢轴左上，再 +10,+10 → 全出界
         c.transform.layerPivot = generate::ImageAnchor::TopLeft;
         c.transform.x = 10; c.transform.y = 10;
@@ -1324,7 +1617,7 @@ static void testCanvas() {
     {
         std::vector<ImageLayer> st;
         // 画布恒透明底（composeCanvas 无级背景）
-        ImageLayer b; b.sourceKind = LayerSourceKind::File; b.decodedPixels = solid(2, 2, blue); b.zOrder = 0;
+        ImageLayer b; b.decodedPixels = solid(2, 2, blue); b.zOrder = 0;
         b.transform.inCanvasAnchor = generate::ImageAnchor::TopRight;   // 画布点 = (W, 0) = (4,0)
         b.transform.layerPivot = generate::ImageAnchor::TopLeft;        // 图层点 = (0,0) → offset=(4,0)
         st = {b};
@@ -1341,7 +1634,7 @@ static void testCanvas() {
     // ---- 配方层：recipe 经 makePattern 现算（Solid 绿 2×2），居中入 4×4 ----
     {
         std::vector<ImageLayer> st;
-        ImageLayer rl; rl.sourceKind = LayerSourceKind::Recipe;
+        ImageLayer rl;
         generate::PatternParams pp; pp.kind = generate::PatternKind::Solid; pp.background = green;
         rl.recipe = pp; rl.transform.width = 2; rl.transform.height = 2; rl.zOrder = 0;
         st = {rl};
@@ -1352,7 +1645,7 @@ static void testCanvas() {
 
     // ---- 逐层预处理物化：File 层不透明红 + Invert → materialize 反色、alpha 不变（不透明度属合成期，非预处理步）----
     {
-        ImageLayer a; a.sourceKind = LayerSourceKind::File; a.decodedPixels = solid(2, 2, red);
+        ImageLayer a; a.decodedPixels = solid(2, 2, red);
         a.preprocess.add(preprocess::InvertOp{"111"});
         const core::Image mat = materializeLayer(a);
         CHECK(mat.getPixel(0, 0) == core::Color(0, 255, 255, 255));
@@ -1361,7 +1654,7 @@ static void testCanvas() {
     // ---- layerPlacement 落位矩形（拾取几何，与 composeCanvas 同口径）----
     {
         // 默认 Center/Center/(0,0)：File 4×4 入 8×8 画布 → 居中 offset=(2,2)。
-        ImageLayer a; a.sourceKind = LayerSourceKind::File; a.decodedPixels = solid(4, 4, red); a.id = 1;
+        ImageLayer a; a.decodedPixels = solid(4, 4, red); a.id = 1;
         const auto p = layerPlacement(a, 8, 8);
         CHECK(p.has_value() && p->x == 2 && p->y == 2 && p->width == 4 && p->height == 4);
         // TopLeft 锚 + TopLeft 枢轴 → offset=(0,0)；叠加自由偏移 +10,+10 → (10,10)（越界不裁剪，矩形如实返回）。
@@ -1373,12 +1666,12 @@ static void testCanvas() {
         const auto p1 = layerPlacement(a, 8, 8);
         CHECK(p1->x == 10 && p1->y == 10 && p1->width == 4 && p1->height == 4);
         // 目标宽高缩放：4×4 → 6×6，Center 入 8×8 → offset=(1,1)、尺寸 6×6。
-        ImageLayer s; s.sourceKind = LayerSourceKind::File; s.decodedPixels = solid(4, 4, blue);
+        ImageLayer s; s.decodedPixels = solid(4, 4, blue);
         s.transform.width = 6; s.transform.height = 6;
         const auto ps = layerPlacement(s, 8, 8);
         CHECK(ps->x == 1 && ps->y == 1 && ps->width == 6 && ps->height == 6);
         // 无可呈现位图（空占位）→ nullopt（合成与拾取跳过）。
-        ImageLayer e; e.sourceKind = LayerSourceKind::Empty;
+        ImageLayer e;
         CHECK(!layerPlacement(e, 8, 8).has_value());
     }
 
@@ -1386,7 +1679,7 @@ static void testCanvas() {
     {
         auto composeOne = [](const core::Color& srcPx, const int opacity) {
             // 透明底
-            ImageLayer a; a.sourceKind = LayerSourceKind::File;
+            ImageLayer a;
             a.decodedPixels = core::Image(1, 1, core::ImageFormat::Rgba);
             a.decodedPixels.setPixel(0, 0, srcPx);
             a.transform.opacity = opacity;
@@ -1404,7 +1697,7 @@ static void testCanvas() {
     // ---- 灰度层不透明度（Gap 2：GRAY 无 alpha 通道，层 opacity 仍生效，getPixel 视作 a=255）----
     {
         std::vector<ImageLayer> st;   // 透明底
-        ImageLayer a; a.sourceKind = LayerSourceKind::File;
+        ImageLayer a;
         core::Image g(2, 2, core::ImageFormat::Gray); g.fill(core::Color(50, 50, 50, 255));
         a.decodedPixels = g;
         a.transform.opacity = 128;   // (255·128+127)/255 = 128
@@ -1417,7 +1710,7 @@ static void testCanvas() {
     {
         // 单层 File：解码像素红 + Invert 预处理（materializeLayer 会反色成青）。
         // 命中预物化表时 composeCanvas 直取表内位图、跳过 materializeLayer，故喂入的位图原样落位。
-        ImageLayer a; a.id = 7; a.sourceKind = LayerSourceKind::File;
+        ImageLayer a; a.id = 7;
         a.decodedPixels = solid(2, 2, red);
         a.preprocess.add(preprocess::InvertOp{"111"});
         a.transform.inCanvasAnchor = generate::ImageAnchor::TopLeft;
@@ -1448,7 +1741,6 @@ static void testCanvas() {
     {
         // Recipe 底（纯图案、无内层落位）：按 source 尺寸现算图案、铺满画布。
         ImageLayer base;
-        base.sourceKind = LayerSourceKind::Recipe;
         generate::PatternParams pp;
         pp.kind = generate::PatternKind::Solid;
         pp.background = green;
@@ -1459,7 +1751,6 @@ static void testCanvas() {
 
         // File 底 + 内层落位：composeBase 内部转调 composeCanvas({base},w,h)，二者逐像素等价（委托契约）。
         ImageLayer fb;
-        fb.sourceKind = LayerSourceKind::File;
         fb.decodedPixels = solid(2, 2, red);
         fb.hasImagePlacement = true;
         fb.boxWidth = 4; fb.boxHeight = 4;
@@ -1478,7 +1769,7 @@ static void testCanvas() {
 
     // ---- 整层生效（色彩及底色）：源空但带底色框 + Invert → 框底色一起被反色（预处理作用于含底色的整层、底色亦参与）----
     {
-        ImageLayer a; a.id = 20; a.sourceKind = LayerSourceKind::File;   // decodedPixels 空（仅靠底色框呈现）
+        ImageLayer a; a.id = 20;   // decodedPixels 空（仅靠底色框呈现）
         a.hasImagePlacement = true; a.boxWidth = 2; a.boxHeight = 2;
         generate::PatternParams bd; bd.kind = generate::PatternKind::Solid; bd.background = green;
         a.boxBackdrop = bd;
@@ -1492,7 +1783,7 @@ static void testCanvas() {
 
     // ---- 整层生效（几何驱动足迹）：源 2×4 + 目标框 2×4 + Rotate90 → 落位 4×2（宽高互换、不被拉回旧框）----
     {
-        ImageLayer a; a.id = 21; a.sourceKind = LayerSourceKind::File;
+        ImageLayer a; a.id = 21;
         a.decodedPixels = solid(2, 4, red);
         a.transform.width = 2; a.transform.height = 4;    // scaleToTarget 不覆盖几何步：旋转后宽高互换，不被拉回 2×4
         a.preprocess.add(preprocess::RotateOp{90});
@@ -1502,7 +1793,7 @@ static void testCanvas() {
 
     // ---- 整层生效（resize 步设新尺寸、覆盖 transform 目标）：源 4×4 + transform 2×2 + Resize6×3 → 落位 6×3 ----
     {
-        ImageLayer a; a.id = 22; a.sourceKind = LayerSourceKind::File;
+        ImageLayer a; a.id = 22;
         a.decodedPixels = solid(4, 4, blue);
         a.transform.width = 2; a.transform.height = 2;
         a.preprocess.add(preprocess::ResizeOp{6, 3});
@@ -1523,6 +1814,9 @@ int main() {
     testGenerate();
     testCanvas();
     testAnnotation();
+    testDragGesture();   // 平移拖拽手势（零 Qt，跨模块直编）
+    testPickCycle();     // 同点连击循环选层（零 Qt，跨模块直编）
+    testConfigAssets();  // GUI 配置资产助手（零 Qt，跨模块直编）：查找链 / 解码注入 / 打包 / 字段往返
     testPreprocess();
     testPreprocessSession();  // 预处理会话（零 Qt，跨模块直编）不变式/归一化/baseDirty/签名断言
     testHistory();
@@ -1531,8 +1825,12 @@ int main() {
     testEnginePipeline();  // 引擎流水线功能（SPEC §3）
     testEngineExport();    // 引擎导出落盘（SPEC §4）
     testEngineBoundary();  // 引擎边界异常（SPEC §5 / E-1~E-8）
+    testEngineGridAxis();  // L3 网格单轴三态（分割数 / 比例）：取整律、混合轴、精确报因、JSON 双形态
     testEngineConfigJson(); // 配置 JSON 存取（SPEC §7，含 annotations 段）
+    testEngineConfigStrict(); // 配置严格 schema 校验（present-but-invalid 拒绝；缺失/越界/合法别名仍过）
+    testPercentCoords();    // 百分比几何坐标："N%" 换算 / 保留比例回写 / 无基准与小数拒绝
     testAnnoParseText();    // 标注 JSON 文本段级解析（SPEC §7，供 CLI 复用）
+    testLayerParseText();   // 图层 JSON 文本段级解析（SPEC §7，供 CLI --layer/--layers 复用）
     testAnnoAnchorRoundTrip(); // 约束图元锚点往返（buildShape ↔ shapeToJson/FromJson 顶点级一致）
     testI18nCatalog();   // i18n 目录对账：读源码树比三层「常量层 ↔ 译文表」，孤儿键 / 重复键 / 跨层撞键即红
     testI18nCore();      // i18n 机制内核（本段会改进程级语言态，故置于最后，收尾已复位到源语言）

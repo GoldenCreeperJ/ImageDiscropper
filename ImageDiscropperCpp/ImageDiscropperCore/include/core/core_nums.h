@@ -27,10 +27,10 @@ namespace idc::core::nums {
 // engine：SPEC §7 配置读写的兜底默认与边界（src/engine/engine_config_json*.cpp、
 //       include/engine/composition.h、src/io/image_io.cpp）。
 namespace engine {
-inline constexpr int kDefaultOpacity = 255;      // 缺 opacity 键时的回退值＝全不透明乘子。四处共用：顶层画布级、
-                                                 // 底图 generate 段、图层 transform、旧 opacity 迁移步的 mul。
+inline constexpr int kDefaultOpacity = 255;      // 缺 opacity 键时的回退值＝全不透明乘子。三处共用：顶层画布级、
+                                                 // 底图 generate 段、图层 transform。
                                                  // 调它只改「配置文件没写该键」时的观感，不影响显式写出的值。
-inline constexpr int kDefaultQuality = 90;       // emit.quality 出厂默认：CompositionParams / EmitParams 两处成员初值
+inline constexpr int kDefaultQuality = 90;       // export.quality 出厂默认：CompositionParams / Composition 两处成员初值
                                                  // 与 §7 读取回退同源。只影响 JPEG/WebP 有损质量档位。
 inline constexpr int kQualityMin = 1;            // 质量下限：写盘前 clamp 的下界（0 会让部分编码器按「默认质量」处理，故禁）。
 inline constexpr int kQualityMax = 100;          // 质量上限：同时是 JPEG 编码器的合法上界。

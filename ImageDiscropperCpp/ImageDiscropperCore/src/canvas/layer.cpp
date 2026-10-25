@@ -63,18 +63,10 @@ core::Image composeIntoBox(const ImageLayer& layer, const core::Image& src);
 //   preprocess 置于组装/缩放之后是其语义关键：色彩连图层框底色一起变、几何（旋转/翻转/resize）改变最终落位足迹（不被 scaleToTarget 拉回旧框）。
 core::Image materializeLayer(const ImageLayer& layer) {
     core::Image raw;
-    switch (layer.sourceKind) {
-        case LayerSourceKind::Recipe:
-            if (layer.recipe) {
-                raw = generate::makePattern(layer.transform.width, layer.transform.height, *layer.recipe);
-            }
-            break;
-        case LayerSourceKind::File:
-            raw = layer.decodedPixels;   // 上层解码注入；未注入即空图（占位/降级）
-            break;
-        case LayerSourceKind::Empty:
-        default:
-            break;
+    if (layer.recipe) {
+        raw = generate::makePattern(layer.transform.width, layer.transform.height, *layer.recipe);   // 配方源：按目标尺寸现算
+    } else if (!layer.decodedPixels.empty()) {
+        raw = layer.decodedPixels;   // 文件源：上层解码注入；未注入即空图（占位/降级）
     }
     // 组装整层：有内层落位→源铺进图层框（源空时仍产出纯底色框，保留现语义）；无落位→直接用源（空则短路）。
     core::Image content = raw;
@@ -241,9 +233,9 @@ core::Image composeCanvas(const std::vector<ImageLayer>& layers, const int width
 
 core::Image composeBase(const ImageLayer& base, const int width, const int height,
                         const std::unordered_map<int, core::Image>* materialized) {
-    // 纯图案底图（Recipe 且无内层落位）：按画布(source)尺寸经 makePattern 现算图案。
-    //   不走 materializeLayer（其 Recipe 分支用 transform.width/height 现算，恒等 transform 尺寸为 0 会得空图）。
-    if (base.sourceKind == LayerSourceKind::Recipe && base.recipe && !base.hasImagePlacement) {
+    // 纯图案底图（有 recipe 且无内层落位）：按画布(source)尺寸经 makePattern 现算图案。
+    //   不走 materializeLayer（其配方路用 transform.width/height 现算，恒等 transform 尺寸为 0 会得空图）。
+    if (base.recipe && !base.hasImagePlacement) {
         core::Image pat = generate::makePattern(width, height, *base.recipe);
         if (pat.empty()) return core::Image{};
         return base.preprocess.empty() ? pat : base.preprocess.applyExec(pat);

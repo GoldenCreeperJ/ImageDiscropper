@@ -13,6 +13,7 @@
 #include "annotation/annotation_json.h"
 
 #include "core/core_nums.h"  // 字号 / 描边 / 退化容差默认值单一真相源（常量层）
+#include "core/percent.h"    // parsePercent / resolvePercent：标注几何的百分比换算（与 engine 读侧同口径）
 #include "i18n/core_i18n.h"   // IDC_KTR / IDC_KTRF：报因取译文（缺译文回退常量层）
 #include "i18n/core_texts.h" // §7 JSON 键名单一真相源（常量层）
 
@@ -38,7 +39,7 @@
 namespace idc::annotation {
 namespace {
 
-using json = nlohmann::json;
+using json = jsonutil::json; // 与 engine/json_common 单一类型对齐（ordered_json，保插入序）。
 using geometry::ShapeType;
 
 // §7 annotations 段键名 / 兜底默认串 / 默认数字的别名（单一真相源见 include/i18n/core_texts.h）。
@@ -50,6 +51,7 @@ namespace nums = core::nums;
 using jsonutil::at;
 using jsonutil::colorFromHex;
 using jsonutil::colorToHex;
+using jsonutil::isValidHexColor;  // 颜色串严格校验（engine/annotation 共用单一真相源）
 using jsonutil::jBool;
 using jsonutil::jDouble;
 using jsonutil::jInt;
@@ -102,16 +104,6 @@ bool isAnchorConstrained(const ShapeType t) {
         default:
             return false;
     }
-}
-
-// 颜色串严格校验：# 可省；长度须为 6（RRGGBB）或 8（AARRGGBB），且全为十六进制字符。
-bool isValidHexColor(const std::string& raw) {
-    const std::string h = !raw.empty() && raw[0] == '#' ? raw.substr(1) : raw;
-    if (h.size() != 6 && h.size() != 8) return false;
-    for (const char c : h) {
-        if (const bool ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'); !ok) return false;
-    }
-    return true;
 }
 
 // 约束图元的规范顶点 → 双锚点 (x1,y1,x2,y2)：各类型反解规则与 buildShape 一一对应，保证往返顶点级稳定。
@@ -267,6 +259,60 @@ bool needNumField(const json& v, const char* key, double& out, std::string& reas
     const json& jv = at(v, key);
     if (!jv.is_number()) { reason = IDC_KTRF(msg, kErrMissingNumField, key); return false; }
     out = jv.get<double>();
+    return true;
+}
+
+// 可变子节点：非对象 / 键缺失 / 值为 null → nullptr（百分比换算需就地改写）。
+json* mutableField(json& obj, const char* key) {
+    if (!obj.is_object()) return nullptr;
+    const auto it = obj.find(key);
+    return it == obj.end() || it->is_null() ? nullptr : &*it;
+}
+
+// 单个几何叶子上的百分比换算：非字符串（整数）不动；"N%" 按 basis 四舍五入为像素。
+//   非百分比串仍按「缺少或非法数值字段」报错；基准未知（<= 0）而写了百分比 → 报基准未知，不静默归零。
+bool resolveAnnoCoord(json& node, const int basis, const std::string& field, std::string& reason) {
+    if (!node.is_string()) return true;
+    const auto ratio = core::parsePercent(node.get_ref<const std::string&>());
+    if (!ratio) { reason = IDC_KTRF(msg, kErrMissingNumField, field); return false; }
+    if (basis <= 0) { reason = IDC_KTRF(msg, kErrAnnoPercentNoBasis, field); return false; }
+    node = core::resolvePercent(*ratio, basis);
+    return true;
+}
+
+// 标注几何键的百分比换算（与 engine 读侧 resolveAnnotationCoords 同口径）：x/y（文字落点）、
+//   x1..y2（锚点图元 / 圆 / 椭圆）、points[i][j]（直线 / 折线顶点）、segments[i].coords[j]
+//   （path 控制点，偶索引 x、奇索引 y）。样式与 transform 快照是相对量，不参与换算。
+bool resolveAnnoPercentKeys(json& item, const int width, const int height, std::string& reason) {
+    const auto one = [&](const char* key, const int basis) {
+        json* node = mutableField(item, key);
+        return node == nullptr || resolveAnnoCoord(*node, basis, key, reason);
+    };
+    if (!one(keys::common::kX, width) || !one(keys::common::kY, height)) return false;
+    if (!one(keys::common::kX1, width) || !one(keys::common::kY1, height)) return false;
+    if (!one(keys::common::kX2, width) || !one(keys::common::kY2, height)) return false;
+    if (json* pts = mutableField(item, keys::common::kPoints); pts != nullptr && pts->is_array()) {
+        for (std::size_t i = 0; i < pts->size(); ++i) {
+            json& p = (*pts)[i];
+            if (!p.is_array()) continue;
+            for (std::size_t j = 0; j < p.size() && j < 2; ++j) {
+                const std::string field = std::string(keys::common::kPoints) + "[" + std::to_string(i) + "][" +
+                                          std::to_string(j) + "]";
+                if (!resolveAnnoCoord(p[j], j == 0 ? width : height, field, reason)) return false;
+            }
+        }
+    }
+    if (json* segs = mutableField(item, keys::anno::kSegments); segs != nullptr && segs->is_array()) {
+        for (std::size_t i = 0; i < segs->size(); ++i) {
+            json* coords = mutableField((*segs)[i], keys::anno::kCoords);
+            if (coords == nullptr || !coords->is_array()) continue;
+            for (std::size_t j = 0; j < coords->size(); ++j) {
+                const std::string field = std::string(keys::anno::kSegments) + "[" + std::to_string(i) + "]." +
+                                          keys::anno::kCoords + "[" + std::to_string(j) + "]";
+                if (!resolveAnnoCoord((*coords)[j], j % 2 == 0 ? width : height, field, reason)) return false;
+            }
+        }
+    }
     return true;
 }
 
@@ -431,7 +477,7 @@ Annotation annotationFromJson(const json& v, std::string& reason, const int fall
 // engine_config_json 组装 / 解析整份 SPEC §7 文档时对 annotations 段调用之。
 // ---------------------------------------------------------------------------
 // 集合内标注 → annotations 数组（逐条 annotationToJson，无形状 / 未知类返回 null 时跳过）。
-nlohmann::json annotationsSegmentToJson(const AnnotationSet& set) {
+jsonutil::json annotationsSegmentToJson(const AnnotationSet& set) {
     json arr = json::array();
     for (const Annotation& a : set.annotations()) {
         if (json o = annotationToJson(a); !o.is_null()) arr.push_back(std::move(o));
@@ -442,7 +488,7 @@ nlohmann::json annotationsSegmentToJson(const AnnotationSet& set) {
 // annotations 数组值 → 集合（严格校验，逐条重建）：任一非法即整体失败（不静默丢弃），
 // annoErr 非空时逐条回传原因；段缺失 / 非数组 → 清空集合（配置文件为标注真相源）；
 // 成功则按 zOrder 稳定排序（等值保序）后 restore（其内规范化 zOrder ＝ 新下标）。
-bool annotationsFromSegmentJson(const nlohmann::json& arrValue, AnnotationSet& set, std::string* annoErr) {
+bool annotationsFromSegmentJson(const jsonutil::json& arrValue, AnnotationSet& set, std::string* annoErr) {
     std::vector<Annotation> items;
     std::vector<std::string> errs;
     if (arrValue.is_array()) {
@@ -478,10 +524,14 @@ bool annotationsFromSegmentJson(const nlohmann::json& arrValue, AnnotationSet& s
 // 公共入口（annotation_json.h）：解析标注 JSON 文本（SPEC §7 annotations 段元素语法）——
 // 根对象＝单条、根数组＝多条。与整档存取共用同一套重建逻辑（annotationFromJson）。
 // 强制校验：逐条重建，**任一条非法即整体失败**（不静默丢弃，out 保持不变），err 逐条列出序号与原因。
+// 几何坐标可写百分比串：逐条先按 basisWidth/basisHeight 分方向换算为像素（拷贝后改写，不动调用方视图），
+//   再交同一重建逻辑；基准未知而写百分比 → 该条报错（不静默归零）。
 // ---------------------------------------------------------------------------
 bool parseAnnotationsFromJsonText(const std::string& text,
                                   std::vector<Annotation>& out,
-                                  std::string& err) {
+                                  std::string& err,
+                                  const int basisWidth,
+                                  const int basisHeight) {
     if (text.empty()) { err = IDC_KTR(msg, kErrAnnoTextEmpty); return false; }
     try {
         const json value = json::parse(text);
@@ -494,8 +544,10 @@ bool parseAnnotationsFromJsonText(const std::string& text,
             if (!item.is_object()) {
                 reason = IDC_KTR(msg, kErrNotAnObject);
             } else {
-                if (Annotation a = annotationFromJson(item, reason, static_cast<int>(idx - 1)); a.shape)
-                    built.push_back(std::move(a));
+                if (json resolved = item; resolveAnnoPercentKeys(resolved, basisWidth, basisHeight, reason)) {
+                    if (Annotation a = annotationFromJson(resolved, reason, static_cast<int>(idx - 1)); a.shape)
+                        built.push_back(std::move(a));
+                }
             }
             if (!reason.empty()) errs.push_back(IDC_KTRF(msg, kErrAnnoElementPrefix, std::to_string(idx), reason));
         };

@@ -28,12 +28,9 @@
 
 namespace idc::canvas {
 
-// 图层来源类型：配方（可序列化 PatternParams）/ 文件（相对 assets 名 + 上层解码像素）/ 空占位。
-enum class LayerSourceKind {
-    Empty,   // 空占位（缺文件降级 / 新建未指定）——物化为空图，合成时跳过
-    Recipe,  // 配方来源：由 generate::makePattern 依 recipe + 目标尺寸现算像素（可逐字节复现）
-    File,    // 文件来源：decodedPixels 由上层解码注入（配方不外传位图）
-};
+// 来源类型无显式枚举字段，由载荷三元组派生（单一真相源）：
+//   recipe 有值＝配方源（generate::makePattern 现算）；无 recipe 而 fileName/decodedPixels 有值＝文件源；
+//   三者皆空（仅落位/backdrop）＝空占位 / 运行时位图底（物化为空图，合成时跳过或待上层注入位图）。
 
 // ---------------------------------------------------------------------------
 // ImageFit：内层源图→图层框（boxW×boxH）的适应方式（仅 hasImagePlacement 为真时参与合成）。
@@ -67,15 +64,15 @@ struct ImageTransform {
 
 // ---------------------------------------------------------------------------
 // ImageLayer：单条图层记录（来源 + 落位 + z 序 + 逐层预处理）。
-//   decodedPixels 仅在 sourceKind==File 且上层已解码时非空；配方 / 占位时为空。
+//   来源态无独立字段，由 recipe / fileName / decodedPixels 派生（见上）。
+//   decodedPixels 仅在文件源且上层已解码时非空；配方 / 占位时为空。
 //   id 为跨会话的稳定标识（GUI 引用 / 缓存键），Core 只存取不解释。
 // ---------------------------------------------------------------------------
 struct ImageLayer {
     int id{0};
-    LayerSourceKind sourceKind{LayerSourceKind::Empty};
-    std::optional<generate::PatternParams> recipe;  // 配方来源（provenance，可序列化；不含位图）
+    std::optional<generate::PatternParams> recipe;  // 配方来源（provenance，可序列化；不含位图）；有值即配方源。
     std::string fileName;                            // 文件来源（相对 assets 目录的文件名）
-    core::Image decodedPixels;                       // 上层解码注入的源像素（仅 File 用；不入配置）
+    core::Image decodedPixels;                       // 上层解码注入的源像素（文件源用；不入配置）
     ImageTransform transform;
     // ---- 内层：源图 → 图层框（仅 hasImagePlacement 为真时生效；供对话框附加图片图层两级落位的 config 往返）----
     //   composeCanvas 先将 decodedPixels（原始源）按 imageFit + 内层锚点/枢轴/偏移合成进 boxWidth×boxHeight
@@ -125,7 +122,7 @@ void applyAlpha(core::Image& image, std::uint8_t opacity);
 
 // ---------------------------------------------------------------------------
 // composeBase：把「底图」（同构 canvas::ImageLayer，钉住画布最底）展平为 width×height 像素。
-//   纯图案底图（sourceKind==Recipe 且无内层落位）：按画布(source)尺寸经 makePattern 现算图案
+//   纯图案底图（有 recipe 且无内层落位）：按画布(source)尺寸经 makePattern 现算图案
 //   （不走 materializeLayer 的 transform 尺寸，避免回归）；如有逐层预处理则同口径 applyExec。
 //   文件底图 / 带内层落位：当作单元素 layers、空底、box=画布、transform 恒等，转调 composeCanvas 复用两段合成。
 //   **不烘焙底图整体透明度**：placement 路转调 composeCanvas 前把 transform.opacity 归一 255（合成期恒不施乘），

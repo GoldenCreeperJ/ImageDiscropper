@@ -192,6 +192,20 @@ static std::vector<std::vector<core::Point2D>> extractPolylines(const Path& flat
     return polylines;
 }
 
+// 填充语义用：未闭合则追加一条回到首点的直线段（Qt 隐式闭合同款），已闭合/空/退化原样返回副本。
+Path Path::closedForFill() const {
+    Path out = *this;
+    if (segments_.empty()) return out;
+    if (segments_.back().type == PathSegmentType::Close) return out;   // 已显式闭合
+    const std::vector<double>& fc = segments_.front().coords;
+    const std::vector<double>& lc = segments_.back().coords;
+    if (fc.size() < 2 || lc.size() < 2) return out;   // 退化段：无从闭合
+    const double fx = fc[0], fy = fc[1];
+    const double ly = lc[lc.size() - 1];
+    if (const double lx = lc[lc.size() - 2]; lx != fx || ly != fy) out.lineTo(fx, fy);
+    return out;
+}
+
 // 内部判定：使用偶奇规则的扫描线算法。
 bool Path::contains(const double px, const double py, const double flatness) const {
     const Path flat = flattened(flatness);

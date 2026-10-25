@@ -6,7 +6,7 @@
 //       - preprocess：PreprocessPipeline 顺序编排与像素核（GrayOp / RotateOp / FlipOp；
 //         缩放与取色为 core::Image 成员）
 //       - view_transform：屏幕 ↔ 逻辑坐标换算、以指定点缩放
-//       - engine：真正跑通 Grid-Selection-Emit 流水线（L2 剔除坍缩 / L3 网格重排）并导出到磁盘
+//       - engine：真正跑通 Grid-Selection-Export 流水线（L2 剔除坍缩 / L3 网格重排）并导出到磁盘
 // 分块依据：每一步聚焦一个模块或一个典型场景，便于按需拷贝到实际项目。
 // ============================================================================
 #include <filesystem>
@@ -176,7 +176,7 @@ int main() {
     std::cout << "after scaleAboutPoint -> scale=" << vt.scale() << "\n";
 
     // ------------------------------------------------------------------
-    // 9. 引擎实战演示：真正跑通 Grid-Selection-Emit 流水线并导出到磁盘。
+    // 9. 引擎实战演示：真正跑通 Grid-Selection-Export 流水线并导出到磁盘。
     //    9.1 L2 十字剔除 → 坍缩合并单图；9.2 同作业分离导出到文件夹；
     //    9.3 L3 网格 → 选择四角单元 → 重排合并；9.4 配置 JSON 存取（NFR-4）。
     //    输出写入 ./demo_output/。
@@ -194,27 +194,27 @@ int main() {
         cfg.cut.generator = engine::CutGenerator::Rect;    // 单矩形诱导十字切割线
         cfg.cut.rect = engine::RectRegion(60, 30, 140, 90);
         cfg.cut.polarity = engine::Polarity::Remove;       // 剔除十字 → 保留四角
-        cfg.emitParams.mode = engine::EmitMode::Merged;
-        cfg.emitParams.layout = engine::MergeLayout::Collapse; // 坍缩式合并（SPEC §4.2）
+        cfg.exportParams.mode = engine::ExportMode::Merged;
+        cfg.exportParams.layout = engine::MergeLayout::Collapse; // 坍缩式合并（SPEC §4.2）
 
         const auto exp = engine::runEngine(composed, cfg);
         const bool ok = exp.has_value();
-        const auto [kept, composition, collapsible] = exp.value_or(engine::EngineResult{});
+        const engine::EngineResult r = exp.value_or(engine::EngineResult{});
         std::cout << "[L2 collapse] ok=" << ok
-                  << " collapsible=" << collapsible
-                  << " kept=" << kept.size()
-                  << " canvas=" << composition.canvasWidth << "x" << composition.canvasHeight
+                  << " collapsible=" << r.collapsible
+                  << " kept=" << r.kept.size()
+                  << " canvas=" << r.composition.canvasWidth << "x" << r.composition.canvasHeight
                   << "\n";
         if (ok) {
             const fs::path out = outDir / "l2_collapsed.png";
-            const bool w = engine::exportImage(composition, composed, out.string()).has_value();
+            const bool w = engine::exportImage(r.composition, composed, out.string()).has_value();
             std::cout << "  exported -> " << out.string() << " (" << (w ? "OK" : "FAIL") << ")\n";
         } else {
             std::cout << "  error: " << exp.error().message << "\n";
         }
 
         // 9.2 同一作业改为分离导出 → 文件夹（四角 4 张 PNG，直接写入，不压缩）。
-        cfg.emitParams.mode = engine::EmitMode::Separate;
+        cfg.exportParams.mode = engine::ExportMode::Separate;
         if (const auto rs = engine::runEngine(composed, cfg); rs.has_value()) {
             const fs::path folder = outDir / "l2_corners"; // 目标文件夹（不存在会自动创建）
             const bool w = engine::exportImage(rs->composition, composed, folder.string()).has_value();
@@ -243,9 +243,9 @@ int main() {
         cfg.cut.polarity = engine::Polarity::Keep;
         cfg.selectedCells = {0, 3, 8, 11};               // 4×3 网格的四角单元
         cfg.order.strategy = engine::SortStrategy::RowMajor;
-        cfg.emitParams.mode = engine::EmitMode::Merged;
-        cfg.emitParams.layout = engine::MergeLayout::Rearrange; // 重排式合并（SPEC §4.3）
-        cfg.emitParams.cols = 2;
+        cfg.exportParams.mode = engine::ExportMode::Merged;
+        cfg.exportParams.layout = engine::MergeLayout::Rearrange; // 重排式合并（SPEC §4.3）
+        cfg.exportParams.cols = 2;
 
         const auto rexp = engine::runEngine(composed, cfg);
         const bool ok = rexp.has_value();

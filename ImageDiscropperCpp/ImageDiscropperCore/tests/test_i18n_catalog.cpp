@@ -233,6 +233,57 @@ std::string joinKeys(const std::vector<std::string>& keys, const std::size_t lim
 void testI18nCatalog() {
     const std::filesystem::path root(IDC_TEXTS_SOURCE_ROOT);
 
+    // —— 纯文本纪律：CLI 帮助 / 各层消息是纯文本输出，字符串常量内不得出现 markdown 加粗（**），
+    //    也不得出现「idc <command> --help」这类与位置语义矛盾的失效指引（命令后 --help 已被拒绝）。
+    //    逐行扫描各层常量层与译文表，凡双引号字符串内含违禁子串即失败（注释不在此列）。——
+    {
+        const std::vector<std::string> forbidden = {"**", "§", "idc <command> --help", "idc <命令> --help"};
+        std::vector<std::string> offenders;
+        for (const auto&[name, layerHeaders, tableFiles, translatableGroups] : layers()) {
+            for (const std::string& rel : layerHeaders) {
+                bool ok = false;
+                const std::string text = readWholeFile(root / rel, ok);
+                if (!ok) continue;
+                std::size_t lineNo = 0;
+                std::string line;
+                std::istringstream ss(text);
+                while (std::getline(ss, line)) {
+                    ++lineNo;
+                    const std::size_t q1 = line.find('"');
+                    const std::size_t q2 = line.find_last_of('"');
+                    if (q1 == std::string::npos || q2 <= q1) continue;
+                    for (const std::string& bad : forbidden)
+                        if (line.find(bad, q1) != std::string::npos && line.find(bad) < q2) {
+                            offenders.push_back(rel + ":" + std::to_string(lineNo) + " 含「" + bad + "」");
+                            break;
+                        }
+                }
+            }
+            for (const std::string& rel : tableFiles) {
+                bool ok = false;
+                const std::string text = readWholeFile(root / rel, ok);
+                if (!ok) continue;
+                std::size_t lineNo = 0;
+                std::string line;
+                std::istringstream ss(text);
+                while (std::getline(ss, line)) {
+                    ++lineNo;
+                    const std::size_t q1 = line.find('"');
+                    const std::size_t q2 = line.find_last_of('"');
+                    if (q1 == std::string::npos || q2 <= q1) continue;
+                    for (const std::string& bad : forbidden)
+                        if (line.find(bad, q1) != std::string::npos && line.find(bad) < q2) {
+                            offenders.push_back(rel + ":" + std::to_string(lineNo) + " 含「" + bad + "」");
+                            break;
+                        }
+                }
+            }
+        }
+        CHECK_MSG(offenders.empty(),
+                  std::string("文本常量含违禁子串（纯文本纪律）：\n  - ") +
+                      [&offenders] { std::string s; for (const auto& o : offenders) s += o + "\n  - "; return s; }());
+    }
+
     // —— 全局键归属：三层共用一张进程表，同键跨层出现＝后装者永远命中不了（静默失效）。——
     std::map<std::string, std::string> ownerOf;   // 键 → 首个登记它的一层
     std::vector<std::string> crossLayerDupes;

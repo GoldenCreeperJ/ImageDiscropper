@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：src/engine/engine.cpp
-// 作用：Grid-Selection-Emit 流水线的顶层编排入口 runEngine（SPEC §1 概念流程）。
+// 作用：Grid-Selection-Export 流水线的顶层编排入口 runEngine（SPEC §1 概念流程）。
 //       一次调用串起：① 切割线 → ② 诱导网格 → ③ 选择集 → ④ 极性 → split →
 //       Sequence → ⑤ 合成，产出 EngineResult（保留集 + 合成描述 + 坍缩可行性）。
 // 分块依据：六个阶段的函数定义分散在各阶段文件（cut_line/grid/split/selection/
@@ -84,6 +84,27 @@ std::unexpected<core::CoreError> fail(const core::CoreError::Code code, std::str
     return std::unexpected(core::CoreError{code, std::move(message)});
 }
 
+// 单轴定义的第一处错误（先横后纵）——与 Grid::build 的分派同源，避免“校验放行、铺设产空”。
+GridAxisError firstAxisError(const GridParams& params, const int width, const int height) {
+    if (const GridAxisError e = checkAxis(effectiveAxis(params, true), width); e != GridAxisError::None) return e;
+    return checkAxis(effectiveAxis(params, false), height);
+}
+
+// 轴定义错误的本地化报因：分割数 / 权重 / 单元尺寸三类分句。
+std::string axisErrorText(const GridAxisError err) {
+    switch (err) {
+        case GridAxisError::CountNotPositive:
+        case GridAxisError::CountExceedsLimit:
+            return IDC_KTR(msg, kEngineGridCountInvalid);
+        case GridAxisError::WeightNotPositive:
+            return IDC_KTR(msg, kEngineGridWeightsInvalid);
+        case GridAxisError::CellUnderflow:
+        case GridAxisError::None:
+            break;
+    }
+    return IDC_KTR(msg, kEngineGridCellInvalid);
+}
+
 } // namespace
 
 // 内部几何流水线主体：以给定 source 尺寸铺切割线/网格、以 (clipW,clipH) 裁剪 split。
@@ -107,9 +128,13 @@ static std::expected<EngineResult, core::CoreError> runEngineImpl(const SourceIn
         return fail(core::CoreError::Code::MultiRectEmpty, IDC_KTR(msg, kEngineMultiRectEmpty));
     }
 
-    // --- ① 切割线 + ② 诱导网格。Grid 生成器走 Grid::build（可处理余量策略）。---
+    // --- ① 切割线 + ② 诱导网格。Grid 生成器走 Grid::build（可处理余量策略 / 分割数 / 比例）。---
     Grid grid;
     if (config.cut.generator == CutGenerator::Grid) {
+        // 铺网格前先校验两轴定义（分割数 / 权重相对图像过粗会产出零宽单元），
+        // 以便报出精确原因而非落到笼统的 NoGrid。
+        if (const GridAxisError axisErr = firstAxisError(config.cut.grid, source.width, source.height); axisErr != GridAxisError::None)
+            return fail(core::CoreError::Code::NoGrid, axisErrorText(axisErr));
         grid.build(config.cut.grid, source.width, source.height);
     } else {
         const CutLineSet lines = generateCutLines(config.cut, source);
@@ -149,6 +174,19 @@ static std::expected<EngineResult, core::CoreError> runEngineImpl(const SourceIn
     // --- ⑤ 坍缩可行性（SPEC §4.4）+ 序列 + 合成。---
     result.collapsible = isCollapsible(selection, grid);
 
+    // 重排准入门限（SPEC §4.3）：仅当保留块长宽全等才可重排——参差块会在 cols×rows 画布上
+    // 按「最大宽 × 列数 / 最大高 × 行数」撑开并互相错位（比例轴、保留残缺单元都会产出参差块）。
+    const std::vector<Fragment>& fragments = kept.fragments();
+    bool uniformBlocks = true;
+    for (const Fragment& f : fragments) {
+        if (f.region.width() != fragments.front().region.width() ||
+            f.region.height() != fragments.front().region.height()) {
+            uniformBlocks = false;
+            break;
+        }
+    }
+    result.uniformBlocks = uniformBlocks;
+
     Sequence sequence;
     if (config.order.strategy == SortStrategy::Custom && !config.selectedCells.empty()) {
         sequence.setCustom(config.selectedCells); // 自定义序：以显式选择顺序为准（FR-L3.5）。
@@ -160,22 +198,33 @@ static std::expected<EngineResult, core::CoreError> runEngineImpl(const SourceIn
     }
 
     // 布局决策 +「仅 L3 可重排」限制（重排是 L3 网格的专属合成方式，SPEC §4.3）。
-    CompositionParams emitParams = config.emitParams;
+    CompositionParams exportParams = config.exportParams;
     const bool isL3 = config.cut.tier == Tier::Grid;
-    const bool merged = emitParams.mode == EmitMode::Merged;
+    const bool merged = exportParams.mode == ExportMode::Merged;
     // 显式选择重排但非 L3 → 直接报错（不静默改布局）。
-    if (merged && emitParams.layout == MergeLayout::Rearrange && !isL3) {
+    if (merged && exportParams.layout == MergeLayout::Rearrange && !isL3) {
         return fail(core::CoreError::Code::RearrangeNeedsL3, IDC_KTR(msg, kEngineRearrangeNeedsL3));
     }
-    // Merged+Collapse 但不可坍缩：L3 降级为重排（SPEC §4.4 推论）；L1/L2 无重排可用 → 报错。
-    if (merged && emitParams.layout == MergeLayout::Collapse && !result.collapsible) {
+    // Merged+Collapse 但不可坍缩：L3 可转重排（SPEC §4.4 推论），但重排同样有准入门限——
+    // 块尺寸不齐又不可坍缩时两者都做不成，降为分离导出；L1/L2 无重排可用 → 报错。
+    if (merged && exportParams.layout == MergeLayout::Collapse && !result.collapsible) {
         if (!isL3) {
             return fail(core::CoreError::Code::NotCollapsible, IDC_KTR(msg, kEngineNotCollapsible));
         }
-        emitParams.layout = MergeLayout::Rearrange;
+        if (uniformBlocks)
+            exportParams.layout = MergeLayout::Rearrange;
+        else
+            exportParams.mode = ExportMode::Separate;
+    }
+    // Merged+Rearrange：准入不满足（块尺寸不齐）时逐级回退——可坍缩则坍缩，否则分离。
+    if (merged && exportParams.layout == MergeLayout::Rearrange && !uniformBlocks) {
+        if (result.collapsible)
+            exportParams.layout = MergeLayout::Collapse;
+        else
+            exportParams.mode = ExportMode::Separate;
     }
 
-    result.composition = compose(kept, sequence, emitParams);
+    result.composition = compose(kept, sequence, exportParams);
     result.kept = kept;
     return result;
 }

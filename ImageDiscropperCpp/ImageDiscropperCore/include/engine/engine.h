@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：include/engine/engine.h
-// 作用：定义统一引擎的顶层配置与 Grid-Selection-Emit 流水线接口（SPEC §1）。
+// 作用：定义统一引擎的顶层配置与 Grid-Selection-Export 流水线接口（SPEC §1）。
 //       这是三层模式（L1 标准提取 / L2 反向剔除 / L3 网格分割）共用的同一代码路径，
 //       模式仅为参数预设（NFR-0）。
 // 分块依据：
@@ -13,9 +13,9 @@
 //       exportImage 的声明位于各自阶段头（解耦），定义分散在 src/engine/ 各阶段文件，
 //       避免上帝文件。runEngine 定义见 src/engine/engine.cpp。
 //   EngineConfig.base（SPEC §7 可选「generate」段）：底图是与图层同构的 canvas::ImageLayer，
-//       仅角色为「钉住最底、不可拖 / 不可改落位」；sourceKind==Recipe 表纯程序图案底图（配方落
-//       recipe、transform 恒等），sourceKind==File 表新建画布附带图片底图（凭 fileName 引用
-//       assets + 内层图片落位）；位图恒不入配置。base 存在＝由 composeBase 展平得源画布，代替
+//       仅角色为「钉住最底、不可拖 / 不可改落位」；有 recipe 表纯程序图案底图（配方落
+//       recipe、transform 恒等），无 recipe 而携 fileName / 内层落位表新建画布附带图片底图（凭 fileName
+//       引用 assets + 内层图片落位）；来源态由载荷（recipe / fileName / decodedPixels）派生、无独立枚举字段；位图恒不入配置。base 存在＝由 composeBase 展平得源画布，代替
 //       外部输入图。layers 段同理：存在＝由 composeCanvas 展平得工作图，引擎仍只收一张展平图。
 // ============================================================================
 #pragma once
@@ -92,11 +92,15 @@ struct EngineConfig {
     SourceInfo source;                          // 原图尺寸
     std::optional<canvas::ImageLayer> base;     // SPEC §7 可选「generate」段：底图（语义见文件头「说明」）
     std::optional<std::vector<canvas::ImageLayer>> layers;   // SPEC §7 可选「layers」段：多层画布数组（存在＝composeCanvas 展平得工作图）
+    // 资产目录声明（SPEC §7 可选「assetsDir」键，generate 与 layers 之间）：layers 段 file 相对名的
+    //   第一查找位（其余按 <配置名>.assets/ → 配置目录的约定链）。空 = 未声明（纯约定查找）。
+    //   须为相对路径、不含「..」/绝对路径/盘符（越界拒绝在执行侧，与 file 名同规）。位图不入配置。
+    std::string assetsDir;
     preprocess::PreprocessPipeline preprocess;  // 切割前的基础图像处理（FR-1）
     CutConfig cut;                              // 切割配置
     std::vector<int> selectedCells;             // 显式选择集 S（单元序号）；空 = L1/L2 由生成器自动推导
     SequenceParams order;                       // 排序策略（FR-L3.5）
-    CompositionParams emitParams;               // 导出/合成配置（SPEC §4；成员名避开 Qt emit 关键字宏）
+    CompositionParams exportParams;             // 导出/合成配置（SPEC §4）；export 为 C++ 保留关键字，故成员名用 exportParams。
     // 画布级整体不透明度（0..255，255＝不透明）：SPEC §7 顶层可选「opacity」键。作用于合成 +
     //   画布预处理后的整幅工作图（逐像素 alpha 乘子，与 composeCanvas 逐层不透明度同口径），
     //   影响预览与导出；缺省 255（向后兼容）。不入位图、恒在产出边界施加一次，不烘焙进缓存像素。
@@ -104,7 +108,7 @@ struct EngineConfig {
 };
 
 // ===========================================================================
-// Grid-Selection-Emit 流水线接口（SPEC §1）
+// Grid-Selection-Export 流水线接口（SPEC §1）
 // 原图 → ① 切割线集合 → ② 诱导网格 → ③ 选择集 → ④ 极性 → ⑤ 排布导出
 // 各阶段函数声明位于对应子头（解耦：实现文件只依赖自身阶段头，不全量依赖本 facade）：
 //   split → engine/split.h；applyPolarity → engine/selection.h；
@@ -123,7 +127,7 @@ Grid induceGrid(const CutLineSet& lines, const SourceInfo& source);
 // ===========================================================================
 // 顶层编排入口（SPEC §1 概念流程）
 // generateCutLines → induceGrid → 构建选择集 → split → applyPolarity →
-// Sequence::build → compose，一次调用跑通整条 Grid-Selection-Emit 管线。
+// Sequence::build → compose，一次调用跑通整条 Grid-Selection-Export 管线。
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
@@ -132,12 +136,15 @@ Grid induceGrid(const CutLineSet& lines, const SourceInfo& source);
 //   composition —— 合成/排布描述（画布尺寸 + 各片段落位）。
 //   collapsible —— 坍缩可行性判定结果（SPEC §4.4）；false 时不可合并坍缩
 //               （L3 由 runEngine 自动改用重排，L1/L2 归为错误 NotCollapsible）。
-// 说明：成功值类型只含上述三字段；成功与否由 std::expected 表达，报因由 CoreError 承载。
+//   uniformBlocks —— 保留块是否长宽全等（重排准入门限，SPEC §4.3）：false 时重排不可用，
+//               引擎按「可坍缩 → 坍缩，否则 → 分离导出」自动回退（GUI 据此置灰重排项）。
+// 说明：成功值类型只含上述字段；成功与否由 std::expected 表达，报因由 CoreError 承载。
 // ---------------------------------------------------------------------------
 struct EngineResult {
     RegionSet kept;
     Composition composition;
     bool collapsible{false};
+    bool uniformBlocks{false};
 };
 
 // 依据配置对图像跑通完整流水线，返回保留集与合成描述（不落盘）；失败返回 core::CoreError。

@@ -1,6 +1,6 @@
 // ============================================================================
 // 文件：include/engine/selection.h
-// 作用：定义极性 Polarity 与选择集 Selection——Grid-Selection-Emit 阶段 ③④
+// 作用：定义极性 Polarity 与选择集 Selection——Grid-Selection-Export 阶段 ③④
 //       （SPEC §1）的数据载体，也是 L1/L2/L3 三层共用“保留 / 剔除”开关的落点。
 // 分块依据：
 //   - Polarity：keep / remove 二元极性（SPEC §2.2 术语），L2 反向剔除的核心即此开关。

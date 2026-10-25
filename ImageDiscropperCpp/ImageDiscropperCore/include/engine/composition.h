@@ -1,10 +1,10 @@
 // ============================================================================
 // 文件：include/engine/composition.h
-// 作用：定义导出/合成相关类型——输出模式 EmitMode、合并布局 MergeLayout、
+// 作用：定义导出/合成相关类型——输出模式 ExportMode、合并布局 MergeLayout、
 //       导出格式 ExportFormat、合成参数 CompositionParams 与合成结果 Composition，
-//       对应 Grid-Selection-Emit 阶段 ⑤（SPEC §1）与导出规格（SPEC §4）。
+//       对应 Grid-Selection-Export 阶段 ⑤（SPEC §1）与导出规格（SPEC §4）。
 // 分块依据：
-//   - EmitMode / MergeLayout / ExportFormat：导出方式的枚举（SPEC §4.1/§4.2/§4.3/§4.5）。
+//   - ExportMode / MergeLayout / ExportFormat：导出方式的枚举（SPEC §4.1/§4.2/§4.3/§4.5）。
 //   - CompositionParams：导出配置（分离/合并、坍缩/重排、画布、填充色、命名模板…）。
 //   - Placement / Composition：合成结果的数据描述（每个片段落到输出画布的位置）。
 //   - isCollapsible：SPEC §4.4 坍缩可行性定理的判定接口（定义见 src/engine/composition.cpp）。
@@ -19,7 +19,7 @@
 #include <vector>
 
 #include "core/color.h"
-#include "core/core_nums.h"   // emit.quality 出厂默认与范围（常量层）
+#include "core/core_nums.h"   // export.quality 出厂默认与范围（常量层）
 #include "i18n/core_texts.h"  // 命名模板缺省串（常量层）
 #include "engine/grid.h"
 #include "engine/region.h"
@@ -30,9 +30,9 @@
 namespace idc::engine {
 
 // ---------------------------------------------------------------------------
-// EmitMode：输出模式（SPEC §1 阶段⑤）。
+// ExportMode：输出模式（SPEC §1 阶段⑤）。
 // ---------------------------------------------------------------------------
-enum class EmitMode {
+enum class ExportMode {
     Separate,  // 多图分离：每个保留单元写入目标文件夹下一张图（SPEC §4.1 / FR-L3.6）
     Merged,    // 合并单图：坍缩或重排为一张画布（SPEC §4.2 / §4.3）
 };
@@ -68,10 +68,10 @@ enum class ExportFormat {
 };
 
 // ---------------------------------------------------------------------------
-// CompositionParams：导出/合成参数（对应 SPEC §7 JSON 的 emit 段）。
+// CompositionParams：导出/合成参数（对应 SPEC §7 JSON 的 export 段）。
 // ---------------------------------------------------------------------------
 struct CompositionParams {
-    EmitMode mode{EmitMode::Merged};                 // 分离 or 合并
+    ExportMode mode{ExportMode::Merged};                 // 分离 or 合并
     MergeLayout layout{MergeLayout::Collapse};       // 坍缩 or 重排
     MergeOrder mergeOrder;                           // 重排填充顺序（仅 Rearrange；与 order 选择排序正交）
     std::optional<int> cols;                         // 重排画布列数（可选）

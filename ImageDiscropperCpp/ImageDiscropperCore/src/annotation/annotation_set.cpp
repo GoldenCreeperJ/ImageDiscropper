@@ -105,25 +105,38 @@ void AnnotationSet::restore(std::vector<Annotation> items) {
 
 // 命中检测：从顶层（最后绘制的）开始遍历，返回第一个命中的索引。
 // 判定规则：
-//   - 填充形状：使用 Path::contains 判断点是否在内部
+//   - 填充形状：使用 Path::contains 判断点是否在内部（开放路径按 Qt 语义隐式闭合后判定）
+//   - 文本：世界矩形（包围盒）内部即命中——字形绘制在盒内、toPath 仅为不可见边框，
+//     按轮廓距离只会落在边框带（fill 与否无关）
 //   - 未填充形状：使用 Path::distanceToOutline 判断点是否靠近轮廓
 //     （容差 = nums::annotation::kHitTolerancePx + strokeWidth）
 std::optional<std::size_t> AnnotationSet::hitTest(const core::Point2D& p) const {
+    const auto all = hitTestAll(p);
+    return all.empty() ? std::nullopt : std::optional(all.front());
+}
+
+std::vector<std::size_t> AnnotationSet::hitTestAll(const core::Point2D& p) const {
+    std::vector<std::size_t> hits;
     for (std::size_t i = items_.size(); i-- > 0;) {
         const Annotation& ps = items_[i];
         if (!ps.shape) continue;
         // 取世界路径（已套用非破坏性变换），故命中判定与缩放/旋转/翻转后的可见几何一致。
         const geometry::Path path = ps.shape->worldPath();
+        // 内部判定适用：填充形状（非直线）与文本——文本恒按包围盒内部命中（toPath 仅为不可见边框，
+        // 与 GUI 图元抓取区同口径、与 fill 无关）。填充形状的轮廓带也应含隐式闭合边（与渲染填充边界一致）；
+        // 描边保持原路径。
+        const bool interiorHit = (ps.style.fill && ps.shape->type() != geometry::ShapeType::Line)
+                                 || ps.shape->type() == geometry::ShapeType::Text;
+        const geometry::Path hitPath = interiorHit ? path.closedForFill() : path;
 
-        // 填充且非直线：优先按内部判定
-        if (ps.style.fill && ps.shape->type() != geometry::ShapeType::Line) {
-            if (path.contains(p.x, p.y)) return i;
+        if (interiorHit) {
+            if (hitPath.contains(p.x, p.y)) { hits.push_back(i); continue; }
         }
         // 其余情况按轮廓距离判定
-        if (const double dist = path.distanceToOutline(p.x, p.y);
-            dist < nums::annotation::kHitTolerancePx + ps.style.strokeWidth) return i;
+        if (const double dist = hitPath.distanceToOutline(p.x, p.y);
+            dist < nums::annotation::kHitTolerancePx + ps.style.strokeWidth) hits.push_back(i);
     }
-    return std::nullopt;
+    return hits;
 }
 
 // 合成（指定底图）：以传入底图为基准逐条光栅化，后入列表者覆盖先入者；

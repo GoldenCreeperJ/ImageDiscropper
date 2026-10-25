@@ -1,3 +1,5 @@
+
+
 // ============================================================================
 // 文件：tests/test_engine_config_json.cpp
 // 作用：配置文件存取验收（SPEC §7）——EngineConfig ↔ JSON 往返、preprocess 队列（含 resize）、
@@ -8,9 +10,11 @@
 // ============================================================================
 #include "test_harness.h"
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
@@ -99,7 +103,7 @@ void testEngineConfigJson() {
     fs::create_directories(dir, ec);
     const fs::path file = dir / "cfg.json";
 
-    // ---- 基座配置：source + 声明式队列（resize→rotate）+ cut/emit 非默认值。----
+    // ---- 基座配置：source + 声明式队列（resize→rotate）+ cut/export 非默认值。----
     engine::EngineConfig cfg;
     cfg.source = engine::SourceInfo{800, 600};
     cfg.preprocess.add(preprocess::ResizeOp{400, 300});
@@ -109,17 +113,16 @@ void testEngineConfigJson() {
     cfg.cut.grid = engine::GridParams{.originX = 0, .originY = 0, .cellWidth = 100, .cellHeight = 100, .remainder = engine::RemainderPolicy::Pad};
     cfg.cut.polarity = engine::Polarity::Keep;
     cfg.selectedCells = {0, 4};
-    cfg.emitParams.mode = engine::EmitMode::Merged;
-    cfg.emitParams.layout = engine::MergeLayout::Rearrange;
-    cfg.emitParams.cols = 3;
-    cfg.emitParams.padColor = core::Color(0, 0, 0, 0);
+    cfg.exportParams.mode = engine::ExportMode::Merged;
+    cfg.exportParams.layout = engine::MergeLayout::Rearrange;
+    cfg.exportParams.cols = 3;
+    cfg.exportParams.padColor = core::Color(0, 0, 0, 0);
 
     // 多层画布 layers 段：一配方层（带逐层 preprocess + transform）+ 一文件层（仅相对名/落位）。
     {
         std::vector<canvas::ImageLayer> st;
         canvas::ImageLayer l0;
         l0.id = 7;
-        l0.sourceKind = canvas::LayerSourceKind::Recipe;
         generate::PatternParams pp;
         pp.kind = generate::PatternKind::Checkerboard;
         pp.period = 4;
@@ -133,7 +136,6 @@ void testEngineConfigJson() {
         l0.preprocess.add(preprocess::GrayOp{});
         canvas::ImageLayer l1;
         l1.id = 9;
-        l1.sourceKind = canvas::LayerSourceKind::File;
         l1.fileName = "sub/a.png";   // 相对名（含子目录）；像素不入配置
         l1.transform.x = 3; l1.transform.y = -2;
         l1.transform.layerPivot = generate::ImageAnchor::BottomRight;
@@ -159,7 +161,7 @@ void testEngineConfigJson() {
     CHECK(got.cut.tier == engine::Tier::Grid && got.cut.generator == engine::CutGenerator::Grid);
     CHECK(got.cut.grid.cellWidth == 100 && got.cut.grid.remainder == engine::RemainderPolicy::Pad);
     CHECK(got.selectedCells.size() == 2 && got.selectedCells[1] == 4);
-    CHECK(got.emitParams.layout == engine::MergeLayout::Rearrange && got.emitParams.cols == 3);
+    CHECK(got.exportParams.layout == engine::MergeLayout::Rearrange && got.exportParams.cols == 3);
 
     // layers 段往返：配方层（含逐层 preprocess + transform）/ 文件层（仅相对名，像素不入配置）。
     CHECK(got.layers.has_value());
@@ -168,7 +170,7 @@ void testEngineConfigJson() {
         CHECK(layers.size() == 2);
         if (layers.size() == 2) {
             const canvas::ImageLayer& r0 = layers[0];
-            CHECK(r0.sourceKind == canvas::LayerSourceKind::Recipe);
+            CHECK(r0.recipe.has_value());
             CHECK(r0.recipe.has_value() && r0.recipe->kind == generate::PatternKind::Checkerboard && r0.recipe->period == 4);
             CHECK(r0.transform.width == 8 && r0.transform.height == 8);
             CHECK(r0.transform.inCanvasAnchor == generate::ImageAnchor::TopLeft);
@@ -176,7 +178,7 @@ void testEngineConfigJson() {
             CHECK(r0.zOrder == 0 && r0.preprocess.size() == 1);
             CHECK(std::holds_alternative<preprocess::GrayOp>(r0.preprocess.items()[0]));
             const canvas::ImageLayer& r1 = layers[1];
-            CHECK(r1.sourceKind == canvas::LayerSourceKind::File);
+            CHECK(!r1.recipe.has_value() && !r1.fileName.empty());
             CHECK(r1.fileName == "sub/a.png");
             CHECK(r1.decodedPixels.empty());   // 像素不经配置还原
             CHECK(r1.transform.x == 3 && r1.transform.y == -2);
@@ -278,7 +280,7 @@ void testEngineConfigJson() {
         const std::string text((std::istreambuf_iterator(ifs)), std::istreambuf_iterator<char>());
         CHECK(text.find("\"annotations\"") == std::string::npos);
     }
-    CHECK(engine::loadEngineConfig(plainFile.string(), got)); // 旧调用形态仍可编译（默认参数）。
+    CHECK(engine::loadEngineConfig(plainFile.string(), got)); // 缺省尾参的调用形态仍可编译（默认参数）。
 
     // ---- 真相源语义：文件无 annotations 段 + 传集合加载 → 清空既有标注。----
     annotation::AnnotationSet keep = makeSet();
@@ -302,7 +304,6 @@ void testEngineConfigJson() {
         engine::EngineConfig pc;
         pc.source = engine::SourceInfo{64, 48};
         canvas::ImageLayer pb;
-        pb.sourceKind = canvas::LayerSourceKind::Recipe;
         generate::PatternParams ppp;
         ppp.kind = generate::PatternKind::Stripes;
         ppp.period = 6;
@@ -319,7 +320,7 @@ void testEngineConfigJson() {
         CHECK(engine::loadEngineConfig(patFile.string(), pg));
         CHECK(pg.base.has_value());
         if (pg.base.has_value()) {
-            CHECK(pg.base->sourceKind == canvas::LayerSourceKind::Recipe);
+            CHECK(pg.base->recipe.has_value());
             CHECK(pg.base->recipe.has_value() && pg.base->recipe->kind == generate::PatternKind::Stripes && pg.base->recipe->period == 6);
             CHECK(!pg.base->hasImagePlacement);
             CHECK(pg.base->fileName.empty());
@@ -331,7 +332,6 @@ void testEngineConfigJson() {
         engine::EngineConfig fc;
         fc.source = engine::SourceInfo{200, 100};
         canvas::ImageLayer fb;
-        fb.sourceKind = canvas::LayerSourceKind::File;
         fb.fileName = "photo.png";
         fb.hasImagePlacement = true;
         fb.imageFit = canvas::ImageFit::Stretch;
@@ -358,7 +358,7 @@ void testEngineConfigJson() {
         CHECK(fg.base.has_value());
         if (fg.base.has_value()) {
             const canvas::ImageLayer& b = *fg.base;
-            CHECK(b.sourceKind == canvas::LayerSourceKind::Empty);   // 无配方→不回退为 File（底图仅存落位声明）
+            CHECK(!b.recipe.has_value());   // 无配方→不回退为配方底（底图仅存落位声明）
             CHECK(b.fileName.empty());                               // 文件路径不入配置
             CHECK(b.decodedPixels.empty());   // 位图不经配置还原
             CHECK(b.hasImagePlacement);
@@ -379,7 +379,7 @@ void testEngineConfigJson() {
         }
         engine::EngineConfig lg;
         CHECK(engine::loadEngineConfig(legacyGen.string(), lg));
-        CHECK(lg.base.has_value() && lg.base->sourceKind == canvas::LayerSourceKind::Recipe);
+        CHECK(lg.base.has_value() && lg.base->recipe.has_value());
         if (lg.base.has_value()) {
             CHECK(lg.base->recipe.has_value() && lg.base->recipe->kind == generate::PatternKind::GridLines && lg.base->recipe->period == 8);
             CHECK(!lg.base->hasImagePlacement);
@@ -431,7 +431,6 @@ void testEngineConfigJson() {
         engine::EngineConfig bp;
         bp.source = engine::SourceInfo{40, 40};
         canvas::ImageLayer pb;
-        pb.sourceKind = canvas::LayerSourceKind::Recipe;
         generate::PatternParams ppp;
         ppp.kind = generate::PatternKind::Solid;
         pb.recipe = ppp;
@@ -571,7 +570,151 @@ void testAnnoParseText() {
         CHECK(!annotation::parseAnnotationsFromJsonText("", out, err));
     }
 
+    // ⑧ 几何百分比（段级入口）：按给定基准分方向换算（x 用宽、y 用高）；>100% 与负值合法（与 §7 标注段同口径）。
+    {
+        std::vector<annotation::Annotation> out;
+        std::string err;
+        CHECK(annotation::parseAnnotationsFromJsonText(R"J([
+            {"type":"rectangle","x1":"0%","y1":"0%","x2":"50%","y2":"100%"},
+            {"type":"line","points":[["-10%","-10%"],["150%","150%"]]},
+            {"type":"path","segments":[{"t":"M","coords":["25%","50%"]},{"t":"L","coords":["100%","100%"]}]}])J",
+            out, err, 200, 100));
+        CHECK(out.size() == 3);
+        if (out.size() == 3) {
+            const auto* rect = dynamic_cast<const geometry::PolygonShape*>(out[0].shape.get());
+            CHECK(rect != nullptr);
+            if (rect != nullptr) {
+                double minx = 1e18, miny = 1e18, maxx = -1e18, maxy = -1e18;
+                for (const core::Point2D& p : rect->points()) {
+                    minx = std::min(minx, p.x); miny = std::min(miny, p.y);
+                    maxx = std::max(maxx, p.x); maxy = std::max(maxy, p.y);
+                }
+                CHECK(nearEq(minx, 0.0) && nearEq(miny, 0.0) && nearEq(maxx, 100.0) && nearEq(maxy, 100.0));
+            }
+            const auto* line = dynamic_cast<const geometry::PolygonShape*>(out[1].shape.get());
+            CHECK(line != nullptr && line->points().size() == 2);
+            if (line != nullptr && line->points().size() == 2) {
+                CHECK(nearEq(line->points()[0].x, -20.0) && nearEq(line->points()[0].y, -10.0));
+                CHECK(nearEq(line->points()[1].x, 300.0) && nearEq(line->points()[1].y, 150.0));
+            }
+            const auto* path = dynamic_cast<const geometry::PathShape*>(out[2].shape.get());
+            CHECK(path != nullptr);
+            if (path != nullptr) {
+                CHECK(nearEq(path->path().segments()[0].coords[0], 50.0));   // 25% × 200
+                CHECK(nearEq(path->path().segments()[0].coords[1], 50.0));   // 50% × 100
+                CHECK(nearEq(path->path().segments()[1].coords[0], 200.0));
+                CHECK(nearEq(path->path().segments()[1].coords[1], 100.0));
+            }
+        }
+    }
+
+    // ⑨ 写百分比却未给基准（缺省 0）→ 拒绝且报因定位到字段，不静默归零（回归护栏）。
+    {
+        std::vector<annotation::Annotation> out;
+        std::string err;
+        CHECK(!annotation::parseAnnotationsFromJsonText(
+            R"J({"type":"rectangle","x1":"0%","y1":"0%","x2":"50%","y2":"50%"})J", out, err));
+        CHECK(out.empty());
+        CHECK(err.find("'x1'") != std::string::npos);
+    }
+
+    // ⑩ 既非整数也非百分比串的几何字段 → 仍报「缺少或非法数值字段」。
+    {
+        std::vector<annotation::Annotation> out;
+        std::string err;
+        CHECK(!annotation::parseAnnotationsFromJsonText(
+            R"J({"type":"line","points":[["wide%","0%"],["1","1"]]})J", out, err, 100, 100));
+        CHECK(err.find("'points[0][0]'") != std::string::npos);
+    }
+
     std::cout << "[anno-parse-text] OK\n";
+}
+
+// 图层 JSON 文本段级解析（parseImageLayersFromJsonText）：单对象 / 数组 / 累积 / 根类型非法 / 语法错误 / 空串。
+void testLayerParseText() {
+    using namespace idc;
+
+    // ① 单条对象 → 追加 1 条（file 源 + transform + zOrder）。
+    {
+        std::vector<canvas::ImageLayer> out;
+        std::string err;
+        CHECK(engine::parseImageLayersFromJsonText(
+            R"J({"source":{"file":"sub/a.png"},"transform":{"x":10,"y":-5,"opacity":128},"zOrder":2})J", out, err));
+        CHECK(out.size() == 1);
+        CHECK(out[0].fileName == "sub/a.png" && out[0].zOrder == 2);
+        CHECK(out[0].transform.x == 10 && out[0].transform.y == -5 && out[0].transform.opacity == 128);
+    }
+
+    // ② 根数组 → 按序追加 2 条（recipe 源与 file 源混排）。
+    {
+        std::vector<canvas::ImageLayer> out;
+        std::string err;
+        CHECK(engine::parseImageLayersFromJsonText(
+            R"J([{"source":{"recipe":{"kind":"checkerboard","period":4}},"zOrder":1},
+                {"source":{"file":"b.png"}}])J", out, err));
+        CHECK(out.size() == 2);
+        CHECK(out[0].recipe.has_value() && out[0].zOrder == 1);
+        CHECK(out[1].fileName == "b.png" && out[1].zOrder == 0);   // 未给 zOrder → 缺省 0
+    }
+
+    // ③ 累积：二次调用追加到既有列表之后（CLI --layer 可重复的同构语义）。
+    {
+        std::vector<canvas::ImageLayer> out;
+        std::string err;
+        CHECK(engine::parseImageLayersFromJsonText(R"J({"source":{"file":"a.png"}})J", out, err));
+        CHECK(engine::parseImageLayersFromJsonText(R"J({"source":{"file":"b.png"}})J", out, err));
+        CHECK(out.size() == 2 && out[1].fileName == "b.png");
+    }
+
+    // ④ 根类型非法（标量）→ 失败且 err 非空、out 不动。
+    {
+        std::vector<canvas::ImageLayer> out{{}};
+        std::string err;
+        CHECK(!engine::parseImageLayersFromJsonText(R"J(42)J", out, err));
+        CHECK(!err.empty() && out.size() == 1);   // 失败回滚：不改动 out
+    }
+
+    // ⑤ JSON 语法错误 → 失败透传 parse_error 详情。
+    {
+        std::vector<canvas::ImageLayer> out;
+        std::string err;
+        CHECK(!engine::parseImageLayersFromJsonText("{ not json", out, err));
+        CHECK(!err.empty());
+    }
+
+    // ⑥ 空串 → 失败且 err 非空。
+    {
+        std::vector<canvas::ImageLayer> out;
+        std::string err;
+        CHECK(!engine::parseImageLayersFromJsonText("", out, err));
+        CHECK(!err.empty());
+    }
+
+    // ⑦ transform 百分比（段级入口）：x/width 用宽、y/height 用高；>100% 与负值合法。
+    {
+        std::vector<canvas::ImageLayer> out;
+        std::string err;
+        CHECK(engine::parseImageLayersFromJsonText(
+            R"J({"source":{"file":"a.png"},"transform":{"x":"150%","y":"-10%","width":"25%","height":"200%"}})J",
+            out, err, 200, 100));
+        CHECK(out.size() == 1);
+        if (out.size() == 1) {
+            CHECK(out[0].transform.x == 300 && out[0].transform.y == -10);
+            CHECK(out[0].transform.width == 50 && out[0].transform.height == 200);
+        }
+    }
+
+    // ⑧ 写百分比却未给画布尺寸 → 报错（回归护栏：须拒绝，不得静默当 0）。
+    {
+        std::vector<canvas::ImageLayer> out;
+        std::string err;
+        CHECK(!engine::parseImageLayersFromJsonText(
+            R"J({"source":{"file":"a.png"},"transform":{"x":"50%"}})J", out, err));
+        CHECK(out.empty());
+        CHECK(err.find("transform.x") != std::string::npos);
+    }
+
+    std::cout << "[layer-parse-text] OK\n";
 }
 
 // 约束图元锚点往返（计划核心卡点）：buildShape(锚点) → shapeToJson(反解锚点) → shapeFromJson(buildShape)
@@ -684,4 +827,326 @@ void testAnnoAnchorRoundTrip() {
 
     fs::remove_all(dir, ec);
     std::cout << "[anno-anchor-roundtrip] OK\n";
+}
+
+// §7 配置严格 schema 校验（读侧守卫）：present-but-invalid（枚举拼错 / 颜色非法 / 类型不符 / 容器错型）一律拒绝，
+//   且携定位报因（CoreError.message 非空、code=ConfigParseFailed）；缺失→默认、越界→clamp、合法别名与显式默认 token 仍放行；
+//   文件级语法错误 message 留空（两层契约）。
+void testEngineConfigStrict() {
+    using namespace idc;
+    namespace fs = std::filesystem;
+
+    const fs::path dir = fs::temp_directory_path() / "idc_config_strict_test";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir, ec);
+
+    // 写一段 JSON 到独立文件并加载，回传 expected（供逐例断言成功/失败与 message）；cfg 经出参回填。
+    auto loadText = [&](const char* name, const std::string& text, engine::EngineConfig& cfg) {
+        const fs::path f = dir / name;
+        { std::ofstream ofs(f); ofs << text; }
+        return engine::loadEngineConfig(f.string(), cfg);
+    };
+
+    // ① 缺失 → 默认（向后兼容不变）：仅 source，其余全缺，仍成功。
+    {
+        engine::EngineConfig cfg;
+        CHECK(loadText("min.json", R"J({"source":{"width":8,"height":8}})J", cfg).has_value());
+    }
+
+    // ② 越界 → clamp（不拦）：opacity:300 成功且夹为 255。
+    {
+        engine::EngineConfig cfg;
+        const auto r = loadText("clamp.json", R"J({"source":{"width":8,"height":8},"opacity":300})J", cfg);
+        CHECK(r.has_value());
+        CHECK(cfg.canvasOpacity == 255);
+    }
+
+    // ③ 合法别名（jpg）与显式默认 token（erase/rect/remove/merged）一律放行。
+    {
+        engine::EngineConfig cfg;
+        CHECK(loadText("alias.json",
+            R"J({"cut":{"tier":"erase","generator":"rect","polarity":"remove"},"export":{"format":"jpg","mode":"merged"}})J", cfg).has_value());
+    }
+
+    // ④ 枚举拼错（mode）→ 拒绝 + 定位报因非空 + code=ConfigParseFailed。
+    {
+        engine::EngineConfig cfg;
+        const auto r = loadText("badmode.json", R"J({"export":{"mode":"sepreate"}})J", cfg);
+        CHECK(!r.has_value());
+        if (!r) {
+            CHECK(r.error().code == core::CoreError::Code::ConfigParseFailed);
+            CHECK(!r.error().message.empty());
+        }
+    }
+    // ⑤ tier 拼错 → 拒绝。
+    {
+        engine::EngineConfig cfg;
+        CHECK(!loadText("badtier.json", R"J({"cut":{"tier":"grdi"}})J", cfg).has_value());
+    }
+    // ⑥ 颜色非法 → 拒绝（present 但 hex 非法）。
+    {
+        engine::EngineConfig cfg;
+        CHECK(!loadText("badcolor.json", R"J({"export":{"merge":{"padColor":"#ZZZZZZZZ"}}})J", cfg).has_value());
+    }
+    // ⑦ 枚举字段给了数字 → 拒绝（类型不符）。
+    {
+        engine::EngineConfig cfg;
+        CHECK(!loadText("badenumtype.json", R"J({"cut":{"tier":5}})J", cfg).has_value());
+    }
+    // ⑧ 数值字段给了字符串 → 拒绝。
+    {
+        engine::EngineConfig cfg;
+        CHECK(!loadText("badnum.json", R"J({"source":{"width":"big","height":8}})J", cfg).has_value());
+    }
+    // ⑨ 该为对象却给数组 → 拒绝。
+    {
+        engine::EngineConfig cfg;
+        CHECK(!loadText("badobj.json", R"J({"cut":[]})J", cfg).has_value());
+    }
+    // ⑩ 嵌套 recipe.kind 拼错（layers[0]）→ 拒绝。
+    {
+        engine::EngineConfig cfg;
+        CHECK(!loadText("badrecipe.json", R"J({"layers":[{"source":{"recipe":{"kind":"chekboard"}}}]})J", cfg).has_value());
+    }
+    // ⑪ 预处理 op 拼错 → 拒绝。
+    {
+        engine::EngineConfig cfg;
+        CHECK(!loadText("badop.json", R"J({"preprocess":[{"op":"grayy"}]})J", cfg).has_value());
+    }
+    // ⑫ 合法嵌套（grid-lines 底图 + 色彩步）仍放行。
+    {
+        engine::EngineConfig cfg;
+        CHECK(loadText("goodnest.json",
+            R"J({"generate":{"kind":"grid-lines","period":8,"preprocess":[{"op":"gray"}]}})J", cfg).has_value());
+    }
+
+    // ⑬ 网格参数给小数 → 拒绝（坐标键另接受百分比字符串，但仍不收裸小数）。
+    {
+        engine::EngineConfig cfg;
+        CHECK(!loadText("fracgrid.json",
+            R"J({"cut":{"tier":"grid","generator":"grid","params":{"originX":10.5,"originY":0,"cellWidth":100,"cellHeight":100}}})J", cfg).has_value());
+    }
+    // ⑭ 切割矩形给小数 → 拒绝（同上：比例须写成 "50%" 字符串，不能是裸小数）。
+    {
+        engine::EngineConfig cfg;
+        CHECK(!loadText("fracrect.json",
+            R"J({"cut":{"tier":"extract","generator":"rect","params":{"x1":1.5,"y1":0,"x2":10,"y2":10}}})J", cfg).has_value());
+    }
+    // ⑮ 负基准点仍放行（基准点只作相位，可为负）。
+    {
+        engine::EngineConfig cfg;
+        CHECK(loadText("neggrid.json",
+            R"J({"cut":{"tier":"grid","generator":"grid","params":{"originX":-5,"originY":-7,"cellWidth":100,"cellHeight":100}}})J", cfg).has_value());
+        CHECK(cfg.cut.grid.originX == -5 && cfg.cut.grid.originY == -7);
+    }
+
+    // ⑯ source 尺寸给小数 → 拒绝（source.width/height 恒为整数）。
+    {
+        engine::EngineConfig cfg;
+        CHECK(!loadText("fracsrc.json", R"J({"source":{"width":8.5,"height":8}})J", cfg).has_value());
+    }
+    // ⑰ 顶层 opacity 给小数 → 拒绝（整数；越界（如 300）仍 clamp 不拦）。
+    {
+        engine::EngineConfig cfg;
+        CHECK(!loadText("fracopacity.json", R"J({"source":{"width":8,"height":8},"opacity":200.5})J", cfg).has_value());
+    }
+    // ⑱ 底图 opacity 给小数 → 拒绝（同顶层 opacity 口径）。
+    {
+        engine::EngineConfig cfg;
+        CHECK(!loadText("fracgenopacity.json", R"J({"generate":{"kind":"solid","opacity":100.5}})J", cfg).has_value());
+    }
+    // ⑲ order.select 单元序号给小数 → 拒绝（序号恒为整数）。
+    {
+        engine::EngineConfig cfg;
+        CHECK(!loadText("fracselect.json", R"J({"order":{"select":[1.5]}})J", cfg).has_value());
+    }
+    // ⑳ export.quality 给小数 → 拒绝。
+    {
+        engine::EngineConfig cfg;
+        CHECK(!loadText("fracquality.json", R"J({"export":{"quality":90.5}})J", cfg).has_value());
+    }
+    // ㉑ export.merge 的 cols/rows/cellWidth/cellHeight 给小数 → 拒绝（行列数恒为整数；
+    //    cellWidth/cellHeight 只接受整数或百分比字符串）。
+    {
+        engine::EngineConfig cfg;
+        CHECK(!loadText("fracmerge.json", R"J({"export":{"merge":{"layout":"rearrange","cols":2.5}}})J", cfg).has_value());
+    }
+
+    // ㉒ 文件级语法错误 → 失败但 message 留空（上层自产文案）。
+    {
+        const fs::path f = dir / "syntax.json";
+        { std::ofstream ofs(f); ofs << "{ not valid json "; }
+        engine::EngineConfig cfg;
+        const auto r = engine::loadEngineConfig(f.string(), cfg);
+        CHECK(!r.has_value());
+        if (!r) CHECK(r.error().message.empty());
+    }
+
+    fs::remove_all(dir, ec);
+    std::cout << "[engine-config-strict] OK\n";
+}
+
+// 百分比几何坐标验收（SPEC §7 数值类型契约的几何例外）："N%" 依基准换算为像素（画布 / 工作图 / source）、
+//   保留比例回写、非百分比串与无基准拒绝；非几何数值键（opacity / quality / 行列数）仍只收整数。
+void testPercentCoords() {
+    using namespace idc;
+    namespace fs = std::filesystem;
+
+    const fs::path dir = fs::temp_directory_path() / "idc_percent_coords_test";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir, ec);
+
+    const auto readText = [](const fs::path& p) {
+        std::ifstream ifs(p);
+        return std::string(std::istreambuf_iterator(ifs), std::istreambuf_iterator<char>());
+    };
+    // 写一段 JSON 到独立文件并加载（可选收集百分比记录）。
+    auto loadText = [&](const char* name, const std::string& text, engine::EngineConfig& cfg,
+                        annotation::AnnotationSet* set = nullptr, core::PercentHints* hints = nullptr) {
+        const fs::path f = dir / name;
+        { std::ofstream ofs(f); ofs << text; }
+        return engine::loadEngineConfig(f.string(), cfg, set, nullptr, hints);
+    };
+
+    // ① 各白名单几何键按各自基准换算：source 200×100 → 位置/尺寸按画布宽高；resize 目标尺寸以 source 为基准。
+    {
+        engine::EngineConfig cfg;
+        core::PercentHints hints;
+        CHECK(loadText("basic.json", R"J({
+  "source": {"width": 200, "height": 100},
+  "preprocess": [{"op": "resize", "width": "50%", "height": "50%"}],
+  "cut": {"tier": "extract", "generator": "rect", "params": {"x1": "10%", "y1": "20%", "x2": "50%", "y2": "80%"}},
+  "export": {"merge": {"cellWidth": "50%", "cellHeight": "25%"}},
+  "generate": {"kind": "solid", "fit": "crop", "x": "10%", "y": "50%"},
+  "layers": [{"transform": {"x": "50%", "y": "50%", "width": "25%", "height": "25%"}}]
+})J", cfg, nullptr, &hints).has_value());
+        CHECK(cfg.cut.rect.left == 20 && cfg.cut.rect.top == 20);
+        CHECK(cfg.cut.rect.right == 100 && cfg.cut.rect.bottom == 80);
+        CHECK(cfg.exportParams.cellWidth.has_value() && *cfg.exportParams.cellWidth == 100);
+        CHECK(cfg.exportParams.cellHeight.has_value() && *cfg.exportParams.cellHeight == 25);
+        CHECK(cfg.base.has_value() && cfg.base->imageX == 20 && cfg.base->imageY == 50);
+        CHECK(cfg.layers.has_value() && cfg.layers->size() == 1);
+        if (cfg.layers.has_value() && cfg.layers->size() == 1) {
+            const auto& t = (*cfg.layers)[0].transform;
+            CHECK(t.x == 100 && t.y == 50 && t.width == 50 && t.height == 25);
+        }
+        CHECK(cfg.preprocess.size() == 1);
+        if (cfg.preprocess.size() == 1) {
+            CHECK(std::get<preprocess::ResizeOp>(cfg.preprocess.items()[0]).width == 100);
+            CHECK(std::get<preprocess::ResizeOp>(cfg.preprocess.items()[0]).height == 50);
+        }
+        // 每处换算记一条记录，路径与落盘结构一致（保存时据此回写）。
+        CHECK(hints.size() == 14);
+        bool sawRect = false, sawLayer = false, sawResize = false;
+        for (const auto&[pointer, ratio, resolved] : hints) {
+            if (pointer == "/cut/params/x1") { sawRect = true; CHECK(nearEq(ratio, 0.1) && nearEq(resolved, 20.0)); }
+            if (pointer == "/layers/0/transform/width") sawLayer = true;
+            if (pointer == "/preprocess/0/width") sawResize = true;
+        }
+        CHECK(sawRect && sawLayer && sawResize);
+    }
+
+    // ② 换算四舍五入（与交互坐标同口径）：12.5% × 100 → 13。
+    {
+        engine::EngineConfig cfg;
+        CHECK(loadText("round.json", R"J({"source":{"width":100,"height":100},"cut":{"generator":"rect","params":{"x2":"12.5%"}}})J", cfg).has_value());
+        CHECK(cfg.cut.rect.right == 13);
+    }
+
+    // ③ 负比例可写（网格基准点只作相位）："-10%" × 100 → -10。
+    {
+        engine::EngineConfig cfg;
+        CHECK(loadText("negorigin.json", R"J({"source":{"width":100,"height":100},"cut":{"tier":"grid","generator":"grid","params":{"originX":"-10%","originY":"0%","cellWidth":"50%","cellHeight":"50%"}}})J", cfg).has_value());
+        CHECK(cfg.cut.grid.originX == -10 && cfg.cut.grid.originY == 0);
+        CHECK(cfg.cut.grid.cellWidth == 50 && cfg.cut.grid.cellHeight == 50);
+    }
+
+    // ④ 保存回写：未编辑的比例原样保留为 "N%"，编辑过的字段写像素。
+    {
+        engine::EngineConfig cfg;
+        core::PercentHints hints;
+        CHECK(loadText("roundtrip.json", R"J({"source":{"width":200,"height":100},"cut":{"generator":"rect","params":{"x1":"10%","y1":"20%","x2":"50%","y2":"80%"}}})J", cfg, nullptr, &hints).has_value());
+        cfg.cut.rect.left = 30;   // 只改一处
+        const fs::path out = dir / "roundtrip_out.json";
+        CHECK(engine::saveEngineConfig(out.string(), cfg, nullptr, &hints));
+        const std::string text = readText(out);
+        CHECK(text.find("\"x1\": 30") != std::string::npos);
+        CHECK(text.find("\"y1\": \"20%\"") != std::string::npos);
+        CHECK(text.find("\"x2\": \"50%\"") != std::string::npos);
+        CHECK(text.find("\"y2\": \"80%\"") != std::string::npos);
+    }
+
+    // ⑤ 标注几何的比例：基准＝工作图尺寸（rotate 90 交换宽高，resize 覆盖后再换算）。
+    {
+        engine::EngineConfig cfg;
+        annotation::AnnotationSet set;
+        CHECK(loadText("anno.json", R"J({
+  "source": {"width": 200, "height": 100},
+  "preprocess": [{"op": "rotate", "deg": 90}, {"op": "resize", "width": "50%", "height": "50%"}],
+  "annotations": [
+    {"type": "rectangle", "x1": "0%", "y1": "0%", "x2": "100%", "y2": "100%"},
+    {"type": "line", "points": [["0%", "0%"], ["100%", "100%"]]},
+    {"type": "text", "x": "50%", "y": "50%", "text": "hi", "fontSize": 10}
+  ]
+})J", cfg, &set).has_value());
+        CHECK(set.annotations().size() == 3);
+        if (set.annotations().size() == 3) {
+            const auto* poly = dynamic_cast<const geometry::PolygonShape*>(set.annotations()[0].shape.get());
+            CHECK(poly != nullptr);
+            if (poly) {
+                double minx = 1e18, miny = 1e18, maxx = -1e18, maxy = -1e18;
+                for (const core::Point2D& p : poly->points()) {
+                    minx = std::min(minx, p.x); miny = std::min(miny, p.y);
+                    maxx = std::max(maxx, p.x); maxy = std::max(maxy, p.y);
+                }
+                CHECK(nearEq(minx, 0.0) && nearEq(miny, 0.0) && nearEq(maxx, 100.0) && nearEq(maxy, 50.0));
+            }
+            const auto* line = dynamic_cast<const geometry::PolygonShape*>(set.annotations()[1].shape.get());
+            CHECK(line != nullptr && line->points().size() == 2);
+            if (line && line->points().size() == 2) {
+                CHECK(nearEq(line->points()[1].x, 100.0) && nearEq(line->points()[1].y, 50.0));
+            }
+            const auto* text = dynamic_cast<const geometry::TextShape*>(set.annotations()[2].shape.get());
+            CHECK(text != nullptr);
+            if (text) CHECK(nearEq(text->x(), 50.0) && nearEq(text->y(), 25.0));
+        }
+    }
+
+    // ⑥ 标注比例同样原样回写（数组序与 zOrder 一致时路径稳定）。
+    {
+        engine::EngineConfig cfg;
+        annotation::AnnotationSet set;
+        core::PercentHints hints;
+        CHECK(loadText("anno_rt.json", R"J({"source":{"width":100,"height":100},"annotations":[{"type":"rectangle","x1":"0%","y1":"0%","x2":"50%","y2":"50%"}]})J", cfg, &set, &hints).has_value());
+        const fs::path out = dir / "anno_rt_out.json";
+        CHECK(engine::saveEngineConfig(out.string(), cfg, &set, &hints));
+        const std::string text = readText(out);
+        CHECK(text.find("\"x1\": \"0%\"") != std::string::npos);
+        CHECK(text.find("\"x2\": \"50%\"") != std::string::npos);
+    }
+
+    // ⑦ 拒绝：非百分比串、百分比无基准、坐标键给小数、非几何数值键给百分比。
+    {
+        engine::EngineConfig cfg;
+        const auto r = loadText("badpct.json", R"J({"source":{"width":100,"height":100},"cut":{"generator":"rect","params":{"x1":"wide%"}}})J", cfg);
+        CHECK(!r.has_value());
+        if (!r) CHECK(!r.error().message.empty());
+    }
+    {
+        engine::EngineConfig cfg;
+        CHECK(!loadText("nobasis.json", R"J({"cut":{"generator":"rect","params":{"x1":"10%"}}})J", cfg).has_value());
+    }
+    {
+        engine::EngineConfig cfg;
+        CHECK(!loadText("fraccoord.json", R"J({"source":{"width":100,"height":100},"cut":{"generator":"rect","params":{"x1":1.5}}})J", cfg).has_value());
+    }
+    {
+        engine::EngineConfig cfg;
+        CHECK(!loadText("pctopacity.json", R"J({"source":{"width":100,"height":100},"opacity":"50%"})J", cfg).has_value());
+    }
+
+    fs::remove_all(dir, ec);
+    std::cout << "[percent-coords] OK\n";
 }

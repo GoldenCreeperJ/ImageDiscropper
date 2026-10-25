@@ -28,7 +28,7 @@ class AnnotationSet;
 
 namespace idc::jsonutil {
 
-using json = nlohmann::json;
+using json = nlohmann::ordered_json; // 保插入序：序列化按写入顺序输出，§7 落盘键序可控（整棵配置树共用此单一类型）。
 
 // ---------------------------------------------------------------------------
 // 颜色 ↔ "#AARRGGBB"（SPEC §7 示例 "#00000000" 即全透明）。
@@ -72,6 +72,18 @@ inline core::Color colorFromHex(const std::string& str) {
     return core::kTransparent;
 }
 
+// 颜色串严格校验（供 engine §7 schema 与 annotation 标注段共用的唯一口径）：
+//   # 可省；长度须为 6（RRGGBB）或 8（AARRGGBB），且全为十六进制字符。与 colorFromHex 的宽容
+//   解析互补——colorFromHex 坏值落默认，本函数判「写出的值是否合法」，用于严格报因。
+inline bool isValidHexColor(const std::string& raw) {
+    const std::string h = !raw.empty() && raw[0] == '#' ? raw.substr(1) : raw;
+    if (h.size() != 6 && h.size() != 8) return false;
+    for (const char c : h) {
+        if (const bool ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'); !ok) return false;
+    }
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // 宽容读取助手：nlohmann 的 const operator[] 对缺失键会断言，故统一经 at() 取子元素，
 //       再按类型安全取值；缺失或类型不符时返回给定默认值。
@@ -84,6 +96,8 @@ inline const json& at(const json& obj, const char* key) {
     return it == obj.end() ? kNull : *it;
 }
 
+// 整数读取：schema 层 checkInt 已在入参处拒绝小数，此处不再承担业务级宽容；
+// 浮点分支仅为绕过 schema 的直接调用兜底（向零截断），其余（含 null/缺失）取默认。
 inline int jInt(const json& v, const int def) {
     if (v.is_number_integer()) return v.get<int>();                    // 整数直接取。
     if (v.is_number_float()) return static_cast<int>(v.get<double>()); // 浮点截断。
@@ -106,12 +120,12 @@ inline double jDouble(const json& v, const double def) {
 
 namespace idc::annotation {
 
-// 标注段 ↔ JSON 片段（跨模块私有交换，nlohmann::json 不经公共头外泄；实现见 src/annotation/annotation_json.cpp）：
+// 标注段 ↔ JSON 片段（跨模块私有交换，nlohmann 类型不经公共头外泄；实现见 src/annotation/annotation_json.cpp）：
 //   · annotationsSegmentToJson：集合内标注 → SPEC §7 annotations 数组（逐条经标注序列化，无形状 / 未知类跳过）。
 //   · annotationsFromSegmentJson：annotations 数组值 → 集合（逐条严格校验，任一非法写 annoErr 返回 false；
 //     段缺失 / 非数组 → 清空集合，与「配置文件为标注真相源」一致；成功则按 zOrder 稳定排序后 restore）。
 // engine_config_json 组装 / 解析整份 §7 文档时调用，二者的实现均落在 annotation 模块，使标注 JSON 归属收口于 annotation。
-nlohmann::json annotationsSegmentToJson(const AnnotationSet& set);
-bool annotationsFromSegmentJson(const nlohmann::json& arrValue, AnnotationSet& set, std::string* annoErr);
+jsonutil::json annotationsSegmentToJson(const AnnotationSet& set);
+bool annotationsFromSegmentJson(const jsonutil::json& arrValue, AnnotationSet& set, std::string* annoErr);
 
 } // namespace idc::annotation
