@@ -2,8 +2,9 @@
 // 文件：canvas/canvas_desktop_input_adapter.cpp
 // 作用：DesktopInputAdapter 实现——桌面鼠标 / 滚轮 / 右键事件到 CanvasView 业务
 //       手势的翻译（映射表见同名头文件）。
-// 分块依据：本文件集中承载桌面设备语义（鼠标按键角色、滚轮刻度、QMenu 等处方的）→ 业务手势的翻译；
-//           一切状态与信号发射都委托 view 的 gesture*。触控适配器仅在双击过滤与
+// 分块依据：本文件集中承载桌面设备语义（鼠标按键角色、滚轮刻度、右键菜单触发时机）→ 业务手势的翻译；
+//           一切状态与信号发射都委托 view 的 gesture*（菜单 UI 本身住在 CanvasView::showCanvasContextMenu，
+//           本类只判「绘制态收笔 vs 普通弹菜单」）。触控适配器仅在双击过滤与
 //           吞序列判定时额外触及 Qt::LeftButton，其余业务路由全部经 router_ 委托本类。
 // 说明：平移中 / 绘制中 / 框选中的互斥路由靠 view 的状态查询（panning() 等）完成，
 //       顺序：平移 → 绘制拖拽 → 绘制悬停 → 交付场景图元 + 框选更新。
@@ -11,15 +12,12 @@
 #include "canvas/canvas_desktop_input_adapter.h"
 
 #include <QContextMenuEvent>
-#include <QMenu>
 #include <QMouseEvent>
 #include <QWheelEvent>
 
 #include "canvas/canvas_scene.h"
 #include "canvas/canvas_view.h"
 #include "util/gui_nums.h"
-#include "i18n/gui_texts.h"
-#include "i18n/gui_i18n.h"
 
 namespace idc::gui {
 
@@ -136,30 +134,18 @@ void DesktopInputAdapter::onWheel(CanvasView& view, QWheelEvent* event) {
     event->accept();
 }
 
-// 右键：绘制态＝收笔（不弹菜单）；普通＝弹上下文菜单（清除切割线 / 重置视图 / 切换遮罩），
-// 菜单项命中后转发为视图的既有意图信号。
-// 移动端长按＝先落一段合成左键 press（Marquee 态已起框选 / AnnoSelect 空白已起反选 / 图元已抓取），
-//   紧随才到本 context 事件；QMenu::exec() 是嵌套阻塞循环，可能吃掉随后的合成 Release，令 rubber_ 等
-//   状态永久悬置。故 exec 前显式 gestureCancelCurrent() 收掉 press 起的副作用，exec 返回后再清一次兜底
-//   （Release 若已被循环吞掉，这里补复位；正常桌面右键时二者近似 no-op，不改桌面行为）。
+// 右键：绘制态＝收笔（不弹菜单）；普通＝弹上下文菜单（清除切割线 / 重置视图 / 切换遮罩）。
+// 菜单 UI 与意图补发统一收敛到 CanvasView::showCanvasContextMenu（桌面右键与触控长按共用一份）。
+// 桌面右键不产生合成左键 press，无框选/平移副作用需清理；菜单以 popup() 非阻塞弹出，本函数
+// 内不起嵌套事件循环，故无需旧 exec 前后的状态复位。
 void DesktopInputAdapter::onContextMenu(CanvasView& view, QContextMenuEvent* event) {
     if (view.annotationDrawActive()) {
         view.gestureStrokeFinish();
         event->accept();
         return;
     }
-    view.gestureCancelCurrent();   // exec 前：收拾长按合成左键 press 已起的框选/反选/图元抓取。
-    QMenu menu(view.viewport());
-    const QAction* aClear = menu.addAction(IDC_GTR(menu, kCtxClearCutLine));
-    const QAction* aReset = menu.addAction(IDC_GTR(menu, kCtxResetView));
-    const auto* scene = dynamic_cast<CanvasScene*>(view.scene());
-    const bool masksOn = scene && scene->masksVisible();
-    const QAction* aToggle = menu.addAction(masksOn ? IDC_GTR(menu, kCtxHideMask)
-                                              : IDC_GTR(menu, kCtxShowMask));
-    if (const QAction* chosen = menu.exec(event->globalPos()); chosen == aClear) view.requestClearCut();
-    else if (chosen == aReset) view.requestResetView();
-    else if (chosen == aToggle) view.requestToggleMasks();
-    view.gestureCancelCurrent();   // exec 后：菜单阻塞循环吞掉 Release 时补复位框选/平移态，防橡皮筋卡死。
+    view.showCanvasContextMenu(event->globalPos());
+    event->accept();
 }
 
 } // namespace idc::gui

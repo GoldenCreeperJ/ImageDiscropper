@@ -17,9 +17,11 @@
 #include <algorithm>
 #include <memory>
 
+#include <QAction>
 #include <QColor>
 #include <QGestureEvent>
 #include <QKeyEvent>
+#include <QMenu>
 #include <QPainter>
 #include <QResizeEvent>
 #include <QRubberBand>
@@ -32,6 +34,7 @@
 #include "canvas/items/selection_rect_item.h"
 #include "app/palette.h"
 #include "app/canvas_prefs.h"
+#include "i18n/gui_i18n.h"
 #include "util/gui_nums.h"
 
 namespace idc::gui {
@@ -371,10 +374,28 @@ void CanvasView::gestureStepZoomAt(const QPoint& anchorViewport, const qreal fac
     updateHandleSize();                                    // 重报倍率并随新缩放换算手柄 / 余量。
 }
 
-// 右键菜单项意图代理：菜单 UI 在桌面适配器，此处仅补发既有意图信号（接线住在各属主旁：清除在 CanvasCoordinator、遮罩在 PreviewController、复位视图在 MainWindow）。
+// 右键菜单项意图代理：菜单 UI 在 showCanvasContextMenu（桌面右键与触控长按共用），此处仅补发既有意图信号
+//（接线住在各属主旁：清除在 CanvasCoordinator、遮罩在 PreviewController、复位视图在 MainWindow）。
 void CanvasView::requestClearCut() { emit clearCutRequested(); }
 void CanvasView::requestResetView() { emit resetViewRequested(); }
 void CanvasView::requestToggleMasks() { emit toggleMasksRequested(); }
+
+// 画布上下文菜单：桌面右键与触控长按共用同一份（菜单 UI 此前住桌面适配器，现收敛到视图，
+// 使不产生 QContextMenuEvent 的触控长按也能直调本方法）。popup() 非阻塞弹出，不起嵌套循环，
+// 命中项经 request* 补发意图信号；菜单长按前落下的 press 副作用由调用方先行 gestureCancelCurrent。
+void CanvasView::showCanvasContextMenu(const QPoint& globalPos) {
+    auto* ctxMenu = new QMenu(this);
+    ctxMenu->setAttribute(Qt::WA_DeleteOnClose, true);
+    const bool masksOn = scene_ && scene_->masksVisible();
+    const QAction* aClear = ctxMenu->addAction(IDC_GTR(menu, kCtxClearCutLine));
+    const QAction* aReset = ctxMenu->addAction(IDC_GTR(menu, kCtxResetView));
+    const QAction* aToggle = ctxMenu->addAction(masksOn ? IDC_GTR(menu, kCtxHideMask)
+                                                  : IDC_GTR(menu, kCtxShowMask));
+    connect(aClear, &QAction::triggered, this, &CanvasView::requestClearCut);
+    connect(aReset, &QAction::triggered, this, &CanvasView::requestResetView);
+    connect(aToggle, &QAction::triggered, this, &CanvasView::requestToggleMasks);
+    ctxMenu->popup(globalPos);   // 非阻塞：调用方不阻塞于此，合成 Release 不被菜单循环吞掉。
+}
 
 // 无键盘补偿：步进盘/取消/完成按钮与键盘、右键同一信号链路（方向键微调 → nudgeSelection；
 // 绘制态 Esc → annoEscape；绘制态右键/长按收笔与移动端「完成」按钮 → annoFinish），

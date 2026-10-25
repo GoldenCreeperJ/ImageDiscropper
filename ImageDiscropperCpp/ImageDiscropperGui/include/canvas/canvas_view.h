@@ -101,10 +101,14 @@ public:
     // AnchorUnderMouse——其内部记录的鼠标位仅在基类 mouseMove/Press 里刷新，而本视图的绘制悬停 /
     // 平移路径不经基类，读数会陈旧，导致缩放跳位（有时不以鼠标为原点）。
     void gestureStepZoomAt(const QPoint& anchorViewport, qreal factor);
-    // 右键菜单项意图代理（菜单 UI 在桌面适配器；此处补发既有意图信号）。
+    // 右键菜单项意图代理（菜单 UI 见 showCanvasContextMenu；此处补发既有意图信号）。
     void requestClearCut();
     void requestResetView();
     void requestToggleMasks();
+    // 画布上下文菜单（清除切割线 / 重置视图 / 切换遮罩）：桌面右键与触控长按共用同一份。
+    // 非阻塞 popup() 于给定全局点弹出，命中项经 request* 补发既有意图信号（不起嵌套事件循环、
+    // 不吞 Release）；QMenu 以本视图为父并置 WA_DeleteOnClose，关闭即自销毁。
+    void showCanvasContextMenu(const QPoint& globalPos);
     // 无键盘补偿入口（移动端 8 向步进盘 / 「取消与完成」按钮，SPEC §8.3）：
     // 与键盘同一条信号链路——方向键微调与绘制态 Esc 的触控等价物。
     void requestNudge(int dx, int dy);

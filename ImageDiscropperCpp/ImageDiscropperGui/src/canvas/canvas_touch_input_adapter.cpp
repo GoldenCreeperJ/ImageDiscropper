@@ -11,6 +11,7 @@
 #include <QGestureEvent>
 #include <QMouseEvent>
 #include <QPinchGesture>
+#include <QTapAndHoldGesture>
 #include <QWheelEvent>
 
 #include "canvas/canvas_view.h"
@@ -21,12 +22,16 @@ namespace idc::gui {
 qreal TouchInputAdapter::screenOverlayPx() const { return nums::canvas::kTouchOverlayScreenPx; }
 
 // 触控装配：①注册捏合手势——双指缩放/平移由此进入 onGestureEvent（单指仍走 QPA 合成鼠标序列）；
-// ②防误触：关闭 hover 鼠标跟踪——触控无持续悬停，若不关则拖拽途中的
+// ②注册长按手势（Qt::TapAndHoldGesture）——长按与捏合共用同一套 QGestureEvent 识别/投递机制；
+//   Widgets 框架不会据长按识别自动产出 QContextMenuEvent，故长按菜单由本类 onGestureEvent
+//   自行处理（GestureFinished 时弹 CanvasView::showCanvasContextMenu）。
+// ③防误触：关闭 hover 鼠标跟踪——触控无持续悬停，若不关则拖拽途中的
 //   合成 move 会逐帧触发悬停拾取/光标切换，坐标回显抖动且易误变可交互态；按下拖拽序列不受影响。
 //   画布手势与抽屉面板滚动的分区由 widget 边界天然保证：触控事件不跨 viewport/抽屉传播，
-//   捏合也仅 view 单点 grabGesture，面板内滑动只驱动其 QScrollArea 滚动。
+//   捏合/长按也仅 view 单点 grabGesture，面板内滑动只驱动其 QScrollArea 滚动。
 void TouchInputAdapter::attach(CanvasView& view) {
     view.grabGesture(Qt::PinchGesture);
+    view.grabGesture(Qt::TapAndHoldGesture);
     view.setMouseTracking(false);
 }
 
@@ -87,7 +92,8 @@ void TouchInputAdapter::onWheel(CanvasView& /*view*/, QWheelEvent* event) {
     event->ignore();
 }
 
-// 长按菜单：Android QPA 长按自动合成 QContextMenuEvent，与桌面右键完全同义 → 原样委托。
+// 长按菜单：本适配器已走 TapAndHold 手势自行弹菜单（见 onGestureEvent），正常不产生 QContextMenuEvent；
+// 仅当外部真鼠标右键（或未来 QPA 确实合成本事件）时才进此处 → 委托桌面路由，与长按共用同一份菜单。
 void TouchInputAdapter::onContextMenu(CanvasView& view, QContextMenuEvent* event) {
     router_.onContextMenu(view, event);
 }
@@ -95,6 +101,20 @@ void TouchInputAdapter::onContextMenu(CanvasView& view, QContextMenuEvent* event
 // 双指捏合：scaleFactor 为相对上次事件的增量 → gestureStepZoom（钳制复用桌面链路）；
 // 中心点位移差 → gesturePanDelta（SPEC §8.3 双指平移）；出现手势即作废本序列 tap 判定。
 bool TouchInputAdapter::onGestureEvent(CanvasView& view, QGestureEvent* event) {
+    // 长按识别（TapAndHold）：与捏合同一管线，由本类自行合成菜单——Widgets 不自动把长按识别
+    // 转为 QContextMenuEvent。gestureSeen_ 置位使本序列不再被当作轻点/双击（同捏合，防长按误触发适应窗口）。
+    if (const auto* hold = dynamic_cast<QTapAndHoldGesture*>(event->gesture(Qt::TapAndHoldGesture))) {
+        gestureSeen_ = true;
+        if (hold->state() == Qt::GestureFinished) {
+            view.gestureCancelCurrent();   // 清长按前落下的合成左键 press 副作用（框选/反选/图元抓取）。
+            if (view.annotationDrawActive())
+                view.gestureStrokeFinish();   // 绘制态：长按＝收笔（等价桌面右键）。
+            else
+                view.showCanvasContextMenu(view.mapToGlobal(hold->position().toPoint()));
+        }
+        event->accept();
+        return true;
+    }
     const auto* pinch = dynamic_cast<QPinchGesture*>(event->gesture(Qt::PinchGesture));
     if (!pinch) return false;
     if (!gestureSeen_) {
