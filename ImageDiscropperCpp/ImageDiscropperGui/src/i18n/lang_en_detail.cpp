@@ -149,6 +149,14 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     // 弹窗正文：`\n` 与 `%1..%5` 逐字保留；长正文按「整段一个键」纳入，行首空格与空行是排版的一部分。
     {"msg::kRearrangeWarnTitle", "Rearrange Parameter Warning"},
     {"msg::kRearrangeAskContinue", "\n\nContinue with the export anyway?"},
+    {"msg::kRearrangeDontRemind", "Don't remind me again"},
+    {"msg::kBurnSkipTitle", "Export Excludes Annotations/Layers"},
+    {"msg::kBurnSkipBodyAnno", "The canvas has annotations, but \"Burn in annotations on export\" is not checked; the export will not include them."},
+    {"msg::kBurnSkipBodyLayers", "The canvas has image layers, but \"Burn in images on export\" is not checked; the export will not include them."},
+    {"msg::kBurnSkipBodyBoth", "The canvas has both annotations and image layers, but neither burn-in is checked; the export will include neither."},
+    {"msg::kBurnSkipEnableExport", "Burn in and export"},
+    {"msg::kBurnSkipExportAsIs", "Export as-is"},
+    {"msg::kBurnSkipDontRemind", "Don't remind me again"},
     {"msg::kShortcutNeedModifier", "Combo keys need Ctrl or Alt"},
     {"msg::kShortcutConflictTitle", "Shortcut Conflict"},
     {"msg::kShortcutConflictBody", "Already used by \"%1\". Rebind and clear?"},
@@ -206,7 +214,7 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
         "5) Pick an annotation tool on the Mode page, then draw on the canvas; the Annotation page edits style / stacking / fill, deletes the selection and clears all.\n"
         "6) The Image page adds, reorders and removes image layers and places the anchor / pivot.\n"
         "7) The Export page sets the output mode / format / burn-in flags; produce the files with Export on the tool bar.\n"
-        "8) More: load/save configuration, selection snap, appearance/interaction, confirm before rearrange, reset all, exit.\n\n"
+        "8) More: load/save configuration, appearance/interaction (selection snap and confirm before rearrange live here), reset all, exit.\n\n"
         "Gestures: pinch to zoom, double-tap to fit the window, long press = right click (long press finishes a drawing; the menu can clear cut lines);\n"
         "the Step pad replaces the arrow keys for nudging the selection."},
     {"msg::kAboutBody",
@@ -219,6 +227,7 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"tooltip::kBurnAnnotation", "On export, composite the annotations into the pixels (annotations are cut along with the image)."},
     {"tooltip::kBurnImageLayers", "On export, merge in the image layers (independent from the Layers panel’s “Show”, which is preview-only)."},
     {"tooltip::kConfirmRearrange", "Confirm before export when rearrange is risky; off exports directly."},
+    {"tooltip::kConfirmBurnIn", "Remind before export when annotations or image layers exist but their burn-in is unchecked; off exports directly."},
     {"tooltip::kLoadConfig", "Restore cut/sort/export parameters from a config file; undoable."},
     {"tooltip::kSaveConfig", "Save current parameters to a config file, reusable for same-size images."},
     {"tooltip::kUndo", "Undo the last step (annotation, or selection/sort/export parameters)."},

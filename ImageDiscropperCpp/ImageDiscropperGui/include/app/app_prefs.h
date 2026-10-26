@@ -12,12 +12,13 @@
 //   - 本件承载「跨会话的应用级记忆」而非画布渲染参数，故与 CanvasPrefs 分家。
 // 说明：
 //   · 非 QObject：无即时联动消费者——最近文件子菜单经 QMenu::aboutToShow 懒重建读取、
-//     导出确认在 onExport 调用点即时读取，均无需 changed() 信号；变更即落盘。
+//     两项导出确认由外观对话框「确认与吸附」复选框即时写、onExport/onSaveConfig 调用点即时读，均无需 changed() 信号；变更即落盘。
 //   · recentFiles 仅收本地可再开路径（content:// 等不可复用 URI 由调用方过滤）；
 //     有序（最近在前），上限 kMaxRecent，重复路径前移。
 //   · lastOpenDir / lastExportDir 仅作文件对话框起始目录的跨会话种子（与 Document 内
 //     当前会话的 outputDir/outputFile 正交：后者是本次作业复用值，前者是下次对话框落点）。
 //   · confirmRearrangeRisk：导出面板「合并重排参数风险」内联红字之外的模态二次确认开关，默认开。
+//   · confirmBurnInOnExport：导出/保存配置时「有标注/图层但未勾对应烧录」的模态提醒开关，默认开（提醒可一键开烧录再导出、按现状继续或取消）。
 //   · language：界面语言偏好（auto / 语言码）——本单例只存字符串、不切语言，切换在外观对话框完成，故与其余各项一样只落盘不发信号。
 // ============================================================================
 #pragma once
@@ -48,6 +49,10 @@ public:
     // 导出「合并重排参数风险」前是否弹模态二次确认（默认开）。
     bool confirmRearrangeRisk() const { return confirmRearrangeRisk_; }
     void setConfirmRearrangeRisk(bool on);
+
+    // 导出「有标注/图层但未勾选对应烧录」前是否弹模态提醒（默认开）：提醒可一键开烧录再导出、按现状导出或取消。
+    bool confirmBurnInOnExport() const { return confirmBurnInOnExport_; }
+    void setConfirmBurnInOnExport(bool on);
 
     // 界面语言偏好（存的是**语言码串**，不是当前生效语言）：
     //   ident::kLangAuto（缺省，跟随系统）/ core::kSourceLanguage / core::kLangCodeEn。
@@ -83,6 +88,7 @@ private:
     QString themeMode_;  // 深浅色主题偏好（初值取 "system"，由构造函数从 QSettings 覆盖）。
     QString defaultExportDir_;   // 默认输出文件夹（初值空，由构造函数从 QSettings 覆盖；仅桌面）。
     bool confirmRearrangeRisk_ = true;
+    bool confirmBurnInOnExport_ = true;
 };
 
 } // namespace idc::gui

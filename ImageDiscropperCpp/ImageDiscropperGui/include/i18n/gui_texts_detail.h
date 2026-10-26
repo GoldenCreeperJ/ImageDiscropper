@@ -21,6 +21,7 @@ inline constexpr char kExportRearrange[] = "按 cols×rows 重排输出；面板
 inline constexpr char kBurnAnnotation[] = "导出时把标注合成进像素（标注随切割被切开）。";
 inline constexpr char kBurnImageLayers[] = "导出时并入图片图层（与图层面板「显示」仅预览正交）。";
 inline constexpr char kConfirmRearrange[] = "重排有风险时导出前二次确认；关则直接导出。";
+inline constexpr char kConfirmBurnIn[] = "有标注或图片图层却未勾选对应烧录时，导出前弹框提醒；关则直接导出。";
 inline constexpr char kLoadConfig[] = "从配置文件还原切割/排序/导出参数；可撤销。";
 inline constexpr char kSaveConfig[] = "把当前参数存为配置文件，同尺寸图像可复用。";
 inline constexpr char kUndo[] = "撤销上一步（标注或选区/排序/导出参数）。";
@@ -322,6 +323,16 @@ namespace msg {
 // 合并重排的导出前二次确认（app/controllers/export_controller.cpp；标题与正文后缀分两条，正文本体由面板实时给出）。
 inline constexpr char kRearrangeWarnTitle[]  = "重排参数警告";            // QMessageBox::warning 标题。
 inline constexpr char kRearrangeAskContinue[] = "\n\n仍要继续导出吗？";  // 拼在面板警告文本之后的追问句。
+inline constexpr char kRearrangeDontRemind[] = "下次不再提醒";   // QMessageBox::setCheckBox 内嵌复选框：勾选即关掉 UiPrefs::confirmRearrangeRisk 偏好，下次导出不再弹。
+// 导出前「未烧录提醒」（app/controllers/export_controller.cpp）：画布有标注/图层但未勾对应烧录时弹框，
+//   三键：开烧录并导出（视同用户勾选后继续）/ 按现状导出（不改开关）/ 取消（中止）。可经「导出设置·未烧录时导出前提醒」关闭。
+inline constexpr char kBurnSkipTitle[]        = "导出未包含标注/图层";   // QMessageBox::warning 标题。
+inline constexpr char kBurnSkipBodyAnno[]     = "画布上有标注，但未勾选「导出时烧录标注」，导出结果将不含标注。";
+inline constexpr char kBurnSkipBodyLayers[]   = "画布上有图片图层，但未勾选「导出时烧录图片」，导出结果将不含图层。";
+inline constexpr char kBurnSkipBodyBoth[]     = "画布上有标注与图片图层，但二者均未勾选烧录，导出结果将都不含它们。";
+inline constexpr char kBurnSkipEnableExport[] = "开烧录并导出";   // 视同用户勾选对应烧录后继续导出。
+inline constexpr char kBurnSkipExportAsIs[]   = "按现状导出";     // 不改烧录开关，直接导出（不含未烧项）。
+inline constexpr char kBurnSkipDontRemind[]   = "下次不再提醒";   // QMessageBox::setCheckBox 内嵌复选框：勾选即关掉 UiPrefs::confirmBurnInOnExport 偏好，下次不再弹。
 // 外观对话框「快捷键」Tab 的编辑校验（app/appearance_dialog.cpp）：组合键缺修饰 / 冲突改绑询问。
 // 与菜单命令名无关（那些复用 menu::k*），本组只收编辑区的提示与弹窗文本。
 inline constexpr char kShortcutNeedModifier[]  = "组合键须包含 Ctrl 或 Alt";   // 组合键类命令缺 Ctrl/Alt 时的弹提示（回退本行上一次值）。
@@ -389,7 +400,7 @@ inline constexpr char kMobileHelpBody[] =
     "5) 「模式」页选标注工具后在画布绘制；「标注」页改样式/叠放次序/填充、删除选中、清除全部。\n"
     "6) 「图片」页添加/排序/删除图片图层、锚点/枢轴落位。\n"
     "7) 「导出」页设输出方式/格式/烧录开关，工具条「导出」出图。\n"
-    "8) 「更多」：加载/保存配置、选区吸附、外观/交互、重排前二次确认、重置全部、退出。\n\n"
+    "8) 「更多」：加载/保存配置、外观/交互（含选区吸附与重排前确认）、重置全部、退出。\n\n"
     "手势：双指捏合缩放、双击适应窗口、长按＝右键（绘制时长按收笔、菜单可清除切割线）；\n"
     "「步进」盘替代方向键微调选区。";
 inline constexpr char kAboutBody[] =

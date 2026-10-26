@@ -13,7 +13,7 @@
 //       语言区自持一份 Retranslator，选中即 setupFromPreference + retranslate()（本窗换文），并发 languageApplied() 让宿主主窗原地重放——
 //       不依赖 MainWindow 类型（信号解耦），接线由组合处（main_window_menus.cpp / mobile_shell_ui.cpp）负责。
 //       shortcutsEnabled 由构造参数决定：移动端与桌面共用本类（同一编译单元），键盘属桌面能力，
-//       故移动壳显式传 false 关闭「快捷键」页（不能靠逐产物宏区分）。选区吸附不在此——它是运行时开关，挂菜单可勾选 QAction。
+//       故移动壳显式传 false 关闭「快捷键」页（不能靠逐产物宏区分）。选区吸附现收进「其他→确认与吸附」组（即时经 CanvasPrefs::changed 联动生效，不再挂菜单）。
 // ============================================================================
 #pragma once
 
@@ -26,6 +26,7 @@
 #include "i18n/retranslate.h"   // Retranslator + bind 助手（本对话框自身文案原地重放）
 
 class QPushButton;
+class QCheckBox;
 class QSpinBox;
 class QComboBox;
 class QLineEdit;
@@ -94,6 +95,10 @@ private:
     QComboBox* themeCombo_{nullptr};
     // 默认输出文件夹（写 UiPrefs，仅桌面）：行内可手输 + 「浏览…」，改动即时落盘。
     QLineEdit* defaultExportDirEdit_{nullptr};
+    // 「确认与吸附」组复选框（即时写各自单例）：选区吸附→CanvasPrefs，两项导出前确认→UiPrefs。
+    QCheckBox* snapCheck_{nullptr};
+    QCheckBox* confirmBurnInCheck_{nullptr};
+    QCheckBox* confirmRearrangeCheck_{nullptr};
     // —— 快捷键编辑区（仅 shortcutsEnabled_ 时构建）——
     bool shortcutsEnabled_ = true;                    // 构造参数：移动端传 false 关闭「快捷键」Tab。
     QTabWidget* tabs_{nullptr};                        // 外层多页容器（配色 / 其他 / 快捷键）。

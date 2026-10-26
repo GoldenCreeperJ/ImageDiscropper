@@ -62,6 +62,11 @@ public:
     void setBurnInChecked(bool on) const;
     // 反向同步「导出时烧录图片图层」复选框（由 MainWindow 依 Document::layersBurnIn 回灌；blockSignals 防回环）。
     void setLayersBurnInChecked(bool on) const;
+    // 视同用户勾选「导出时烧录标注」：仅在当前未勾时 setChecked(true)，触发 toggled→burnInChanged
+    // 走既有信号链（写回真相源 + 同步菜单/预览）；已勾则不动。供载入配置后按存在性自动开烧录。
+    void enableBurnIn() const;
+    // 视同用户勾选「导出时烧录图片图层」：语义同 enableBurnIn，走 layersBurnInChanged 链。
+    void enableLayersBurnIn() const;
     // 外部（文件菜单「导出设置」）选择输出方式/格式：经 combo 走与用户点击同一
     // onModeChanged/onFormatChanged 路径（含重排 auto-grid 与警告刷新）；面板为唯一真相源。
     void selectExportMode(int index) const;

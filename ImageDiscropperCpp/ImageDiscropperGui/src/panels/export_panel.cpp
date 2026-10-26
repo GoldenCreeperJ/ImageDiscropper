@@ -393,6 +393,17 @@ void ExportPanel::setLayersBurnInChecked(const bool on) const {
     layersBurnIn_->blockSignals(false);
 }
 
+// 视同用户勾选「导出时烧录标注」：不 blockSignals，仅在未勾时 setChecked(true) 触发
+// toggled→burnInChanged，复用既有信号链写回真相源并同步菜单/预览；已勾则不发冗余信号。
+void ExportPanel::enableBurnIn() const {
+    if (burnIn_ && !burnIn_->isChecked()) burnIn_->setChecked(true);
+}
+
+// 视同用户勾选「导出时烧录图片图层」：语义同 enableBurnIn，走 layersBurnInChanged 链。
+void ExportPanel::enableLayersBurnIn() const {
+    if (layersBurnIn_ && !layersBurnIn_->isChecked()) layersBurnIn_->setChecked(true);
+}
+
 // 输出模式变更 → 写回 Document + 切换字段可见性。
 // 外部（文件菜单「导出设置」）选输出方式：与用户点 combo 同一路径（含重排 auto-grid 与警告刷新）。
 void ExportPanel::selectExportMode(const int index) const {

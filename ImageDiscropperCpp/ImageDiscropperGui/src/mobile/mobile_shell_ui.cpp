@@ -384,11 +384,7 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
     QObject::connect(aLoad, &QAction::triggered, w, [w] { w->config_->onLoadConfig(); });
     const QAction* aSave = addI18nAction(IDC_GT(label, kTbSaveConfigEllipsis));
     QObject::connect(aSave, &QAction::triggered, w, [w] { w->config_->onSaveConfig(); });
-    // 选区吸附（运行时开关）：与桌面「视图→选区吸附」同一 CanvasPrefs 应用级态；勾选态切换即时联动重设选区图元。
-    QAction* aSnap = addI18nAction(IDC_GT(menu, kSnapToggle));
-    aSnap->setCheckable(true);
-    aSnap->setChecked(CanvasPrefs::instance().snapEnabled());
-    QObject::connect(aSnap, &QAction::toggled, w, [](const bool on) { CanvasPrefs::instance().setSnapEnabled(on); });
+    // 选区吸附与两项导出前确认已迁至「外观/交互→其他→确认与吸附」（与桌面同构），本菜单不再设入口（偏好仍存 CanvasPrefs/UiPrefs）。
     // 外观/交互：与桌面「视图 → 外观/交互…」同一模态弹窗（Palette + CanvasPrefs 单例共享，
     // 呈现/交互偏好走 QSettings 应用级；移动端同样可用，弹窗控件已在 AppearanceDialog 内取触控下限）。
     // 键盘属桌面能力：传入 shortcutsEnabled=false，移动端不建「快捷键」Tab（其余两页照常）。
@@ -405,11 +401,6 @@ void MobileShellUi::buildBottomBar(MainWindow* w) {
         if (i18n::needsRetranslate(UiPrefs::instance().language()))
             w->retranslateUi();
     });
-    // 重排前二次确认（与桌面「导出设置→重排前二次确认」同一 UiPrefs 应用级态）：行为同构。
-    QAction* aConfirmRearrange = addI18nAction(IDC_GT(menu, kConfirmRearrange));
-    aConfirmRearrange->setCheckable(true);
-    aConfirmRearrange->setChecked(UiPrefs::instance().confirmRearrangeRisk());
-    QObject::connect(aConfirmRearrange, &QAction::toggled, w, [](const bool on) { UiPrefs::instance().setConfirmRearrangeRisk(on); });
     const QAction* aDestroyAll = addI18nAction(IDC_GT(label, kTbResetAll));
     QObject::connect(aDestroyAll, &QAction::triggered, w, [w] { w->session_->onDestroyAll(); });
     moreMenu->addSeparator();

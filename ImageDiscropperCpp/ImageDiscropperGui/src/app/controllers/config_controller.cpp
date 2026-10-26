@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <filesystem>
 
+#include "app/controllers/burn_in_reminder.h"
 #include "app/controllers/doc_history.h"
 #include "app/controllers/preprocess_controller.h"
 #include "app/forms/config_io_dialog.h"   // 保存/加载配置对话框（路径 + 图层资产四选项）
@@ -22,6 +23,7 @@
 #include "model/config_assets.h"          // 资产查找链解析 / 解码注入 / 打包写盘（零 Qt，与 CLI 同规）
 #include "model/document.h"
 #include "model/engine_bridge.h"
+#include "panels/export_panel.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 
@@ -35,6 +37,7 @@ void ConfigController::setPreprocessController(PreprocessController* preprocess)
 void ConfigController::setHistory(DocHistory* history) { history_ = history; }
 void ConfigController::setStatusBar(StatusBar* status) { status_ = status; }
 void ConfigController::setDialogParent(QWidget* parent) { dialogParent_ = parent; }
+void ConfigController::setExportPanel(ExportPanel* panel) { panel_ = panel; }
 
 // 保存配置：把当前作业配置写为 SPEC §7 schema 的 JSON 文件（委托 EngineBridge → Core）。
 void ConfigController::onSaveConfig() {
@@ -59,9 +62,17 @@ void ConfigController::onSaveConfig() {
     path = dlg.path();
     if (path.isEmpty()) return;
 
+    // 未烧录提醒（三键快捷框，可经「外观/交互→其他→确认与吸附」的「未烧录时导出前提醒」关闭，默认开）：有标注/图层但未勾对应烧录时提醒；
+    //   「开烧录并导出」经面板信号链视同勾选后继续，取消则中止。下面据更新后的烧录态决定配置是否写入对应段。
+    if (!confirmBurnInBeforeExport(dialogParent_, panel_, doc_, anno_)) return;
+
     // 保存携带完整声明式预处理队列（含 ResizeOp）：用 buildSerializableConfig（非运行配置的空 preprocess）。
-    // 标注层同时序列化进 SPEC §7 annotations 段（配置为真相源，往返不丢）。
+    // 标注层与图层段的写入由烧录开关决定（用户口径「烧录影响导出配置」）：
+    //   · 图层烧录未勾 → 清空 cfg.layers（不写 §7 layers 段）；仅作用于此处的「保存的配置」，
+    //     DocHistory 快照虽同走 buildSerializableConfig，但不经本函数、不受影响（图层仍可撤销）。
+    //   · 标注烧录未勾 → saveConfig 的 annotations 实参传 nullptr（不写 §7 annotations 段）。
     engine::EngineConfig cfg = doc_->buildSerializableConfig();
+    if (!doc_->layersBurnIn()) cfg.layers.reset();
     // 资产目录为配置目录之内的自定义目录 → 写 assetsDir 字段（相对化，加载端按字段优先解析）；
     //   配置目录之外仍照常打包，但不写字段（字段契约＝配置内相对声明）。
     const QString assetDir = dlg.assetDir();
@@ -71,7 +82,7 @@ void ConfigController::onSaveConfig() {
         if (const QString dirAbs = QFileInfo(assetDir).absoluteFilePath(); dirAbs.startsWith(cfgAbs + u'/'))
             cfg.assetsDir = QDir(cfgAbs).relativeFilePath(dirAbs).toStdString();
     }
-    if (QString err; !EngineBridge::saveConfig(path, cfg, err, &anno_->set(), &percentHints_)) {
+    if (QString err; !EngineBridge::saveConfig(path, cfg, err, anno_->burnInEnabled() ? &anno_->set() : nullptr, &percentHints_)) {
         status_->notify(IDC_GTR(status, kConfigSaveFailed).arg(err), true);
         return;
     }
@@ -173,6 +184,17 @@ void ConfigController::onLoadConfig() {
     // 标注还原在队列重放之后（SPEC §7 顺序纪律：先重放预处理、再还原标注；坐标基准＝预处理产出）。
     // 已知限制：还原不进 DocHistory 撤销栈（标注撤销由 AnnotationEditor 内建条目级会话态承担）。
     anno_->replaceAnnotations(loadedAnno.annotations());
+    // 载入后按存在性单向自动开烧录（仅开不关）：配置带标注→开标注烧录，带叠加图片图层→开图层烧录；
+    //   没有则保持现状不动（绝不主动关）。经 panel 的 enable* 走既有信号链（写回真相源 + 同步面板/菜单/预览）；
+    //   panel 缺位时回退直设真相源（烧录为纯 GUI 运行态、不入配置）。
+    if (anno_->count() > 0) {
+        if (panel_) panel_->enableBurnIn();
+        else anno_->setBurnIn(true);
+    }
+    if (!doc_->layerStack().empty()) {
+        if (panel_) panel_->enableLayersBurnIn();
+        else doc_->setLayersBurnIn(true);
+    }
     // 载入成功回报：底图位图/图层资源有降级时，在成功句后逐段追加非阻断警示片段（任一则 isError=true 取 8s 警示色），载入绝不阻断。
     QString loadedMsg = IDC_GTR(status, kConfigLoaded).arg(path);
     bool degraded = false;

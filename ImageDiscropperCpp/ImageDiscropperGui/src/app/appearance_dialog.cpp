@@ -10,11 +10,12 @@
 //           走 util/retranslate.h 的 bind 助手（设初值 + 登记重放闭包），与面板 retranslate() 同一机制；
 //           故本类自持一份 Retranslator。下拉项数据（语言码）不可译，只重放 itemText（保 userData/currentIndex）。
 // 说明：色块按钮以背景色直观示色，点开 QColorDialog 预选当前色；alpha/交互项用 QSpinBox。
-//       选区吸附不在本对话框（属运行时开关，挂菜单可勾选 QAction）。「恢复默认」回退配色与交互两单例（语言/输出目录不回退）。
+//       选区吸附与两项导出前确认现居「其他→确认与吸附」组（吸附写 CanvasPrefs、确认写 UiPrefs）。「恢复默认」回退配色与交互两单例（含吸附；语言/输出目录/确认偏好不回退）。
 // ============================================================================
 #include "app/appearance_dialog.h"
 
 #include <QAbstractItemView>
+#include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QFileDialog>
@@ -301,9 +302,30 @@ AppearanceDialog::AppearanceDialog(QWidget* parent, const bool shortcutsEnabled)
         defaultExportDirEdit_->setText(d);
         UiPrefs::instance().setDefaultExportDir(d);
     });
-    // 本页顺序按「语言置顶」（用户要求「放到顶上」）重排：应用语言在最上，其次画布交互，末尾默认输出文件夹。
+    // ---- 其他页 · 确认与吸附（选区吸附写 CanvasPrefs，两项导出前确认写 UiPrefs；均即时落盘）----
+    // 吸附属画布交互语义，故与两项导出前确认同归本组；三项均构造时读单例初值、toggled 即时写回对应单例。
+    auto* confirmBox = makeGroupBox(retranslator_, content, IDC_GT(label, kConfirmSnapBoxTitle));
+    auto* cbl = new QVBoxLayout(confirmBox);
+    snapCheck_ = makeCheckBox(retranslator_, confirmBox, IDC_GT(menu, kSnapToggle));
+    snapCheck_->setChecked(CanvasPrefs::instance().snapEnabled());
+    i18n::bindToolTip(retranslator_, snapCheck_, IDC_GT(tooltip, kSnap));
+    connect(snapCheck_, &QCheckBox::toggled, this, [](const bool on) { CanvasPrefs::instance().setSnapEnabled(on); });
+    confirmBurnInCheck_ = makeCheckBox(retranslator_, confirmBox, IDC_GT(menu, kConfirmBurnIn));
+    confirmBurnInCheck_->setChecked(UiPrefs::instance().confirmBurnInOnExport());
+    i18n::bindToolTip(retranslator_, confirmBurnInCheck_, IDC_GT(tooltip, kConfirmBurnIn));
+    connect(confirmBurnInCheck_, &QCheckBox::toggled, this, [](const bool on) { UiPrefs::instance().setConfirmBurnInOnExport(on); });
+    confirmRearrangeCheck_ = makeCheckBox(retranslator_, confirmBox, IDC_GT(menu, kConfirmRearrange));
+    confirmRearrangeCheck_->setChecked(UiPrefs::instance().confirmRearrangeRisk());
+    i18n::bindToolTip(retranslator_, confirmRearrangeCheck_, IDC_GT(tooltip, kConfirmRearrange));
+    connect(confirmRearrangeCheck_, &QCheckBox::toggled, this, [](const bool on) { UiPrefs::instance().setConfirmRearrangeRisk(on); });
+    cbl->addWidget(snapCheck_);
+    cbl->addWidget(confirmBurnInCheck_);
+    cbl->addWidget(confirmRearrangeCheck_);
+
+    // 本页顺序按「语言置顶」（用户要求「放到顶上」）重排：应用语言在最上，其次画布交互与确认/吸附，末尾默认输出文件夹。
     vbox->addWidget(langBox);    vbox->addWidget(interBox);   // 语言置顶，交互随后
     // 应用语言排在交互/输出之上（本页顶部）
+    vbox->addWidget(confirmBox);   // 确认与吸附：紧跟交互组（吸附同属画布交互语义）
     vbox->addWidget(exportBox);
 
     vbox->addStretch(1);
@@ -397,6 +419,8 @@ void AppearanceDialog::refreshInteraction() const {
     zoomMaxSpin_->setValue(prefs.zoomMaxPercent());
     newWidthSpin_->setValue(prefs.newCanvasWidth());
     newHeightSpin_->setValue(prefs.newCanvasHeight());
+    // 吸附复选框同步（属 CanvasPrefs）：「恢复默认」回退后需刷新；阻信号避免回环。
+    if (snapCheck_) { const QSignalBlocker b(snapCheck_); snapCheck_->setChecked(prefs.snapEnabled()); }
 }
 
 // 快捷键 Tab：依 KeyBindings 注册表逐行建表（列 0 命令名 / 列 1 QKeySequenceEdit / 列 2 行内恢复按钮）。

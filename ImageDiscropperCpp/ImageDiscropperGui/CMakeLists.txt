@@ -214,6 +214,7 @@ set(IDC_GUI_APP_SRC
         include/app/canvas_prefs.h
         include/app/app_prefs.h
         include/app/keybindings.h
+        include/app/controllers/burn_in_reminder.h
         include/app/controllers/canvas_coordinator.h
         include/app/controllers/config_controller.h
         include/app/controllers/doc_history.h
@@ -235,6 +236,7 @@ set(IDC_GUI_APP_SRC
         src/app/canvas_prefs.cpp
         src/app/app_prefs.cpp
         src/app/keybindings.cpp
+        src/app/controllers/burn_in_reminder.cpp
         src/app/controllers/canvas_coordinator.cpp
         src/app/controllers/config_controller.cpp
         src/app/controllers/doc_history.cpp

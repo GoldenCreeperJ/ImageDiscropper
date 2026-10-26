@@ -6,6 +6,7 @@
 // ============================================================================
 #include "app/controllers/export_controller.h"
 
+#include <QCheckBox>
 #include <QDateTime>
 #include <QDir>
 #include <QFileDialog>
@@ -13,6 +14,7 @@
 #include <QMessageBox>
 #include <QStandardPaths>
 
+#include "app/controllers/burn_in_reminder.h"
 #include "app/controllers/preprocess_controller.h"
 #include "app/app_prefs.h"
 #include "app/status_bar.h"
@@ -52,16 +54,30 @@ void ExportController::onExport() {
     const engine::EngineConfig cfg = doc_->buildEngineConfig();
 
     // 合并重排参数警告（cols*rows < 保留块数，或 cw/ch < 网格单元尺寸）：导出前弹窗二次确认。
-    // 内联红字已在导出面板实时显示，此处按需求再加一道模态确认；可由「导出设置→重排前确认」关掉。
+    // 内联红字已在导出面板实时显示，此处按需求再加一道模态确认；可由「外观/交互→其他→确认与吸附」的「重排前二次确认」关掉。
     if (UiPrefs::instance().confirmRearrangeRisk()) {
         if (const QString rearrangeWarn = panel_->rearrangeWarning(); !rearrangeWarn.isEmpty()) {
-            const QMessageBox::StandardButton ret = QMessageBox::warning(
-                dialogParent_, IDC_GTR(msg, kRearrangeWarnTitle),
-                rearrangeWarn + IDC_GTR(msg, kRearrangeAskContinue),
-                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+            // 实例式弹框以容纳内嵌复选框（同「重置全部」/未烧录提醒做法）：Yes/No、默认 No。
+            QMessageBox box(dialogParent_);
+            box.setIcon(QMessageBox::Warning);
+            box.setWindowTitle(IDC_GTR(msg, kRearrangeWarnTitle));
+            box.setText(rearrangeWarn + IDC_GTR(msg, kRearrangeAskContinue));
+            box.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+            box.setDefaultButton(QMessageBox::No);
+            // 「下次不再提醒」复选框（默认不勾）：无论点 Yes 还是 No，勾选即在关闭后关掉
+            //   UiPrefs::confirmRearrangeRisk 偏好（落盘），下次导出不再弹。
+            QCheckBox dontRemind(IDC_GTR(msg, kRearrangeDontRemind), &box);
+            box.setCheckBox(&dontRemind);
+            const int ret = box.exec();
+            if (dontRemind.isChecked()) UiPrefs::instance().setConfirmRearrangeRisk(false);
             if (ret != QMessageBox::Yes) return;
         }
     }
+
+    // 未烧录提醒（可由「外观/交互→其他→确认与吸附」的「未烧录时导出前提醒」关掉，默认开）：有标注/图层但未勾对应烧录时弹三键快捷框；
+    //   「开烧录并导出」经面板信号链视同用户勾选对应烧录（同步写回真相源/菜单/预览）后继续，「按现状导出」不改开关继续，取消则中止。
+    //   下面的导出烧录据此读取更新后的 burnInEnabled()/layersBurnIn() 决定是否并入像素。
+    if (!confirmBurnInBeforeExport(dialogParent_, panel_, doc_, anno_)) return;
 
     QString path;
 #ifdef Q_OS_ANDROID

@@ -50,6 +50,7 @@ inline constexpr char kUiLastOpenDir[]       = "lastOpenDir";       // 打开对
 inline constexpr char kUiLastExportDir[]     = "lastExportDir";     // 导出对话框起始目录（上次实际使用，自动记录）。
 inline constexpr char kUiDefaultExportDir[]  = "defaultExportDir";  // 默认输出文件夹（用户预设的导出起始目录，仅桌面；空＝不预设）。
 inline constexpr char kUiConfirmRearrange[]  = "confirmRearrange";  // 重排前二次确认开关。
+inline constexpr char kUiConfirmBurnIn[]     = "confirmBurnIn";     // 未烧录（有标注/图层却没勾烧录）导出前提醒开关。
 inline constexpr char kUiLanguage[]          = "language";           // 界面语言偏好（值见下方 kLangAuto 与 core 的两个语言码）。
 inline constexpr char kUiThemeMode[]         = "themeMode";          // 深浅色主题偏好（值见 util/theme.h：system/light/dark）。
 // 界面语言偏好的**取值**（数据而非文案：写进 QSettings，由 app/main.cpp 与外观对话框同源读写）。
@@ -105,6 +106,7 @@ inline constexpr char kExportRearrange[]     = "重排";
 inline constexpr char kBurnAnnotation[]    = "烧录标注";
 inline constexpr char kBurnImageLayers[]   = "烧录图片图层";
 inline constexpr char kConfirmRearrange[]  = "重排前二次确认";      // 开关态存 UiPrefs（ui/confirmRearrange）。
+inline constexpr char kConfirmBurnIn[]     = "未烧录时导出前提醒";  // 开关态存 UiPrefs（ui/confirmBurnIn）。
 inline constexpr char kFileLoadConfig[]    = "加载配置(&L)…";
 inline constexpr char kFileSaveConfig[]    = "保存配置(&C)…";
 inline constexpr char kFileExit[]          = "退出(&X)";
@@ -492,6 +494,7 @@ inline constexpr char kPolarityRemoveButton[] = "删除框内";   // 与按钮�
 inline constexpr char kDlgTitleAppearance[]   = "外观 / 交互";
 inline constexpr char kPaletteBoxTitle[]      = "画布配色";
 inline constexpr char kInteractionBoxTitle[]  = "画布交互";
+inline constexpr char kConfirmSnapBoxTitle[]  = "确认与吸附";   // 其他页组：选区吸附（CanvasPrefs）+ 两项导出前确认（UiPrefs）；原视图/导出设置菜单入口收拢至此。
 // 配色页六项语义色的行标签（按钮背色即直观示色）。
 inline constexpr char kSwatchKeepMask[]      = "保留块遮罩";
 inline constexpr char kSwatchDeleteMask[]    = "删除块遮罩";

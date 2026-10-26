@@ -24,12 +24,14 @@ const QString kKeyRecent = QString::fromUtf8(texts::ident::kUiRecentFiles);
 const QString kKeyLastOpen = QString::fromUtf8(texts::ident::kUiLastOpenDir);
 const QString kKeyLastExport = QString::fromUtf8(texts::ident::kUiLastExportDir);
 const QString kKeyConfirmRearrange = QString::fromUtf8(texts::ident::kUiConfirmRearrange);
+const QString kKeyConfirmBurnIn = QString::fromUtf8(texts::ident::kUiConfirmBurnIn);
 const QString kKeyLanguage = QString::fromUtf8(texts::ident::kUiLanguage);
 const QString kKeyThemeMode = QString::fromUtf8(texts::ident::kUiThemeMode);
 const QString kKeyDefaultExport = QString::fromUtf8(texts::ident::kUiDefaultExportDir);
 const QString kDefaultLanguage = QString::fromUtf8(texts::ident::kLangAuto);   // 缺省跟随系统 locale
 const auto kDefaultThemeMode = QStringLiteral("system");   // 缺省跟随系统深浅（与 theme::Mode::System 同字）
 constexpr bool kDefaultConfirmRearrange = true;
+constexpr bool kDefaultConfirmBurnIn = true;
 
 } // namespace
 
@@ -46,6 +48,7 @@ UiPrefs::UiPrefs() {
     lastOpenDir_ = st.value(kKeyLastOpen).toString();
     lastExportDir_ = st.value(kKeyLastExport).toString();
     confirmRearrangeRisk_ = st.value(kKeyConfirmRearrange, kDefaultConfirmRearrange).toBool();
+    confirmBurnInOnExport_ = st.value(kKeyConfirmBurnIn, kDefaultConfirmBurnIn).toBool();
     language_ = st.value(kKeyLanguage, kDefaultLanguage).toString();
     themeMode_ = st.value(kKeyThemeMode, kDefaultThemeMode).toString();
     defaultExportDir_ = st.value(kKeyDefaultExport).toString();   // 缺省空（不预设）。
@@ -106,6 +109,16 @@ void UiPrefs::setConfirmRearrangeRisk(const bool on) {
     QSettings st;
     st.beginGroup(kGroup);
     st.setValue(kKeyConfirmRearrange, confirmRearrangeRisk_);
+    st.endGroup();
+    st.sync();
+}
+
+void UiPrefs::setConfirmBurnInOnExport(const bool on) {
+    if (confirmBurnInOnExport_ == on) return;
+    confirmBurnInOnExport_ = on;
+    QSettings st;
+    st.beginGroup(kGroup);
+    st.setValue(kKeyConfirmBurnIn, confirmBurnInOnExport_);
     st.endGroup();
     st.sync();
 }

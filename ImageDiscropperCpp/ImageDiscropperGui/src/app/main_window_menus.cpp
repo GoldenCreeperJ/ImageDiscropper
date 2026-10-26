@@ -153,12 +153,7 @@ void MainWindowUi::buildFileMenu(MainWindow* w, QMenuBar* bar) {
     w->aBurnLayers_->setCheckable(true);
     i18n::bindToolTip(w->retranslator_, w->aBurnLayers_, IDC_GT(tooltip, kBurnImageLayers));
     QObject::connect(w->aBurnLayers_, &QAction::triggered, w, [w](const bool on) { w->exportPanel_->setLayersBurnInChecked(on); });
-    // 重排前二次确认：开关存在 UiPrefs（应用级、跨会话记住），控制 onExport 遇风险时是否弹模态确认（默认开）。
-    QAction* aConfirmRearrange = bindAddAction(w->retranslator_, mExportSet, IDC_GT(menu, kConfirmRearrange));
-    aConfirmRearrange->setCheckable(true);
-    aConfirmRearrange->setChecked(UiPrefs::instance().confirmRearrangeRisk());
-    i18n::bindToolTip(w->retranslator_, aConfirmRearrange, IDC_GT(tooltip, kConfirmRearrange));
-    QObject::connect(aConfirmRearrange, &QAction::toggled, w, [](const bool on) { UiPrefs::instance().setConfirmRearrangeRisk(on); });
+    // 「重排前二次确认」「未烧录时导出前提醒」两开关已迁至「视图→外观/交互→其他→确认与吸附」，本菜单不再设入口（偏好仍存 UiPrefs，onExport/onSaveConfig 照常读取）。
     mFile->addSeparator();
     // 配置文件加载/保存（FR-L3.8）：复用 Core loadEngineConfig/saveEngineConfig（SPEC §7 schema）。
     QAction* aLoadCfg = bindAddAction(w->retranslator_, mFile, IDC_GT(menu, kFileLoadConfig));
@@ -631,16 +626,9 @@ void MainWindowUi::buildViewMenu(MainWindow* w, QMenuBar* bar) {
     addViewToggle(IDC_GT(menu, kShowCellNumber), &LayerPanel::setNumberVisible, &LayerPanel::numberVisibilityChanged);
 
     mView->addSeparator();
-    // 选区吸附（运行时开关）：拖动选区/边时是否自动吸附到图像边界与中线；状态走 CanvasPrefs（QSettings 应用级）。
-    // 切换即时经 CanvasPrefs::changed 联动 CanvasView 回设已存在选区图元，无需重建。
-    QAction* aSnap = bindAddAction(w->retranslator_, mView, IDC_GT(menu, kSnapToggle));
-    aSnap->setCheckable(true);
-    aSnap->setChecked(CanvasPrefs::instance().snapEnabled());
-    i18n::bindToolTip(w->retranslator_, aSnap, IDC_GT(tooltip, kSnap));
-    QObject::connect(aSnap, &QAction::toggled, w, [](const bool on) { CanvasPrefs::instance().setSnapEnabled(on); });
     // 外观/交互：QTabWidget 多页采参——配色页（六色 + 三 alpha 写 Palette，含深浅色主题写 UiPrefs）、其他页
-    // （画布交互写 CanvasPrefs + 应用语言 + 默认输出文件夹写 UiPrefs）、快捷键页（KeyBindings，桌面方开）；
-    // 均 QSettings 应用级持久化，改动即时生效（选区吸附不在此——上面已作可勾选运行时开关）。
+    // （画布交互写 CanvasPrefs + 应用语言 + 默认输出文件夹写 UiPrefs + 「确认与吸附」组：选区吸附写 CanvasPrefs、两项导出前确认写 UiPrefs）、
+    // 快捷键页（KeyBindings，桌面方开）；均 QSettings 应用级持久化，改动即时生效（选区吸附已并入本对话框）。
     QAction* aAppearance = bindAddAction(w->retranslator_, mView, IDC_GT(menu, kAppearance));
     i18n::bindToolTip(w->retranslator_, aAppearance, IDC_GT(tooltip, kAppearance));
     QObject::connect(aAppearance, &QAction::triggered, w, [w] {

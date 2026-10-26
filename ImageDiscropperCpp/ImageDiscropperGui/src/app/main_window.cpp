@@ -166,6 +166,7 @@ void MainWindow::initCore() {
     config_->setHistory(history_);
     config_->setStatusBar(status_);
     config_->setDialogParent(this);
+    config_->setExportPanel(exportPanel_);   // 载入配置后按存在性单向自动开烧录时走面板 enable* 信号链
 
     connectAll();                    // 剩余跨件串联（须在历史启用态刷新之前）。
 

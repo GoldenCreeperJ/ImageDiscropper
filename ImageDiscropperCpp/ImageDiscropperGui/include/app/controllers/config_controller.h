@@ -20,6 +20,7 @@ class AnnotationBridge;
 class PreprocessController;
 class DocHistory;
 class StatusBar;
+class ExportPanel;
 
 // ---------------------------------------------------------------------------
 // ConfigController：配置保存/加载编排。
@@ -36,6 +37,7 @@ public:
     void setHistory(DocHistory* history);        // recordConfigLoad（载入压栈可撤销）
     void setStatusBar(StatusBar* status);
     void setDialogParent(QWidget* parent);       // 配置对话框父窗口（桌面 QFileDialog / 移动端 QInputDialog 列表选择框）
+    void setExportPanel(ExportPanel* panel);     // 导出面板（载入后按存在性单向自动开烧录时走其 enable* 信号链；缺位则回退直设真相源）
 
 public slots:
     void onSaveConfig();   // 保存配置：当前作业配置写为 §7 schema JSON（委托 EngineBridge → Core）。
@@ -48,6 +50,7 @@ private:
     DocHistory* history_{nullptr};
     StatusBar* status_{nullptr};
     QWidget* dialogParent_{nullptr};
+    ExportPanel* panel_{nullptr};   // 载入后自动开烧录的目标面板（null → 直设 Document/AnnotationBridge 真相源）
     // 当前文档配置中「以百分比书写」的几何字段（载入时收集、保存时回写）：值未被编辑且基准尺寸未变
     //   则原样写回 "N%"，否则写像素（判定全在 Core，本层只做搬运）。
     core::PercentHints percentHints_;
