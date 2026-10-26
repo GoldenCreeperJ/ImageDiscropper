@@ -215,6 +215,7 @@ inline constexpr char kSessionNoLayersToClear[]  = "当前无图片图层可清�
 inline constexpr char kSessionLayersCleared[]    = "已清空全部图片图层（保留底图/标注/预处理）";
 inline constexpr char kSessionNothingToReset[]   = "无图像可重置";
 inline constexpr char kSessionAllReset[]         = "已重置全部（保留底图）";
+inline constexpr char kSessionAllResetNoBase[]   = "已重置全部（含底图，画布已清空）；可「打开/新建」重新载入图像";
 // 配置存取回报（app/controllers/config_controller.cpp）：
 inline constexpr char kConfigSaved[]        = "配置已保存：%1";
 inline constexpr char kConfigSaveFailed[]   = "保存配置失败：%1";
@@ -332,7 +333,8 @@ inline constexpr char kShortcutResetConflictBody[] = "恢复默认后检测到�
 inline constexpr char kClearLayersTitle[] = "清空全部图层";
 inline constexpr char kClearLayersAsk[]   = "确定要清空全部 %1 个图片图层吗？将仅保留底图（标注与预处理保留）。";
 inline constexpr char kResetAllTitle[]    = "重置全部";   // 工具栏动作短名同字见 label::kTbResetAll（对话框标题 / 控件文字角色不同，各立一条）。
-inline constexpr char kResetAllAsk[]      = "将清空：图片图层（回退底图）、全部标注、全部预处理、选区。\n保留：底图本身。确定继续？";
+inline constexpr char kResetAllAsk[]      = "将清空：图片图层、全部标注、全部预处理、选区。\n默认保留底图；勾选下方可一并删除（清空为无图）。确定继续？";
+inline constexpr char kResetAllDeleteBase[] = "同时删除底图（清空为无图）";   // 「重置全部」对话框内嵌复选框（QMessageBox::setCheckBox）：勾选则连底图一并删、文档回空白态。
 // 清除全部标注的二次确认（app/controllers/annotation_coordinator.cpp::onAnnoClearAll，Yes/No、默认 No）。
 // 标题与面板按钮 label::kClearAllAnnoButton 同字但角色不同（对话框标题 / 控件文字），各立一条。
 inline constexpr char kClearAnnosTitle[]  = "清除全部标注";

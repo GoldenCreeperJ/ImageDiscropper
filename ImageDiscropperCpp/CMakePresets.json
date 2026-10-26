@@ -18,7 +18,7 @@
     },
     {
       "name": "windows-debug",
-      "displayName": "Windows Debug（Ninja + MSVC + vcpkg 清单模式）",
+      "displayName": "Windows Debug",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -29,7 +29,7 @@
     },
     {
       "name": "windows-release",
-      "displayName": "Windows Release（Ninja + MSVC + vcpkg 清单模式）",
+      "displayName": "Windows Release",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",

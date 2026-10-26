@@ -80,6 +80,37 @@ void Document::setImage(core::Image img, QString path) {
     emit imageChanged();
 }
 
+// 删除底图并复位为空白文档（setImage 的逆操作）：把与「有图」相关的全部状态清回构造初态——
+//   基准/工作图/底图像素与声明/预处理会话/图层栈与每层会话/选区全部置空，layersActive_=false。
+//   发 imageChanged()：MainWindow::onImageChanged → PreviewController::rebuildPreviewPixmap 命中 !hasImage() 分支 scene_->clearAll() 清场。
+//   不动 mode/polarity/导出/网格参数（它们仅是参数，空白文档下引擎/预览入口自被 hasImage 早退）。
+void Document::resetToEmpty() {
+    original_ = core::Image{};
+    working_ = core::Image{};
+    preprocess_.clear();
+    imagePath_.clear();
+    baseImage_ = core::Image{};
+    baseLayer_.reset();
+    baseOpacity_ = 255;
+    baseSelected_ = false;
+    baseSession_.clear();
+    fadedBaseCache_ = FadedBaseCache{};   // 底图已空：显式作废淡出缓存。
+    canvasOpacity_ = 255;
+    layers_.clear();
+    imageLayersVisible_ = true;
+    layersActive_ = false;                // 回空白文档：非图层画布。
+    canvasWidth_ = 0;
+    canvasHeight_ = 0;
+    selectedLayerId_.reset();
+    nextLayerId_ = 1;
+    layerSessions_.clear();
+    hasRect_ = false;
+    rect_ = engine::RectRegion{};
+    rects_.clear();
+    selectedCells_.clear();
+    emit imageChanged();
+}
+
 // 新建语义（**非破坏性**）：以新扁平底图替换画布基座、保留图层栈与色彩预处理（详见头文件）。
 //   与 setImage 的关键差异：不清图层/不取消标注会话、仅剥除会改变尺寸的 resize+几何预处理，
 //   从而“新建同尺寸画布”不会清空图层/标注/预处理。标注捕获回填与色彩预处理重放均由调用方（SessionController）掌控。

@@ -47,6 +47,7 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"status::kSessionLayersCleared", "Cleared all image layers (keeps base image/annotations/preprocess)"},
     {"status::kSessionNothingToReset", "No image to reset"},
     {"status::kSessionAllReset", "Reset everything (base image kept)"},
+    {"status::kSessionAllResetNoBase", "Reset everything (base image deleted too; canvas cleared) - use Open/New to load an image again"},
     // 配置存取回报
     {"status::kConfigSaved", "Configuration saved: %1"},
     {"status::kConfigSaveFailed", "Failed to save the configuration: %1"},
@@ -155,7 +156,8 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"msg::kClearLayersTitle", "Clear All Layers"},
     {"msg::kClearLayersAsk", "Clear all %1 image layer(s)? Only the base image will be kept (annotations and preprocess are kept)."},
     {"msg::kResetAllTitle", "Reset All"},
-    {"msg::kResetAllAsk", "Will clear: image layers (fall back to the base image), all annotations, all preprocess steps, selection.\nKept: the base image itself. Continue?"},
+    {"msg::kResetAllAsk", "Will clear: image layers, all annotations, all preprocess steps, selection.\nThe base image is kept by default; tick the box below to delete it too (clear to no image). Continue?"},
+    {"msg::kResetAllDeleteBase", "Also delete the base image (clear to no image)"},
     {"msg::kClearAnnosTitle", "Clear All Annotations"},
     {"msg::kClearAnnosAsk", "Clear all %1 annotation(s)? This can be reverted with Undo Annotation."},
     // 内核调用桥的失败报因（Core 自身的错误文本不在本层重复定义）

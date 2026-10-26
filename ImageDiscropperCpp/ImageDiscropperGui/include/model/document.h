@@ -75,6 +75,10 @@ public:
     // 载入新图像＝建立「含底图的图层画布」（打开图片）：img 立为 baseImage_（input 生态位，**绝不入 layers_**）、
     //   layersActive_ 置真、恒等底图声明带白 backdrop；original_ 与 working_ 均置为 img（无预处理）。记录路径、清空选区，发 imageChanged()。
     void setImage(core::Image img, QString path);
+    // 删除底图并复位为空白文档（「重置全部」勾选「同时删除底图」）：把图像/图层/底图/预处理会话/选区
+    //   全部回到构造初态（layersActive_=false、各像元清空），发 imageChanged() 交预览 clearAll 清场。
+    //   仅复位与「有图」相关的状态；模式/极性/导出/网格参数不动（空白文档下引擎入口自会被 hasImage 早退）。
+    void resetToEmpty();
     // 新建语义（**非破坏性**）：以新扁平底图 flat 替换画布基座（入 baseImage_），保留图层栈/每层会话与画布级**色彩预处理**，
     //   清空 resize 与**几何预处理**（防重放改变尺寸）；**不触碰标注**（由调用方捕获后回填）；
     //   尺寸不变则保留框选、尺寸变化则清框选。恒图层画布——无图首次新建经 beginLayerCanvas 起画布（flat 作底图、绝不入

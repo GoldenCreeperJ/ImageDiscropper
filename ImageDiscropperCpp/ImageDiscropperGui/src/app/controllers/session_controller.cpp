@@ -6,6 +6,7 @@
 #include "app/controllers/session_controller.h"
 
 #include <QDir>
+#include <QCheckBox>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMessageBox>
@@ -162,23 +163,34 @@ void SessionController::onClearAllLayers() const {
     status_->notify(IDC_GTR(status, kSessionLayersCleared), false);
 }
 
-// 一键重置全部：清图层（回底图）+ 清全部标注 + 重置全部预处理（含几何/resize）+ 清选区，仅保留底图。
+// 一键重置全部：清图层（回底图）+ 清全部标注 + 重置全部预处理（含几何/resize）+ 清选区，默认仅保留底图。
+// 对话框内嵌「同时删除底图」复选框（QMessageBox::setCheckBox，默认不勾）：勾选则连底图一并删、文档回空白态。
 void SessionController::onDestroyAll() const {
     if (!doc_->hasImage()) { status_->notify(IDC_GTR(status, kSessionNothingToReset), true); return; }
-    if (const auto ret = QMessageBox::question(dialogParent_, IDC_GTR(msg, kResetAllTitle),
-            IDC_GTR(msg, kResetAllAsk),
-            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-        ret != QMessageBox::Yes) return;
-    if (doc_->hasLayers()) doc_->clearAllLayersToBase();   // 仅清叠加层、保留底图为图层画布（layersChanged→recompose 以仅底图重出）。
-    doc_->resetPreprocess();                              // 清画布预处理（含 resize/几何），working_=original_。
-    anno_->setBaseImage(doc_->working());            // 复位标注会话＝清空全部标注 + 重置重做栈。
-    doc_->clearRect();
-    doc_->clearRects();
-    doc_->clearCells();
-    if (doc_->selectedLayerId()) doc_->selectLayer(std::nullopt);
+    QMessageBox box(QMessageBox::Question, IDC_GTR(msg, kResetAllTitle), IDC_GTR(msg, kResetAllAsk),
+                    QMessageBox::Yes | QMessageBox::No, dialogParent_);
+    box.setDefaultButton(QMessageBox::No);
+    QCheckBox deleteBaseCheck(IDC_GTR(msg, kResetAllDeleteBase), &box);
+    box.setCheckBox(&deleteBaseCheck);
+    if (box.exec() != QMessageBox::Yes) return;
+
+    const bool deleteBase = deleteBaseCheck.isChecked();
+    if (deleteBase) {
+        doc_->resetToEmpty();                 // 连底图一并删→空白文档（发 imageChanged → 预览 clearAll 清场；选区/图层/预处理随之置空）。
+        anno_->setBaseImage(doc_->working()); // working_ 已空→复位标注会话＝清空全部标注 + 重置重做栈。
+    } else {
+        if (doc_->hasLayers()) doc_->clearAllLayersToBase();   // 仅清叠加层、保留底图为图层画布（layersChanged→recompose 以仅底图重出）。
+        doc_->resetPreprocess();                               // 清画布预处理（含 resize/几何），working_=original_。
+        anno_->setBaseImage(doc_->working());                  // 复位标注会话＝清空全部标注 + 重置重做栈。
+        doc_->clearRect();
+        doc_->clearRects();
+        doc_->clearCells();
+        if (doc_->selectedLayerId()) doc_->selectLayer(std::nullopt);
+    }
     toolPanel_->setMode(CanvasMode::Marquee);
     history_->reset();
-    status_->notify(IDC_GTR(status, kSessionAllReset), false);
+    status_->notify(deleteBase ? IDC_GTR(status, kSessionAllResetNoBase)
+                               : IDC_GTR(status, kSessionAllReset), false);
 }
 
 // 从给定路径载入图像（委托 EngineBridge → Core readImageFile），成功后建预览并刷新。
