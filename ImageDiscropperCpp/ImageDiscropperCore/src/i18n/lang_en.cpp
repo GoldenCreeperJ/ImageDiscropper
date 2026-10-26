@@ -79,7 +79,7 @@ constexpr I18nEntry kEntriesCoreEn[] = {
     {"msg::kErrLayerPercentNoBasis", "Layer field '%1' uses a percentage, but the canvas size is unknown (the canvas width/height must be determined first)"},
     {"msg::kErrAnnoParseFailed", "Annotation JSON parse failed: "},
     {"msg::kErrAnnoPercentNoBasis", "Annotation geometry '%1' uses a percentage, but the coordinate reference size is unknown (the work-image width/height must be determined first)"},
-    // —— §7 配置 schema 严格校验报因（engine_config_json.cpp::validateSchema）：%1＝JSON 路径、%2＝原值，皆数据不译 ——
+    // —— §7 配置 schema 严格校验报因（schema_validate.cpp::validateSchema）：%1＝JSON 路径、%2＝原值，皆数据不译 ——
     {"msg::kErrConfigNotObject", "Config field '%1' must be an object"},
     {"msg::kErrConfigNotArray", "Config field '%1' must be an array"},
     {"msg::kErrConfigNotInteger", "Config field '%1' must be an integer"},

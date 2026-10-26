@@ -8,10 +8,12 @@
 // 分块依据：jsonkey 按 SPEC §7 的段归属（每组注释标明实现来源文件，即这些键的实际读写处）：
 //       · common —— 跨段复用的同名键（width/height/x/y/kind/opacity/…）只定义一次，
 //         避免同一键名在写出侧与读取侧各写一份而漂移（这是本文件存在的核心理由）。
-//       · config —— §7 顶层与 source/cut/select/order/export/merge/arrange 段（src/engine/engine_config_json.cpp）。
-//       · layer  —— generate 段与 layers[i] 的 source/transform/imagePlacement（同上 + engine_config_json_internal.h）。
-//       · anno   —— annotations 段逐条元素（src/annotation/annotation_json.cpp）。
-//       · pre    —— 预处理步骤 {op, ...params}（engine_config_json_internal.h / engine_config_json.cpp）。
+//       · config —— §7 顶层与 source/cut/select/order/export/merge/arrange 段（src/engine/config_json/engine_config_json.cpp）。
+//       · layer  —— generate 段与 layers[i] 的 source/transform/imagePlacement（同上 + config_json/engine_config_json_internal.h；
+//                  config_json/schema_validate.cpp 校验、config_json/percent_coords.cpp 换算 transform 百分比）。
+//       · anno   —— annotations 段逐条元素（src/annotation/annotation_json.cpp 写侧 / annotation_json_parse.cpp 读侧）。
+//       · pre    —— 预处理步骤 {op, ...params}（写出在 config_json/engine_config_json_internal.h，读取在 config_json/engine_config_json.cpp；
+//                  config_json/schema_validate.cpp 校验、config_json/percent_coords.cpp 换算 resize 百分比）。
 // 命名：k + 键名驼峰（cellWidth → kCellWidth）；值与 SPEC §7 逐字节一致，注释写「谁写 / 谁读」。
 // 类型：inline constexpr char[]（UTF-8 字节串，MSVC 三层已 /utf-8）。nlohmann 的 operator[] 与
 //       jsonutil::at(const char*) 直接接受，不引入 std::string 全局对象（免静态初始化顺序与启动开销）。
@@ -57,7 +59,7 @@ inline constexpr char kFile[] = "file";               // 图层来源的相对�
 } // namespace common
 
 // ---------------------------------------------------------------------------
-// config：§7 顶层与 cut / order（含 select）/ export 段（src/engine/engine_config_json.cpp）。
+// config：§7 顶层与 cut / order（含 select）/ export 段（src/engine/config_json/engine_config_json.cpp）。
 // ---------------------------------------------------------------------------
 namespace config {
 inline constexpr char kSource[] = "source";           // 顶层：原图尺寸段。
@@ -94,7 +96,8 @@ inline constexpr char kArrange[] = "arrange";         // export.merge.arrange �
 
 // ---------------------------------------------------------------------------
 // layer：generate 段（底图）与 layers[i]（图层）的 source / transform / imagePlacement
-//       （src/engine/engine_config_json.cpp + engine_config_json_internal.h）。
+//       （src/engine/config_json/engine_config_json.cpp + config_json/engine_config_json_internal.h；
+//        config_json/schema_validate.cpp 校验、config_json/percent_coords.cpp 换算 transform 百分比）。
 // ---------------------------------------------------------------------------
 namespace layer {
 inline constexpr char kRecipe[] = "recipe";           // source.recipe（图案配方）。
@@ -127,7 +130,7 @@ inline constexpr char kBackdrop[] = "backdrop";       // 落位框背板图案�
 } // namespace layer
 
 // ---------------------------------------------------------------------------
-// anno：annotations 段逐条元素（src/annotation/annotation_json.cpp；
+// anno：annotations 段逐条元素（src/annotation/annotation_json.cpp 写侧 / annotation_json_parse.cpp 读侧；
 //       x/y/type/points/closed/cornerRadius/zOrder/transform 复用 common）。
 // ---------------------------------------------------------------------------
 namespace anno {
@@ -146,7 +149,8 @@ inline constexpr char kRotationDeg[] = "rotationDeg"; // transform.rotationDeg�
 } // namespace anno
 
 // ---------------------------------------------------------------------------
-// pre：预处理步骤 {op, ...params}（写出在 engine_config_json_internal.h，读取在 engine_config_json.cpp）。
+// pre：预处理步骤 {op, ...params}（写出在 config_json/engine_config_json_internal.h，读取在 config_json/engine_config_json.cpp；
+//      config_json/schema_validate.cpp 校验、config_json/percent_coords.cpp 换算 resize 百分比）。
 // ---------------------------------------------------------------------------
 namespace pre {
 inline constexpr char kOp[] = "op";                   // 步类型（gray/split/invert/rotate/flip/resize）。
@@ -227,7 +231,7 @@ inline constexpr char kEngineNotCollapsible[] = "保留集不可坍缩，且标�
                                                 "请调整切割线使删除区覆盖整行/整列，或改用分离导出";
 inline constexpr char kEngineSourceEmptyAfterPreprocess[] = "预处理后图像为空，无法切割";
 
-// 标注 JSON 逐条校验报因（src/annotation/annotation_json.cpp）。
+// 标注 JSON 逐条校验报因（src/annotation/annotation_json_parse.cpp）。
 inline constexpr char kErrMissingNumField[] = "缺少或非法数值字段 '%1'";   // %1＝键名（IDC_KTRF 填充）。
 inline constexpr char kErrAnchorDegenerate[] = "锚点退化：";             // 后接下列各形状尺寸报因。
 inline constexpr char kErrRectSize[] = "矩形宽高须大于 0";
@@ -267,7 +271,7 @@ inline constexpr char kErrAnnoParseFailed[] = "标注 JSON 解析失败：";  //
 // 段级入口（CLI --annotation / --annotations）写百分比但基准尺寸未知（<= 0）：换算不出像素。
 inline constexpr char kErrAnnoPercentNoBasis[] = "标注几何 '%1' 使用了百分比，但坐标基准尺寸未知（须先确定工作图宽高）";
 
-// §7 配置 schema 严格校验报因（src/engine/engine_config_json.cpp::validateSchema）：
+// §7 配置 schema 严格校验报因（src/engine/config_json/schema_validate.cpp::validateSchema）：
 //   仅当键「显式写出且值非 null」而类型/取值非法时才报错；缺失/null 仍走默认（向后兼容不变）。
 //   %1＝JSON 路径（如 cut.tier / layers[0].source.recipe.kind），%2＝原值——皆数据，不译。
 inline constexpr char kErrConfigNotObject[] = "配置字段 '%1' 须为对象";

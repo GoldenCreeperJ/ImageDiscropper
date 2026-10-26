@@ -195,8 +195,10 @@ set(IDC_GUI_PANELS_SRC
         src/panels/left_panel.cpp
         src/panels/param_panel.cpp
         src/panels/param_panel_pages.cpp
+        src/panels/param_panel_grid.cpp
         src/panels/export_panel.cpp
         src/panels/export_panel_merge.cpp
+        src/panels/export_panel_output.cpp
         src/panels/preprocess_panel.cpp
         src/panels/preprocess_panel_sections.cpp
         src/panels/mode_tool_panel.cpp
@@ -231,7 +233,10 @@ set(IDC_GUI_APP_SRC
         include/app/controllers/session_controller.h
         include/app/status_bar.h
         src/app/controllers/annotation_coordinator.cpp
-        src/app/appearance_dialog.cpp
+        src/app/dialogs/appearance_dialog.cpp
+        src/app/dialogs/appearance_dialog_colors.cpp
+        src/app/dialogs/appearance_dialog_other.cpp
+        src/app/dialogs/appearance_dialog_shortcuts.cpp
         src/app/palette.cpp
         src/app/canvas_prefs.cpp
         src/app/app_prefs.cpp
@@ -243,12 +248,15 @@ set(IDC_GUI_APP_SRC
         src/app/controllers/export_controller.cpp
         src/app/controllers/key_router.cpp
         src/app/main_window.cpp
-        src/app/main_window_menus.cpp
+        src/app/menus/main_window_menus.cpp
+        src/app/menus/main_window_menus_mode.cpp
+        src/app/menus/main_window_menus_canvas.cpp
+        src/app/menus/main_window_menus_view.cpp
         src/app/forms/pattern_form.cpp
         src/app/forms/placement_row.cpp
         src/app/forms/config_io_dialog.cpp
         src/app/main_window_ui.cpp
-        src/app/new_canvas_dialog.cpp
+        src/app/dialogs/new_canvas_dialog.cpp
         src/app/controllers/preprocess_controller.cpp
         src/app/controllers/preprocess_controller_canvas.cpp
         src/app/controllers/preprocess_controller_commit.cpp

@@ -9,9 +9,11 @@
 // 分块依据：对话框只是 Palette / CanvasPrefs / UiPrefs / KeyBindings 的采参视图，自身不持任何偏好状态（单一真相源在各单例）；
 //           故无「确定/取消」回滚语义——改后即生效、即落盘。底部「恢复默认」同时回退配色与交互两单例
 //           （语言/主题/输出目录/快捷键不在内：各属显式选定偏好或另有自身恢复入口）。
+//           实现按页拆四个 TU 于 src/app/dialogs/：appearance_dialog.cpp（装配壳）/ _colors（配色页）/
+//           _other（其他页）/ _shortcuts（快捷键页）；页构建器只回传页面部件，tab 登记与页序统一留在装配壳构造。
 // 说明：属 app 编排层（与新建画布对话框并列），依赖 app 层单例与 util 的 i18n 重放基建；
 //       语言区自持一份 Retranslator，选中即 setupFromPreference + retranslate()（本窗换文），并发 languageApplied() 让宿主主窗原地重放——
-//       不依赖 MainWindow 类型（信号解耦），接线由组合处（main_window_menus.cpp / mobile_shell_ui.cpp）负责。
+//       不依赖 MainWindow 类型（信号解耦），接线由组合处（menus/main_window_menus_view.cpp / mobile_shell_ui.cpp）负责。
 //       shortcutsEnabled 由构造参数决定：移动端与桌面共用本类（同一编译单元），键盘属桌面能力，
 //       故移动壳显式传 false 关闭「快捷键」页（不能靠逐产物宏区分）。选区吸附现收进「其他→确认与吸附」组（即时经 CanvasPrefs::changed 联动生效，不再挂菜单）。
 // ============================================================================
@@ -69,6 +71,10 @@ private:
     void refreshSwatches();                  // 从 Palette 回读全部色块/alpha，刷新外观。
     void refreshInteraction() const;               // 从 CanvasPrefs 回读交互偏好（手柄/余量/缩放/新建），刷新数值框。
     void retranslate() const;                      // 语言热切换：逐条重放本对话框全部可译文案（值/色块与语言无关，不重跑）。
+
+    // —— 页面构建器（按页拆 TU：_colors / _other / _shortcuts；tab 登记由装配壳构造统一负责）——
+    QWidget* buildColorsTab();                // 配色页（六色+三 alpha+深浅色主题）。
+    QWidget* buildOtherTab();                 // 其他页（交互 / 语言 / 输出 / 确认与吸附）。
 
     // —— 快捷键编辑区（仅 shortcutsEnabled_）——
     void buildShortcutsTab();                                                                // 依 KeyBindings 注册表逐行建表（命令名 / QKeySequenceEdit / 行内恢复按钮）。

@@ -43,7 +43,9 @@ public:
     static void syncLayerAvailability(const MainWindow& w);
 
 private:
-    // 按菜单域拆分的静态构建 helper（定义在 main_window_menus.cpp；buildMenus 依序调用）。
+    // 按菜单域拆分的静态构建 helper（定义在 src/app/menus/main_window_menus*.cpp 四个 TU：
+    //   文件/编辑 + 总装配与共享绑定助手在 main_window_menus.cpp，模式/预处理在 _mode，
+    //   图片/标注在 _canvas，视图/帮助在 _view；buildMenus 依序调用）。
     // 声明为 MainWindowUi 静态成员以继承其 friend 权限（自由函数无法访问 MainWindow 私有成员）。
     static void buildFileMenu(MainWindow* w, QMenuBar* bar);
     static void buildEditMenu(MainWindow* w, QMenuBar* bar);

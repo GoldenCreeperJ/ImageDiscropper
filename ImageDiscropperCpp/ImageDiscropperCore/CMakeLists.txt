@@ -29,8 +29,10 @@ endif()
 # 第三方依赖（均由 vcpkg 提供，且全部以 PRIVATE 方式接入——不经公共头暴露给下游）：
 #   · stb           header-only 图像编码库，仅 src/io/image_io.cpp 内含 <stb_image_write.h> 并定义实现宏。
 #   · libwebp       WebP 编码库，仅 src/io/image_io.cpp 内含 <webp/encode.h>/<webp/decode.h>（补齐 stb 不支持的 WebP）。
-#   · nlohmann_json 单头 JSON 库，仅 engine_config_json.cpp 与 annotation/annotation_json.cpp 内含 <nlohmann/json.hpp>
-#                   （配置整档 / 标注段 JSON，二者经私有内部头 src/json_common.h 共用助手与片段交换）。
+#   · nlohmann_json 单头 JSON 库，仅配置 / 标注的私有实现内含 <nlohmann/json.hpp>：
+#     engine_config_json.cpp（codec）、schema_validate.cpp、percent_coords.cpp（居 src/engine/config_json/，
+#     经私有内部头 src/json_common.h / engine_config_json_internal.h 共用助手）与
+#     annotation_json.cpp / annotation_json_parse.cpp（经 src/json_common.h、annotation_json_internal.h）。
 # 三者均只在各自 .cpp 内部使用，公共头不出现其类型，故对下游零依赖扩散（依赖单向）。
 # ---------------------------------------------------------------------------
 find_package(Stb REQUIRED)
@@ -68,12 +70,13 @@ set(IDC_GEOMETRY_SRC
 )
 
 # annotation：标注集合（FR-1.3，纯数据 + zOrder + 光栅合成；编辑会话态属 GUI AnnotationEditor）
-#             + 标注 ↔ JSON 序列化（SPEC §7 annotations 段）
+#             + 标注 ↔ JSON 序列化（SPEC §7 annotations 段，写侧 annotation_json.cpp / 读侧 annotation_json_parse.cpp）
 set(IDC_ANNOTATION_SRC
         src/annotation/shape_factory.cpp
         src/annotation/rasterizer.cpp
         src/annotation/annotation_set.cpp
         src/annotation/annotation_json.cpp
+        src/annotation/annotation_json_parse.cpp
         src/annotation/view_transform.cpp
 )
 
@@ -104,7 +107,9 @@ set(IDC_ENGINE_SRC
         src/engine/sequence.cpp
         src/engine/composition.cpp
         src/engine/export.cpp
-        src/engine/engine_config_json.cpp
+        src/engine/config_json/schema_validate.cpp   # §7 schema 严格校验（读侧守卫；validateSchema / validateLayerSeg）
+        src/engine/config_json/percent_coords.cpp    # 百分比坐标读侧归一化 + 保存侧回写（resolvePercentCoords / applyPercentHints）
+        src/engine/config_json/engine_config_json.cpp
         src/engine/engine.cpp
 )
 

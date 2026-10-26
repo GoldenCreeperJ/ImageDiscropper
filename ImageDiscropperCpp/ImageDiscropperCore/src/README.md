@@ -10,7 +10,8 @@
 内部 `.cpp` 以相对路径包含，**绝不经 `include/` 公共头外泄给下游**（同 [../CMakeLists.txt](../CMakeLists.txt)
 的 PRIVATE 封装注释与仓库根 CONTRIBUTING「分层纪律」）。判据：若某助手被**两个及以上模块**共同依赖、
 且其口径漂移会影响向后兼容，就上收到本层单一真相源；只服务单模块的一律留在模块目录内
-（先例：`engine/engine_config_json_internal.h` 只在 engine 内用，故留在 `engine/`）。
+（先例：`engine/config_json/engine_config_json_internal.h`、`annotation/annotation_json_internal.h` 只在各自模块内用，
+故留在各自目录）。
 
 | 文件              | 内容                                                                                                                                                  |
 |-----------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|

@@ -24,7 +24,7 @@
 
 namespace idc::core::nums {
 
-// engine：SPEC §7 配置读写的兜底默认与边界（src/engine/engine_config_json*.cpp、
+// engine：SPEC §7 配置读写的兜底默认与边界（src/engine/config_json/engine_config_json*.cpp、
 //       include/engine/composition.h、src/io/image_io.cpp）。
 namespace engine {
 inline constexpr int kDefaultOpacity = 255;      // 缺 opacity 键时的回退值＝全不透明乘子。三处共用：顶层画布级、
@@ -67,7 +67,7 @@ namespace canvas {
 } // namespace canvas
 
 // generate：程序化图案的参数默认与边界（include/generate/pattern.h、src/generate/pattern.cpp、
-//       src/engine/engine_config_json_internal.h 的 §7 读取回退）。
+//       src/engine/config_json/engine_config_json_internal.h 的 §7 读取回退）。
 namespace generate {
 inline constexpr int kDefaultPeriod = 32;      // 周期 / 格子边长 / 环间距默认 px（PatternParams 初值与 §7 回退同源）。
 inline constexpr int kMinPeriod = 2;           // 周期下限：小于 2 会让取模图案退化成纯色，生成前钳制。

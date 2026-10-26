@@ -1,16 +1,17 @@
 // ============================================================================
-// 文件：src/engine/engine_config_json_internal.h（Core 私有内部头，仅 engine_config_json.cpp 包含）
+// 文件：src/engine/config_json/engine_config_json_internal.h（Core 私有内部头，仅 engine 配置三实现包含）
 // 作用：EngineConfig ↔ SPEC §7 JSON 的「枚举 ↔ 串 / 颜色 / 宽容读取」助手区：
 //       tierName/generatorName/remainderName 等枚举串映射 + cut/generate/preprocess
-//       各段 toJson/fromJson 小助手。单消费者内部头（同 json_common.h 先例：仅 Core 内部 .cpp
+//       各段 toJson/fromJson 小助手。内部头（同 json_common.h 先例：仅 Core 内部 .cpp
 //       以相对路径包含，绝不外泄公共头）。
 // 常量层：本头内的 keys:: / defs:: / nums:: 三个别名是 §7 键名 / 兜底默认串 / 数字兜底的
-//       引用简写（定义见 include/i18n/core_texts.h 与 core_nums.h）；engine_config_json.cpp 经
+//       引用简写（定义见 include/i18n/core_texts.h 与 core_nums.h）；三个配置实现
+//       （engine_config_json.cpp / schema_validate.cpp / percent_coords.cpp）经
 //       `using namespace detail` 共用同一套，故不得在 .cpp 里重复定义。
 // ============================================================================
 #pragma once
 
-#include "../json_common.h"   // idc::jsonutil 助手（单一真相源）
+#include "../../json_common.h"   // idc::jsonutil 助手（单一真相源）
 
 #include <nlohmann/json.hpp>
 

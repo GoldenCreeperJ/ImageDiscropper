@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件：app/new_canvas_dialog.cpp
+// 文件：app/dialogs/new_canvas_dialog.cpp
 // 作用：实现 NewCanvasDialog（见同名头文件说明）——尺寸/附加图片/两级落位采参控件装配、
 //       小尺寸代理实时预览，以及 accept() 时的全尺寸两段合成（图片→图层框→叠到图案底图）。
 //       图案采参表单（底色/前景/类型/方向/参数/噪声）位于 app/forms/PatternFormWidget（pattern_form.h）。

@@ -96,7 +96,7 @@ ImageDiscropperCore/
 │   ├── canvas/               多层画布数据模型与合成：ImageLayer / composeCanvas（零 GUI、无 IO）
 │   ├── generate/             程序化图案生成：makePattern / PatternKind / PatternParams
 │   └── engine/               ★ Grid-Selection-Export 统一引擎接口
-├── src/                      对应 include 的实现（含私有内部头 json_common.h、engine_config_json_internal.h、pixel_kernels.h）
+├── src/                      对应 include 的实现（含私有内部头 json_common.h、engine/config_json/engine_config_json_internal.h、pixel_kernels.h）
 ├── examples/                 演示程序 demo_main.cpp（真正跑通引擎并导出到 demo_output/）
 └── tests/                    自测 test_main.cpp + test_engine_*.cpp（引擎验收）+ test_i18n_*.cpp（i18n 内核与目录对账）
 ```
