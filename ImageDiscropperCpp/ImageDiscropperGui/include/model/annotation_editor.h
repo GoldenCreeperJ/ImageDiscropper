@@ -47,9 +47,9 @@ enum class EditType {
 class AnnotationEditor {
 public:
     // ------ 底图与会话 ------
-    // 设置底图：拷贝持有；新底图＝新会话，清空标注集合与重做栈、复位选中。
+    // 设置底图＝开新标注会话：清空标注集合与重做栈、复位选中。**不拷贝持有像素**——
+    //   导出/烧录恒经 burnIn(base) 传当前工作图（避免陈旧副本）；本参数仅表达「换底」事件语义。
     void setImage(const core::Image& img);
-    const core::Image& image() const { return image_; }
 
     // 只读引用底层集合：供保存配置时把当前标注交给 EngineBridge 序列化。
     const annotation::AnnotationSet& set() const { return set_; }
@@ -121,8 +121,8 @@ public:
     void restoreAnnotations(std::vector<annotation::Annotation> items);
 
     // ------ 合成 ------
-    // 以所持底图合成（委托集合 burnIn）；或显式传入 base（供底图与内部不一致的场景）。
-    core::Image burnIn() const { return set_.burnIn(image_); }
+    // 以显式传入的 base（当前工作图）合成（委托集合 burnIn）：不复用会话自身——
+    //   本类不持有底图像素（内存短路），烧录基准恒由调用方供给，确保与预处理后最新底图一致。
     core::Image burnIn(const core::Image& base) const { return set_.burnIn(base); }
 
 private:
@@ -131,7 +131,6 @@ private:
 
     annotation::AnnotationSet set_;               // 数据集合（唯一标注真相源，含 zOrder 不变式）
     std::vector<annotation::Annotation> redoStack_; // 重做栈（撤销弹尾入此、重做回推集合）
-    core::Image image_;                           // 底图（供无参 burnIn）
 
     EditType editType_{EditType::Draw};
     geometry::ShapeType currentType_{geometry::ShapeType::Line};

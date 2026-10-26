@@ -67,7 +67,7 @@ public:
     explicit AnnotationBridge(QObject* parent = nullptr);
 
     // ---- 底图与会话 ----
-    // 设置底图：委托 Core setImage（内部会清空旧标注＝开启新标注会话）。
+    // 设置底图：委托 editor 开新标注会话（内部清空旧标注；**不拷贝持有像素**）。
     // 载入新图 / 维度变化的预处理后调用；同维度预处理不清标注（矢量叠加 + 导出注入当前 base）。
     void setBaseImage(const core::Image& base);
 

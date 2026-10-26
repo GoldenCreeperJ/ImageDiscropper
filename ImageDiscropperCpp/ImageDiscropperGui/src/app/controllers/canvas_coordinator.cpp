@@ -66,7 +66,8 @@ void CanvasCoordinator::connectSignals() {
     });
     connect(scene_, &CanvasScene::imageLayerMoved, this, [this](const int id, const int dx, const int dy) {
         if (const canvas::ImageLayer* layer = doc_->layerById(id)) {
-            canvas::ImageLayer updated = *layer;
+            // transform-only 就地更新（不拷贝整层声明含源位图）：拖拽逐帧调用，零大拷贝。
+            canvas::ImageTransform t = layer->transform;
             // 拖拽增量来自场景（工作图）坐标系，而 transform.x/y 是画布坐标系声明态：
             //   需经画布级有效管线的逆映射（mapDeltaToInput）换回画布增量再累加，
             //   否则画布级 rotate/flip/resize 后拖动方向错乱（与选框映射同口径，空管线→恒等）。
@@ -74,9 +75,9 @@ void CanvasCoordinator::connectSignals() {
             double cdx = 0.0;
             double cdy = 0.0;
             canvasGeom.mapDeltaToInput(dx, dy, doc_->canvasWidth(), doc_->canvasHeight(), cdx, cdy);
-            updated.transform.x += static_cast<int>(std::llround(cdx));
-            updated.transform.y += static_cast<int>(std::llround(cdy));
-            doc_->updateLayer(id, updated);   // → layersChanged → recomposeLayerCanvas → working_ → 落位框回灌。
+            t.x += static_cast<int>(std::llround(cdx));
+            t.y += static_cast<int>(std::llround(cdy));
+            doc_->updateLayerTransform(id, t);   // → layersChanged → recomposeLayerCanvas → working_ → 落位框回灌。
         }
     });
 }

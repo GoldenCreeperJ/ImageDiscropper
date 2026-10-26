@@ -85,8 +85,8 @@ engine::EngineConfig ConfigCodec::buildSerializableConfig(const Document& doc) {
         cfg.source.width = doc.canvasWidth_;
         cfg.source.height = doc.canvasHeight_;
     } else {
-        cfg.source.width = doc.original_.width();
-        cfg.source.height = doc.original_.height();
+        cfg.source.width = doc.original().width();
+        cfg.source.height = doc.original().height();
     }
     return cfg;
 }
@@ -206,6 +206,11 @@ void ConfigCodec::applyEngineConfig(Document& doc, const engine::EngineConfig& c
             if (layer.id >= doc.nextLayerId_) doc.nextLayerId_ = layer.id + 1;
         }
         doc.layers_ = std::move(restored);   // 图片图层数组整体替换（显隐不随配置还原，已在上方置回默认可见）。
+        // 载入 zOrder 视作权威（含乱序/带间隙的旧配置）→ 稳定重排 + 重编号，重建「向量序≡zOrder 下标」不变式。
+        std::ranges::stable_sort(doc.layers_, [](const canvas::ImageLayer& a, const canvas::ImageLayer& b) {
+            return a.zOrder < b.zOrder;
+        });
+        for (std::size_t k = 0; k < doc.layers_.size(); ++k) doc.layers_[k].zOrder = static_cast<int>(k);
         if (doc.selectedLayerId_ && doc.layerById(*doc.selectedLayerId_) == nullptr) doc.selectedLayerId_.reset();
         layersRestored = true;
     } else {

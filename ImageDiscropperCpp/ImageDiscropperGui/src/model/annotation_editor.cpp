@@ -22,7 +22,7 @@ namespace idc::gui {
 
 // 设置底图：拷贝一份到内部，同时清空标注集合与重做栈（新的底图意味着新的编辑会话）。
 void AnnotationEditor::setImage(const core::Image& img) {
-    image_ = img.clone();
+    (void)img;                    // 像素不再持有（内存短路）：烧录基准恒由 burnIn(base) 调用方供给。
     set_.clear();               // 新底图 = 新会话：一并清空集合与重做栈
     redoStack_.clear();
     selectedIndex_.reset();

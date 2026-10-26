@@ -38,9 +38,27 @@ QImage toQImage(const core::Image& img) {
     return {};
 }
 
-// 将 core::Image 转换为 QPixmap（经 toQImage）。
+// 将 core::Image 转换为 QPixmap：以**零拷贝 QImage 视图**直喂 QPixmap::fromImage（其内部深拷贝进
+//   平台 pixmap，视图随调用结束失效）——免 toQImage 的 view.copy() 一份全图临时拷贝（仅省转换峰值）。
 QPixmap toPixmap(const core::Image& img) {
-    return QPixmap::fromImage(toQImage(img));
+    if (img.empty()) {
+        return {};
+    }
+
+    const int w = img.width();
+    const int h = img.height();
+    const auto* bytes = img.data();
+
+    // Core Image 为行主序、紧凑排列（无行填充），故 bytesPerLine = 宽 × 每像素字节数。
+    switch (img.format()) {
+        case core::ImageFormat::Rgba:
+            return QPixmap::fromImage(QImage(bytes, w, h, w * 4, QImage::Format_RGBA8888));
+        case core::ImageFormat::Rgb:
+            return QPixmap::fromImage(QImage(bytes, w, h, w * 3, QImage::Format_RGB888));
+        case core::ImageFormat::Gray:
+            return QPixmap::fromImage(QImage(bytes, w, h, w, QImage::Format_Grayscale8));
+    }
+    return {};
 }
 
 } // namespace idc::gui

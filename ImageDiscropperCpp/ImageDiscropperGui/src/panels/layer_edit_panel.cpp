@@ -1,9 +1,8 @@
 // ============================================================================
 // 文件：panels/layer_edit_panel.cpp
 // 作用：实现「图层编辑」面板的构建与模型反向同步（见同名头文件说明）。
-// 分块依据：三块分组——① 图层列表 + 增删序按钮；② 落位变换区（锚点/枢轴/偏移/宽高）；
-//           ③ 画布尺寸区。控件回调只发意图信号，无任何图层 / 合成 / 像素逻辑
-//          （CONTRIBUTING.md「分层纪律」）。
+// 分块依据：两块分组——① 图层增删序按钮；② 落位变换区（锚点/枢轴/偏移/宽高/不透明度）。
+//           控件回调只发意图信号，无任何图层 / 合成 / 像素逻辑（CONTRIBUTING.md「分层纪律」）。
 // ============================================================================
 #include "panels/layer_edit_panel.h"
 
@@ -19,7 +18,6 @@
 #include <QVBoxLayout>
 
 #include "model/document.h"
-#include "generate/pattern.h"   // generate::kMaxDimension：画布尺寸上限的真相源在 Core
 #include "util/coord_spin.h"
 #include "util/gui_nums.h"
 #include "util/widget_factory.h"
@@ -122,19 +120,6 @@ LayerEditPanel::LayerEditPanel(QWidget* parent) : QWidget(parent) {
     tfForm->addRow(applyTransformBtn_);
     root->addWidget(tfBox);
 
-    // ---- ③ 画布尺寸区 ----
-    auto* sizeBox = makeGroupBox(retranslator_, this, IDC_GT(label, kCanvasSizeBox));
-    auto* sizeLay = new QHBoxLayout(sizeBox);
-    canvasWSpin_ = makeSpin(sizeBox, 1, generate::kMaxDimension, QStringLiteral(" ×"));
-    canvasHSpin_ = makeSpin(sizeBox, 1, generate::kMaxDimension, QStringLiteral(" px"));
-    applyCanvasBtn_ = makeButton(retranslator_, sizeBox, IDC_GT(label, kApplyButton));
-    i18n::bindToolTip(retranslator_, applyCanvasBtn_, IDC_GT(tooltip, kLayerCanvasSizeApply));
-    sizeLay->addWidget(canvasWSpin_);
-    sizeLay->addWidget(canvasHSpin_);
-    sizeLay->addWidget(applyCanvasBtn_);
-    sizeLay->addStretch(1);
-    root->addWidget(sizeBox);
-
     root->addStretch(1);
 
     // ---- 回调 → 意图信号 ----
@@ -146,7 +131,6 @@ LayerEditPanel::LayerEditPanel(QWidget* parent) : QWidget(parent) {
     connect(addImageBtn_, &QPushButton::clicked, this, &LayerEditPanel::addImageRequested);
     connect(clearLayersBtn_, &QPushButton::clicked, this, &LayerEditPanel::clearAllLayersRequested);
     connect(applyTransformBtn_, &QPushButton::clicked, this, &LayerEditPanel::onApplyTransform);
-    connect(applyCanvasBtn_, &QPushButton::clicked, this, &LayerEditPanel::onApplyCanvasSize);
     // 落位编辑即时预览：锚点 / 枢轴 / 偏移 / 目标尺寸任一改变即提交（syncing_ 已回环护栏）。
     connect(anchorCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, &LayerEditPanel::onApplyTransform);
     connect(pivotCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, &LayerEditPanel::onApplyTransform);
@@ -180,17 +164,13 @@ void LayerEditPanel::syncFromDocument() {
 
     const bool hasCanvas = doc_->hasLayers();
 
-    // 回填选中层变换 + 画布尺寸。
+    // 回填选中层变换。
     const auto sel = doc_->selectedLayerId();
     const canvas::ImageLayer* layer = sel.has_value() ? doc_->layerById(*sel) : nullptr;
     if (layer != nullptr) loadTransformIntoControls(layer->transform);
     // 无选中图片图层（图层画布）：不透明度控件按当前预处理目标回填——Base→底图整体透明度、Canvas→画布级透明度。
     else if (hasCanvas) opacitySpin_->setValue(doc_->preprocessTarget() == PreprocessTarget::Base
                                                    ? doc_->baseOpacity() : doc_->canvasOpacity());
-    if (hasCanvas) {
-        canvasWSpin_->setValue(doc_->canvasWidth());
-        canvasHSpin_->setValue(doc_->canvasHeight());
-    }
 
     setControlsEnabled(hasCanvas, layer != nullptr);
     syncing_ = false;
@@ -214,9 +194,6 @@ void LayerEditPanel::setControlsEnabled(const bool hasLayerCanvas, const bool ha
     // 「添加图片」入口：只要有图即可用（有图即图层画布；空文档经 ensureLayerCanvas 兜底起画布）。
     addImageBtn_->setEnabled(doc_ != nullptr && doc_->hasImage());
     clearLayersBtn_->setEnabled(hasLayerCanvas);   // 仅图层画布态可清空全部图层。
-    canvasWSpin_->setEnabled(hasLayerCanvas);
-    canvasHSpin_->setEnabled(hasLayerCanvas);
-    applyCanvasBtn_->setEnabled(hasLayerCanvas);
     moveUpBtn_->setEnabled(hasSelection);
     moveDownBtn_->setEnabled(hasSelection);
     moveTopBtn_->setEnabled(hasSelection);
@@ -279,11 +256,6 @@ void LayerEditPanel::onApplyTransform() {
     t.height = heightSpin_->value();
     t.opacity = opacitySpin_->value();
     emit layerTransformRequested(*id, t);
-}
-
-void LayerEditPanel::onApplyCanvasSize() {
-    if (syncing_) return;
-    emit canvasSizeRequested(canvasWSpin_->value(), canvasHSpin_->value());
 }
 
 } // namespace idc::gui

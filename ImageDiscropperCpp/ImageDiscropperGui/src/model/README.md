@@ -10,13 +10,13 @@
 | `preprocess_session.{h,cpp}`    | 预处理会话（纯 C++、零 Qt）：声明式轻队列 `steps_` + 独立 `resize_` + `base_` 重放缓存 + geo→color 不变式/块内移动限幅/载入归一化/`effectivePipeline`/`baseDirtyFor`/`geomSig`/`producesGray` 等纯策略（由 `Document` 组合持有、`PreprocessController` 经 Document 驱动）                                                                                  |
 | `layer_session_store.{h,cpp}`   | `LayerSessionStore`（纯 C++、零 Qt）：按 layerId 单点持有每层「预处理声明态会话（`LayerSession`＝`PreprocessSession` + `LayerSig` 物化签名）+ 逐层物化位图（并列 `unordered_map<int,core::Image>`，零拷贝直传 `composeCanvas`）」，统一生命周期回收（`find`/`ensure`/`remove`/`clear`/`prune`；由 `Document` 组合持有、`PreprocessController` 经 Document 驱动，只存数据不跑像素） |
 | `engine_bridge.{h,cpp}`         | GUI 中**唯一**触碰切割引擎 API 的类                                                                                                                                                                                                                                                                               |
-| `annotation_editor.{h,cpp}`     | 标注会话编辑器（纯 C++、零 Qt 依赖）：组合 Core `annotation::AnnotationSet` + 撤销/重做双栈 + `EditType`/选中/`current*` 属性模板 + 底图持有                                                                                                                                                                                            |
+| `annotation_editor.{h,cpp}`     | 标注会话编辑器（纯 C++、零 Qt 依赖）：组合 Core `annotation::AnnotationSet` + 撤销/重做双栈 + `EditType`/选中/`current*` 属性模板；**不持有底图像素**（内存短路——`setImage` 仅开新会话清旧标注，烧录基准恒由 `burnIn(base)` 调用方供给当前工作图）                                                                                                                          |
 | `annotation_bridge_pending.cpp` | `AnnotationBridge` 的「绘制流程」域实现（TU 拆分）：pending 草稿重建/两点形状 begin·update·commit/折线·画笔路径/文字添加                                                                                                                                                                                                                |
 | `annotation_bridge.{h,cpp}`     | 标注域桥：唯一持有并驱动 `AnnotationEditor`（其下组合 Core `annotation::AnnotationSet`）                                                                                                                                                                                                                                 |
 
 ## Document（QObject）
 
-持有：原图 `original_`（不可变）/ **预处理会话 `preprocess_`（`PreprocessSession`：组合声明式轻队列 `steps_` + 独立 `resize_` + `base_` 重放缓存，详见下「PreprocessSession」小节）** / 工作图 `working_`（＝在 `preprocess_` 有效管线上重放的物化产物；新载入图时会话清空、`working_`≡`original_`）、模式 `Tier`（默认 L1）、
+持有：原图基准 `original_`（**派生锚点、非缓存**——恒等 compose 时 `original()` 别名 `baseImage_` 零物化，非恒等时为展平物化副本，由重组/提交链结构性写入）/ **预处理会话 `preprocess_`（`PreprocessSession`：组合声明式轻队列 `steps_` + 独立 `resize_` + `base_` 重放缓存，详见下「PreprocessSession」小节）** / 工作图 `working_`（**派生锚点**——恒等管线时 `working()` 派生别名重放基准零物化，否则为物化产物；新载入图时会话清空、`working_`≡`original_`）、模式 `Tier`（默认 L1）、
 极性 `Polarity`（默认 Keep）、L1 形状 / L2 子功能、选区矩形 `RectRegion` + `hasRect_`、
 **L2 多矩形列表 `rects_`（仅 `MultiRect` 生效；进入该子功能时把现有单选区带入空列表，切出后内容保留但不参与切割）**、
 导出参数（`ExportMode`/`MergeLayout`/`ExportFormat`/质量/命名/输出目录/输出文件）、
@@ -30,7 +30,7 @@ L3 网格参数 `GridParams`（默认单元 100×100，避免 `GridParams` 默�
   `MultiRect` 时 `buildCutConfig` 另把 `rects_` 搬运进 `CutConfig::rects`（Core 对每个矩形诱导十字带后取并集，方案 A）。
 - `buildCutConfig()` / `buildEngineConfig()`：**纯字段搬运 + 枚举映射**，不含任何几何/极性判定。`buildEngineConfig` 为**运行配置**（送预览/导出，`cfg.preprocess` 恒空——队列已物化进 `working_`）。
 - `buildSerializableConfig()`：**序列化配置**（供保存配置）——与 `buildEngineConfig` 同构但携带 `preprocess_.effectivePipeline()`（`[resize?]+steps_`）、`source` 取**原图尺寸**（与加载时重放基准一致）。
-- 预处理访问（均**转委托 `preprocess_`**）：`steps()`/`setSteps(pipeline)`（回灌整条轻队列）、`resizeTarget()`/`setResize()`、`geomSig()`（`preprocess_.geomSig(original_.w, original_.h)`→尺寸/净旋转象限，供 `PreprocessController` 尺寸门）、`hasPreprocess()`/`hasResize()`/`preprocessProducesGray()`、base 缓存系列（`hasBase`/`base`/`basePrefix`/`setBase`/`clearBase`/`baseDirtyFor`）。`setImage`/`resetPreprocess` 走 `preprocess_.clear()` 使会话失效。
+- 预处理访问（均**转委托 `preprocess_`**）：`steps()`/`setSteps(pipeline)`（回灌整条轻队列）、`resizeTarget()`/`setResize()`、`geomSig()`（`preprocess_.geomSig(original().w, original().h)`→尺寸/净旋转象限，供 `PreprocessController` 尺寸门）、`hasPreprocess()`/`hasResize()`/`preprocessProducesGray()`、base 缓存系列（`hasBase`/`base`/`basePrefix`/`setBase`/`clearBase`/`baseDirtyFor`）。`setImage`/`resetPreprocess` 走 `preprocess_.clear()` 使会话失效。
 - `applyEngineConfig(cfg)`：`buildEngineConfig` 的**互逆反向映射**（配置加载与撤销重做共用）——生成器+tier 还原 L1 形状/L2 子功能，搬运几何/选择集/排序/导出参数（optional 画布/单元尺寸 nullopt↔0）；直接改字段后只发一次 `changed()`；不还原 source 尺寸（图像不随配置/快照变）；守卫「非 L3 不得重排」「网格单元尺寸为正」不变式。
 - 信号：`imageChanged()`（换图，需重建预览 pixmap）、`changed()`（任意参数变更，仅需刷新预览）。
 - `setMode()` 套用模式定义极性（L1→Keep、L2→Remove；L1≡keep、L2≡remove）；**切入 L3 保留当前极性不变**（L3 极性独立，从 L2 进 L3 沿用 remove）；**离开 L3 时若 `layout_==Rearrange` 自动复位为 Collapse**（模型层维持「重排仅 L3」不变式）。
@@ -49,6 +49,24 @@ L3 网格参数 `GridParams`（默认单元 100×100，避免 `GridParams` 默�
   `>0` 才写入 `CompositionParams` 的 `cols/rows/cellWidth/cellHeight`（optional），否则保持 `nullopt` 交 Core 自动推导。
 - 重排填充顺序：`setMergeOrderStrategy(s)`（仅 RowMajor/ColumnMajor，Custom 按行优先）/`setMergeOrderReverse(on)`/`setMergeOrderSnake(on)`
   改值后发 `changed`；`buildEngineConfig` 中透传 `cfg.exportParams.mergeOrder = mergeOrder_`。
+
+### 存储路线总图（像素位图盘点与失效纪律）
+
+主干：输入 → 底图 `baseImage_` →（展平重组）→ 基准锚点 `original_` →（画布级管线重放）→ 工作图锚点 `working_` → 预览/引擎/导出。
+
+| 位图                            | 位置                | 定性                                                      | 失效纪律                                                                         |
+|-------------------------------|-------------------|---------------------------------------------------------|------------------------------------------------------------------------------|
+| `baseImage_`                  | Document          | 输入像素（不可约）                                               | 整体替换（setImage/resetBaseWith/setBaseImage）                                    |
+| `original_`                   | Document          | **派生锚点**（恒等 compose 时 `original()` 别名 `baseImage_` 零物化） | 重组/提交链结构性写入；恒等早退清空                                                           |
+| `working_`                    | Document          | **派生锚点**（恒等管线时 `working()` 别名重放基准零物化）                   | 提交链结构性写入；恒等早退清空                                                              |
+| `preprocess_.base_`           | PreprocessSession | resize 重放缓存                                             | **DerivedCache**（Key＝[resize?] 前缀比对）                                         |
+| `fadedBaseCache_`             | Document          | 底图色+淡出产物缓存                                              | **DerivedCache**（Key＝内容指纹+不透明度+色彩步）；恒等早退清缓存                                  |
+| `layerSessions_.materialized` | LayerSessionStore | 每层物化位图                                                  | LayerSig 键控（同 DerivedCache 纪律；保持 `map<int,Image>` 以零拷贝直传 Core composeCanvas） |
+| `layer.decodedPixels`         | 各层声明              | 文件层源像素（**常驻内存不释放**——删原图不得影响程序功能）                        | 随层删/换图/重载                                                                    |
+| 标注域                           | AnnotationEditor  | **不持有底图**（烧录基准由 `burnIn(base)` 调用方供给）                   | —                                                                            |
+| 历史快照                          | DocHistory        | 声明态快照（像素不入）                                             | 清历史                                                                          |
+
+统一失效纪律（终局）：**`DerivedCache<Key,Value>`**（model/derived_cache.h）——Key 覆盖产物全部输入即自愈，3 套历史失效策略（显式挂钩/前缀比对/内容指纹）归一为 1 套键比对；恒等短路（内存短路 1/2）在缓存之前早退，恒等态零物化。
 
 ## PreprocessSession（纯 C++、零 Qt）
 
@@ -95,6 +113,6 @@ effectivePipeline）。**只持声明态与派生查询，绝不跑像素**：`b
 - **层序（叠放次序）**：`raiseSelected/lowerSelected/bringSelectedToFront/sendSelectedToBack` 作用于选中标注，取 `selectedAnnotationIndex()` 与 `annotations().size()` 算目标下标后委托 Core `moveAnnotation`（`Annotation::zOrder` 恒等于列表下标、大＝顶，增删移后由 Core 统一规范化），发 `changed()+selectionChanged()` 驱动画布重绘与面板回显；已在目标边界（顶/底）则早退。
 - **变换（缩放/旋转/翻转）**：`transformSelected(sx,sy,rotateDeg)` 委托 Core `Shape::applyObbTransform`（非破坏性仿射：绕局部盒中心沿自身轴缩放 + 绕世界中心刚性旋转，保留具体类型与字形不退化）；sx/sy 为**增量系数**（1.0=不变、负即翻转）、rotateDeg 为增量角。`displayObbScaleX/Y/RotationDeg()` 读出 Core 累积的**绝对带符号值**供属性面板忠实回显（变换语义与累积参数机制见 `include/geometry`）。属性面板与画布手柄**共用此入口**；无选中或增量恒等（1,1,0）则忽略。
 - **撤销/重做/清除**：`undo/redo/clearAll` → editor `revoke/redo/clear`（条目级撤销双栈：列表即主栈、撤销弹尾入重做栈、新操作清重做，GUI 不自建历史栈）。
-- **图层可见/导出烧录**：`setLayerVisible/setBurnIn` 为 GUI 侧标志；`burnIn(base)` 以传入的**当前工作图**为底逐个调 editor 的合成入口（委托 `AnnotationSet::burnIn(base)`，不复用会话 `AnnotationEditor` 所持可能陈旧的底图 `image_`，确保与预处理后最新底图一致）。
+- **图层可见/导出烧录**：`setLayerVisible/setBurnIn` 为 GUI 侧标志；`burnIn(base)` 以传入的**当前工作图**为底逐个调 editor 的合成入口（委托 `AnnotationSet::burnIn(base)`；会话**不持有底图像素**——`setBaseImage` 仅开新会话清旧标注，烧录基准恒由调用方供给，确保与预处理后最新底图一致）。
 - **配置还原**（SPEC §7 `annotations` 段）：`set()` 只读引用内部 Core `AnnotationSet`，供保存配置时交给 `EngineBridge::saveConfig` 序列化；`replaceAnnotations(items)` 委托 editor `restoreAnnotations` 整体替换当前列表（不推撤销快照、取消选中）后发 `changed()/selectionChanged()`；调用方（`ConfigController::onLoadConfig`）需保证在预处理队列重放**之后**执行（尺寸门现仅清框选、不清标注）；还原不纳入 DocHistory 文档撤销栈（已知限制）。
 - **信号**：`changed()`（标注列表/预览变化→画布重绘）、`selectionChanged()`（选中变化→高亮+属性面板）、`toolChanged()`（工具变化→面板同步）。

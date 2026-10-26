@@ -38,10 +38,18 @@ void PreprocessController::syncLayerMaterialCache(const std::vector<canvas::Imag
 // 多层画布重组：叠加层栈 / 画布尺寸声明变时由本方法展平回灌。无叠加层（含空文档）早退。
 // 步骤：① 以**画布底图 canvasBase()** 为基、当前叠加层声明栈调 composeCanvas 得 width×height 展平底图；
 //       ② setOriginalImage 回灌为 original_（失效画布 base_）；③ 在新基准上走 commitPipeline 重放画布级预处理→working_。
-//       画布预处理声明未变 → commitPipeline 内部 geomSig 前后一致 → 不误清选区（尺寸变已在 setCanvasSize 清）。
+//       画布预处理声明未变 → commitPipeline 内部 geomSig 前后一致 → 不误清选区（画布尺寸变恒经画布级 resize 由 geomSig 门清）。
 void PreprocessController::recomposeLayerCanvas() {
     if (!doc_->hasLayers()) return;
     if (const int w = doc_->canvasWidth(), h = doc_->canvasHeight(); w <= 0 || h <= 0) return;
+    // 恒等早退（内存短路 2）：无叠加层 + 底图无色彩预处理与淡出 + 底图尺寸=画布尺寸 → 展平恒等底图自身：
+    //   清空物化展平副本（original() 转别名 baseImage_）、免 compose 全图合成，直走 commitPipeline 重放。
+    if (doc_->composeIsIdentity()) {
+        doc_->clearOriginalImage();
+        commitPipeline(doc_->steps(), doc_->resizeTarget(), IDC_GTR(status, kLayerRecomposed),
+                       IDC_GTR(status, kLayerRecomposeBusy));
+        return;
+    }
     // 以当前声明栈为准（各层已含 transform/zOrder/preprocess）；底图作 base 铺于叠加层之下。
     const std::vector<canvas::ImageLayer>& layers = doc_->layerStack();
     // 先按签名刷新逐层物化缓存：仅签名（来源/图层框/底色/预处理/目标尺寸）变化的层重跑 materializeLayer，改落位/不透明度（transform.x/y/锚点/opacity）复用缓存整层位图。
@@ -69,10 +77,12 @@ core::Image PreprocessController::composeLayerCanvasForExport(const bool include
     if (!doc_->hasLayers()) return doc_->working();   // 无叠加层：叠加层无从谈起，恒回工作图。
     // 并入叠加层：working_ 即全量合成形态，直接复用，省一次全量合成 + 管线重放。
     if (includeOverlays) return doc_->working();
+    // 恒等早退（内存短路 2）：无叠加层（恒等 compose）时「仅底图」形态即工作图自身，免 compose + 管线重放。
+    if (doc_->composeIsIdentity()) return doc_->working();
     const int w = doc_->canvasWidth(), h = doc_->canvasHeight();
     if (w <= 0 || h <= 0) return doc_->working();
     // 不含叠加层：传空 layers（仅底图），Core 不持显隐态、形态由调用方传参决定。
-    static const std::vector<canvas::ImageLayer> kNoLayers;
+    static constexpr std::vector<canvas::ImageLayer> kNoLayers;
     // 复用已按签名刷新的物化缓存（命中直取、未命中 Core 回退现算）；底图取 fadedCanvasBase（折入底图色 + 淡）。
     const core::Image composed = EngineBridge::composeCanvas(kNoLayers, w, h, doc_->fadedCanvasBase(), &doc_->layerSessions().materialized());
     if (composed.empty()) return doc_->working();      // 合成失败回退当前工作图（与重组早退同口径）。
@@ -91,6 +101,8 @@ core::Image PreprocessController::composeLayersForDisplay() const {
     if (!doc_ || !doc_->hasLayers()) return core::Image{};
     const int w = doc_->canvasWidth(), h = doc_->canvasHeight();
     if (w <= 0 || h <= 0) return core::Image{};
+    // 空叠加层栈：无图层像素可显示——早退返回空图，免空栈合成出一张全透明全画布（内存短路）。
+    if (doc_->layerStack().empty()) return core::Image{};
     const core::Image composed = EngineBridge::composeCanvas(doc_->layerStack(), w, h, core::Image{}, &doc_->layerSessions().materialized());
     if (composed.empty()) return core::Image{};
     const auto eff = PreprocessSession::makeEffective(doc_->resizeTarget(), doc_->steps());

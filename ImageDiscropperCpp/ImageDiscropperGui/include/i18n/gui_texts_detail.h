@@ -90,7 +90,6 @@ inline constexpr char kLayerOffsetYSpin[]  = "自由偏移 Y。";
 inline constexpr char kLayerWidthSpin[]    = "目标宽（0＝用原生尺寸不缩放）。";
 inline constexpr char kLayerHeightSpin[]   = "目标高（0＝用原生尺寸不缩放）。";
 inline constexpr char kLayerOpacitySpin[]  = "不透明度 0–255（255 不透明），影响预览与导出。";
-inline constexpr char kLayerCanvasSizeApply[] = "改画布尺寸：仅清空框选/网格选区，保留图层与标注。";
 // 以下为预处理面板（src/panels/preprocess_panel.cpp 与 preprocess_panel_sections.cpp）各控件悬停说明。
 inline constexpr char kPreprocessTarget[]   = "预处理作用于当前目标：选中图层/底图（仅色彩）/画布。";
 inline constexpr char kResizeEdgeSpin[]     = "目标边长（像素）；勾选保持宽高比时改宽联动高。";

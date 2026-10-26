@@ -56,12 +56,13 @@ public:
     void refreshExportPreviewFromCache(); // 用缓存重渲染输出预览（不重跑 Core；A 切回补渲染 / B 轻量刷新共用）
     void refreshExportSource();          // 按当前「烧录图片图层」开关重算导出预览小源图后重渲染（不重跑 Core 几何）
 
-    // 预览重建时留存的「仅底图」全分辨率合成（不含叠加层）：图层显隐是纯预览态、working_ 恒含层，
-    //   隐藏图层后状态栏取色须读本图才与屏幕所见一致（见 MainWindow::onCursor）；随 rebuildPreviewPixmap 刷新。
-    const core::Image& displayBaseImage() const { return displayBaseImage_; }
-    // 与 displayBaseImage 对称的「仅图层」全分辨率合成（图层于透明底、不含底图）：底图隐藏后状态栏取色
-    //   须读本图（透明处即屏幕空白），否则会取到已被隐藏的底图像素（所见≠所取）。同样随重建刷新。
-    const core::Image& displayLayersImage() const { return displayLayersImage_; }
+    // 取色真相源（惰性物化，内存短路）：图层显隐是纯预览态、working_ 恒含层——
+    //   · displayBaseImage()＝「仅底图」合成：无叠加层时底图形态即 working_（零物化直取）；
+    //     有叠加层时首次取色现算 composeLayerCanvasForExport(false) 并缓存，随 rebuildPreviewPixmap 失效清空。
+    //   · displayLayersImage()＝「仅图层」合成（透明底、不含底图）：无叠加层恒空图；否则同上惰性。
+    //   仅在「对应显隐开关关闭 + 状态栏取色」时才物化全图（见 MainWindow::onCursor），常态零常驻。
+    const core::Image& displayBaseImage();
+    const core::Image& displayLayersImage();
 
 public slots:
     void onToggleMasks();                // 切换预览遮罩显隐（视图菜单 / 画布右键）；同步图层面板复选框。
@@ -91,10 +92,13 @@ private:
     QPixmap exportSrcPixmap_;
     double exportSrcScaleX_{1.0};
     double exportSrcScaleY_{1.0};
-    // 与场景底图 item 同源的全分辨率「仅底图」合成：图层隐藏时状态栏取色的真相源（working_ 恒含叠加层，不可直接取）。
+    // 「仅底图」合成惰性缓存：图层隐藏时状态栏取色的真相源（working_ 恒含叠加层，不可直接取）。
+    //   仅取色且隐藏态时物化；无叠加层零物化（直取 working_）。valid 标志随 rebuildPreviewPixmap 失效。
     core::Image displayBaseImage_;
-    // 与场景图层覆盖 item 同源的全分辨率「仅图层」合成：底图隐藏时状态栏取色的真相源（透明像素即屏幕空白）。
+    bool displayBaseValid_{false};
+    // 「仅图层」合成惰性缓存：底图隐藏时状态栏取色的真相源（透明像素即屏幕空白）。同上惰性。
     core::Image displayLayersImage_;
+    bool displayLayersValid_{false};
     bool exportPreviewDirty_{false};   // 导出页不可见期间参数有变→置脏；切回该页时补渲染（A）。
     // 上次引擎结果的合成缓存：供烧录/标注变更时**只重渲染缩略图、不重跑 Core**（切割几何不受标注影响）。
     engine::Composition lastComposition_;

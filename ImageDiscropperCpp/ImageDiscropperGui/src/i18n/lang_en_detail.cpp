@@ -293,7 +293,6 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"tooltip::kLayerWidthSpin", "Target width (0 = use the native size, no scaling)."},
     {"tooltip::kLayerHeightSpin", "Target height (0 = use the native size, no scaling)."},
     {"tooltip::kLayerOpacitySpin", "Opacity 0–255 (255 = opaque); affects preview and export."},
-    {"tooltip::kLayerCanvasSizeApply", "Change the canvas size: only clears the marquee/grid selection, keeps layers and annotations."},
     {"tooltip::kPreprocessTarget", "Preprocessing targets the current object: selected layer / base (color only) / canvas."},
     {"tooltip::kResizeEdgeSpin", "Target edge (px); with aspect lock, changing width updates height."},
     {"tooltip::kResizeScaleSpin", "Scale by a percentage of the current target canvas size (or the original size if none)."},

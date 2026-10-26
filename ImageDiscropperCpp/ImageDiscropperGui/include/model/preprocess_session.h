@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "core/image.h"
+#include "model/derived_cache.h"
 #include "preprocess/preprocess_config.h"
 #include "preprocess/preprocess_pipeline.h"
 
@@ -83,16 +84,17 @@ public:
 
     //====== 实例：base_ 重放缓存（图像由 Controller 物化后灌入；session 只存槽、比对前缀、失效）======
 
-    bool hasBase() const { return base_.has_value(); }
-    const core::Image& base() const { return *base_; }
-    const preprocess::PreprocessPipeline& basePrefix() const { return basePath_; }
+    bool hasBase() const { return base_.valid(); }
+    const core::Image& base() const { return base_.value(); }
+    // 缓存对应的 [resize?] 前缀（无缓存时返回空静态；调用方须 hasBase 守卫）。
+    const preprocess::PreprocessPipeline& basePrefix() const;
     // 记录一段前缀的重放产物为 base_（prefix 为其对应的 [resize?] 前缀队列）。
-    void setBase(core::Image img, preprocess::PreprocessPipeline prefix);
+    void setBase(core::Image img, const preprocess::PreprocessPipeline &prefix);
     // 释放 base_（由「有 resize」切到「无 resize」时回收内存）。
-    void clearBase() { base_.reset(); basePath_.clear(); }
+    void clearBase() { base_.clear(); }
     // 前缀是否需要重烤：无缓存，或缓存前缀与之逐字段不等 → true。
     bool baseDirtyFor(const preprocess::PreprocessPipeline& prefix) const {
-        return !hasBase() || !(basePath_ == prefix);
+        return !base_.hit(prefix);
     }
 
     //====== 实例：已提交态改写（供 Document 回灌 / 控制器提交成功后落定）======
@@ -106,8 +108,8 @@ public:
 private:
     preprocess::PreprocessPipeline steps_;             // 声明式轻操作队列（绝不含 ResizeOp），几何签名与序列化真相源
     std::optional<ResizeTarget> resize_;               // 独立画布尺寸（可选，恒最先重放）
-    std::optional<core::Image> base_;                  // resize(original) 的物化产物；无 resize 不维护（省一份拷贝）
-    preprocess::PreprocessPipeline basePath_;          // base_ 对应的 [resize?] 前缀，供失效比对
+    // resize(original) 的物化缓存（统一 DerivedCache：Key＝[resize?] 前缀比对自愈；无 resize 不维护，省一份拷贝）。
+    DerivedCache<preprocess::PreprocessPipeline, core::Image> base_;
 };
 
 } // namespace idc::gui

@@ -125,10 +125,9 @@ Document 发 `changed()` → app 层 `PreviewController` 刷新预览；反向�
 
 右侧「图片」节（**多层画布**，SPEC §8.2；桌面折叠栏首节）。编辑 `Document` 内的图片图层（`std::vector<canvas::ImageLayer>`），与上面 `layer_panel`（画布叠加图层显示开关）职责不同。面板**只发意图信号、不持真相**，由 `SessionController` 落到 `Document` 声明态 CRUD。图层「选中」由画布拾取承担（`Document::selectedLayerId`），本面板不内置图层列表。
 
-- **启停分组**（`setControlsEnabled`）：「添加图片」只要有图即可用（有图即图层画布；空文档经 `ensureLayerCanvas` 兜底起画布）；上/下移/置顶/置底/删除/落位需画布已拾取某层；清空/画布尺寸/不透明度仅图层画布态可用。
+- **启停分组**（`setControlsEnabled`）：「添加图片」只要有图即可用（有图即图层画布；空文档经 `ensureLayerCanvas` 兜底起画布）；上/下移/置顶/置底/删除/落位需画布已拾取某层；清空/不透明度仅图层画布态可用。
 - **上/下移、置顶/置底、删除、清空、添加图片图层**：作用对象取 `Document::selectedLayerId()`（未拾取时无操作），发 `layerMoveRequested(id, up)`/`layerMoveEdgeRequested(id, toTop)`/`layerRemoveRequested(id)`/`clearAllLayersRequested()`/`addImageRequested()`；`SessionController` 分别落 `moveLayerZOrder`/`removeLayer`/清空/`onAddImageLayer`（据对话框「附加图片开关」`producesLayerCanvas()` 分派：勾选→两段合成整幅结果作 `ImageLayer{File}` 内容、**落位恒等**；未勾→取 `resultParams()` 产 `recipe` 层；均不撑大画布）。
 - **落位 `transform` 编辑区**（`anchorCombo_`/`pivotCombo_` 各 9 向、`posX/Y`/`width/heightSpin_`、`opacitySpin_`）：「画布锚点（`inCanvasAnchor`）+ 图片枢轴（`layerPivot`）+ 自由 x/y + 目标宽高（≤0 用原生）+ 不透明度（0..255）」，组装 `canvas::ImageTransform` 发 `layerTransformRequested(id, transform)`；枚举↔combo index 直接 `static_cast`（与 `generate::ImageAnchor` 序一致）；任一控件改动即时提交（`applyTransformBtn_` 为等价入口）。无选中层时 `opacitySpin_` 改按预处理目标分派：`PreprocessTarget::Base`→`baseOpacityRequested`、`Canvas`→`canvasOpacityRequested`。偏移与目标宽高为 `CoordSpinBox`：另收百分比串（`50%`），基准＝画布宽/高（`x`/宽 用宽、`y`/高 用高），`0%` 在宽/高上即「原生」。
-- **画布尺寸区**（`canvasW/HSpin_` + `applyCanvasBtn_`）：发 `canvasSizeRequested(w, h)` → `doc_.setCanvasSize`（**仅清框选**，图片图层与标注保留）。
 - `syncing_` 标志在 `syncFromDocument()` 回填控件时抑制 `valueChanged`/`currentIndexChanged` 等信号回环。
 
 ## annotation_prop_panel

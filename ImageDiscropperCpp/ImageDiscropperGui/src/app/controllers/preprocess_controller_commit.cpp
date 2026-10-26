@@ -44,7 +44,7 @@ void PreprocessController::commitPipeline(const preprocess::PreprocessPipeline& 
                                           const QString& okMsg, const QString& busyText) {
     // 「无图即跳过」须以本函数真正依赖的基准 original_ 为准，而非 working_：空文档首次建底图走
     //   beginLayerCanvas/setBaseImage → recomposeLayerCanvas 只 setOriginalImage（不碰 working_）后调本函数产 working_，
-    //   此时 working_ 尚空——若判 hasImage()(=!working_.empty()) 会误挡回，令新建/载入配置的底图永远铺不出。
+    //   此时 working_ 尚空（恒等态亦恒空、经 accessor 派生）——若以 working_ 判空会误挡回，令新建/载入配置的底图永远铺不出。
     if (doc_->original().empty()) return;
 
     // 编辑前几何签名（对原图尺寸跑「有效管线」的纯元数据推演）。
@@ -79,6 +79,20 @@ void PreprocessController::commitPipeline(const preprocess::PreprocessPipeline& 
         } else if (doc_->hasBase()) {
             doc_->clearBase();   // 由「有 resize」切到「无 resize」：释放陈旧缓存，稳态仅 original_ + working_ 两份。
         }
+        // 恒等产出短路（内存短路 1）：轻队列空 + 画布级不透明度 255 → 工作图即重放基准自身
+        //   （无 resize 为 original()，有 resize 为 base_ 物化产物），零全图物化；working() 访问器
+        //   按同一判据派生别名。仅回灌声明态 + 释放陈旧 working_（见 commitIdentityPipeline）。
+        if (nextSteps.empty() && doc_->canvasOpacity() == 255) {
+            if (geomChanged) {
+                // 尺寸/净旋转象限变：既有框选坐标基于旧几何失效 → 仅清框选（rect/cells）。
+                doc_->clearRect();
+                doc_->clearRects();
+                doc_->clearCells();
+            }
+            doc_->commitIdentityPipeline(nextSteps, nextResize);
+            status_->notify(okMsg, false);
+            return;
+        }
         // 轻队列恒快：在 base_ 上重放 nextSteps（空队列 → 直接取 base_ 副本）。
         // 重放经 EngineBridge::applyPipeline → Core applyExec（执行层融合：色彩折单次 channelMap、几何折单次 D4、灰度后死步自动吞除；
         // resize 已为 base_ 前缀，轻队列不含 resize → 整条恒单块）：逐像素结果不变、趟数与队列长度解耦。
@@ -95,7 +109,7 @@ void PreprocessController::commitPipeline(const preprocess::PreprocessPipeline& 
         if (geomChanged) {
             // 尺寸/净旋转象限变：既有框选坐标基于旧几何失效 → 仅清框选（rect/cells）。
             // 标注/图片图层栈/色彩预处理**恒保留**（resize/rotate 口径）：标注为矢量叠加，可存在于画布外
-            //（与 setCanvasSize「只清框选」同口径，SPEC §8.2）；图层落位随重组链重放同一管线同步变换；色彩步不碰几何。
+            //（与画布尺寸变「只清框选」同口径，SPEC §8.2）；图层落位随重组链重放同一管线同步变换；色彩步不碰几何。
             doc_->clearRect();
             doc_->clearRects();
             doc_->clearCells();

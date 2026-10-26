@@ -103,8 +103,10 @@ void PreviewController::rebuildPreviewPixmap() {
     if (!doc_->hasImage()) {
         scene_->clearAll();
         exportSrcPixmap_ = QPixmap();   // 无图像：清空输出预览小源图。
-        displayBaseImage_ = core::Image{};   // 无底图可取：清空取色真相源。
-        displayLayersImage_ = core::Image{}; // 无图层可取：清空取色真相源（与底图侧对称）。
+        displayBaseImage_ = core::Image{};    // 无底图可取：清空取色真相源。
+        displayBaseValid_ = false;
+        displayLayersImage_ = core::Image{};  // 无图层可取：清空取色真相源（与底图侧对称）。
+        displayLayersValid_ = false;
         lastFitW_ = lastFitH_ = -1;     // 清空后复位尺寸追踪，下次载入必然 fit。
         return;
     }
@@ -123,19 +125,21 @@ void PreviewController::rebuildPreviewPixmap() {
     };
 
     // 底图：非图层画布→working_（全量即底图）；图层画布→仅底图合成（不含叠加层，故隐藏底图时图层覆盖不受牵连）。
-    core::Image baseOnly = doc_->hasLayers() ? preprocess_->composeLayerCanvasForExport(false) : doc_->working();
+    const core::Image baseOnly = doc_->hasLayers() ? preprocess_->composeLayerCanvasForExport(false) : doc_->working();
     double bsx = 1.0, bsy = 1.0;
     // 场景坐标 = 原图像素坐标；底图用放大系数把预览 pixmap 铺到原图尺寸。
     scene_->setBaseImage(toPreview(baseOnly, bsx, bsy), bsx, bsy, doc_->width(), doc_->height());
-    // 留存全分辨率底图（与场景底图 item 同源）：图层隐藏时状态栏取色的真相源（本函数已算出，仅转存、零额外重算）。
-    displayBaseImage_ = std::move(baseOnly);
+    // 取色真相源不再常驻留存：失效惰性缓存（仅在「图层隐藏 + 状态栏取色」时按需物化，见 displayBaseImage()）。
+    displayBaseImage_ = core::Image{};
+    displayBaseValid_ = false;
 
     // 图层覆盖：图层于透明底合成（非图层画布返回空 → 清空覆盖）；可见性由场景 imageLayersVisible 落地（纯显示切换）。
     double osx = 1.0, osy = 1.0;
-    core::Image layers = doc_->hasLayers() ? preprocess_->composeLayersForDisplay() : core::Image{};
+    const core::Image layers = doc_->hasLayers() ? preprocess_->composeLayersForDisplay() : core::Image{};
     scene_->setImageLayerOverlay(toPreview(layers, osx, osy), osx, osy, doc_->width(), doc_->height());
-    // 留存全分辨率「仅图层」合成（与场景覆盖 item 同源）：底图隐藏时状态栏取色的真相源（本函数已算出，仅转存）。
-    displayLayersImage_ = std::move(layers);
+    // 同上：取色真相源惰性化（仅在「底图隐藏 + 状态栏取色」时按需物化，见 displayLayersImage()）。
+    displayLayersImage_ = core::Image{};
+    displayLayersValid_ = false;
 
     // 输出预览专用小源图：按当前「烧录图片图层」决定含层/仅底图（与显示正交）。
     rebuildExportSourcePixmap();
@@ -160,6 +164,30 @@ void PreviewController::rebuildPreviewPixmap() {
     }
     // 新图/重建后把场景图层显隐旗标回同步到 Document（换图默认可见），保证图层像素覆盖与落位框可见性一致。
     scene_->setImageLayersVisible(doc_->imageLayersVisible());
+}
+
+// 「仅底图」取色真相源（惰性，见头文件）：无叠加层时底图形态即工作图（零物化直取）；
+//   有叠加层时首次取色现算并缓存，随 rebuildPreviewPixmap 失效清空。
+const core::Image& PreviewController::displayBaseImage() {
+    static const core::Image kEmpty;
+    if (!doc_ || !doc_->hasImage()) return kEmpty;
+    if (doc_->layerStack().empty()) return doc_->working();
+    if (!displayBaseValid_) {
+        displayBaseImage_ = preprocess_ ? preprocess_->composeLayerCanvasForExport(false) : core::Image{};
+        displayBaseValid_ = true;
+    }
+    return displayBaseImage_;
+}
+
+// 「仅图层」取色真相源（惰性，见头文件）：无叠加层恒空图；否则首次取色现算并缓存、随重建失效。
+const core::Image& PreviewController::displayLayersImage() {
+    static const core::Image kEmpty;
+    if (!doc_ || !preprocess_ || doc_->layerStack().empty()) return kEmpty;
+    if (!displayLayersValid_) {
+        displayLayersImage_ = preprocess_->composeLayersForDisplay();
+        displayLayersValid_ = true;
+    }
+    return displayLayersImage_;
 }
 
 // 依当前「烧录图片图层」开关重算导出预览小源图（含层→复用 working_；不含→仅底图合成）并降到 ≤ kExportSrcMaxDim。

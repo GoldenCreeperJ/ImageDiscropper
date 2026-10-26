@@ -37,19 +37,41 @@ std::uint64_t baseFingerprintOf(const core::Image& img) {
 } // namespace
 
 
+// 恒等 compose 判定（内存短路 2，见头文件）：纯派生、无失效簿记——任一条件翻转即回落物化路径。
+bool Document::composeIsIdentity() const {
+    return layersActive_ && layers_.empty() && baseSession_.steps().empty() && baseOpacity_ == 255 &&
+           !baseImage_.empty() && baseImage_.width() == canvasWidth_ && baseImage_.height() == canvasHeight_;
+}
+
+// 原图基准：恒等 compose 时别名底图（零物化），否则为展平物化 original_。
+const core::Image& Document::original() const {
+    return composeIsIdentity() ? baseImage_ : original_;
+}
+
+// 工作图（引擎输入，内存短路 1，见头文件）：恒等管线派生别名重放基准自身，否则物化 working_。
+const core::Image& Document::working() const {
+    if (preprocess_.steps().empty() && canvasOpacity_ == 255) {
+        if (!preprocess_.hasResize()) return original();
+        if (preprocess_.hasBase()) return preprocess_.base();   // resize 恒最先重放、队列空 → 工作图即 base_
+    }
+    return working_;
+}
+
 // 载入新图像＝建立「含底图的图层画布」（打开图片等价 新建画布[白底+原生附图]）：
 //   底图入 baseImage_（input 生态位，**绝不入 layers_**）、叠加层栈清空；有图即图层画布。
 void Document::setImage(core::Image img, QString path) {
     const int w = img.width();
     const int h = img.height();
-    original_ = img;             // 保留一份原始副本（供队列重放与「重置预处理」）。
-    working_ = std::move(img);   // 新图初始无预处理，工作图即原图。
+    // 恒等态起步（内存短路）：底图入 baseImage_（唯一像素实体）；无叠加层/底图色/淡出 → compose 恒等，
+    //   original_/working_ 不物化、经 accessor 派生别名 baseImage_（打开大图零克隆）。
+    baseImage_ = std::move(img);
+    original_ = core::Image{};
+    working_ = core::Image{};
     preprocess_.clear();         // 换图：轻队列 / 独立 resize / base_ 缓存随原图一并失效。
     // 打开图片＝图层画布基座——baseImage_ 取原图像素（identity），叠加层栈 / 会话 / 选中清空（底图不入 layers_）。
     layersActive_ = true;
     canvasWidth_ = w;
     canvasHeight_ = h;
-    baseImage_ = original_.clone();
     baseSelected_ = false;
     baseSession_.clear();
     // 恒等底图声明（§7 generate 段：placement-only + solid white backdrop）：无「recipe 键」→ 载入端 baseFromJson 视作运行时位图底；
@@ -94,7 +116,7 @@ void Document::resetToEmpty() {
     baseOpacity_ = 255;
     baseSelected_ = false;
     baseSession_.clear();
-    fadedBaseCache_ = FadedBaseCache{};   // 底图已空：显式作废淡出缓存。
+    fadedBaseCache_.clear();   // 底图已空：作废淡出缓存。
     canvasOpacity_ = 255;
     layers_.clear();
     imageLayersVisible_ = true;
@@ -117,8 +139,8 @@ void Document::resetToEmpty() {
 void Document::resetBaseWith(core::Image flat, std::optional<canvas::ImageLayer> baseLayer) {
     const int newW = flat.width();
     const int newH = flat.height();
-    const int curW = layersActive_ ? canvasWidth_ : original_.width();
-    const int curH = layersActive_ ? canvasHeight_ : original_.height();
+    const int curW = layersActive_ ? canvasWidth_ : original().width();
+    const int curH = layersActive_ ? canvasHeight_ : original().height();
     const bool sizeChanged = newW != curW || newH != curH;
 
     imagePath_.clear();               // 新建画布无文件来源。
@@ -168,6 +190,16 @@ void Document::setWorkingImage(core::Image img) {
     emit imageChanged();
 }
 
+// 恒等产出回灌（内存短路 1，见头文件）：置声明态 + 清陈旧 working_ 位图 + 发 imageChanged 驱动预览重建。
+// 与 setWorkingImage 互斥使用——提交期按「轻队列空 && 画布级不透明度 255」判据二选一。
+void Document::commitIdentityPipeline(const preprocess::PreprocessPipeline& steps,
+                                      const std::optional<ResizeTarget> resize) {
+    preprocess_.setSteps(steps);
+    preprocess_.setResize(resize);
+    working_ = core::Image{};   // 释放陈旧物化位图；working() 自此派生别名（见 accessor）。
+    emit imageChanged();
+}
+
 // 重组后回灌展平画布底图为 original_（多层画布专用）：保留画布级预处理声明、失效其 base_ 缓存；
 // 空图拒绝。不碰 working_、不发信号（随后由控制器走 commitPipeline 重放产 working_）。
 void Document::setOriginalImage(core::Image composedCanvas) {
@@ -176,11 +208,24 @@ void Document::setOriginalImage(core::Image composedCanvas) {
     preprocess_.clearBase();   // 基准已变：旧 base_=resize(旧 original) 失效，下次提交重烤。
 }
 
-// 重置预处理：清空独立 resize 与轻操作队列、工作图恢复为原图（original_ 始终保留）；未预处理时无需还原。
+// 恒等 compose 时释放物化展平副本（内存短路 2，见头文件）：只清不填——original_ 清空后
+//   original() 转别名 baseImage_；恒失效 base_（基准即底图）。不发信号、不碰 working_。
+void Document::clearOriginalImage() {
+    original_ = core::Image{};
+    preprocess_.clearBase();
+}
+
+// 重置预处理：清空独立 resize 与轻操作队列、工作图恢复为原图。恒等态（画布级不透明度 255）零物化：
+//   working() 派生别名 original()；否则按产出边界口径对 original() 施一次画布级淡出（防重置后淡出丢失）。
 void Document::resetPreprocess() {
     if (!preprocess_.hasPreprocess()) return;
     preprocess_.clear();         // 清空轻队列 / 独立 resize / base_ 缓存（会话失效）。
-    working_ = original_;
+    if (canvasOpacity_ == 255) {
+        working_ = core::Image{};   // 恒等：working() 派生别名，释放陈旧物化位图
+    } else {
+        working_ = original();
+        canvas::applyAlpha(working_, canvasOpacity_);
+    }
     emit imageChanged();
 }
 
@@ -201,7 +246,7 @@ void Document::setBase(core::Image img, preprocess::PreprocessPipeline prefix) {
 
 // 几何签名：对原图尺寸跑「有效管线」（[resize?] + 轻操作队列）的纯元数据推演（不碰像素），得 {输出宽高, 净旋转象限}。
 preprocess::PreprocessPipeline::GeometryOut Document::geomSig() const {
-    return preprocess_.geomSig(original_.width(), original_.height());
+    return preprocess_.geomSig(original().width(), original().height());
 }
 
 // 队列灰度推演：任一 GrayOp 使输出恒为灰度（下游 invert/rotate/flip/resize/split 均不恢复彩色），
@@ -267,12 +312,12 @@ void Document::beginLayerCanvas(const int width, const int height, core::Image b
     baseImage_ = std::move(base);        // 画布底图（input 生态位）；空＝仅透明底。
 }
 
-// 追加图层：分配递增稳定 id、zOrder 置顶（高于现有最大）、建其独立会话；发 layersChanged。
+// 追加图层：分配递增稳定 id、置顶（zOrder = 栈长，恒与向量位序一致）、建其独立会话；发 layersChanged。
+// 不变式（zOrder 不变式，SPEC §8.2 口径）：layers_ 向量恒按 zOrder 升序且 zOrder ≡ 向量下标（0..n-1）——
+//   面板/场景按向量序天然有序，合成/序列化口径不漂移；任何增删移改后本不变式立即重建。
 int Document::addImageLayer(canvas::ImageLayer layer) {
     layer.id = nextLayerId_++;
-    int maxZ = 0;
-    for (const auto& l : layers_) maxZ = std::max(maxZ, l.zOrder);
-    layer.zOrder = layers_.empty() ? 0 : maxZ + 1;
+    layer.zOrder = static_cast<int>(layers_.size());   // 置顶：向量尾 + 下标即 zOrder
     const int id = layer.id;
     layerSessions_.ensure(id);   // 该层独立声明态会话（含 base 槽 + 物化签名槽）
     layers_.push_back(std::move(layer));
@@ -292,10 +337,8 @@ bool Document::removeLayer(const int id) {
     return true;
 }
 
-// 上/下移一层：与相邻项交换 zOrder（存序不敏感、合成恒按 zOrder 升序）。up＝向顶层（更大 zOrder）。
+// 上/下移一层：向量邻位交换并同步 zOrder（恒等下标 0..n-1 不变式，免全量排序）。up＝向顶层（更高 zOrder）。
 bool Document::moveLayerZOrder(const int id, const bool up) {
-    std::ranges::sort(layers_,
-                      [](const canvas::ImageLayer& a, const canvas::ImageLayer& b) { return a.zOrder < b.zOrder; });
     const auto it = std::ranges::find_if(layers_,
                                          [id](const canvas::ImageLayer& l) { return l.id == id; });
     if (it == layers_.end()) return false;
@@ -303,32 +346,31 @@ bool Document::moveLayerZOrder(const int id, const bool up) {
     const auto n = layers_.size();
     const std::size_t j = up ? i + 1 : i > 0 ? i - 1 : i;   // up→邻 i+1（更高）；down→邻 i−1（更低）
     if (j == i || j >= n) return false;                        // 已在顶/底，不动
-    std::swap(layers_[i].zOrder, layers_[j].zOrder);
+    std::swap(layers_[i], layers_[j]);
+    layers_[i].zOrder = static_cast<int>(i);
+    layers_[j].zOrder = static_cast<int>(j);
     emit layersChanged();
     return true;
 }
 
-// 移至顶层 / 底层：把选中层 zOrder 设为当前最大 +1（顶）或最小 −1（底）。合成恒按 zOrder 升序稳定，
-// 故单值推离即整体置顶/置底（无需重排其余层）。已在边缘（zOrder 已等极值）则短路不动。
+// 移至顶层 / 底层：把元素搬到向量尾/首并重编号 zOrder（恒等下标不变式，免极值扫描与值漂移）。
 bool Document::moveLayerToEdge(const int id, const bool toTop) {
     const auto it = std::ranges::find_if(layers_,
                                          [id](const canvas::ImageLayer& l) { return l.id == id; });
     if (it == layers_.end() || layers_.size() < 2) return false;
-    int lo = it->zOrder;
-    int hi = it->zOrder;
-    for (const canvas::ImageLayer& l : layers_) { lo = std::min(lo, l.zOrder); hi = std::max(hi, l.zOrder); }
-    if (toTop) {
-        if (it->zOrder >= hi) return false;   // 已在顶层（zOrder 已为最大）
-        it->zOrder = hi + 1;
-    } else {
-        if (it->zOrder <= lo) return false;   // 已在底层（zOrder 已为最小）
-        it->zOrder = lo - 1;
-    }
+    const auto i = static_cast<std::size_t>(it - layers_.begin());
+    if ((toTop && i + 1 == layers_.size()) || (!toTop && i == 0)) return false;   // 已在边缘
+    canvas::ImageLayer moved = std::move(layers_[i]);
+    layers_.erase(it);
+    layers_.insert(toTop ? layers_.end() : layers_.begin(), std::move(moved));
+    for (std::size_t k = 0; k < layers_.size(); ++k) layers_[k].zOrder = static_cast<int>(k);
     emit layersChanged();
     return true;
 }
 
 // 就地替换某层（transform / z / preprocess 编辑）：强制保持原 id 稳定（id 为会话/拾取键）。
+// 外部传入的 zOrder 视作权威 → 替换后按 zOrder 稳定重排并重编号 0..n-1，重建「向量序≡zOrder 下标」不变式
+//（transform-only 的逐帧更新已改走 updateLayerTransform，本函数仅在预处理编辑/整层替换等事件级路径调用）。
 bool Document::updateLayer(const int id, const canvas::ImageLayer& layer) {
     const auto it = std::ranges::find_if(layers_,
                                          [id](const canvas::ImageLayer& l) { return l.id == id; });
@@ -336,6 +378,21 @@ bool Document::updateLayer(const int id, const canvas::ImageLayer& layer) {
     canvas::ImageLayer nl = layer;
     nl.id = id;
     *it = std::move(nl);
+    std::ranges::stable_sort(layers_, [](const canvas::ImageLayer& a, const canvas::ImageLayer& b) {
+        return a.zOrder < b.zOrder;
+    });
+    for (std::size_t k = 0; k < layers_.size(); ++k) layers_[k].zOrder = static_cast<int>(k);
+    emit layersChanged();
+    return true;
+}
+
+// 仅改落位变换（见头文件）：transform 就地写回、不拷贝声明其余字段——拖拽/落位编辑逐帧调用，
+//   免整层声明（含 decodedPixels 源位图）的逐帧深拷贝；像素零触碰。
+bool Document::updateLayerTransform(const int id, const canvas::ImageTransform& transform) {
+    const auto it = std::ranges::find_if(layers_,
+                                         [id](const canvas::ImageLayer& l) { return l.id == id; });
+    if (it == layers_.end()) return false;
+    it->transform = transform;
     emit layersChanged();
     return true;
 }
@@ -367,30 +424,17 @@ bool Document::clearAllLayersToBase() {
     return hadBase;
 }
 
-// 声明画布尺寸：更新尺寸 + 仅清框选（矩形/多矩形/单元），保留图层与标注；发 layersChanged 交控制器重组。
-void Document::setCanvasSize(const int width, const int height) {
-    if (width <= 0 || height <= 0) return;
-    if (canvasWidth_ == width && canvasHeight_ == height) return;
-    canvasWidth_ = width;
-    canvasHeight_ = height;
-    hasRect_ = false;
-    rect_ = engine::RectRegion{};
-    rects_.clear();
-    selectedCells_.clear();
-    emit layersChanged();
-}
-
 // 确保图层画布态：无图层但有单张载入图时，把当前原图纳为**画布底图**（input 生态位，不入 layers、无 transform）。
 // 底图声明（若原图为程序图案 / 附图片底）保留在 baseLayer_，序列化时进 §7 generate 段。不动画布级预处理会话（preprocess_）——
 // 重组后 composed==original_（空叠加层），工作图经 commitPipeline 重放保持不变。
 bool Document::ensureLayerCanvas() {
     if (layersActive_) return true;
-    if (original_.empty()) return false;
-    const int w = original_.width();
-    const int h = original_.height();
+    if (original().empty()) return false;
+    const int w = original().width();
+    const int h = original().height();
     if (w <= 0 || h <= 0) return false;
     // 以原图为底图（base）进入图层编辑态（画布无级背景）；不往 layers 塞底图层（故底图不可拖 / 无 transform / 不失配方）。
-    beginLayerCanvas(w, h, original_.clone());
+    beginLayerCanvas(w, h, original().clone());
     return true;
 }
 
@@ -401,34 +445,34 @@ void Document::setBaseOpacity(const int opacity) {
     const int v = std::clamp(opacity, 0, 255);
     if (static_cast<int>(baseOpacity_) == v) return;
     baseOpacity_ = static_cast<std::uint8_t>(v);
+    fadedBaseCache_.clear();   // 键值已变：旧淡出产物作废（顺带释放全图内存；回 255 恒等态亦回收）。
     emit layersChanged();
     emit changed();
 }
 
-// 按 baseOpacity_ 淡出的画布底图：以「内容签名」（尺寸/格式/首尾字节指纹 + baseOpacity + 底图色彩步声明）缓存，
-//   签名命中即直接回缓存引用（零 clone/零重跑），未命中才 canvasBase().clone() + applyExec + applyAlpha 重算并回写缓存。
-//   空底图（无 base）返回空图由 composeCanvas 自然处理。取用点：图层态 recompose / 导出重算作 composeCanvas 的底图入参
-//   （折入底图色+淡、不回写 original_）；canvasBase() 本身保持原样供几何等用途。
+// 按 baseOpacity_ 淡出的画布底图（统一 DerivedCache：键＝底图内容签名+不透明度+色彩步，键变自愈重算；
+//   命中直接回缓存引用零重跑）。空底图（无 base）返回空图由 composeCanvas 自然处理。
+//   取用点：图层态 recompose / 导出重算作 composeCanvas 的底图入参（折入底图色+淡、不回写 original_）；
+//   canvasBase() 本身保持原样供几何等用途。
 const core::Image& Document::fadedCanvasBase() const {
     const core::Image& base = canvasBase();
-    FadedBaseCache key;
-    key.valid = true;
-    key.baseWidth = base.width();
-    key.baseHeight = base.height();
-    key.baseFormat = base.format();
-    key.baseFingerprint = baseFingerprintOf(base);
-    key.opacity = baseOpacity_;
-    key.steps = baseSession_.steps();
-    if (fadedBaseCache_.matches(key)) return fadedBaseCache_.value;   // 签名未变：零重算直接复用
-
-    core::Image img = base.clone();
-    // 底图色彩预处理（仅色彩步、resize 恒空）在合成边界施加——baseImage_ 保持未处理原始像素，杜绝与 composeBase 双应用。
-    if (!baseSession_.steps().empty())
-        img = baseSession_.effectivePipeline().applyExec(img);
-    canvas::applyAlpha(img, baseOpacity_);   // 底图整体淡出，同一边界仅施加一次
-    fadedBaseCache_ = std::move(key);
-    fadedBaseCache_.value = std::move(img);
-    return fadedBaseCache_.value;
+    // 恒等早退（内存短路 2）：无底图色彩预处理与淡出 → 淡出结果即底图自身，零克隆零缓存；
+    //   若此前缓存着旧淡出产物，释放之（回到恒等态回收一份全画布内存）。
+    if (baseSession_.steps().empty() && baseOpacity_ == 255) {
+        if (fadedBaseCache_.valid()) fadedBaseCache_.clear();
+        return base;
+    }
+    const FadedBaseKey key{base.width(), base.height(), base.format(), baseFingerprintOf(base),
+                           baseOpacity_, baseSession_.steps()};
+    // 键未命中：现算（底图色彩预处理仅色彩步、resize 恒空，在合成边界施加——baseImage_ 保持
+    //   未处理原始像素，杜绝与 composeBase 双应用；淡出同一边界仅施加一次）。
+    return fadedBaseCache_.get(key, [&base, this](const FadedBaseKey&) {
+        core::Image img = base.clone();
+        if (!baseSession_.steps().empty())
+            img = baseSession_.effectivePipeline().applyExec(img);
+        canvas::applyAlpha(img, baseOpacity_);
+        return img;
+    });
 }
 
 // 设画布级整体不透明度（0..255）：三元目标 Canvas 的透明度，与图层 transform.opacity、底图 baseOpacity 正交。
@@ -451,6 +495,7 @@ bool Document::updateBasePreprocess(const preprocess::PreprocessPipeline& colorS
     if (baseSession_.steps() == filtered) return false;
     baseSession_.setSteps(std::move(filtered));
     baseSession_.setResize(std::nullopt);   // 底图预处理恒不含 resize
+    fadedBaseCache_.clear();                // 键值已变：旧淡出产物作废（顺带释放全图内存；回空恒等态亦回收）。
     emit layersChanged();
     return true;
 }

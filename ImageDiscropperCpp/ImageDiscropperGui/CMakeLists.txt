@@ -129,6 +129,7 @@ set(IDC_GUI_MODEL_SRC
         include/model/annotation_editor.h
         include/model/config_codec.h
         include/model/config_assets.h
+        include/model/derived_cache.h
         include/model/document.h
         include/model/engine_bridge.h
         include/model/layer_session_store.h

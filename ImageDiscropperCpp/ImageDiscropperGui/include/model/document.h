@@ -23,6 +23,7 @@
 #include "core/color.h"
 #include "core/image.h"
 #include "engine/engine.h"
+#include "model/derived_cache.h"
 #include "model/layer_session_store.h"
 #include "model/preprocess_session.h"
 #include "preprocess/preprocess_pipeline.h"
@@ -73,7 +74,8 @@ public:
 
     // ---- 图像 ----
     // 载入新图像＝建立「含底图的图层画布」（打开图片）：img 立为 baseImage_（input 生态位，**绝不入 layers_**）、
-    //   layersActive_ 置真、恒等底图声明带白 backdrop；original_ 与 working_ 均置为 img（无预处理）。记录路径、清空选区，发 imageChanged()。
+    //   layersActive_ 置真、恒等底图声明带白 backdrop；恒等态起步——original_/working_ 不物化、经 accessor
+    //   派生别名 baseImage_（内存短路：打开大图零克隆）。记录路径、清空选区，发 imageChanged()。
     void setImage(core::Image img, QString path);
     // 删除底图并复位为空白文档（「重置全部」勾选「同时删除底图」）：把图像/图层/底图/预处理会话/选区
     //   全部回到构造初态（layersActive_=false、各像元清空），发 imageChanged() 交预览 clearAll 清场。
@@ -84,24 +86,42 @@ public:
     //   尺寸不变则保留框选、尺寸变化则清框选。恒图层画布——无图首次新建经 beginLayerCanvas 起画布（flat 作底图、绝不入
     //   layers_），末尾恒发 layersChanged（交控制器重组重放色彩预处理产出 working_）。
     void resetBaseWith(core::Image flat, std::optional<canvas::ImageLayer> baseLayer);
-    const core::Image& original() const { return original_; }
-    const core::Image& working() const { return working_; }
-    bool hasImage() const { return !working_.empty(); }
-    int width() const { return working_.width(); }
-    int height() const { return working_.height(); }
+    // 恒等 compose 判定（内存短路 2）：无叠加层 + 底图无色彩预处理与淡出 + 底图尺寸恰为画布尺寸时，
+    //   展平结果恒等底图自身——original() 直接别名 baseImage_，不物化一份全画布展平副本。
+    //   纯派生（由当前声明态现算、无失效簿记）：任一条件翻转后 original() 自动回落 original_ 物化路径
+    //   （重组链保证 original_ 与别名态同真值）。实现在 document_canvas.cpp。
+    bool composeIsIdentity() const;
+    // 原图基准：恒等 compose 时别名 baseImage_（内存短路 2），否则为展平物化 original_。
+    const core::Image& original() const;
+    // 工作图（引擎输入）：恒等管线（轻队列空 + 画布级不透明度 255）时派生别名重放基准自身——
+    //   无 resize 为 original()、有 resize 为其 base_ 物化产物（内存短路 1）；否则为物化 working_。
+    //   hasBase 守卫：resize 刚声明、base_ 尚未物化的瞬态回落 original()（随后提交即物化）。
+    const core::Image& working() const;
+    bool hasImage() const { return !original().empty(); }
+    int width() const { return working().width(); }
+    int height() const { return working().height(); }
     const QString& imagePath() const { return imagePath_; }
 
     // 重组后回灌「展平后的画布底图」为 original_（多层画布专用）：仅换原图基准、保留画布级预处理会话声明（steps_/resize_），
     // 但失效其 base_ 重放缓存（基准已变）。不碰 working_、不发信号——由控制器随后走 commitPipeline 重放产出新 working_。
     void setOriginalImage(core::Image composedCanvas);
+    // 恒等 compose 时释放物化展平副本（内存短路 2）：original_ 清空后 original() 转别名 baseImage_；
+    //   与 setOriginalImage 相反——只清不填，由重组链恒等分支调用。恒失效 base_（基准即底图）。不发信号。
+    void clearOriginalImage();
 
     // ---- 预处理工作图（FR-1；独立 resize + 声明式轻操作队列）----
     // 模型：original_（不可变）→ resize_（可选，恒最先重放、从原图重采样）→ steps_（可排序轻操作队列，绝不含 ResizeOp）
     //       → working_（= 在 resize 产物上重放 steps_ 的物化结果）。
+    // 内存短路（恒等零物化）：恒等 compose 时 original() 别名 baseImage_；恒等管线（steps_ 空 + 画布级
+    //   不透明度 255）时 working() 派生别名重放基准自身——两情形下对应字段不持有位图（见 accessor 注释）。
     // 每次编辑由上层（PreprocessController）重放物化后写回；Document 只存状态、不跑像素运算（CONTRIBUTING.md「分层纪律」）。
     // 用一次预处理结果替换工作图；original_ / resize_ / steps_ 保持不变，供「重置预处理」与几何签名重算。
     // 由 PreprocessController 经 EngineBridge 算出新图后写回；触发 imageChanged()。
     void setWorkingImage(core::Image img);
+    // 恒等产出回灌（内存短路 1）：轻队列空 + 画布级不透明度 255 时工作图即重放基准自身，无需物化——
+    //   置声明态、清陈旧 working_ 位图（释放内存）、发 imageChanged() 驱动预览重建。
+    //   与 setWorkingImage 互斥使用：提交期按「恒等产出」判据二选一（见 preprocess_controller_commit.cpp）。
+    void commitIdentityPipeline(const preprocess::PreprocessPipeline& steps, std::optional<ResizeTarget> resize);
     // 重置预处理：清空 resize_ 与轻操作队列、工作图恢复为原图；未预处理时早退。触发 imageChanged()。
     void resetPreprocess();
     // 当前工作图是否已被预处理（有 resize 或队列非空）——供面板/菜单启用「重置预处理」。
@@ -121,8 +141,8 @@ public:
     //（物化与刷新时机由调用方经 setWorkingImage / changed 掌控）。
     void setSteps(preprocess::PreprocessPipeline pipeline);
     // 几何签名：对 original 尺寸跑 steps_ 的纯元数据推演，得 {输出宽高, 净旋转象限}。
-    // 队列编辑前后比较此签名——尺寸或净旋转象限变化即判定几何失效（清空框选/标注），
-    // 仅换色/换序等不改签名者保留既有选择（不清框）。
+    // 队列编辑前后比较此签名——尺寸或净旋转象限变化即判定几何失效（仅清框选；标注/图层/色彩预处理恒保留，
+    // 与画布尺寸变「只清框选」同口径），仅换色/换序等不改签名者保留既有选择（不清框）。
     preprocess::PreprocessPipeline::GeometryOut geomSig() const;
 
     // 队列是否已产出灰度：任一 GrayOp 之后输出恒为灰度（invert/rotate/flip/resize 均不恢复彩色，
@@ -146,7 +166,8 @@ public:
     // ---- 多层画布（画布层概念，引擎零改动）----
     // 建模不变式：**任何有效图像都是图层画布**——layersActive_ 恒为真（仅空文档为假）。
     //   original_ 恒为 composeCanvas(layers_, canvasW, canvasH, fadedCanvasBase()) 的产物（PreprocessController 经
-    //   EngineBridge 物化回灌），其上再叠画布级预处理（preprocess_）得 working_。底图 baseImage_ 独立保留于 input 生态位、
+    //   EngineBridge 物化回灌），其上再叠画布级预处理（preprocess_）得 working_；**恒等 compose**（无叠加层 +
+    //   底图无色彩预处理与淡出 + 底图尺寸=画布尺寸）时 original_ 不物化、original() 别名 baseImage_（内存短路）。底图 baseImage_ 独立保留于 input 生态位、
     //   **绝不入 layers_**，供重组取底。打开图片≡新建画布[白底+原生附图]：底图立为 baseImage_、叠加层栈恒空直至用户加层。
     // hasLayers()＝layersActive_（是否图层画布）：有图即真（底图可选中路经此恒开）；仅空文档为假。
     bool hasLayers() const { return layersActive_; }
@@ -159,7 +180,10 @@ public:
     const std::optional<canvas::ImageLayer>& baseLayer() const { return baseLayer_; }
     void setBaseLayer(std::optional<canvas::ImageLayer> l) { baseLayer_ = std::move(l); }  // onNew 底图声明（图案/附图片落位）留存
     // 显式设底图像素（配置载入时按 generate 段重生底图后回灌；不改 layersActive_ / 声明态）。
-    void setBaseImage(core::Image img) { baseImage_ = std::move(img); }
+    void setBaseImage(core::Image img) {
+        baseImage_ = std::move(img);
+        fadedBaseCache_.clear();   // 内容已换：旧淡出产物作废（顺带释放全图内存）。
+    }
 
     // ---- 底图整体不透明度（0..255，255＝不透明）----
     //   与图层自身 transform.opacity 正交：它是「底图（画布基座）」的整体淡出，恒在合成边界施加
@@ -221,9 +245,12 @@ public:
     void beginLayerCanvas(int width, int height, core::Image base = {});
     int  addImageLayer(canvas::ImageLayer layer);   // 追加，分配递增 id 与置顶 zOrder；返回新 id
     bool removeLayer(int id);                       // 删除某层（连带回收其会话）
-    bool moveLayerZOrder(int id, bool up);          // 与相邻层交换 zOrder（上/下移一层）
-    bool moveLayerToEdge(int id, bool toTop);       // 移至顶层（zOrder = 当前最大 +1）/ 底层（最小 −1）
-    bool updateLayer(int id, const canvas::ImageLayer& layer); // 就地替换（transform/z/preprocess 编辑）
+    bool moveLayerZOrder(int id, bool up);          // 与相邻层交换（向量邻位换 + zOrder 同步；不变式见下）
+    bool moveLayerToEdge(int id, bool toTop);       // 移至顶层 / 底层（元素搬首/尾 + 重编号）
+    bool updateLayer(int id, const canvas::ImageLayer& layer); // 就地替换（transform/z/preprocess 编辑）；外改 z 后按 z 稳定重排重建不变式
+    // 仅改某层落位变换（transform 就地写回，不拷贝声明其余字段）：拖拽/落位编辑逐帧调用，
+    //   免整层声明（含 decodedPixels 源位图）的逐帧深拷贝——像素零触碰（内存/性能短路）。
+    bool updateLayerTransform(int id, const canvas::ImageTransform& transform);
     // 图片图层「显示」开关（图层面板）：**仅影响画布预览**——纯 GUI 运行态标志（不入 §7 配置、不随存盘往返），
     //   纯显示切换：发 imageLayersVisibleChanged 交上层切场景图层像素/落位框可见性，**不驱动重组**（working_ 恒为全量合成）。
     //   导出是否并入叠加层由下方「烧录」开关独立决定，二者正交。值未变则短路。
@@ -237,8 +264,6 @@ public:
     // 清空全部叠加图片图层、仅留底图（图层画布与 baseImage_ 原样保留、底图绝不入栈）：
     //   发 layersChanged 交控制器以「仅底图」重出 original_/working_。**保留画布级预处理声明与标注**。仅图层态有效，否则早退返回 false。
     bool clearAllLayersToBase();
-    // 声明画布尺寸：更新 canvasW/H 并发 layersChanged（交控制器重组）。尺寸变化只清框选、不清图层/标注。
-    void setCanvasSize(int width, int height);
 
     // 确保处于图层画布态（兜底）：有图即图层画布（layersActive_ 恒真）→ 直接返回 true；无图 → 返回 false。
     //   「添加图片图层」入口调用它，正常路径恒命中「已图层画布」早退；保留仅为防御空文档。
@@ -374,7 +399,7 @@ signals:
     // 模式 / 极性切换（仅公开 setMode / setPolarity 触发；配置加载直写字段不走此信号）：
     // 供上层在用户切模式/极性后把画布交互态收口回「框选」。
     void modeOrPolarityChanged();
-    // 图层栈/画布尺寸声明态变更（addImageLayer/removeLayer/move/update/setCanvasSize/beginLayerCanvas）：
+    // 图层栈/画布尺寸声明态变更（addImageLayer/removeLayer/move/update/beginLayerCanvas）：
     // 需 PreprocessController 接此信号走 composeCanvas 重算 original_（再叠画布预处理→working_）。
     void layersChanged();
     // 图片图层「显示」开关切换（setImageLayersVisible）：**纯显隐**，不重组工作图。
@@ -398,11 +423,9 @@ private:
     std::uint8_t baseOpacity_{255};                          // 底图整体不透明度（0..255，255＝不透明）：合成边界淡出用，内存 baseLayer_ 声明恒存 255
     bool baseSelected_{false};                               // 底图是否被选中（图片拾取态点画布内非图层处）；与 selectedLayerId_ 互斥
     PreprocessSession baseSession_;                          // 底图色彩预处理声明态（steps_ 仅色彩、resize_ 恒 nullopt）；fadedCanvasBase 边界施加、不烘焙进 baseImage_
-    // fadedCanvasBase 的「内容签名 + 淡出结果」缓存：签名（见 matches()）不变即直接复用 value_、免重跑 clone/applyExec/applyAlpha。
-    //   不采用「显式失效挂钩」——因 baseImage_/baseOpacity_/baseSession_ 均可被 ConfigCodec（friend）直接改字段绕过 setter，
-    //   挂钩遗漏会造成静默脏缓存；改用内容指纹自行判等，签名变了自然重算，无需任何调用点配合。
-    struct FadedBaseCache {
-        bool valid = false;
+    // fadedCanvasBase 的缓存键：底图内容签名（首尾字节指纹）+ 底图不透明度 + 底图色彩步声明——
+    //   覆盖淡出产物的全部输入，键变自然重算（统一 DerivedCache 失效纪律，无需任何调用点配合）。
+    struct FadedBaseKey {
         int baseWidth = 0;
         int baseHeight = 0;
         core::ImageFormat baseFormat = core::ImageFormat::Rgba;
@@ -410,17 +433,19 @@ private:
         std::uint8_t opacity = 255;
         preprocess::PreprocessPipeline steps;
 
-        bool matches(const FadedBaseCache& o) const {
-            return valid && o.valid && baseWidth == o.baseWidth && baseHeight == o.baseHeight &&
+        bool operator==(const FadedBaseKey& o) const {
+            return baseWidth == o.baseWidth && baseHeight == o.baseHeight &&
                    baseFormat == o.baseFormat && baseFingerprint == o.baseFingerprint &&
                    opacity == o.opacity && steps == o.steps;
         }
-
-        core::Image value;   // 淡出后的完整底图位图（命中时直接按引用回给调用方，零拷贝）
     };
-    mutable FadedBaseCache fadedBaseCache_;
+    // 淡出产物缓存（统一 DerivedCache；mutable 供 const 访问器 get 时写缓存）。
+    mutable DerivedCache<FadedBaseKey, core::Image> fadedBaseCache_;
     std::uint8_t canvasOpacity_{255};                        // 画布级整体不透明度（0..255）：产出边界 applyAlpha 施加一次、影响预览与导出，随 §7 顶层 opacity 往返
-    std::vector<canvas::ImageLayer> layers_;                   // 叠加图片图层数组（声明态；**不含底图**；直接以数组承载）
+    // zOrder 不变式：layers_ 向量恒按 zOrder 升序且 zOrder ≡ 向量下标（0..n-1，重编号维护）。
+    //   增（addImageLayer 置顶）/删/邻换（moveLayerZOrder）/置顶置底（moveLayerToEdge）均就地维持；
+    //   updateLayer 外改 z 与配置载入按 z 稳定重排重建。面板/场景按向量序天然有序、合成口径不漂移。
+    std::vector<canvas::ImageLayer> layers_;                   // 叠加图片图层数组（声明态；**不含底图**；按 zOrder 恒有序）
     bool imageLayersVisible_{true};                            // 图片图层整体显隐（纯 GUI 运行态，不入配置；对标 layersBurnIn_）
     bool layersActive_{false};                               // 是否为图层画布（有图即真；仅空文档为假）
     bool layersBurnIn_{true};                                // 图片图层「烧录」导出开关（纯 GUI 运行态，对标标注 burnInEnabled；不入配置）

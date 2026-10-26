@@ -88,17 +88,21 @@ bool PreprocessSession::producesGray() const {
 }
 
 // 记录一段前缀的重放产物为 base_（图像由 Controller 经 EngineBridge 物化后灌入）。
-void PreprocessSession::setBase(core::Image img, preprocess::PreprocessPipeline prefix) {
-    base_ = std::move(img);
-    basePath_ = std::move(prefix);
+void PreprocessSession::setBase(core::Image img, const preprocess::PreprocessPipeline& prefix) {
+    base_.get(prefix, [&](const preprocess::PreprocessPipeline&) { return std::move(img); });
+}
+
+// 缓存前缀（无缓存时返回空静态；调用方须 hasBase 守卫）。
+const preprocess::PreprocessPipeline& PreprocessSession::basePrefix() const {
+    static const preprocess::PreprocessPipeline kEmpty;
+    return base_.key() ? *base_.key() : kEmpty;
 }
 
 // 会话失效：清空轻队列、独立 resize 与 base_ 缓存（换图 / 重置预处理复用；不含 working_ 还原，那归 Document）。
 void PreprocessSession::clear() {
     steps_.clear();
     resize_.reset();
-    base_.reset();
-    basePath_.clear();
+    base_.clear();
 }
 
 } // namespace idc::gui

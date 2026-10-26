@@ -51,14 +51,8 @@ void SessionController::connectSignals() {
             [this](const int id) { doc_->removeLayer(id); });
     connect(layerEditPanel_, &LayerEditPanel::layerTransformRequested, this,
             [this](const int id, const canvas::ImageTransform &t) {
-                if (const canvas::ImageLayer* layer = doc_->layerById(id)) {
-                    canvas::ImageLayer updated = *layer;
-                    updated.transform = t;
-                    doc_->updateLayer(id, updated);
-                }
+                doc_->updateLayerTransform(id, t);   // transform-only 就地更新：不拷贝整层声明（含源位图）。
             });
-    connect(layerEditPanel_, &LayerEditPanel::canvasSizeRequested, this,
-            [this](const int width, const int height) { doc_->setCanvasSize(width, height); });
     connect(layerEditPanel_, &LayerEditPanel::addImageRequested, this, &SessionController::onAddImageLayer);
     connect(layerEditPanel_, &LayerEditPanel::clearAllLayersRequested, this, &SessionController::onClearAllLayers);
     // 不透明度目标＝底图（Base）时驱动底图整体透明度（→ setBaseOpacity → layersChanged 重组以淡出底图）。
@@ -180,7 +174,7 @@ void SessionController::onDestroyAll() const {
         anno_->setBaseImage(doc_->working()); // working_ 已空→复位标注会话＝清空全部标注 + 重置重做栈。
     } else {
         if (doc_->hasLayers()) doc_->clearAllLayersToBase();   // 仅清叠加层、保留底图为图层画布（layersChanged→recompose 以仅底图重出）。
-        doc_->resetPreprocess();                               // 清画布预处理（含 resize/几何），working_=original_。
+        doc_->resetPreprocess();                               // 清画布预处理（含 resize/几何）；恒等态 working() 派生别名 original()。
         anno_->setBaseImage(doc_->working());                  // 复位标注会话＝清空全部标注 + 重置重做栈。
         doc_->clearRect();
         doc_->clearRects();
