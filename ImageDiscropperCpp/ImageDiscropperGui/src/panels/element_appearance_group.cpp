@@ -106,22 +106,8 @@ ElementAppearanceGroup::ElementAppearanceGroup(QWidget* parent, const bool geome
         geoMoveUpBtn_ = makeButton(retranslator_, geoSection_, IDC_GT(label, kMoveUpButton));
         geoMoveDownBtn_ = makeButton(retranslator_, geoSection_, IDC_GT(label, kMoveDownButton));
         geoRemoveBtn_ = makeButton(retranslator_, geoSection_, IDC_GT(label, kRemoveButton));
-        if (compact) {   // 窄屏：操作行 2×2 两行排（触控目标不减、行宽减半）。
-            auto* opRow = new QGridLayout();
-            opRow->addWidget(geoUpdateBtn_, 0, 0);
-            opRow->addWidget(geoMoveUpBtn_, 0, 1);
-            opRow->addWidget(geoMoveDownBtn_, 1, 0);
-            opRow->addWidget(geoRemoveBtn_, 1, 1);
-            lay->addLayout(opRow);
-        } else {
-            auto* opRow = new QHBoxLayout();
-            opRow->addWidget(geoUpdateBtn_);
-            opRow->addWidget(geoMoveUpBtn_);
-            opRow->addWidget(geoMoveDownBtn_);
-            opRow->addWidget(geoRemoveBtn_);
-            opRow->addStretch(1);
-            lay->addLayout(opRow);
-        }
+        geoOpGrid_ = new QGridLayout();   // 操作行形态（单行 4 列 / 2×2）由 rebuildOpRows 按 compact_ 重摆。
+        lay->addLayout(geoOpGrid_);
     }
     geoSection_->setVisible(geometricAllowed_);
     root->addWidget(geoSection_);
@@ -165,23 +151,12 @@ ElementAppearanceGroup::ElementAppearanceGroup(QWidget* parent, const bool geome
         colorMoveUpBtn_ = makeButton(retranslator_, this, IDC_GT(label, kMoveUpButton));
         colorMoveDownBtn_ = makeButton(retranslator_, this, IDC_GT(label, kMoveDownButton));
         colorRemoveBtn_ = makeButton(retranslator_, this, IDC_GT(label, kRemoveButton));
-        if (compact) {   // 窄屏：操作行 2×2 两行排。
-            auto* opRow = new QGridLayout();
-            opRow->addWidget(colorUpdateBtn_, 0, 0);
-            opRow->addWidget(colorMoveUpBtn_, 0, 1);
-            opRow->addWidget(colorMoveDownBtn_, 1, 0);
-            opRow->addWidget(colorRemoveBtn_, 1, 1);
-            root->addLayout(opRow);
-        } else {
-            auto* opRow = new QHBoxLayout();
-            opRow->addWidget(colorUpdateBtn_);
-            opRow->addWidget(colorMoveUpBtn_);
-            opRow->addWidget(colorMoveDownBtn_);
-            opRow->addWidget(colorRemoveBtn_);
-            opRow->addStretch(1);
-            root->addLayout(opRow);
-        }
+        colorOpGrid_ = new QGridLayout();
+        root->addLayout(colorOpGrid_);
     }
+
+    compact_ = compact;
+    rebuildOpRows();   // 依 compact 形态摆好两区操作行按钮。
 
     // 不透明度（元素外观·不透明度，0..255）；节点外观实例不显示（由对话框整体不透明度行独家采集）。
     if (showOpacity_) {
@@ -244,6 +219,35 @@ void ElementAppearanceGroup::setGeometricAllowed(const bool allowed) {
         pipeline_ = std::move(kept);
     }
     rebuildLists();
+}
+
+void ElementAppearanceGroup::setCompactLayout(const bool compact) {
+    if (compact_ == compact) return;
+    compact_ = compact;
+    rebuildOpRows();
+}
+
+void ElementAppearanceGroup::rebuildOpRows() const {
+    const auto fill = [](QGridLayout* g, QPushButton* u, QPushButton* mU, QPushButton* mD, QPushButton* rm,
+                         const bool compact) {
+        while (const QLayoutItem* item = g->takeAt(0)) delete item;   // 清空布局项（spacer 等）；按钮为宿主子件不随项删除。
+        for (int c = 0; c < g->columnCount(); ++c) g->setColumnStretch(c, 0);
+        if (compact) {   // 窄屏：2×2 两行排（触控目标不减、行宽减半）。
+            g->addWidget(u, 0, 0);
+            g->addWidget(mU, 0, 1);
+            g->addWidget(mD, 1, 0);
+            g->addWidget(rm, 1, 1);
+            g->setColumnStretch(2, 1);
+        } else {         // 宽屏：单行 4 列。
+            g->addWidget(u, 0, 0);
+            g->addWidget(mU, 0, 1);
+            g->addWidget(mD, 0, 2);
+            g->addWidget(rm, 0, 3);
+            g->setColumnStretch(4, 1);
+        }
+    };
+    fill(geoOpGrid_, geoUpdateBtn_, geoMoveUpBtn_, geoMoveDownBtn_, geoRemoveBtn_, compact_);
+    fill(colorOpGrid_, colorUpdateBtn_, colorMoveUpBtn_, colorMoveDownBtn_, colorRemoveBtn_, compact_);
 }
 
 void ElementAppearanceGroup::onAddGeoStep() {

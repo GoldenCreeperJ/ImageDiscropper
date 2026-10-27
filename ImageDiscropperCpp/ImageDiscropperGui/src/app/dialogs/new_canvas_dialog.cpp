@@ -123,7 +123,7 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle(IDC_GTR(label, kDlgTitleNewCanvas));
     setModal(true);
 
-    auto* root = new QVBoxLayout(this);
+    auto* root = rootLayout_ = new QVBoxLayout(this);
     // 主体（表单 + 预览）装进纵向可滑外壳：小屏 / 横屏超高时内部滚动，配合底部固定按钮行 + 屏幕尺寸护栏，
     // 根治「显示不全 / 无法关闭」；勾选附加图片增删的行也落在滚动内容里，外层窗口不被撑大。
     // 按钮行留滚动区外恒可关闭；预览并入滚动内容（用户滚到底即可看到）。
@@ -146,7 +146,7 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     //      画布级整体透明度不在本对话框采集（属建好后的画布态，交图层面板处理）。----
     auto* nodeBox = new QFrame(body);
     nodeBox->setFrameShape(QFrame::StyledPanel);
-    auto* nodeLay = new QHBoxLayout(nodeBox);
+    auto* nodeLay = nodeLay_ = new QHBoxLayout(nodeBox);
     if (narrow) nodeLay->setDirection(QBoxLayout::TopToBottom);
     auto* nodeParams = new QWidget(nodeBox);   // 左列：尺寸/不透明度/图层落位。
     auto* nodeGrid = new QGridLayout(nodeParams);
@@ -192,7 +192,7 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     // ---- 图案元素节（横贯，可折叠）：图案采参表单 | 色彩外观组 左右并排（窄屏上下叠）。----
     auto* backdropBox = new QFrame(body);
     backdropBox->setFrameShape(QFrame::StyledPanel);
-    auto* backdropLay = new QHBoxLayout(backdropBox);
+    auto* backdropLay = backdropLay_ = new QHBoxLayout(backdropBox);
     if (narrow) backdropLay->setDirection(QBoxLayout::TopToBottom);
     patternForm_ = new PatternFormWidget(backdropBox);   // 底色/前景/类型/方向/周期/线宽/点半径/噪声。
     backdropLay->addWidget(pinnedTop(patternForm_), 1);
@@ -205,7 +205,7 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     //      内容＝[源图/适应/图片落位 | 两区外观] 左右并排（窄屏上下叠）。----
     auto* imageBox = new QFrame(body);
     imageBox->setFrameShape(QFrame::StyledPanel);
-    auto* imageLay = new QHBoxLayout(imageBox);
+    auto* imageLay = imageLay_ = new QHBoxLayout(imageBox);
     if (narrow) imageLay->setDirection(QBoxLayout::TopToBottom);
     attachImageCheck_ = new QCheckBox(IDC_GTR(label, kAttachImageCheck));   // 标题行开关（声明语义；折叠箭头仅显隐）。
     attachImageCheck_->setToolTip(IDC_GTR(tooltip, kAttachImageTip));
@@ -257,7 +257,7 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
                                   nums::dialog::kNewCanvasPreviewMinHeightPx);
     previewLabel_->setFrameShape(QFrame::StyledPanel);
     previewLabel_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    auto* previewCol = new QWidget(this);
+    auto* previewCol = previewCol_ = new QWidget(this);
     auto* pvLay = new QVBoxLayout(previewCol);
     pvLay->setContentsMargins(0, 0, 0, 0);
     pvLay->addWidget(previewLabel_);
@@ -275,7 +275,7 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     } else {
         // 左列最小宽护栏＝展开态内容最小宽 + 纵滚条宽（下限不裁输入；拖窄分隔条到此即止）。
         formScroll_->setMinimumWidth(qMax(expandedFormMinW + verticalScrollBarExtent(formScroll_), 480));
-        auto* splitter = new QSplitter(Qt::Horizontal, this);
+        auto* splitter = splitter_ = new QSplitter(Qt::Horizontal, this);
         splitter->addWidget(formScroll_);
         previewCol->setMinimumWidth(nums::dialog::kNewCanvasPreviewMinWidthPx);
         splitter->addWidget(previewCol);
@@ -332,6 +332,8 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
                            + 2 * nums::dialog::kTouchFieldMinHeightPx + nums::panels::kPanelSpacingPx;
     limitDialogToScreen(this, QSize(preferredW, preferredH));
     resize(preferredW, preferredH);   // 构造期即定宽：不依赖护栏首显回调（双保险；护栏仍管超屏钳制）。
+    // 屏幕几何变化（旋转）→ 宽/窄形态动态切换（节内方向、外观组操作行、表单/预览外壳随之重排）。
+    if (sc) connect(sc, &QScreen::availableGeometryChanged, this, [this] { applyLayoutMode(); });
 }
 
 // 依附加图片开关/语境/适应方式显隐落位组并锁定尺寸（图案相关行显隐与文案在 PatternFormWidget 内）。
@@ -406,6 +408,63 @@ void NewCanvasDialog::resizeToContent() {
                       + nums::dialog::kNewCanvasPreviewMinWidthPx + 60
                       + m.left() + m.right();
     if (wantW > width()) resize(wantW, height());
+}
+
+// 屏幕几何变化（旋转）→ 宽/窄形态动态切换：三段节内方向、外观组操作行形态、表单/预览外壳
+//   随之重排，并按新形态的舒适尺寸重收整窗（护栏继续钳超屏）。
+void NewCanvasDialog::applyLayoutMode() {
+    const QScreen* sc = screen();
+    if (!sc) sc = QGuiApplication::primaryScreen();
+    const bool narrow = !sc || sc->availableGeometry().width() < nums::mobile::kStackColumnsMaxWidthPx;
+    if (narrow == narrow_) return;
+    narrow_ = narrow;
+
+    // 节内方向 + 外观组操作行形态 + 预览最小高。
+    const QBoxLayout::Direction dir = narrow ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight;
+    nodeLay_->setDirection(dir);
+    backdropLay_->setDirection(dir);
+    imageLay_->setDirection(dir);
+    nodeAppearance_->setCompactLayout(narrow);
+    backdropAppearance_->setCompactLayout(narrow);
+    imageAppearance_->setCompactLayout(narrow);
+    previewLabel_->setMinimumHeight(narrow ? 120 : nums::dialog::kNewCanvasPreviewMinHeightPx);
+
+    // 表单/预览外壳：窄屏纵向堆叠 ↔ 宽屏可拖分隔条（布局重挂会自动改父）。
+    rootLayout_->removeWidget(formScroll_);
+    rootLayout_->removeWidget(previewCol_);
+    if (splitter_) rootLayout_->removeWidget(splitter_);
+    if (!narrow) {
+        if (!splitter_) {
+            splitter_ = new QSplitter(Qt::Horizontal, this);
+            splitter_->setChildrenCollapsible(false);
+            splitter_->setStretchFactor(0, 1);
+            splitter_->setStretchFactor(1, 0);
+        }
+        formScroll_->setMinimumHeight(0);
+        previewCol_->setMinimumWidth(nums::dialog::kNewCanvasPreviewMinWidthPx);
+        splitter_->addWidget(formScroll_);
+        splitter_->addWidget(previewCol_);
+        rootLayout_->insertWidget(0, splitter_, 1);
+    } else {
+        if (splitter_) {
+            // 子件先摘出再删分隔条（QSplitter 无 removeWidget；子件为其 QObject 子级、不摘出会随删）。
+            formScroll_->setParent(nullptr);
+            previewCol_->setParent(nullptr);
+            delete splitter_;
+            splitter_ = nullptr;
+        }
+        formScroll_->setMinimumHeight(0);
+        rootLayout_->insertWidget(0, formScroll_, 1);   // 布局接管（重挂父）。
+        rootLayout_->insertWidget(1, previewCol_);
+    }
+    resizeToContent();
+    const QSize formHint = body_->sizeHint();
+    const QMargins m = layout()->contentsMargins();
+    resize(qMax(formHint.width(), narrow ? 0 : 640)
+               + (narrow ? 0 : nums::dialog::kNewCanvasPreviewMinWidthPx + 60)
+               + m.left() + m.right(),
+           formHint.height() + (narrow ? 120 : 0)
+               + 2 * nums::dialog::kTouchFieldMinHeightPx + nums::panels::kPanelSpacingPx);
 }
 
 // 切「添加图层」语境：顶部宽/高 spin（即图层尺寸）预填真实画布 W×H 并保持可编辑（改小即裁剪、改大即留白）。

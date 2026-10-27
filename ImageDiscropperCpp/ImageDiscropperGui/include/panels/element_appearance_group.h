@@ -26,6 +26,7 @@
 
 class QCheckBox;
 class QComboBox;
+class QGridLayout;
 class QListWidget;
 class QPushButton;
 class QSpinBox;
@@ -53,6 +54,9 @@ public:
     // 切换几何步可用性：收窄时几何区隐藏、现有队列里的几何步被剔除（仅留色彩步，与 Core 写出/还原过滤同口径）。
     void setGeometricAllowed(bool allowed);
 
+    // 切换操作行紧凑布局（窄屏 2×2 两行排 ↔ 宽屏单行排）：屏幕几何变化时由对话框驱动（旋转后随形态切换）。
+    void setCompactLayout(bool compact);
+
     // 语言热切换重放（与面板 retranslate 同构）。
     void retranslate() const { retranslator_.run(); }
 
@@ -78,7 +82,10 @@ private:
     // 两列表重建：几何区＝pipeline 前段几何块、色彩区＝后段色彩块（几何恒前由结构保证）；保选中行。
     void rebuildLists() const;
 
-    QWidget* geoSection_{nullptr};   // 几何区整块（类型行 + 列表 + 移/删行）：仅 geometricAllowed 显示。
+    // 操作行重排（compact 形态切换共用）：同一网格按形态重摆按钮（单行 4 列 / 2×2 两行）。
+    void rebuildOpRows() const;
+
+    QWidget* geoSection_{nullptr};   // 几何区整块（类型行 + 列表 + 操作行）：仅 geometricAllowed 显示。
     QComboBox* geoCombo_{nullptr};
     QPushButton* geoAddBtn_{nullptr};
     QListWidget* geoList_{nullptr};
@@ -86,6 +93,7 @@ private:
     QPushButton* geoMoveUpBtn_{nullptr};
     QPushButton* geoMoveDownBtn_{nullptr};
     QPushButton* geoRemoveBtn_{nullptr};
+    QGridLayout* geoOpGrid_{nullptr}; // 几何操作行网格（单行 4 列 / 2×2，随 compact 重摆）。
     QComboBox* colorCombo_{nullptr};
     QPushButton* colorAddBtn_{nullptr};
     QWidget* chanRow_{nullptr};   // 「作用通道」行（R/G/B 三勾，仅反色/分离显示）。
@@ -97,7 +105,10 @@ private:
     QPushButton* colorMoveUpBtn_{nullptr};
     QPushButton* colorMoveDownBtn_{nullptr};
     QPushButton* colorRemoveBtn_{nullptr};
+    QGridLayout* colorOpGrid_{nullptr}; // 色彩操作行网格（同上）。
     QSpinBox* opacitySpin_{nullptr};
+
+    bool compact_{false};
 
     preprocess::PreprocessPipeline pipeline_;
     bool geometricAllowed_{true};

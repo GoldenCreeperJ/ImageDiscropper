@@ -30,12 +30,15 @@
 #include "canvas/layer.h"        // canvas::ImageTransform（图片相对图层的落位）
 #include "generate/pattern.h"
 
+class QBoxLayout;
 class QCheckBox;
 class QComboBox;
 class QLabel;
 class QPushButton;
 class QScrollArea;
 class QSpinBox;
+class QSplitter;
+class QVBoxLayout;
 
 namespace idc::gui {
 
@@ -117,6 +120,7 @@ private:
     void updateControlAvailability() const;                       // 依附加图片开关/语境/适应方式显隐落位组并锁定尺寸（图案相关显隐在 PatternFormWidget 内）。
     void syncCanvasSizeToSource() const;                           // Native 适应下把顶部宽/高（图层尺寸）回填为源图原生尺寸。
     void resizeToContent();                                        // 折叠/展开变化：重算表单滚动区最小宽并让窗口跟上（同主窗页签切换更新滚动区最小宽手法）。
+    void applyLayoutMode();                                        // 屏幕几何变化（旋转）→ 宽/窄形态切换：节内方向、外观组操作行、表单/预览外壳重排并收尺寸。
     // 内层构造：按当前落位/适应/图案元素（backdrop）与两元素外观组装一个图片层（decodedPixels 预缩 factor 为预览代理，
     //   boxWidth/Height = 传入尺寸，transform = 图层落位）；预览与定稿共用，保证与 Core 合成单一真相源。
     canvas::ImageLayer buildAttachedLayer(double factor, const canvas::ImageTransform& layerPlace,
@@ -171,6 +175,12 @@ private:
     bool narrow_{false};        // 窄屏（<kStackColumnsMaxWidthPx）：节内上下叠 + 预览固定底部。
     QWidget* body_{nullptr};    // 滚动表单主体（resizeToContent 据其最小宽重算）。
     QScrollArea* formScroll_{nullptr};   // 表单滚动区（resizeToContent 更新其最小宽）。
+    QVBoxLayout* rootLayout_{nullptr};   // 对话框根布局（applyLayoutMode 重排表单/预览外壳）。
+    QBoxLayout* nodeLay_{nullptr};       // 节点外观节内方向（applyLayoutMode 切换）。
+    QBoxLayout* backdropLay_{nullptr};   // 图案元素节内方向（同上）。
+    QBoxLayout* imageLay_{nullptr};      // 图片元素节内方向（同上）。
+    QSplitter* splitter_{nullptr};       // 宽屏表单/预览分隔条（窄屏为 null）。
+    QWidget* previewCol_{nullptr};       // 预览列（宽屏＝右侧列、窄屏＝底部固定）。
 
     static constexpr int kPreviewMaxDim = 256;   // 预览代理最长边（越小越流畅）。
 };
