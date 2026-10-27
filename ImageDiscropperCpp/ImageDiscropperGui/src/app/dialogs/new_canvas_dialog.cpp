@@ -336,10 +336,13 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
                            + 2 * nums::dialog::kTouchFieldMinHeightPx + nums::panels::kPanelSpacingPx;
     limitDialogToScreen(this, QSize(preferredW, preferredH));
     resize(preferredW, preferredH);   // 构造期即定宽：不依赖护栏首显回调（双保险；护栏仍管超屏钳制）。
-    // 屏幕几何变化（旋转）→ 宽/窄形态动态切换。延迟一拍执行：旋转时序里平台在事件批处理之后
-    //   才重摆窗口，立即改会被覆盖。
+    // 屏幕几何变化（旋转）→ 宽/窄形态动态切换 + 几何收钳。旋转动画时序里平台会在我们钳位之后再摆
+    //   一次窗口（间歇性推出屏边），故多拍重钳：0/250/600ms 三次，等动画落定后再定一次。
     if (sc) connect(sc, &QScreen::availableGeometryChanged, this, [this] {
-        QTimer::singleShot(0, this, [this] { applyLayoutMode(); });
+        const auto settle = [this] { applyLayoutMode(); };
+        QTimer::singleShot(0, this, settle);
+        QTimer::singleShot(250, this, settle);
+        QTimer::singleShot(600, this, settle);
     });
     QTimer::singleShot(0, this, [this] { refreshDiag(); });   // 【临时诊断】首显后刷新真实几何。
 }
@@ -424,48 +427,50 @@ void NewCanvasDialog::applyLayoutMode() {
     const QScreen* sc = screen();
     if (!sc) sc = QGuiApplication::primaryScreen();
     const bool narrow = !sc || sc->availableGeometry().width() < nums::mobile::kStackColumnsMaxWidthPx;
-    if (narrow == narrow_) return;
-    narrow_ = narrow;
+    if (narrow != narrow_) {
+        // 形态切换（仅模式变化时执行；几何收钳部分每次调用都做——旋转落定多拍重钳）。
+        narrow_ = narrow;
 
-    // 节内方向 + 外观组操作行形态 + 预览最小高。
-    const QBoxLayout::Direction dir = narrow ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight;
-    nodeLay_->setDirection(dir);
-    backdropLay_->setDirection(dir);
-    imageLay_->setDirection(dir);
-    nodeAppearance_->setCompactLayout(narrow);
-    backdropAppearance_->setCompactLayout(narrow);
-    imageAppearance_->setCompactLayout(narrow);
-    previewLabel_->setMinimumHeight(narrow ? 120 : nums::dialog::kNewCanvasPreviewMinHeightPx);
+        // 节内方向 + 外观组操作行形态 + 预览最小高。
+        const QBoxLayout::Direction dir = narrow ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight;
+        nodeLay_->setDirection(dir);
+        backdropLay_->setDirection(dir);
+        imageLay_->setDirection(dir);
+        nodeAppearance_->setCompactLayout(narrow);
+        backdropAppearance_->setCompactLayout(narrow);
+        imageAppearance_->setCompactLayout(narrow);
+        previewLabel_->setMinimumHeight(narrow ? 120 : nums::dialog::kNewCanvasPreviewMinHeightPx);
 
-    // 表单/预览外壳：窄屏纵向堆叠 ↔ 宽屏可拖分隔条（布局重挂会自动改父）。
-    rootLayout_->removeWidget(formScroll_);
-    rootLayout_->removeWidget(previewCol_);
-    if (splitter_) rootLayout_->removeWidget(splitter_);
-    if (!narrow) {
-        if (!splitter_) {
-            splitter_ = new QSplitter(Qt::Horizontal, this);
-            splitter_->setChildrenCollapsible(false);
-            splitter_->setStretchFactor(0, 1);
-            splitter_->setStretchFactor(1, 0);
+        // 表单/预览外壳：窄屏纵向堆叠 ↔ 宽屏可拖分隔条（布局重挂会自动改父）。
+        rootLayout_->removeWidget(formScroll_);
+        rootLayout_->removeWidget(previewCol_);
+        if (splitter_) rootLayout_->removeWidget(splitter_);
+        if (!narrow) {
+            if (!splitter_) {
+                splitter_ = new QSplitter(Qt::Horizontal, this);
+                splitter_->setChildrenCollapsible(false);
+                splitter_->setStretchFactor(0, 1);
+                splitter_->setStretchFactor(1, 0);
+            }
+            // 宽形态下限随屏自适应（构造期与旋转切换同一口径）。
+            applyWideMinimums(sc ? sc->availableGeometry() : QRect());
+            splitter_->addWidget(formScroll_);
+            splitter_->addWidget(previewCol_);
+            rootLayout_->insertWidget(0, splitter_, 1);
+        } else {
+            if (splitter_) {
+                // 子件先摘出再删分隔条（QSplitter 无 removeWidget；子件为其 QObject 子级、不摘出会随删）。
+                formScroll_->setParent(nullptr);
+                previewCol_->setParent(nullptr);
+                delete splitter_;
+                splitter_ = nullptr;
+            }
+            formScroll_->setMinimumHeight(0);
+            rootLayout_->insertWidget(0, formScroll_, 1);   // 布局接管（重挂父）。
+            rootLayout_->insertWidget(1, previewCol_);
         }
-        // 宽形态下限随屏自适应（构造期与旋转切换同一口径）。
-        applyWideMinimums(sc ? sc->availableGeometry() : QRect());
-        splitter_->addWidget(formScroll_);
-        splitter_->addWidget(previewCol_);
-        rootLayout_->insertWidget(0, splitter_, 1);
-    } else {
-        if (splitter_) {
-            // 子件先摘出再删分隔条（QSplitter 无 removeWidget；子件为其 QObject 子级、不摘出会随删）。
-            formScroll_->setParent(nullptr);
-            previewCol_->setParent(nullptr);
-            delete splitter_;
-            splitter_ = nullptr;
-        }
-        formScroll_->setMinimumHeight(0);
-        rootLayout_->insertWidget(0, formScroll_, 1);   // 布局接管（重挂父）。
-        rootLayout_->insertWidget(1, previewCol_);
+        resizeToContent();
     }
-    resizeToContent();
     body_->updateGeometry();
     const QSize formHint = body_->sizeHint();
     const QMargins m = layout()->contentsMargins();
@@ -500,8 +505,9 @@ void NewCanvasDialog::applyLayoutMode() {
     // 【临时诊断】移动端无标题栏：几何信息放按钮行上方（定位后移除）。
     QString refInfo;
     if (auto* p = parentWidget()) refInfo = QStringLiteral("/parent %1x%2").arg(p->width()).arg(p->height());
-    if (diagLabel_) diagLabel_->setText(QStringLiteral("dlg %1x%2 / avail %3x%4%5")
+    if (diagLabel_) diagLabel_->setText(QStringLiteral("dlg %1x%2 @%3,%4 / avail %5x%6%7")
                                             .arg(width()).arg(height())
+                                            .arg(x()).arg(y())
                                             .arg(avail.width()).arg(avail.height()).arg(refInfo));
 }
 
@@ -511,8 +517,9 @@ void NewCanvasDialog::refreshDiag() const {
     const QRect avail = screen() ? screen()->availableGeometry() : QRect();
     QString refInfo;
     if (auto* p = parentWidget()) refInfo = QStringLiteral("/parent %1x%2").arg(p->width()).arg(p->height());
-    diagLabel_->setText(QStringLiteral("dlg %1x%2 / avail %3x%4%5")
+    diagLabel_->setText(QStringLiteral("dlg %1x%2 @%3,%4 / avail %5x%6%7")
                             .arg(width()).arg(height())
+                            .arg(x()).arg(y())
                             .arg(avail.width()).arg(avail.height()).arg(refInfo));
 }
 
