@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <array>
+#include <climits>
 #include <cmath>
 #include <cstdint>
 #include <functional>
@@ -440,8 +441,14 @@ void NewCanvasDialog::applyLayoutMode() {
             splitter_->setStretchFactor(0, 1);
             splitter_->setStretchFactor(1, 0);
         }
+        // 宽形态最小宽随屏自适应：小屏（手机横屏）下 480/280 固定下限会顶过护栏钳值而溢出。
+        const QRect avail = sc ? sc->availableGeometry() : QRect();
+        const int availW = avail.isNull() ? INT_MAX : avail.width();
+        const int previewMinW = qMin(nums::dialog::kNewCanvasPreviewMinWidthPx, availW / 3);
+        previewCol_->setMinimumWidth(previewMinW);
+        const int contentMin = body_->minimumSizeHint().width() + verticalScrollBarExtent(formScroll_);
+        formScroll_->setMinimumWidth(qMax(contentMin, qMin(480, availW - previewMinW - 60)));
         formScroll_->setMinimumHeight(0);
-        previewCol_->setMinimumWidth(nums::dialog::kNewCanvasPreviewMinWidthPx);
         splitter_->addWidget(formScroll_);
         splitter_->addWidget(previewCol_);
         rootLayout_->insertWidget(0, splitter_, 1);
@@ -458,13 +465,31 @@ void NewCanvasDialog::applyLayoutMode() {
         rootLayout_->insertWidget(1, previewCol_);
     }
     resizeToContent();
+    body_->updateGeometry();
     const QSize formHint = body_->sizeHint();
     const QMargins m = layout()->contentsMargins();
-    resize(qMax(formHint.width(), narrow ? 0 : 640)
-               + (narrow ? 0 : nums::dialog::kNewCanvasPreviewMinWidthPx + 60)
-               + m.left() + m.right(),
-           formHint.height() + (narrow ? 120 : 0)
-               + 2 * nums::dialog::kTouchFieldMinHeightPx + nums::panels::kPanelSpacingPx);
+    int wantW = qMax(formHint.width(), narrow ? 0 : 640)
+                + (narrow ? 0 : nums::dialog::kNewCanvasPreviewMinWidthPx + 60)
+                + m.left() + m.right();
+    int wantH = formHint.height() + (narrow ? 120 : 0)
+                + 2 * nums::dialog::kTouchFieldMinHeightPx + nums::panels::kPanelSpacingPx;
+    // 显式钳到护栏口径（不依赖 Resize 事件次序）；随后按父窗口居中（无父则按屏居中）——
+    //   旋转时序里屏幕几何先变、父窗口后变，护栏的父窗口处理器会随后再居中回正一次。
+    const QRect avail = sc ? sc->availableGeometry() : QRect();
+    if (!avail.isNull()) {
+        wantW = qMin(wantW, static_cast<int>(avail.width() * nums::mobile::kDialogMaxWidthRatio));
+        wantH = qMin(wantH, static_cast<int>(avail.height() * nums::mobile::kDialogMaxHeightRatio));
+    }
+    resize(wantW, wantH);
+    QRect ref;
+    if (auto* p = parentWidget()) {
+        const QPoint tl = p->isWindow() ? p->frameGeometry().topLeft() : p->mapToGlobal(QPoint(0, 0));
+        const QSize ps = p->isWindow() ? p->frameGeometry().size() : p->size();
+        ref = QRect(tl, ps);
+    } else if (!avail.isNull()) {
+        ref = avail;
+    }
+    if (!ref.isNull()) move(ref.center().x() - width() / 2, ref.center().y() - height() / 2);
 }
 
 // 切「添加图层」语境：顶部宽/高 spin（即图层尺寸）预填真实画布 W×H 并保持可编辑（改小即裁剪、改大即留白）。
