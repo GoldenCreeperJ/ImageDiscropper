@@ -51,89 +51,121 @@ void placementOffset(const ImageTransform& t, const int canvasW, const int canva
     oy = static_cast<int>(std::llround(ay - py)) + t.y;
 }
 
-// scaleToTarget / composeIntoBox 定义在本文件下方 anon namespace（同名 anon namespace 合并）；
-//   materializeLayer 需先组装（框+底色）→缩放→后预处理，故在此前置声明供其调用。
-core::Image scaleToTarget(core::Image placed, const ImageLayer& layer);
-core::Image composeIntoBox(const ImageLayer& layer, const core::Image& src);
-
-} // namespace   // 闭合本文件顶部（namespace idc::canvas 内）开启的匿名命名空间：其内只放内部辅助函数与上述前置声明。
-
-// 物化单层「整层位图」（已组装·已缩放·已预处理·未落位）：先取源（配方按 transform 目标尺寸现算 / 文件用注入的解码像素 / 空→空），
-// 启用两级落位时把源合成进带 boxBackdrop 底色的图层框，再按 transform 缩放到目标尺寸，**最后**对整层跑 preprocess。
-//   preprocess 置于组装/缩放之后是其语义关键：色彩连图层框底色一起变、几何（旋转/翻转/resize）改变最终落位足迹（不被 scaleToTarget 拉回旧框）。
-core::Image materializeLayer(const ImageLayer& layer) {
-    core::Image raw;
-    if (layer.recipe) {
-        raw = generate::makePattern(layer.transform.width, layer.transform.height, *layer.recipe);   // 配方源：按目标尺寸现算
-    } else if (!layer.decodedPixels.empty()) {
-        raw = layer.decodedPixels;   // 文件源：上层解码注入；未注入即空图（占位/降级）
-    }
-    // 组装整层：有内层落位→源铺进图层框（源空时仍产出纯底色框，保留现语义）；无落位→直接用源（空则短路）。
-    core::Image content = raw;
-    if (layer.hasImagePlacement) {
-        content = composeIntoBox(layer, raw);
-    } else if (content.empty()) {
-        return core::Image{};
-    }
-    // 按 transform 目标尺寸缩放后，再对整层跑预处理。
-    core::Image placed = scaleToTarget(std::move(content), layer);
-    if (placed.empty()) return core::Image{};
-    if (layer.preprocess.empty()) return placed;
-    return layer.preprocess.applyExec(placed);
-}
-
-namespace {
-
-// 合成期缩放：目标宽高均 > 0 且与组装尺寸不同才重采样（配方已在取源时按目标尺寸生成，此处自然跳过）。
-//   由 materializeLayer 在组装后调用，使落位尺寸口径与拾取（layerPlacement）一致（单一真相源）。
-core::Image scaleToTarget(core::Image placed, const ImageLayer& layer) {
-    if (placed.empty()) return placed;
-    const int tw = layer.transform.width;
-    if (const int th = layer.transform.height; tw > 0 && th > 0 && (placed.width() != tw || placed.height() != th)) {
-        placed = placed.resized(tw, th);
-    }
-    return placed;
-}
-
-// 内层：源图→图层框。以 boxBackdrop 图案（空→透明）铺 boxWidth×boxHeight 的底，再将解码源按 imageFit +
-//   内层锚点/枢轴/偏移 source-over 落入、越框裁剪。fit==Stretch 先重采样铺满框；图域框非法则退回原生源（交给外层）。
-core::Image composeIntoBox(const ImageLayer& layer, const core::Image& src) {
-    const int bw = layer.boxWidth;
-    const int bh = layer.boxHeight;
-    if (bw <= 0 || bh <= 0 || bw > generate::kMaxDimension || bh > generate::kMaxDimension) return src;
-    core::Image box = layer.boxBackdrop ? generate::makePattern(bw, bh, *layer.boxBackdrop) : core::Image{};
-    if (box.empty()) {
-        box = core::Image(bw, bh, core::ImageFormat::Rgba);
-        box.fill(core::Color(0, 0, 0, 0));   // 无底色图案（或 makePattern 失败）→ 透明底
-    }
-    if (src.empty()) return box;
-    const core::Image placed = layer.imageFit == ImageFit::Stretch ? src.resized(bw, bh) : src;
-    // 内层落位复用 placementOffset（宽高留 0＝不缩放，已在 placed 体现）。
-    ImageTransform inner;
-    inner.inCanvasAnchor = layer.imageAnchor;
-    inner.layerPivot = layer.imagePivot;
-    inner.x = layer.imageX;
-    inner.y = layer.imageY;
-    int ox = 0;
-    int oy = 0;
-    placementOffset(inner, bw, bh, placed.width(), placed.height(), ox, oy);
-    for (int y = 0; y < placed.height(); ++y) {
-        for (int x = 0; x < placed.width(); ++x) {
-            const int dx = ox + x;
-            const int dy = oy + y;
-            if (dx < 0 || dy < 0 || dx >= bw || dy >= bh) continue;   // 越框自然裁剪
-            box.setPixel(dx, dy, core::compositeOver(box.getPixel(dx, dy), placed.getPixel(x, y)));
-        }
-    }
-    return box;
-}
-
 // 逐像素 alpha 乘子：a' = (a·opacity + 127) / 255（整数四舍五入，与 composeCanvas 逐层不透明度同口径）。
+//   元素外观·不透明度与节点外观·不透明度共用此口径。
 core::Color scaleAlpha(const core::Color& c, const int opacity) {
     return core::Color(c.r, c.g, c.b, static_cast<std::uint8_t>((c.a * opacity + 127) / 255));
 }
 
-} // namespace
+} // namespace   // 闭合本文件顶部（namespace idc::canvas 内）开启的匿名命名空间：其内只放内部辅助函数。
+
+// 图片元素是否存在（见头文件）。
+bool hasImageElement(const ImageLayer& layer) {
+    return !layer.fileName.empty() || !layer.decodedPixels.empty() || layer.hasImagePlacement;
+}
+
+// 物化单层「整层位图」（已组装·已缩放·已预处理·未落位）——装配序（SPEC §2.2a，与 composeBase 唯一口径）：
+//   图片元素先处理源（适应重采样→元素预处理）→ 区域定尺寸（有框＝box；无框＝**预处理后源尺寸**——
+//   几何步改尺寸不被原尺寸裁剪/留白）→ 图案元素（生成→其预处理→其透明度）→ 图片元素落位合成施其透明度
+//   → 区域缩放 → 节点外观（preprocess）。节点外观置于组装/缩放之后：色彩连图案底一起变、几何改变最终落位足迹。
+//   区域（图层框）尺寸：有内层落位 → boxWidth×boxHeight；无落位 → 图片元素预处理后原生尺寸 / 图案按 transform 目标。
+core::Image materializeLayer(const ImageLayer& layer) {
+    const bool hasImage = hasImageElement(layer);
+
+    // 有内层落位且框尺寸为正 → box 路径；框 ≤0（退化＝无图层框）或无落位 → 无框路径（区域＝预处理后源尺寸）。
+    const bool inBox = layer.hasImagePlacement && layer.boxWidth > 0 && layer.boxHeight > 0;
+
+    // 0) 图片元素源：适应重采样（仅 box 路径按框尺寸拉伸）→ 元素预处理（可含几何步：无框路径的区域由
+    //    预处理后源尺寸定，几何步不再被原尺寸裁剪/留白）。
+    core::Image src;
+    if (hasImage && !layer.decodedPixels.empty()) {
+        src = inBox && layer.imageFit == ImageFit::Stretch ? layer.decodedPixels.resized(layer.boxWidth, layer.boxHeight)
+                                                           : layer.decodedPixels;
+        if (!layer.imagePreprocess.empty()) src = layer.imagePreprocess.applyExec(src);
+    }
+
+    // 区域尺寸。
+    int regionW = 0;
+    int regionH = 0;
+    if (inBox && layer.imageFit == ImageFit::Native && !src.empty()) {
+        // Native＝图层框恒等于源图原生尺寸：区域按源尺寸收敛（调用方不保证、Core 不校验，直接收敛）。
+        regionW = src.width();
+        regionH = src.height();
+    } else if (inBox) {
+        regionW = layer.boxWidth;
+        regionH = layer.boxHeight;
+    } else if (!src.empty()) {
+        regionW = src.width();    // 无框：区域＝预处理后源尺寸（几何步改尺寸随之变，不裁不留白）。
+        regionH = src.height();
+    } else if (hasImage && !layer.decodedPixels.empty()) {
+        // 元素预处理失败（src 空）而解码像素仍在：按解码像素尺寸兜底定区域——仍产出图案底，不整层丢弃。
+        regionW = layer.decodedPixels.width();
+        regionH = layer.decodedPixels.height();
+    } else {
+        regionW = layer.transform.width;    // 纯图案层：区域 = transform 目标（≤0 → 空）
+        regionH = layer.transform.height;
+    }
+    if (regionW <= 0 || regionH <= 0 || regionW > generate::kMaxDimension || regionH > generate::kMaxDimension)
+        return core::Image{};   // 区域非法 → 空（与 makePattern 同口径）
+    // 无图片元素且无图案元素（空占位）→ 空。
+    if (!hasImage && !layer.backdrop) return core::Image{};
+    // 文件源未注入解码像素：无落位 → 空占位（合成跳过）；有落位 → 仅底色框。
+    if (hasImage && layer.decodedPixels.empty() && !layer.hasImagePlacement) return core::Image{};
+
+    // 1) 图案元素：生成区域尺寸图案 → 元素预处理 → 元素透明度。
+    core::Image box;
+    if (layer.backdrop) {
+        box = generate::makePattern(regionW, regionH, *layer.backdrop);
+        if (box.empty()) {
+            box = core::Image(regionW, regionH, core::ImageFormat::Rgba);
+            box.fill(core::Color(0, 0, 0, 0));   // 生成失败 → 透明底（保守降级）
+        }
+        if (!layer.backdropPreprocess.empty()) box = layer.backdropPreprocess.applyExec(box);
+        applyAlpha(box, layer.backdropOpacity);   // 元素外观·不透明度（RGBA 图案恒可施）
+    }
+    if (box.empty()) {
+        box = core::Image(regionW, regionH, core::ImageFormat::Rgba);
+        box.fill(core::Color(0, 0, 0, 0));   // 无图案元素 → 透明底
+    }
+
+    // 2) 图片元素：落位合成（逐像素施元素透明度，source-over 叠于图案之上）。
+    if (!src.empty()) {
+        int ox = 0;
+        int oy = 0;
+        if (inBox) {
+            // 内层落位：锚点/枢轴/偏移复用 placementOffset（宽高留 0＝不缩放，已在 fit 体现）。
+            ImageTransform inner;
+            inner.inCanvasAnchor = layer.imageAnchor;
+            inner.layerPivot = layer.imagePivot;
+            inner.x = layer.imageX;
+            inner.y = layer.imageY;
+            placementOffset(inner, regionW, regionH, src.width(), src.height(), ox, oy);
+        }   // 无框 / 框 ≤0：内容即源图自身（区域＝源尺寸），直接铺满叠上——不顶替图案底。
+        const bool scaleImgOp = layer.imageOpacity < 255;
+        for (int y = 0; y < src.height(); ++y) {
+            const int dy = oy + y;
+            if (dy < 0 || dy >= regionH) continue;
+            for (int x = 0; x < src.width(); ++x) {
+                const int dx = ox + x;
+                if (dx < 0 || dx >= regionW) continue;   // 越框自然裁剪
+                core::Color c = src.getPixel(x, y);
+                if (scaleImgOp) c = scaleAlpha(c, layer.imageOpacity);
+                if (c.a == 0) continue;
+                box.setPixel(dx, dy, core::compositeOver(box.getPixel(dx, dy), c));
+            }
+        }
+    }   // 元素预处理失败（src 空）：保守降级为仅底色框（不整层丢弃）。
+
+    // 3) 区域缩放（transform 目标尺寸 >0 且不同才重采样；纯图案已按目标生成，此步对其恒等跳过）。
+    if (const int tw = layer.transform.width, th = layer.transform.height;
+        tw > 0 && th > 0 && (box.width() != tw || box.height() != th))
+        box = box.resized(tw, th);
+    if (box.empty()) return core::Image{};
+
+    // 4) 节点外观（层级预处理）。
+    if (layer.preprocess.empty()) return box;
+    return layer.preprocess.applyExec(box);
+}
 
 // 整体淡出 RGBA 图：逐像素复用 scaleAlpha（合成期同款 alpha 乘子）。非 RGBA / 空图 / opacity>=255 → 恒等早退。
 //   供合成边界（GUI fadedCanvasBase、CLI 底图解出后）施加底图整体不透明度，与 composeCanvas 逐层不透明度同口径。
@@ -233,14 +265,16 @@ core::Image composeCanvas(const std::vector<ImageLayer>& layers, const int width
 
 core::Image composeBase(const ImageLayer& base, const int width, const int height,
                         const std::unordered_map<int, core::Image>* materialized) {
-    // 纯图案底图（有 recipe 且无内层落位）：按画布(source)尺寸经 makePattern 现算图案。
-    //   不走 materializeLayer（其配方路用 transform.width/height 现算，恒等 transform 尺寸为 0 会得空图）。
-    if (base.recipe && !base.hasImagePlacement) {
-        core::Image pat = generate::makePattern(width, height, *base.recipe);
+    // 纯图案底图（有 backdrop 且无图片元素）：按画布(source)尺寸现算图案（区域=画布），元素外观后接节点外观。
+    //   不走 materializeLayer——其无落位图案路按 transform 目标现算，恒等 transform 尺寸为 0 会得空图。
+    if (base.backdrop && !hasImageElement(base)) {
+        core::Image pat = generate::makePattern(width, height, *base.backdrop);
         if (pat.empty()) return core::Image{};
+        if (!base.backdropPreprocess.empty()) pat = base.backdropPreprocess.applyExec(pat);
+        applyAlpha(pat, base.backdropOpacity);
         return base.preprocess.empty() ? pat : base.preprocess.applyExec(pat);
     }
-    // 文件底图 / 带内层落位：当作单元素 layers、空底、transform 恒等，转调 composeCanvas 复用两段合成。
+    // 文件底图 / 带内层落位：当作单元素 layers、空底、transform 恒等，转调 composeCanvas 复用装配链。
     //   composeCanvas 会按元素 transform.opacity 施乘，故此处把 opacity 归一 255——底图整体透明度一律
     //   由调用方在合成边界经 applyAlpha 施加（单一应用点，防双淡）。
     ImageLayer normalized = base;

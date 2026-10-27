@@ -143,6 +143,7 @@ inline constexpr int kStripButtonHPadPx = 20;   // 条带文本按钮按文字�
 // 比例入本层（而非散写），旋转后重钳同取此值；桌面大屏下钳值远超内容，等效无约束。
 inline constexpr double kDialogMaxWidthRatio = 0.95;    // 对话框最大宽 = 可用屏宽 × 本值。
 inline constexpr double kDialogMaxHeightRatio = 0.9;    // 对话框最大高 = 可用屏高 × 本值。
+inline constexpr int kStackColumnsMaxWidthPx = 900;     // 可用屏宽低于本值时对话框两栏元素分组叠为两段（移动端窄屏）。
 inline constexpr int kInfoDialogMinWidthPx = 320;       // 可滚动信息框（使用说明/关于）正文标签最小宽：
                                                         // 窄屏下靠它 + word wrap 控宽，避免长行顶成竖窄条。
 inline constexpr int kInfoDialogMinHeightPx = 240;      // 可滚动信息框滚动区最小高（保证正文有可读区、按钮不被挤没）。

@@ -128,7 +128,7 @@ void testEngineConfigJson() {
         pp.period = 4;
         pp.background = core::kWhite;
         pp.foreground = core::kBlack;
-        l0.recipe = pp;
+        l0.backdrop = pp;
         l0.transform.width = 8; l0.transform.height = 8;
         l0.transform.inCanvasAnchor = generate::ImageAnchor::TopLeft;
         l0.transform.opacity = 180;   // 层不透明度（合成期 alpha 乘子）：验证往返。
@@ -170,15 +170,15 @@ void testEngineConfigJson() {
         CHECK(layers.size() == 2);
         if (layers.size() == 2) {
             const canvas::ImageLayer& r0 = layers[0];
-            CHECK(r0.recipe.has_value());
-            CHECK(r0.recipe.has_value() && r0.recipe->kind == generate::PatternKind::Checkerboard && r0.recipe->period == 4);
+            CHECK(r0.backdrop.has_value());
+            CHECK(r0.backdrop.has_value() && r0.backdrop->kind == generate::PatternKind::Checkerboard && r0.backdrop->period == 4);
             CHECK(r0.transform.width == 8 && r0.transform.height == 8);
             CHECK(r0.transform.inCanvasAnchor == generate::ImageAnchor::TopLeft);
             CHECK(r0.transform.opacity == 180);   // 不透明度往返一致
             CHECK(r0.zOrder == 0 && r0.preprocess.size() == 1);
             CHECK(std::holds_alternative<preprocess::GrayOp>(r0.preprocess.items()[0]));
             const canvas::ImageLayer& r1 = layers[1];
-            CHECK(!r1.recipe.has_value() && !r1.fileName.empty());
+            CHECK(!r1.backdrop.has_value() && !r1.fileName.empty());
             CHECK(r1.fileName == "sub/a.png");
             CHECK(r1.decodedPixels.empty());   // 像素不经配置还原
             CHECK(r1.transform.x == 3 && r1.transform.y == -2);
@@ -299,7 +299,7 @@ void testEngineConfigJson() {
 
     // ---- 底图 generate 段（同构 ImageLayer）往返：纯图案底 + 落位声明底（不存文件路径、box 尺寸由 source 派生不落盘）。----
     {
-        // ① 纯图案 Recipe 底：序列化后 generate 段仅图案键（无 file/落位），解析回 recipe。
+        // ① 纯图案底（图案元素、无图片元素）：序列化后 generate 段仅 backdrop 对象（无 file/落位），解析回 backdrop。
         const fs::path patFile = dir / "base_pattern.json";
         engine::EngineConfig pc;
         pc.source = engine::SourceInfo{64, 48};
@@ -307,7 +307,7 @@ void testEngineConfigJson() {
         generate::PatternParams ppp;
         ppp.kind = generate::PatternKind::Stripes;
         ppp.period = 6;
-        pb.recipe = ppp;
+        pb.backdrop = ppp;
         pc.base = pb;
         CHECK(engine::saveEngineConfig(patFile.string(), pc));
         {
@@ -320,14 +320,14 @@ void testEngineConfigJson() {
         CHECK(engine::loadEngineConfig(patFile.string(), pg));
         CHECK(pg.base.has_value());
         if (pg.base.has_value()) {
-            CHECK(pg.base->recipe.has_value());
-            CHECK(pg.base->recipe.has_value() && pg.base->recipe->kind == generate::PatternKind::Stripes && pg.base->recipe->period == 6);
+            CHECK(pg.base->backdrop.has_value());
+            CHECK(pg.base->backdrop.has_value() && pg.base->backdrop->kind == generate::PatternKind::Stripes && pg.base->backdrop->period == 6);
             CHECK(!pg.base->hasImagePlacement);
             CHECK(pg.base->fileName.empty());
             CHECK(pg.base->transform.opacity == 255);   // 底图整体不透明度：默认 255 往返（无显式赋值时）
         }
 
-        // ② 落位声明底（携内层落位 + backdrop）：仅落位键往返；文件路径与位图均不入配置（运行时由 --input 供位图）。
+        // ② 落位声明底（图片元素内层落位 + 图案元素）：仅落位键往返；文件路径与位图均不入配置（运行时由 --input 供位图）。
         const fs::path fileBase = dir / "base_file.json";
         engine::EngineConfig fc;
         fc.source = engine::SourceInfo{200, 100};
@@ -342,7 +342,7 @@ void testEngineConfigJson() {
         generate::PatternParams back;
         back.kind = generate::PatternKind::Solid;
         back.background = core::Color(10, 20, 30, 255);
-        fb.boxBackdrop = back;
+        fb.backdrop = back;
         fb.decodedPixels = core::Image(2, 2, core::ImageFormat::Rgba);   // 位图不入配置：往返后应为空。
         fb.transform.opacity = 64;   // 底图整体不透明度（非默认）：验证随 generate 段 opacity 键往返。
         fc.base = fb;
@@ -351,14 +351,14 @@ void testEngineConfigJson() {
             std::ifstream ifs(fileBase);
             const std::string text((std::istreambuf_iterator(ifs)), std::istreambuf_iterator<char>());
             CHECK(text.find("boxWidth") == std::string::npos);   // 底图落位框尺寸不落盘（恒＝source，载入由 source 回填）
-            CHECK(text.find("imageAnchor") != std::string::npos);
+            CHECK(text.find("\"anchor\"") != std::string::npos); // v2：落位键位于 image 元素内
         }
         engine::EngineConfig fg;
         CHECK(engine::loadEngineConfig(fileBase.string(), fg));
         CHECK(fg.base.has_value());
         if (fg.base.has_value()) {
             const canvas::ImageLayer& b = *fg.base;
-            CHECK(!b.recipe.has_value());   // 无配方→不回退为配方底（底图仅存落位声明）
+            CHECK(b.backdrop.has_value());   // 图案元素（落位声明底可带图案元素）
             CHECK(b.fileName.empty());                               // 文件路径不入配置
             CHECK(b.decodedPixels.empty());   // 位图不经配置还原
             CHECK(b.hasImagePlacement);
@@ -367,23 +367,48 @@ void testEngineConfigJson() {
             CHECK(b.imageAnchor == generate::ImageAnchor::TopLeft);
             CHECK(b.imagePivot == generate::ImageAnchor::BottomRight);
             CHECK(b.imageX == 7 && b.imageY == -3);
-            CHECK(b.boxBackdrop.has_value() && b.boxBackdrop->background == core::Color(10, 20, 30, 255));
+            CHECK(b.backdrop.has_value() && b.backdrop->background == core::Color(10, 20, 30, 255));
             CHECK(b.transform.opacity == 64);   // 底图整体不透明度往返一致
         }
 
-        // ③ 仅图案键的 generate 段 → Recipe 底（无落位键；缺 opacity 键取默认 255）。
+        // ③ v1 旧 generate 段（顶层 kind 平铺）→ 破坏性更新：旧键不识别、按未知键静默忽略（无迁移）。
         const fs::path legacyGen = dir / "legacy_gen.json";
         {
             std::ofstream ofs(legacyGen);
             ofs << R"J({"source":{"width":16,"height":16},"generate":{"kind":"grid-lines","period":8}})J";
         }
         engine::EngineConfig lg;
-        CHECK(engine::loadEngineConfig(legacyGen.string(), lg));
-        CHECK(lg.base.has_value() && lg.base->recipe.has_value());
+        CHECK(engine::loadEngineConfig(legacyGen.string(), lg));   // 载入成功（不再拒载）
+        CHECK(lg.base.has_value());                                // 有 generate 段 → 底图声明在
         if (lg.base.has_value()) {
-            CHECK(lg.base->recipe.has_value() && lg.base->recipe->kind == generate::PatternKind::GridLines && lg.base->recipe->period == 8);
-            CHECK(!lg.base->hasImagePlacement);
-            CHECK(lg.base->transform.opacity == 255);   // 缺 opacity 键 → 默认 255
+            CHECK(!lg.base->backdrop.has_value());                 // v1 平铺图案键被忽略：无图案元素
+            CHECK(!canvas::hasImageElement(*lg.base));             // 亦无图片元素
+        }
+    }
+
+    // ---- 元素外观几何步分化往返：图案元素外观仅色彩步（几何步写出过滤/还原丢弃），图片元素外观可含几何步 ----
+    {
+        const fs::path f = dir / "elem_appearance.json";
+        engine::EngineConfig w;
+        w.source = engine::SourceInfo{16, 16};
+        canvas::ImageLayer l1;   // 图案元素外观：rotate(几何) + gray(色彩) → 往返后仅 gray
+        l1.backdrop = generate::PatternParams{};
+        l1.backdropPreprocess.add(preprocess::RotateOp{90});
+        l1.backdropPreprocess.add(preprocess::GrayOp{});
+        canvas::ImageLayer l2;   // 图片元素外观：rotate(几何) + invert(色彩) → 全保留
+        l2.hasImagePlacement = true;
+        l2.boxWidth = 8; l2.boxHeight = 8;
+        l2.imagePreprocess.add(preprocess::RotateOp{90});
+        l2.imagePreprocess.add(preprocess::InvertOp{"111"});
+        w.layers = std::vector{l1, l2};
+        CHECK(engine::saveEngineConfig(f.string(), w));
+        engine::EngineConfig r;
+        CHECK(engine::loadEngineConfig(f.string(), r));
+        CHECK(r.layers.has_value() && r.layers->size() == 2);
+        if (r.layers.has_value() && r.layers->size() == 2) {
+            CHECK((*r.layers)[0].backdropPreprocess.items().size() == 1);
+            CHECK(std::holds_alternative<preprocess::GrayOp>((*r.layers)[0].backdropPreprocess.items().front()));
+            CHECK((*r.layers)[1].imagePreprocess.items().size() == 2);   // 几何+色彩全保留
         }
     }
 
@@ -413,11 +438,11 @@ void testEngineConfigJson() {
         CHECK(engine::loadEngineConfig(clampFile.string(), clamped));
         CHECK(clamped.canvasOpacity == 255);
 
-        // 旧配置无顶层 opacity → 缺省 255（向后兼容、行为不变）；旧 generate 段无 preprocess → 底图预处理为空。
-        const fs::path legacyNoOp = dir / "legacy_no_opacity.json";
+        // 缺顶层 opacity → 缺省 255、行为不变；generate 段无 preprocess → 底图预处理为空（v2 backdrop 元素形态）。
+        const fs::path legacyNoOp = dir / "no_opacity.json";
         {
             std::ofstream ofs(legacyNoOp);
-            ofs << R"J({"source":{"width":8,"height":8},"generate":{"kind":"solid"}})J";
+            ofs << R"J({"source":{"width":8,"height":8},"generate":{"backdrop":{"kind":"solid"}}})J";
         }
         engine::EngineConfig noOp;
         CHECK(engine::loadEngineConfig(legacyNoOp.string(), noOp));
@@ -433,7 +458,7 @@ void testEngineConfigJson() {
         canvas::ImageLayer pb;
         generate::PatternParams ppp;
         ppp.kind = generate::PatternKind::Solid;
-        pb.recipe = ppp;
+        pb.backdrop = ppp;
         pb.preprocess.add(preprocess::GrayOp{});                        // 色彩步：保留
         pb.preprocess.add(preprocess::InvertOp{std::string("110")});    // 色彩步：保留
         pb.preprocess.add(preprocess::RotateOp{90});                    // 几何步：写出时被过滤
@@ -639,21 +664,21 @@ void testLayerParseText() {
         std::vector<canvas::ImageLayer> out;
         std::string err;
         CHECK(engine::parseImageLayersFromJsonText(
-            R"J({"source":{"file":"sub/a.png"},"transform":{"x":10,"y":-5,"opacity":128},"zOrder":2})J", out, err));
+            R"J({"image":{"file":"sub/a.png"},"transform":{"x":10,"y":-5,"opacity":128},"zOrder":2})J", out, err));
         CHECK(out.size() == 1);
         CHECK(out[0].fileName == "sub/a.png" && out[0].zOrder == 2);
         CHECK(out[0].transform.x == 10 && out[0].transform.y == -5 && out[0].transform.opacity == 128);
     }
 
-    // ② 根数组 → 按序追加 2 条（recipe 源与 file 源混排）。
+    // ② 根数组 → 按序追加 2 条（纯图案层与图片层混排，v2 元素分块）。
     {
         std::vector<canvas::ImageLayer> out;
         std::string err;
         CHECK(engine::parseImageLayersFromJsonText(
-            R"J([{"source":{"recipe":{"kind":"checkerboard","period":4}},"zOrder":1},
-                {"source":{"file":"b.png"}}])J", out, err));
+            R"J([{"backdrop":{"kind":"checkerboard","period":4},"zOrder":1},
+                {"image":{"file":"b.png"}}])J", out, err));
         CHECK(out.size() == 2);
-        CHECK(out[0].recipe.has_value() && out[0].zOrder == 1);
+        CHECK(out[0].backdrop.has_value() && out[0].zOrder == 1);
         CHECK(out[1].fileName == "b.png" && out[1].zOrder == 0);   // 未给 zOrder → 缺省 0
     }
 
@@ -661,8 +686,8 @@ void testLayerParseText() {
     {
         std::vector<canvas::ImageLayer> out;
         std::string err;
-        CHECK(engine::parseImageLayersFromJsonText(R"J({"source":{"file":"a.png"}})J", out, err));
-        CHECK(engine::parseImageLayersFromJsonText(R"J({"source":{"file":"b.png"}})J", out, err));
+        CHECK(engine::parseImageLayersFromJsonText(R"J({"image":{"file":"a.png"}})J", out, err));
+        CHECK(engine::parseImageLayersFromJsonText(R"J({"image":{"file":"b.png"}})J", out, err));
         CHECK(out.size() == 2 && out[1].fileName == "b.png");
     }
 
@@ -695,7 +720,7 @@ void testLayerParseText() {
         std::vector<canvas::ImageLayer> out;
         std::string err;
         CHECK(engine::parseImageLayersFromJsonText(
-            R"J({"source":{"file":"a.png"},"transform":{"x":"150%","y":"-10%","width":"25%","height":"200%"}})J",
+            R"J({"image":{"file":"a.png"},"transform":{"x":"150%","y":"-10%","width":"25%","height":"200%"}})J",
             out, err, 200, 100));
         CHECK(out.size() == 1);
         if (out.size() == 1) {
@@ -709,7 +734,7 @@ void testLayerParseText() {
         std::vector<canvas::ImageLayer> out;
         std::string err;
         CHECK(!engine::parseImageLayersFromJsonText(
-            R"J({"source":{"file":"a.png"},"transform":{"x":"50%"}})J", out, err));
+            R"J({"image":{"file":"a.png"},"transform":{"x":"50%"}})J", out, err));
         CHECK(out.empty());
         CHECK(err.find("transform.x") != std::string::npos);
     }
@@ -904,21 +929,37 @@ void testEngineConfigStrict() {
         engine::EngineConfig cfg;
         CHECK(!loadText("badobj.json", R"J({"cut":[]})J", cfg).has_value());
     }
-    // ⑩ 嵌套 recipe.kind 拼错（layers[0]）→ 拒绝。
+    // ⑩ v1 旧键（layers[0].source.recipe）→ 破坏性更新：旧键不识别、按未知键静默忽略，层退化为空占位（无元素）。
     {
         engine::EngineConfig cfg;
-        CHECK(!loadText("badrecipe.json", R"J({"layers":[{"source":{"recipe":{"kind":"chekboard"}}}]})J", cfg).has_value());
+        CHECK(loadText("badrecipe.json", R"J({"layers":[{"source":{"recipe":{"kind":"chekboard"}}}]})J", cfg).has_value());
+        CHECK(cfg.layers.has_value() && !cfg.layers->empty());
+        if (cfg.layers.has_value() && !cfg.layers->empty()) {
+            CHECK(!(*cfg.layers)[0].backdrop.has_value());
+            CHECK(!canvas::hasImageElement((*cfg.layers)[0]));
+        }
     }
     // ⑪ 预处理 op 拼错 → 拒绝。
     {
         engine::EngineConfig cfg;
         CHECK(!loadText("badop.json", R"J({"preprocess":[{"op":"grayy"}]})J", cfg).has_value());
     }
-    // ⑫ 合法嵌套（grid-lines 底图 + 色彩步）仍放行。
+    // ⑫ 合法嵌套（grid-lines 图案元素 + 底图色彩步）仍放行。
     {
         engine::EngineConfig cfg;
         CHECK(loadText("goodnest.json",
-            R"J({"generate":{"kind":"grid-lines","period":8,"preprocess":[{"op":"gray"}]}})J", cfg).has_value());
+            R"J({"generate":{"backdrop":{"kind":"grid-lines","period":8},"preprocess":[{"op":"gray"}]}})J", cfg).has_value());
+    }
+
+    // ⑫b generate.image 显式写 file / box* → 不是本段合法键，拒载报因（防静默丢字段）。
+    {
+        engine::EngineConfig cfg;
+        const auto rf = loadText("badgenimgfile.json",
+            R"J({"source":{"width":8,"height":8},"generate":{"image":{"fit":"crop","file":"a.png"}}})J", cfg);
+        CHECK(!rf.has_value());
+        const auto rb = loadText("badgenimgbox.json",
+            R"J({"source":{"width":8,"height":8},"generate":{"image":{"fit":"crop","boxWidth":4}}})J", cfg);
+        CHECK(!rb.has_value());
     }
 
     // ⑬ 网格参数给小数 → 拒绝（坐标键另接受百分比字符串，但仍不收裸小数）。
@@ -1019,7 +1060,7 @@ void testPercentCoords() {
   "preprocess": [{"op": "resize", "width": "50%", "height": "50%"}],
   "cut": {"tier": "extract", "generator": "rect", "params": {"x1": "10%", "y1": "20%", "x2": "50%", "y2": "80%"}},
   "export": {"merge": {"cellWidth": "50%", "cellHeight": "25%"}},
-  "generate": {"kind": "solid", "fit": "crop", "x": "10%", "y": "50%"},
+  "generate": {"backdrop": {"kind": "solid"}, "image": {"fit": "crop", "x": "10%", "y": "50%"}},
   "layers": [{"transform": {"x": "50%", "y": "50%", "width": "25%", "height": "25%"}}]
 })J", cfg, nullptr, &hints).has_value());
         CHECK(cfg.cut.rect.left == 20 && cfg.cut.rect.top == 20);

@@ -405,6 +405,11 @@ inline constexpr char kChannelFieldLabel[] = "作用通道";
 inline constexpr char kColorTypeGray[]     = "黑白";   // 色彩操作类型下拉三项；预处理队列的黑白行文本直接复用本条（同字同义，status 组未立第二条，见其 kStepRotateDesc 下方的注）。
 inline constexpr char kColorTypeInvert[]   = "色道反色";
 inline constexpr char kColorTypeSplit[]    = "色道分离";   // 菜单同名项见 menu::kChannelSplit（下拉项与菜单项角色不同，各立一条）。
+inline constexpr char kElementAppearanceBox[] = "元素外观";   // 新建画布/添加图层对话框：元素外观组标题（预处理简表+不透明度；两实例＝图案元素外观/图片元素外观，SPEC §2.2a）。
+inline constexpr char kBackdropElementBox[] = "图案元素";    // 对话框左栏分组：图案配方 + 图案元素外观。
+inline constexpr char kImageElementBox[]    = "图片元素";    // 对话框右栏分组：附加图片开关 + 源图/适应/落位 + 图片元素外观。
+inline constexpr char kNodeAppearanceBox[]  = "节点外观";    // 对话框横贯分组：尺寸（节点区域）+ 图层落位 + 整体不透明度。
+inline constexpr char kAppearanceAddStep[]  = "添加";        // 元素外观组：向简表追加一步。
 // 预处理目标三元名（当前作用对象：图层 / 底图 / 画布）。
 inline constexpr char kTargetCanvasName[]  = "画布";   // 底图一名复用 menu::kShowBase，图片图层一名用上方 kImageLayerName。
 // 注：R / G / B 三个通道勾选框不上提（单字母技术记号，与色彩遮码的 "1"/"0" 位位同源）。

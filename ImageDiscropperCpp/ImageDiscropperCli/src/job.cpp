@@ -177,8 +177,8 @@ ExitCode buildLayerCanvas(const engine::EngineConfig& config, const std::string&
 
     std::size_t missingAssets = 0;   // 降级占位的缺失图层计数（循环后出一条 WARN 汇总）。
     for (auto& layer : layers) {
-        if (layer.fileName.empty() || layer.recipe.has_value())
-            continue; // 配方 / 占位层无需解码；空名视为占位（降级）。
+        if (layer.fileName.empty())
+            continue; // 纯图案 / 占位层无需解码；空名视为占位（降级）。
         if (!isSafeRelativeAsset(layer.fileName)) {
             reportError(makeError(ExitCode::InputError, IDC_CTR(msg, kErrAssetPathEscape),
                                   IDC_CTR(msg, kDetLayerFileName) + layer.fileName,
@@ -299,7 +299,7 @@ ExitCode bundleLayerAssets(const engine::EngineConfig& config, const std::string
         return ExitCode::OutputError;
     }
     for (const auto& layer : *config.layers) {
-        if (layer.fileName.empty() || layer.recipe.has_value())
+        if (layer.fileName.empty())
             continue;
         if (!isSafeRelativeAsset(layer.fileName)) {
             reportError(makeError(ExitCode::ArgError, IDC_CTR(msg, kErrAssetEscapeReject),

@@ -145,9 +145,8 @@ bool resolveAnnotationCoords(json& a, const BoxSize& box, const std::string& pat
             const std::string spath = path + "." + keys::anno::kSegments + "[" + ip + "]." + keys::anno::kCoords;
             const std::string sptr = joinPtr(joinPtr(joinPtr(ptr, keys::anno::kSegments), ip), keys::anno::kCoords);
             for (std::size_t j = 0; j < coords->size(); ++j) {
-                const std::string jp = std::to_string(j);
-                if (!resolveIndexed(*coords, j, j % 2 == 0 ? box.width : box.height,
-                                    spath + "[" + jp + "]", joinPtr(sptr, jp), hints, err)) return false;
+                if (const std::string jp = std::to_string(j); !resolveIndexed(*coords, j, j % 2 == 0 ? box.width : box.height,
+                                                                              spath + "[" + jp + "]", joinPtr(sptr, jp), hints, err)) return false;
             }
         }
     }
@@ -194,11 +193,14 @@ bool resolvePercentCoords(jsonutil::json& root, core::PercentHints& hints, std::
         }
     }
 
-    // generate：底图落位 x/y（落位框恒＝画布）。
+    // generate：底图落位 x/y（v2 在 image 元素内；落位框恒＝画布）。
     if (json* gen = mutableAt(root, keys::config::kGenerate)) {
-        const std::string gpt = joinPtr("", keys::config::kGenerate);
-        if (!resolveCoord(*gen, keys::common::kX, canvas.width, std::string(keys::config::kGenerate) + "." + keys::common::kX, joinPtr(gpt, keys::common::kX), hints, err)) return false;
-        if (!resolveCoord(*gen, keys::common::kY, canvas.height, std::string(keys::config::kGenerate) + "." + keys::common::kY, joinPtr(gpt, keys::common::kY), hints, err)) return false;
+        if (json* im = mutableAt(*gen, keys::layer::kImage)) {
+            const std::string gpt = joinPtr(joinPtr("", keys::config::kGenerate), keys::layer::kImage);
+            const std::string gp = std::string(keys::config::kGenerate) + "." + keys::layer::kImage;
+            if (!resolveCoord(*im, keys::common::kX, canvas.width, gp + "." + keys::common::kX, joinPtr(gpt, keys::common::kX), hints, err)) return false;
+            if (!resolveCoord(*im, keys::common::kY, canvas.height, gp + "." + keys::common::kY, joinPtr(gpt, keys::common::kY), hints, err)) return false;
+        }
     }
 
     // layers：transform 的位置与尺寸（画布坐标）。

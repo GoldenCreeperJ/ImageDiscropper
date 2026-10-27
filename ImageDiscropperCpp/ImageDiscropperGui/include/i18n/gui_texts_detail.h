@@ -179,9 +179,9 @@ inline constexpr char kPatternBgSwatch[]    = "选择底色（可设透明度，
 inline constexpr char kPatternFgSwatch[]    = "选择前景/图案色（可设透明度，非纯色生效）";
 inline constexpr char kPatternSeedSpin[]    = "噪声随机种子：同种子+同尺寸恒同图";
 // 新建画布对话框（src/app/new_canvas_dialog.cpp）两级落位与附加图片区的悬停说明。
-inline constexpr char kLayerPlaceRowTip[]   = "图层框相对底图的落位（段2：图层框摆到底图哪里）。";
-inline constexpr char kImagePlaceRowTip[]   = "图片相对图层框的落位（段1：源图摆进图层框哪里）。";
-inline constexpr char kAttachImageTip[]     = "勾选后把一张源图按适应方式放进图层框、再按图层落位摆到底图上（两段合成）；\n"
+inline constexpr char kLayerPlaceRowTip[]   = "图层框相对底图的落位（图层框摆到底图哪里）。";
+inline constexpr char kImagePlaceRowTip[]   = "图片相对图层框的落位（源图摆进图层框哪里）。";
+inline constexpr char kAttachImageTip[]     = "勾选后把一张源图按适应方式放进图层框、再按图层落位摆到底图上；\n"
                                               "不勾选即可直接导出纯图案画布。";
 inline constexpr char kPickSourceImageBtn[] = "选择要附加的源图（PNG/JPG/BMP/WebP 等），由引擎解码";
 } // namespace tooltip

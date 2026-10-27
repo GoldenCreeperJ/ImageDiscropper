@@ -327,36 +327,62 @@ bool validateExport(const json& root, std::string& reason) {
     return true;
 }
 
-// 底图内层落位键（fit / imageAnchor / imagePivot / x / y）：generate 段与 layer.imagePlacement 段共用。
-//   allowPercent：generate 的落位框恒＝画布（基准已知）故接受百分比；layer.imagePlacement 的框由
-//   boxWidth/boxHeight 决定、可小于画布，无统一基准 → 只收整数。
-bool validatePlacementKeys(const json& o, const std::string& path, const bool allowPercent, std::string& reason) {
+// 图片元素键（image 对象内：fit / anchor / pivot / x / y [+box*]）：generate 段与 layer.image 共用。
+//   allowPercent：generate 的落位框恒＝画布（基准已知）故接受百分比；layer.image 的框由 boxWidth/boxHeight
+//   决定、可小于画布，无统一基准 → 只收整数。allowBox：仅 layers 持久化 box*（generate 不落盘）。
+bool validateImageElement(const json& o, const std::string& path, const bool allowPercent,
+                          const bool allowBox, std::string& reason) {
     if (!checkEnum(o, keys::layer::kFit, path + "." + keys::layer::kFit,
                    {defs::kImageFitCrop, "stretch", "native"}, reason)) return false;
-    if (!checkAnchor(o, keys::layer::kImageAnchor, path + "." + keys::layer::kImageAnchor, reason)) return false;
-    if (!checkAnchor(o, keys::layer::kImagePivot, path + "." + keys::layer::kImagePivot, reason)) return false;
+    if (!checkAnchor(o, keys::layer::kAnchor, path + "." + keys::layer::kAnchor, reason)) return false;
+    if (!checkAnchor(o, keys::layer::kPivot, path + "." + keys::layer::kPivot, reason)) return false;
     const auto checkXY = [&](const char* k) {
         return allowPercent ? checkCoord(o, k, path + "." + k, reason) : checkInt(o, k, path + "." + k, reason);
     };
     if (!checkXY(keys::common::kX)) return false;
     if (!checkXY(keys::common::kY)) return false;
-    if (!checkObject(o, keys::layer::kBackdrop, path + "." + keys::layer::kBackdrop, reason)) return false;
-    if (const json& bk = at(o, keys::layer::kBackdrop); !bk.is_null() && bk.is_object()) {
-        if (!validatePatternParams(bk, path + "." + keys::layer::kBackdrop, reason)) return false;
+    if (allowBox) {
+        for (const char* k : {keys::layer::kBoxWidth, keys::layer::kBoxHeight}) {
+            if (!checkInt(o, k, path + "." + k, reason)) return false;
+        }
     }
+    if (!checkArray(o, keys::common::kPreprocess, path + "." + keys::common::kPreprocess, reason)) return false;
+    if (!validatePreprocessArray(at(o, keys::common::kPreprocess), path + "." + keys::common::kPreprocess, reason)) return false;
+    if (!checkIntRange(o, keys::common::kOpacity, path + "." + keys::common::kOpacity, 0, 255, reason)) return false;
     return true;
 }
 
-// 底图 generate 段：含 kind → 配方（校验 patternParams）；placement 键与 preprocess（仅色彩步，但仍按类型/取值校验）。
+// 图案元素键（backdrop 对象内：图案键族 + preprocess + opacity）。
+bool validateBackdropElement(const json& o, const std::string& path, std::string& reason) {
+    if (!validatePatternParams(o, path, reason)) return false;
+    if (!checkArray(o, keys::common::kPreprocess, path + "." + keys::common::kPreprocess, reason)) return false;
+    if (!validatePreprocessArray(at(o, keys::common::kPreprocess), path + "." + keys::common::kPreprocess, reason)) return false;
+    if (!checkIntRange(o, keys::common::kOpacity, path + "." + keys::common::kOpacity, 0, 255, reason)) return false;
+    return true;
+}
+
+// 底图 generate 段（v2）：{ backdrop?, image?, opacity, preprocess }；旧版（v1）平铺键不识别、按未知键静默忽略。
 bool validateGenerateSeg(const json& gen, const std::string& path, std::string& reason) {
     if (!gen.is_object()) { reason = IDC_KTRF(msg, kErrConfigNotObject, path); return false; }
-    if (gen.contains(keys::common::kKind) && !gen.at(keys::common::kKind).is_null()) {
-        if (!validatePatternParams(gen, path, reason)) return false;
-    }
     if (!checkInt(gen, keys::common::kOpacity, path + "." + keys::common::kOpacity, reason)) return false;
-    if (!validatePlacementKeys(gen, path, true, reason)) return false;
     if (!checkArray(gen, keys::common::kPreprocess, path + "." + keys::common::kPreprocess, reason)) return false;
     if (!validatePreprocessArray(at(gen, keys::common::kPreprocess), path + "." + keys::common::kPreprocess, reason)) return false;
+    if (!checkObject(gen, keys::layer::kBackdrop, path + "." + keys::layer::kBackdrop, reason)) return false;
+    if (const json& bd = at(gen, keys::layer::kBackdrop); !bd.is_null() && bd.is_object()) {
+        if (!validateBackdropElement(bd, path + "." + keys::layer::kBackdrop, reason)) return false;
+    }
+    if (!checkObject(gen, keys::layer::kImage, path + "." + keys::layer::kImage, reason)) return false;
+    if (const json& im = at(gen, keys::layer::kImage); !im.is_null() && im.is_object()) {
+        // generate 不落盘 box*：allowBox=false；落位框恒＝画布：百分比可收（allowPercent=true）。
+        if (!validateImageElement(im, path + "." + keys::layer::kImage, true, false, reason)) return false;
+        // file/box* 不是本段合法键（SPEC §7：底图不落路径、框恒＝画布 source）——显式写出即报因，防静默丢字段。
+        for (const char* k : {keys::common::kFile, keys::layer::kBoxWidth, keys::layer::kBoxHeight}) {
+            if (im.contains(k)) {
+                reason = IDC_KTRF(msg, kErrConfigIllegalKey, path + "." + keys::layer::kImage + "." + k);
+                return false;
+            }
+        }
+    }
     return true;
 }
 
@@ -366,14 +392,15 @@ bool validateGenerateSeg(const json& gen, const std::string& path, std::string& 
 bool validateLayerSeg(const jsonutil::json& lv, const std::string& path, std::string& reason) {
     using namespace detail;
     if (!lv.is_object()) { reason = IDC_KTRF(msg, kErrConfigNotObject, path); return false; }
-    if (!checkObject(lv, keys::config::kSource, path + "." + keys::config::kSource, reason)) return false;
-    if (const json& src = at(lv, keys::config::kSource); !src.is_null() && src.is_object()) {
-        if (const json& r = at(src, keys::layer::kRecipe); src.contains(keys::layer::kRecipe) && !r.is_null()) {
-            if (!r.is_object()) { reason = IDC_KTRF(msg, kErrConfigNotObject, path + "." + keys::config::kSource + "." + keys::layer::kRecipe); return false; }
-            if (!validatePatternParams(r, path + "." + keys::config::kSource + "." + keys::layer::kRecipe, reason)) return false;
-        } else if (!checkString(src, keys::common::kFile, path + "." + keys::config::kSource + "." + keys::common::kFile, reason)) {
-            return false;
-        }
+    if (!checkObject(lv, keys::layer::kImage, path + "." + keys::layer::kImage, reason)) return false;
+    if (const json& im = at(lv, keys::layer::kImage); !im.is_null() && im.is_object()) {
+        if (!checkString(im, keys::common::kFile, path + "." + keys::layer::kImage + "." + keys::common::kFile, reason)) return false;
+        // layers 持久化 box*：allowBox=true；框可小于画布无统一基准：只收整数（allowPercent=false）。
+        if (!validateImageElement(im, path + "." + keys::layer::kImage, false, true, reason)) return false;
+    }
+    if (!checkObject(lv, keys::layer::kBackdrop, path + "." + keys::layer::kBackdrop, reason)) return false;
+    if (const json& bd = at(lv, keys::layer::kBackdrop); !bd.is_null() && bd.is_object()) {
+        if (!validateBackdropElement(bd, path + "." + keys::layer::kBackdrop, reason)) return false;
     }
     if (!checkObject(lv, keys::common::kTransform, path + "." + keys::common::kTransform, reason)) return false;
     if (const json& tf = at(lv, keys::common::kTransform); !tf.is_null() && tf.is_object()) {
@@ -388,14 +415,6 @@ bool validateLayerSeg(const jsonutil::json& lv, const std::string& path, std::st
         if (!checkIntRange(tf, keys::common::kOpacity, tp + "." + keys::common::kOpacity, 0, 255, reason)) return false;
     }
     if (!checkInt(lv, keys::common::kZOrder, path + "." + keys::common::kZOrder, reason)) return false;
-    if (!checkObject(lv, keys::layer::kImagePlacement, path + "." + keys::layer::kImagePlacement, reason)) return false;
-    if (const json& ip = at(lv, keys::layer::kImagePlacement); !ip.is_null() && ip.is_object()) {
-        const std::string ipp = path + "." + keys::layer::kImagePlacement;
-        if (!validatePlacementKeys(ip, ipp, false, reason)) return false;
-        for (const char* k : {keys::layer::kBoxWidth, keys::layer::kBoxHeight}) {
-            if (!checkInt(ip, k, ipp + "." + k, reason)) return false;
-        }
-    }
     if (!checkArray(lv, keys::common::kPreprocess, path + "." + keys::common::kPreprocess, reason)) return false;
     if (!validatePreprocessArray(at(lv, keys::common::kPreprocess), path + "." + keys::common::kPreprocess, reason)) return false;
     return true;

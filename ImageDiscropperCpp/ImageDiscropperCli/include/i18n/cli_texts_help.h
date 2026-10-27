@@ -117,7 +117,7 @@ inline constexpr char kDescOutputConfigMerged[] = "合并输出路径（配置 e
 inline constexpr char kDescOutputDirConfigSeparate[] = "分离输出目录（配置 export.mode=separate 时用）";
 inline constexpr char kDescAnnoInline[] = "[可重复] 内联一条标注对象，或一个标注对象数组";
 inline constexpr char kDescAnnoFile[] = "[可重复] 从「根为标注数组」的 JSON 文件读取";
-inline constexpr char kDescLayerInline[] = "[可重复] 内联一条图层对象，或一个图层对象数组";
+inline constexpr char kDescLayerInline[] = "[可重复] 内联一条图层（v2 JSON 对象 / 数组），或两种等价简写：平铺 {file=a.png,imageOpacity=200,backdrop={\"kind\":\"solid\"}} / 块形 image={...} backdrop={...}";
 inline constexpr char kDescLayerFile[] = "[可重复] 从「根为图层数组」的 JSON 文件读取";
 inline constexpr char kDescGrid[] = "整幅周期：基准点 + 单元尺寸（基准点可为负，cw/ch 换算后必须为正；各值可写百分比，如 \"50%\"）";
 inline constexpr char kDescGridX[] = "横向周期：基准点 x0 + 单元宽 cw（百分比按图宽换算）；纵向未定义时＝整幅 1 份";
@@ -229,39 +229,41 @@ inline constexpr char kTextLayerSeeTopic[] = R"IDCH(
 inline constexpr char kTextLayerHead[] = R"IDCH(
 图层（可选：作为叠加层展平进引擎，与标注同构；transform 的 x/y/width/height 可写百分比串，基准＝画布尺寸；config 命令追加在 --load 配置的 layers 段之后）：
 )IDCH";
-inline constexpr char kTextLayerFields[] = R"IDCH(  字段按来源 / 落位 / 层序分派（缺省值见括注）：
-    source 来源（二选一）：
+inline constexpr char kTextLayerFields[] = R"IDCH(  字段按元素 / 落位 / 层序分派（缺省值见括注；装配序＝图片源处理（适应→元素预处理）→区域定尺寸→图案元素→图片落位合成→区域缩放→节点外观）：
+    image 图片元素（可选；缺省＝纯图案层）：
       file：相对资产名（如 "sub/a.png"）——按「自定义目录（--assets-dir）→ <配置名>.assets/ → 配置所在目录」查找；
             缺失降级为空白占位（合成时跳过，不报错）
-      recipe：程序图案——键与 --pattern 相同（kind / background / foreground / period / line-width / dot-radius /
-              orientation / seed / noise），按 transform 目标尺寸现算
-    transform 落位与合成（均可省略取默认）：
+      fit 源图→图层框适应：crop 裁剪铺满（默认）/ stretch 拉伸 / native 原生
+      boxWidth / boxHeight 图层框尺寸（≤0＝无图层框，内层落位退化——源图直接按 transform 落位）
+      anchor / pivot 图在框的锚点 / 枢轴（9 向枚举同上，默认 center）；x / y 图在框内的自由偏移（可负，缺省 0）
+      preprocess 元素外观·预处理队列（键同节点 preprocess，可含几何步——落位前施于源、无框时区域随预处理后尺寸）；opacity 元素外观·不透明度 0..255（缺省 255）
+    backdrop 图案元素（可选；缺省＝透明底）：
+      图案键与 --pattern 相同（kind / background / foreground / period / line-width / dot-radius /
+        orientation / seed / noise）+ preprocess 元素外观·预处理队列（仅色彩步，几何步忽略）
+        + opacity 元素外观·不透明度 0..255（缺省 255）
+    transform 节点落位（均可省略取默认）：
       inCanvasAnchor 画布锚点 / layerPivot 图层枢轴——9 向枚举：top-left / top-center / top-right /
         middle-left / center（默认）/ middle-right / bottom-left / bottom-center / bottom-right
       x / y：自由偏移像素（可负，缺省 0；可写百分比串，横向按画布宽、纵向按高换算）
-      width / height：目标尺寸（≤0＝源图 / 配方原生尺寸、不缩放；缺省 0；可写百分比串，按画布宽 / 高换算）
+      width / height：目标尺寸（≤0＝源图 / 图案原生尺寸、不缩放；缺省 0；可写百分比串，按画布宽 / 高换算）
       opacity：图层整体不透明度 0..255（缺省 255＝不透明；合成期逐像素施加）
     zOrder 叠放次序：整数、升序叠放（大＝在上；同值按数组先后、后加入者在上）；缺省 0——
       命令行追加时自增续尾（叠在配置自带层之上）
-    preprocess 逐层预处理数组（按序执行；与配置文件的预处理段同规）：
+    preprocess 节点外观·预处理数组（先物化再落位；与配置文件的预处理段同规）：
       {"op":"gray"} 灰度；{"op":"split","mask":"111"} 通道分离 / {"op":"invert","mask":"111"} 反色（mask＝三位 RGB 遮码，'1' 启用）
       {"op":"rotate","deg":90} 旋转（任意整数度）；{"op":"flip","axis":"horizontal"|"vertical"} 翻转
       {"op":"resize","width":W,"height":H} 重采样到 W×H
-    imagePlacement 两级落位（可选；缺省关闭＝源图直接按 transform 落位）：
-      fit 源图→图层框适应：crop 裁剪铺满（默认）/ stretch 拉伸 / native 原生
-      boxWidth / boxHeight 图层框尺寸（≤0＝无图层框，两级落位退化）
-      imageAnchor / imagePivot 图在框的锚点 / 枢轴（9 向枚举同上，默认 center）；x / y 图在框内的自由偏移（可负，缺省 0）
-      backdrop 图层框底色图案（键同 recipe，先铺底再叠源图）
 )IDCH";
 inline constexpr char kTextLayerTail[] = R"IDCH(
   校验与退出码（与标注同级的强制校验，逐条报因）：
     · 锚点 / fit / 图案键拼错、颜色非法、数值字段非整数也非百分比串、opacity 越 0..255 → 退出码 1，报因定位到字段（如「配置字段 '[0].transform.inCanvasAnchor' 的取值 'bogus' 无法识别」）。
-    · zOrder 须为整数（负数合法，视为最底层）；file 名须为字符串（空＝占位层）；JSON 语法错误、根非对象/数组、数组内无有效图层对象 → 退出码 1。
+    · zOrder 须为整数（负数合法，视为最底层）；image.file 名须为字符串（空＝无图片元素）；JSON 语法错误、根非对象/数组、数组内无有效图层对象 → 退出码 1。
     · file 名越界（绝对路径 / 含 ..）→ 执行期退出码 3；缺文件默认降级为空白占位并告警，--strict 改为退出码 3。
-  单条示例：
-    {"source":{"file":"badge.png"},"transform":{"inCanvasAnchor":"top-right","layerPivot":"top-right"}}
-    {"source":{"recipe":{"kind":"stripes","foreground":"#FF000000"}},"transform":{"width":320,"height":240}}
-    {"source":{"file":"badge.png"},"imagePlacement":{"fit":"stretch","boxWidth":160,"boxHeight":120,"backdrop":{"kind":"solid","background":"#FFFFFFFF"}}}
+  单条示例（JSON 形；平铺 / 块形简写见 --layer 选项说明）：
+    {"image":{"file":"badge.png"},"transform":{"inCanvasAnchor":"top-right","layerPivot":"top-right"}}
+    {"backdrop":{"kind":"stripes","foreground":"#FF000000"},"transform":{"width":320,"height":240}}
+    {"image":{"file":"badge.png","fit":"stretch","boxWidth":160,"boxHeight":120,"opacity":200},
+     "backdrop":{"kind":"solid","background":"#FFFFFFFF"},"transform":{"x":0,"y":0}}
   导出：--save-config 会把命令行图层写入配置文件的 layers 段（config 命令追加在 --load 自带段之后；其余命令随配置透写）。
 )IDCH";
 inline constexpr char kTextAnnoFields[] = R"IDCH(  字段按 type 分派几何，样式对所有类型通用：

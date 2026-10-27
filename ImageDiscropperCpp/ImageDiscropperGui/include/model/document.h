@@ -157,7 +157,7 @@ public:
     const core::Image& base() const { return preprocess_.base(); }
     const preprocess::PreprocessPipeline& basePrefix() const { return preprocess_.basePrefix(); }
     // 记录一段前缀的重放产物为 base_（img 为其物化结果，prefix 为其对应的重放前缀队列）。
-    void setBase(core::Image img, preprocess::PreprocessPipeline prefix);
+    void setBase(core::Image img, const preprocess::PreprocessPipeline &prefix);
     // 释放 base_ 重放缓存（由「有 resize」切到「无 resize」时回收内存；与 setImage / resetPreprocess 的失效同处理）。
     void clearBase() { preprocess_.clearBase(); }
     // 候选前缀是否需要重烤：无缓存，或已缓存 basePath_ 与之逐字段不等 → true。供 commitPipeline 提交前判 baseDirty。

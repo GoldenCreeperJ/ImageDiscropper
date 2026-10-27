@@ -83,6 +83,7 @@ constexpr I18nEntry kEntriesCoreEn[] = {
     {"msg::kErrConfigNotObject", "Config field '%1' must be an object"},
     {"msg::kErrConfigNotArray", "Config field '%1' must be an array"},
     {"msg::kErrConfigNotInteger", "Config field '%1' must be an integer"},
+    {"msg::kErrConfigIllegalKey", "Config field '%1' is not a legal key in this section"},
     {"msg::kErrConfigNotCoord", "Config field '%1' must be an integer or a percentage string such as \"50%\", got %2"},
     {"msg::kErrConfigPercentNoBasis", "Config field '%1' uses a percentage, but the reference size is unknown (source width/height must be positive integers)"},
     {"msg::kErrConfigRange", "Config field '%1' must be between %2 and %3"},

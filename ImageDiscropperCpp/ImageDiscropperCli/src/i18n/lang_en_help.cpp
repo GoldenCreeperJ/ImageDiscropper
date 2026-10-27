@@ -50,7 +50,7 @@ constexpr core::I18nEntry kEntriesEnHelp[] = {
     {"help::kDescOutputDirConfigSeparate", "Separate output directory (used when the config has export.mode=separate)"},
     {"help::kDescAnnoInline", "[repeatable] inline one annotation object, or an array of annotation objects"},
     {"help::kDescAnnoFile", "[repeatable] read from a JSON file whose root is an annotation array"},
-    {"help::kDescLayerInline", "[repeatable] inline one layer object, or an array of layer objects"},
+    {"help::kDescLayerInline", R"([repeatable] inline one layer (v2 JSON object / array), or the two equivalent shorthands: flat {file=a.png,imageOpacity=200,backdrop={"kind":"solid"}} / block image={...} backdrop={...})"},
     {"help::kDescLayerFile", "[repeatable] read from a JSON file whose root is a layer array"},
     {"help::kDescGrid", "Whole-canvas period: origin + cell size (the origin may be negative, cw/ch must be positive after conversion; each value may be a percentage such as \"50%\")"},
     {"help::kDescGridX", "Horizontal period: origin x0 + cell width cw (percentages convert against the image width); an undefined vertical axis = one whole span"},
@@ -196,40 +196,42 @@ constexpr core::I18nEntry kEntriesEnHelp[] = {
     {"help::kTextGenTopicHead", "\nProcedural generated source (shared by extract / erase / grid / config; the same pattern parameter set as the new command): use --size (optionally with --pattern, etc.) to procedurally generate a canvas; it may be combined with --input - --size fixes the canvas size, the bitmap is centered (native size by default; --fit changes the adaptation; clipped when over, exposing the base when under):\n"},
 {"help::kTextAnnoHead", "\nAnnotations (optional, burned into the working image before cutting; the coordinate origin = the working-image size after preprocessing; geometry coordinates also accept percentage strings, e.g. \"50%\", horizontal against the working width and vertical against the height):\n"},
     {"help::kTextLayerHead", "\nLayers (optional: flattened into the engine as overlay layers, mirroring annotations; transform x/y/width/height also accept percentage strings, basis = canvas size; the config command appends them after the --load config's own layers section):\n"},
-    {"help::kTextLayerFields", "  Fields are grouped by source / placement / stacking (defaults in parentheses):\n"
-        "    source (pick one):\n"
+    {"help::kTextLayerFields", "  Fields are grouped by element / placement / stacking (defaults in parentheses; assembly order = image source processing (adaptation -> element preprocess) -> region sizing -> backdrop element -> image placement composite -> region scale -> node appearance):\n"
+        "    image element (optional; absent = pure-pattern layer):\n"
         "      file: a relative asset name (e.g. \"sub/a.png\") - looked up in [custom dir (--assets-dir) -> <configname>.assets/ -> config directory];\n"
         "             a missing asset degrades to an empty placeholder (skipped when compositing, no error)\n"
-        "      recipe: a procedural pattern - the keys match --pattern (kind / background / foreground / period / line-width / dot-radius /\n"
-        "              orientation / seed / noise), rendered at the transform target size\n"
-        "    transform placement and compositing (all optional):\n"
+        "      fit source-to-box adaptation: crop fill (default) / stretch / native\n"
+        "      boxWidth / boxHeight layer-box size (<=0 = no box, the in-box placement degrades - the source is placed directly by transform)\n"
+        "      anchor / pivot in-box anchor / pivot (9-way enum as above, default center); x / y free in-box offsets (may be negative, default 0)\n"
+        "      preprocess element-appearance preprocess queue (same steps as the node preprocess; geometric steps allowed - applied to the source before placement, and without a box the region follows the post-preprocess source size); opacity element-appearance opacity 0..255 (default 255)\n"
+        "    backdrop element (optional; absent = transparent base):\n"
+        "      the pattern keys match --pattern (kind / background / foreground / period / line-width / dot-radius /\n"
+        "        orientation / seed / noise) + preprocess element-appearance preprocess queue (color steps only, geometric steps ignored)\n"
+        "        + opacity element-appearance opacity 0..255 (default 255)\n"
+        "    transform node placement (all optional):\n"
         "      inCanvasAnchor canvas anchor / layerPivot layer pivot - 9-way enum: top-left / top-center / top-right /\n"
         "        middle-left / center (default) / middle-right / bottom-left / bottom-center / bottom-right\n"
         "      x / y: free pixel offsets (may be negative, default 0; also accept percentage strings, horizontal against the canvas width and vertical against the height)\n"
-        "      width / height: target size (<=0 = source / recipe native size, no scaling; default 0; also accept percentage strings against the canvas width / height)\n"
+        "      width / height: target size (<=0 = source / pattern native size, no scaling; default 0; also accept percentage strings against the canvas width / height)\n"
         "      opacity: overall layer opacity 0..255 (default 255 = opaque; applied per pixel at composite time)\n"
         "    zOrder stacking order: integer, ascending (larger is on top; equal values keep array order, later on top); default 0 -\n"
         "      command-line appends auto-increment and stack on top of the config's own layers\n"
-        "    preprocess per-layer preprocess array (applied in order; same as the config preprocess section):\n"
+        "    preprocess node-appearance preprocess array (materialized before placement; same as the config preprocess section):\n"
         "      {\"op\":\"gray\"} grayscale; {\"op\":\"split\",\"mask\":\"111\"} channel split / {\"op\":\"invert\",\"mask\":\"111\"} invert (mask = 3-char RGB mask, '1' enables)\n"
         "      {\"op\":\"rotate\",\"deg\":90} rotate (any integer degrees); {\"op\":\"flip\",\"axis\":\"horizontal\"|\"vertical\"} flip\n"
         "      {\"op\":\"resize\",\"width\":W,\"height\":H} resample to W x H\n"
-        "    imagePlacement two-level placement (optional; off by default = the source is placed directly by transform):\n"
-        "      fit source-to-box adaptation: crop fill (default) / stretch / native\n"
-        "      boxWidth / boxHeight layer-box size (<=0 = no box, the two-level placement degrades)\n"
-        "      imageAnchor / imagePivot in-box anchor / pivot (9-way enum as above, default center); x / y free in-box offsets (may be negative, default 0)\n"
-        "      backdrop layer-box backdrop pattern (keys as recipe, laid under the source)\n"
     },
     {"help::kTextLayerTail",
         "\n"
         "  Validation and exit codes (mandatory per-item validation like annotations, reasons reported one by one):\n"
         "    - a misspelled anchor / fit / pattern key, an illegal color, a numeric field that is neither an integer nor a percentage string, or an opacity outside 0..255 -> exit code 1, the reason pinpoints the field (e.g. \"Config field '[0].transform.inCanvasAnchor' has unknown value 'bogus'\").\n"
-        "    - zOrder must be an integer (negative is legal, treated as the bottom); file must be a string (empty = placeholder layer); a JSON syntax error, a root that is not an object/array, or an array with no valid layer object -> exit code 1.\n"
+        "    - zOrder must be an integer (negative is legal, treated as the bottom); image.file must be a string (empty = no image element); a JSON syntax error, a root that is not an object/array, or an array with no valid layer object -> exit code 1.\n"
         "    - an escaping file name (absolute path / containing ..) -> exit code 3 at execution; a missing file degrades to an empty placeholder with a warning, --strict turns it into exit code 3.\n"
-        "  Single-item examples:\n"
-        "    {\"source\":{\"file\":\"badge.png\"},\"transform\":{\"inCanvasAnchor\":\"top-right\",\"layerPivot\":\"top-right\"}}\n"
-        "    {\"source\":{\"recipe\":{\"kind\":\"stripes\",\"foreground\":\"#FF000000\"}},\"transform\":{\"width\":320,\"height\":240}}\n"
-        "    {\"source\":{\"file\":\"badge.png\"},\"imagePlacement\":{\"fit\":\"stretch\",\"boxWidth\":160,\"boxHeight\":120,\"backdrop\":{\"kind\":\"solid\",\"background\":\"#FFFFFFFF\"}}}\n"
+        "  Single-item examples (JSON form; see the --layer option description for the flat / block shorthands):\n"
+        "    {\"image\":{\"file\":\"badge.png\"},\"transform\":{\"inCanvasAnchor\":\"top-right\",\"layerPivot\":\"top-right\"}}\n"
+        "    {\"backdrop\":{\"kind\":\"stripes\",\"foreground\":\"#FF000000\"},\"transform\":{\"width\":320,\"height\":240}}\n"
+        "    {\"image\":{\"file\":\"badge.png\",\"fit\":\"stretch\",\"boxWidth\":160,\"boxHeight\":120,\"opacity\":200},\n"
+        "     \"backdrop\":{\"kind\":\"solid\",\"background\":\"#FFFFFFFF\"},\"transform\":{\"x\":0,\"y\":0}}\n"
         "  Export: --save-config writes the command-line layers into the config file's layers section (the config command appends them after the --load config's own section; the other commands carry them through).\n"
     },
     {"help::kTextAnnoFields",

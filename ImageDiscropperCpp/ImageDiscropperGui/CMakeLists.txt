@@ -191,6 +191,7 @@ set(IDC_GUI_PANELS_SRC
         include/panels/mode_tool_panel.h
         include/panels/layer_panel.h
         include/panels/layer_edit_panel.h
+        include/panels/element_appearance_group.h
         include/panels/annotation_prop_panel.h
         src/panels/accordion_panel.cpp
         src/panels/left_panel.cpp
@@ -205,6 +206,7 @@ set(IDC_GUI_PANELS_SRC
         src/panels/mode_tool_panel.cpp
         src/panels/layer_panel.cpp
         src/panels/layer_edit_panel.cpp
+        src/panels/element_appearance_group.cpp
         src/panels/annotation_prop_panel.cpp
 )
 

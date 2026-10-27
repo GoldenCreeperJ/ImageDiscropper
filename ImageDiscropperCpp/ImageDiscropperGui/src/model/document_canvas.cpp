@@ -75,7 +75,7 @@ void Document::setImage(core::Image img, QString path) {
     baseSelected_ = false;
     baseSession_.clear();
     // 恒等底图声明（§7 generate 段：placement-only + solid white backdrop）：无「recipe 键」→ 载入端 baseFromJson 视作运行时位图底；
-    //   white backdrop 令「无图重载」生成白底、且导 JPEG/BMP 透明区显白非黑（composeIntoBox 缺 backdrop 才透明）。
+    //   white backdrop 令「无图重载」生成白底、且导 JPEG/BMP 透明区显白非黑（图案元素缺省才透明）。
     canvas::ImageLayer base;
     base.fileName = QFileInfo(path).fileName().toStdString();
     base.hasImagePlacement = true;
@@ -86,7 +86,7 @@ void Document::setImage(core::Image img, QString path) {
     base.imagePivot = generate::ImageAnchor::Center;
     base.imageX = 0;
     base.imageY = 0;
-    base.boxBackdrop = generate::PatternParams{};       // 缺省即 solid white（background=kWhite）：白底种子。
+    base.backdrop = generate::PatternParams{};            // 缺省即 solid white（background=kWhite）：白底种子。
     baseLayer_ = std::move(base);
     layers_.clear();
     imageLayersVisible_ = true;
@@ -240,8 +240,8 @@ void Document::setSteps(preprocess::PreprocessPipeline pipeline) {
 }
 
 // 记录一段前缀的重放产物为 base_（供 commitPipeline 免重复重采样复用）。
-void Document::setBase(core::Image img, preprocess::PreprocessPipeline prefix) {
-    preprocess_.setBase(std::move(img), std::move(prefix));
+void Document::setBase(core::Image img, const preprocess::PreprocessPipeline& prefix) {
+    preprocess_.setBase(std::move(img), prefix);
 }
 
 // 几何签名：对原图尺寸跑「有效管线」（[resize?] + 轻操作队列）的纯元数据推演（不碰像素），得 {输出宽高, 净旋转象限}。

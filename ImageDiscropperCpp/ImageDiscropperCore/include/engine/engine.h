@@ -28,7 +28,7 @@
 #include "core/core_error.h"  // core::CoreError（runEngine 错误侧载荷；对齐 Rust GuideLine §3.3）
 #include "core/image.h"
 #include "canvas/layer.h"          // canvas::ImageLayer（可选「layers」段：多层画布展平后作为引擎输入）
-#include "generate/pattern.h"      // generate::PatternParams（底图/图层的 recipe、boxBackdrop 图案配方字段）
+#include "generate/pattern.h"      // generate::PatternParams（底图/图层的图案元素 backdrop 配方字段）
 #include "engine/composition.h"
 #include "engine/cut_line.h"
 #include "engine/export.h"

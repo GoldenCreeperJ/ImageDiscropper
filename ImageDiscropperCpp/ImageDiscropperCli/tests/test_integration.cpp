@@ -612,7 +612,7 @@ void testIntegration() {
             std::ofstream ofs(cfg);
             ofs << R"({
   "source": {"width": 200, "height": 150},
-  "generate": {"kind": "solid", "background": "#FFFF0000", "foreground": "#FF000000"},
+  "generate": {"backdrop": {"kind": "solid", "background": "#FFFF0000", "foreground": "#FF000000"}},
   "cut": {"tier": "extract", "generator": "rect", "polarity": "keep", "params": {"x1": 50, "y1": 40, "x2": 150, "y2": 120}},
   "export": {"mode": "merged", "merge": {"layout": "collapse"}}
 })";
@@ -713,7 +713,7 @@ void testIntegration() {
         idc::generate::PatternParams pp;
         pp.kind = idc::generate::PatternKind::Solid;
         pp.background = Color(255, 0, 0, 255);
-        l.recipe = pp;
+        l.backdrop = pp;
         l.transform.width = 40; l.transform.height = 40; // 铺满画布
         l.zOrder = 0;
         st = {l};
@@ -837,9 +837,9 @@ void testIntegration() {
         EngineConfig cfg;
         cfg.source = idc::engine::SourceInfo{40, 40};
         idc::canvas::ImageLayer own;
-        own.recipe = idc::generate::PatternParams{};
-        own.recipe->kind = idc::generate::PatternKind::Solid;
-        own.recipe->background = Color(255, 0, 0, 255);
+        own.backdrop = idc::generate::PatternParams{};
+        own.backdrop->kind = idc::generate::PatternKind::Solid;
+        own.backdrop->background = Color(255, 0, 0, 255);
         own.zOrder = 5;
         cfg.layers = std::vector{own};
         cfg.cut = idc::engine::CutConfig{};
@@ -856,12 +856,12 @@ void testIntegration() {
         const std::string layersPath = (root / "it465_layers.json").string();
         {
             std::ofstream ofs(layersPath);
-            ofs << R"J([{"source":{"recipe":{"kind":"solid","background":"#FF00FF00"}}}])J";
+            ofs << R"J([{"backdrop":{"kind":"solid","background":"#FF00FF00"}}])J";
         }
         // 内联 --layer（zOrder 未给）+ 文件 --layers：dry-run 保存后读回，验证追加与 zOrder 自增。
         const std::string outCfg = (root / "it465_out.json").string();
         const Captured r = runCli({"config", "--load", cfgPath,
-                                   "--layer", R"J({"source":{"recipe":{"kind":"solid","background":"#FF0000FF"}}})J",
+                                   "--layer", R"J({"backdrop":{"kind":"solid","background":"#FF0000FF"}})J",
                                    "--layers", layersPath,
                                    "--save-config", outCfg});
         CHECK(r.code == 0);
@@ -879,11 +879,11 @@ void testIntegration() {
         CHECK(bad.err.find("图层") != std::string::npos);
     }
 
-    // ---- IT-46.6：extract 命令行 --layer（四命令通用）——recipe 图层铺满生成画布，整图保留导出即图层色。----
+    // ---- IT-46.6：extract 命令行 --layer（四命令通用）——纯图案层铺满生成画布，整图保留导出即图层色。----
     {
         const std::string out = (root / "it466.png").string();
         const Captured r = runCli({"extract", "--size", "20x20", "--rect", "0,0,20,20",
-                                   "--layer", R"J({"source":{"recipe":{"kind":"solid","background":"#FF00FF00"}},"transform":{"width":20,"height":20}})J",
+                                   "--layer", R"J({"backdrop":{"kind":"solid","background":"#FF00FF00"},"transform":{"width":20,"height":20}})J",
                                    "--output", out});
         CHECK(r.code == 0);
         Image o;
@@ -906,11 +906,82 @@ void testIntegration() {
         CHECK(isRed(o.getPixel(35, 35)));   // 未被标注覆盖，仍为底色红
     }
 
+    // ---- IT-46.7b：--layer 双语法（平铺带外层大括号 / 块形）等价归一 → v2 元素字段落位。----
+    {
+        const std::string base = (root / "it467b_base.json").string();
+        {
+            std::ofstream ofs(base);
+            ofs << R"({"source":{"width":20,"height":20},"cut":{"tier":"extract","generator":"rect","params":{"x1":0,"y1":0,"x2":20,"y2":20}},"export":{"mode":"merged","merge":{"layout":"collapse"}}})";
+        }
+        // 平铺形式（嵌套值含引号的 JSON 对象：须仍判为平铺而非标准 JSON）。
+        const std::string outFlat = (root / "it467b_flat.json").string();
+        const Captured rf = runCli({"config", "--load", base,
+                                    "--layer",
+                                    R"({file=sub/a.png,imageOpacity=200,backdrop={"kind":"solid","background":"#FF0000FF"},backdropOpacity=150})",
+                                    "--save-config", outFlat});
+        CHECK(rf.code == 0);
+        EngineConfig flatCfg;
+        CHECK(idc::engine::loadEngineConfig(outFlat, flatCfg).has_value());
+        CHECK(flatCfg.layers.has_value() && flatCfg.layers->size() == 1);
+        if (flatCfg.layers.has_value() && flatCfg.layers->size() == 1) {
+            const auto& l = (*flatCfg.layers)[0];
+            CHECK(l.fileName == "sub/a.png");
+            CHECK(l.imageOpacity == 200);
+            CHECK(l.backdrop.has_value() && l.backdrop->kind == idc::generate::PatternKind::Solid);
+            CHECK(l.backdropOpacity == 150);
+        }
+        // 块形形式（无外层大括号）。
+        const std::string outBlock = (root / "it467b_block.json").string();
+        const Captured rb = runCli({"config", "--load", base,
+                                    "--layer", R"(image={"file":"b.png"} backdrop={"kind":"solid"})",
+                                    "--save-config", outBlock});
+        CHECK(rb.code == 0);
+        EngineConfig blockCfg;
+        CHECK(idc::engine::loadEngineConfig(outBlock, blockCfg).has_value());
+        CHECK(blockCfg.layers.has_value() && blockCfg.layers->size() == 1);
+        if (blockCfg.layers.has_value() && blockCfg.layers->size() == 1) {
+            const auto& l = (*blockCfg.layers)[0];
+            CHECK(l.fileName == "b.png");
+            CHECK(l.backdrop.has_value() && l.backdrop->kind == idc::generate::PatternKind::Solid);
+        }
+        // 未知键 → 语法报错退出 1。
+        const Captured bad = runCli({"config", "--load", base, "--layer", R"({bogusKey=1})",
+                                     "--save-config", (root / "it467b_bad.json").string()});
+        CHECK(bad.code == 1);
+        CHECK(bad.err.find("图层") != std::string::npos);
+        // 平铺形式缺尾括号 → 语法报错退出 1（不截尾静默改义）。
+        const Captured noBrace = runCli({"config", "--load", base, "--layer", R"({file=sub/a.png)",
+                                         "--save-config", (root / "it467b_nobrace.json").string()});
+        CHECK(noBrace.code == 1);
+    }
+
+    // ---- IT-46.7c：无内层落位的图片元素（只写 file 不写 fit）source-over 叠于图案之上——透明源像素透出图案。----
+    {
+        const std::string cfgPath = (root / "it467c.json").string();
+        {
+            std::ofstream ofs(cfgPath);
+            ofs << R"({"source":{"width":20,"height":20},"cut":{"tier":"extract","generator":"rect","polarity":"keep","params":{"x1":0,"y1":0,"x2":20,"y2":20}},"export":{"mode":"merged","merge":{"layout":"collapse"}},"layers":[{"image":{"file":"src.png"},"backdrop":{"kind":"solid","background":"#FF00FF00"},"transform":{"width":20,"height":20,"inCanvasAnchor":"top-left","layerPivot":"top-left"}}]})";
+        }
+        // 资产：20×20 源图（全透明、(1,0) 红），与配置同目录。
+        Image src(20, 20, idc::core::ImageFormat::Rgba);
+        src.fill(Color(0, 0, 0, 0));
+        src.setPixel(1, 0, Color(255, 0, 0, 255));
+        CHECK(idc::io::writeImageFile((root / "src.png").string(), src, idc::engine::ExportFormat::Png, 90,
+                                      idc::core::kTransparent).has_value());
+        const std::string out = (root / "it467c.png").string();
+        const Captured r = runCli({"config", "--load", cfgPath, "--output", out});
+        CHECK(r.code == 0);
+        Image o;
+        CHECK(idc::io::readImageFile(out, o));
+        CHECK(isGreen(o.getPixel(0, 0)));   // 透明源像素透出图案（装配序：图案铺底、图片叠上）
+        CHECK(isRed(o.getPixel(1, 0)));     // 不透明源像素覆盖图案
+    }
+
     // ---- IT-46.8：new --layer（recipe 铺满）→ 图层色覆盖生成画布。----
     {
         const std::string out = (root / "it468.png").string();
         const Captured r = runCli({"new", "--size", "20x20", "--bg", "#FFFF0000",
-                                   "--layer", R"J({"source":{"recipe":{"kind":"solid","background":"#FF00FF00"}},"transform":{"width":20,"height":20}})J",
+                                   "--layer", R"J({"backdrop":{"kind":"solid","background":"#FF00FF00"},"transform":{"width":20,"height":20}})J",
                                    "--output", out});
         CHECK(r.code == 0);
         Image o;
@@ -923,7 +994,7 @@ void testIntegration() {
         const std::string cfgPath = (root / "it469.json").string();
         const Captured r = runCli({"new", "--size", "30x30",
                                    "--annotation", R"ANN({"type":"line","points":[[0,0],[10,10]],"color":"#FF000000"})ANN",
-                                   "--layer", R"J({"source":{"recipe":{"kind":"solid","background":"#FF0000FF"}}})J",
+                                   "--layer", R"J({"backdrop":{"kind":"solid","background":"#FF0000FF"}})J",
                                    "--assets-dir=custom", "--save-config", cfgPath});
         CHECK(r.code == 0);
         EngineConfig back;
@@ -931,7 +1002,7 @@ void testIntegration() {
         std::string annoErr;
         const auto loaded = idc::engine::loadEngineConfig(cfgPath, back, &backAnnos, &annoErr);
         CHECK(loaded.has_value());
-        CHECK(back.base.has_value() && back.base->recipe.has_value()); // generate 段
+        CHECK(back.base.has_value() && back.base->backdrop.has_value()); // generate 段（图案元素）
         CHECK(back.layers.has_value() && back.layers->size() == 1);    // layers 段
         CHECK(backAnnos.annotations().size() == 1);                    // annotations 段
         CHECK(back.assetsDir == "custom");                             // =path 相对化写字段
@@ -984,10 +1055,10 @@ void testIntegration() {
         CHECK(r2.err.find("zOrder") != std::string::npos);
         const Captured r3 = badLayer(R"J({"transform":{"opacity":999}})J");
         CHECK(r3.code == 1);
-        const Captured r4 = badLayer(R"J({"source":{"recipe":{"kind":"bogus"}}})J");
+        const Captured r4 = badLayer(R"J({"backdrop":{"kind":"bogus"}})J");
         CHECK(r4.code == 1);
         // 合法形态不受影响：空 file（占位层）+ 负 zOrder（最底层）→ 正常执行。
-        const Captured ok = badLayer(R"J({"source":{"file":""},"zOrder":-2})J");
+        const Captured ok = badLayer(R"J({"image":{"file":""},"zOrder":-2})J");
         CHECK(ok.code == 0);
     }
 
@@ -1063,7 +1134,7 @@ void testIntegration() {
         const std::string cfg = (root / "it4616.json").string();
         const Captured r0 = runCli({"extract", "--input", in, "--rect", "0,0,100,75",
                                     "--annotation", R"ANN({"type":"line","points":[[0,0],[10,10]],"color":"#FF000000"})ANN",
-                                    "--layer", R"J({"source":{"recipe":{"kind":"solid","background":"#FF0000FF"}}})J",
+                                    "--layer", R"J({"backdrop":{"kind":"solid","background":"#FF0000FF"}})J",
                                     "--save-config", cfg});
         CHECK(r0.code == 0);
         EngineConfig back;
@@ -1077,7 +1148,7 @@ void testIntegration() {
         const std::string out1 = (root / "it4616b.json").string();
         const Captured r1 = runCli({"config", "--load", cfg, "--replace-annotations", "--replace-layers",
                                     "--annotation", R"ANN({"type":"circle","x1":10,"y1":10,"x2":10,"y2":15,"color":"#FF00FF00"})ANN",
-                                    "--layer", R"J({"source":{"recipe":{"kind":"solid","background":"#FF00FF00"}}})J",
+                                    "--layer", R"J({"backdrop":{"kind":"solid","background":"#FF00FF00"}})J",
                                     "--save-config", out1});
         CHECK(r1.code == 0);
         EngineConfig back1;
@@ -1287,7 +1358,7 @@ void testIntegration() {
         idc::generate::PatternParams pp;
         pp.kind = idc::generate::PatternKind::Solid;
         pp.background = Color(0, 255, 0, 255);
-        l.recipe = pp;
+        l.backdrop = pp;
         l.transform.width = 40; l.transform.height = 40; // 图层大于 20×20 画布
         l.zOrder = 0;
         st = {l};
@@ -1320,7 +1391,7 @@ void testIntegration() {
         idc::generate::PatternParams pp;
         pp.kind = idc::generate::PatternKind::Solid;
         pp.background = Color(255, 0, 0, 255);
-        l.recipe = pp;
+        l.backdrop = pp;
         l.transform.width = 40; l.transform.height = 40;
         l.transform.opacity = 90;   // 层不透明度（合成期 alpha 乘子）：Solid 红 → alpha (255·90+127)/255 = 90
         st = {l};
@@ -1341,7 +1412,7 @@ void testIntegration() {
         CHECK(o.getPixel(20, 20).a == 90); // PNG 留 alpha
     }
 
-    // ---- IT-49：底图同构 base（落位声明 + boxBackdrop）端到端——config 载入 + --input 供位图按落位摆入、--save-config 回写 generate 段仅落位（不存路径）。----
+    // ---- IT-49：底图同构 base（落位声明 + backdrop）端到端——config 载入 + --input 供位图按落位摆入、--save-config 回写 generate 段仅落位（不存路径）。----
     {
         fs::create_directories(root / "sub49", ec);
         Image src(20, 20, idc::core::ImageFormat::Rgba);
@@ -1361,7 +1432,7 @@ void testIntegration() {
         idc::generate::PatternParams bd;
         bd.kind = idc::generate::PatternKind::Solid;
         bd.background = Color(0, 255, 0, 255);   // 图层框底色＝绿（越源部分露出）
-        base.boxBackdrop = bd;
+        base.backdrop = bd;
         cfg.base = base;
         cfg.cut = idc::engine::CutConfig{};
         cfg.cut.tier = idc::engine::Tier::Standard;
@@ -1393,7 +1464,7 @@ void testIntegration() {
         CHECK(text.find("\"generate\"") != std::string::npos);
         CHECK(text.find("sub49/base.png") == std::string::npos);   // 文件路径不入配置
         CHECK(text.find("\"file\"") == std::string::npos);
-        CHECK(text.find("imageAnchor") != std::string::npos);
+        CHECK(text.find("\"anchor\"") != std::string::npos);   // v2：落位键位于 image 元素内
         CHECK(text.find("backdrop") != std::string::npos);
         CHECK(text.find("opacity") != std::string::npos);   // generate 段携带底图整体不透明度键（缺省 255）
         CHECK(text.find("boxWidth") == std::string::npos);   // 底图落位框尺寸不落盘（恒＝source，载入由 source 回填）
@@ -1408,7 +1479,7 @@ void testIntegration() {
         idc::generate::PatternParams p;
         p.kind = idc::generate::PatternKind::Solid;
         p.background = Color(0, 0, 255, 255);   // 不透明蓝底
-        base.recipe = p;
+        base.backdrop = p;
         base.transform.opacity = 64;             // 底图整体不透明度（合成期 alpha 乘子）
         cfg.base = base;
         cfg.cut = idc::engine::CutConfig{};
@@ -1438,7 +1509,7 @@ void testIntegration() {
         idc::generate::PatternParams p;
         p.kind = idc::generate::PatternKind::Solid;
         p.background = Color(255, 0, 0, 255);   // 不透明红底
-        base.recipe = p;
+        base.backdrop = p;
         base.preprocess.add(idc::preprocess::InvertOp{std::string("111")});   // 底图色彩预处理：红→青（alpha 保留）
         base.transform.opacity = 180;            // 底图整体不透明度
         cfg.base = base;
@@ -1538,7 +1609,7 @@ void testIntegration() {
         idc::generate::PatternParams pp;
         pp.kind = idc::generate::PatternKind::Solid;
         pp.background = Color(255, 0, 0, 255);
-        solid.recipe = pp;
+        solid.backdrop = pp;
         solid.transform.width = 40; solid.transform.height = 40;
         solid.zOrder = 0;
         idc::canvas::ImageLayer ghost;
@@ -1729,7 +1800,7 @@ void testIntegration() {
                                    "--annotation",
                                    R"ANN({"type":"rectangle","x1":"0%","y1":"0%","x2":"50%","y2":"50%","fillColor":"#FF00FF00","fill":true})ANN",
                                    "--layer",
-                                   R"J({"source":{"recipe":{"kind":"solid","background":"#FF0000FF"}},"transform":{"inCanvasAnchor":"top-left","layerPivot":"top-left","x":"50%","y":"50%","width":"50%","height":"50%"}})J",
+                                   R"J({"backdrop":{"kind":"solid","background":"#FF0000FF"},"transform":{"inCanvasAnchor":"top-left","layerPivot":"top-left","x":"50%","y":"50%","width":"50%","height":"50%"}})J",
                                    "--output", out});
         CHECK(r.code == 0);
         Image o;

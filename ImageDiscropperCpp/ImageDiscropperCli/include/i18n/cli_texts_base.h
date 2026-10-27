@@ -336,6 +336,7 @@ inline constexpr char kLogGenCanvas[] = "已生成画布输入 ";
 // 命令行标注（src/annotation_args.cpp）。
 inline constexpr char kErrAnnoFileUnreadable[] = "标注文件不存在或不可读：";   // 后接路径。
 inline constexpr char kErrLayerFileUnreadable[] = "图层文件不存在或不可读：";   // 后接路径。
+inline constexpr char kErrLayerFlatSyntax[] = "图层参数语法错误：";              // 后接原文（--layer 平铺/块形两种语法解析失败）。
 
 // 命令层公共报错（src/commands/{extract,erase,grid,config}.cpp：同一文案在多命令重复出现）。
 inline constexpr char kErrMissingInput[] = "缺少输入图像";                        // ×3。

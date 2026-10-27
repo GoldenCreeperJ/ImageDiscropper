@@ -16,7 +16,7 @@
 
 > **输入来源**：`extract` / `erase` / `grid` / `config` 的输入图像既可 `--input <file>` 读文件，
 > 也可用 `--size WxH`（可配 `--pattern` 等）**程序生成一张画布**作为输入（`new` 的同一套生成选项）；
-> 二者**互斥、择一**。`config` 还支持 `layers` 段（§7 多层画布）作为**叠加图层**来源：`layers` 仅承载叠加层、不含底图，底图 base 由 `--input` / `--size` / `generate` 段（三者可组合）提供；`layers` 存在时由 CLI 逐层解码 `file` 层源图（相对 `<配置名>.assets/` / 配置目录，assets 优先）注入像素、`canvas::composeCanvas(layers, w, h, base)` 先铺全透明底、依底图 base→叠加层（按 zOrder）展平为 `config.source` 尺寸的画布（画布无级背景；引擎仍只收一张展平画布图，runEngine 零改动）；无底图时叠加层直接铺于全透明底之上（不视为错误）。
+> 二者**互斥、择一**。`config` 还支持 `layers` 段（§7 多层画布）作为**叠加图层**来源：`layers` 仅承载叠加层、不含底图，底图 base 由 `--input` / `--size` / `generate` 段（三者可组合）提供；`layers` 存在时由 CLI 逐层解码 `image.file` 源图（相对 `<配置名>.assets/` / 配置目录，assets 优先）注入像素、`canvas::composeCanvas(layers, w, h, base)` 先铺全透明底、依底图 base→叠加层（按 zOrder）展平为 `config.source` 尺寸的画布（画布无级背景；引擎仍只收一张展平画布图，runEngine 零改动）；无底图时叠加层直接铺于全透明底之上（不视为错误）。
 > `new` 则是「创建而非切割」，只接收生成选项（非 dry-run 时需 `--output`），拒绝 `--input`。
 
 > **配置持久化边界**：CLI 只读写 **SPEC §7 作业参数**（`--save-config` 序列化 / `config --load` 反序列化执行，均委托 Core `saveEngineConfig`/`loadEngineConfig`）；**GUI 的画布配色 / 交互偏好（QSettings `palette/`、`canvas/` 组）不属 §7，CLI 不感知也不读写**——CLI 零 Qt 依赖，两类持久化正交、互不触碰（权威边界条文见 [SPEC §7](../../SPEC.md)）。
@@ -143,33 +143,34 @@ idc extract --input photo.jpg --rect 100,100,300,250 --annotations annos.json \
 > 故标注随像素一起被切割落位（标注不受画布预处理影响）。
 > `--save-config` dry-run 会把「配置自带 + 命令行」标注一并透写 `annotations` 段（往返不丢）。
 
-> **图层入口**（五命令通用，与标注对称）：`--layer '<内联 JSON 对象>'`（一条 SPEC §7 `layers` 元素，可重复）与
+> **图层入口**（五命令通用，与标注对称）：`--layer '<内联 JSON 对象>'`（一条 SPEC §7 `layers` 元素，可重复；另收两种等价简写——平铺 `{file=a.png,imageOpacity=200,backdrop={"kind":"solid"}}` 外层大括号逗号分隔 / 块形 `image={...} backdrop={...}` 空白或逗号分隔，平铺键 imageFit/imageAnchor/boxWidth 等自动映射进 image 元素）与
 > `--layers <file.json>`（文件根为图层数组，可重复）；两者可混用、累积。`config` 命令**追加**在 `--load` 配置自带的
 > `layers` 段之后（`zOrder` 未给 → 按「既有最大 zOrder + 1」自增续尾）；`extract` / `erase` / `grid` / `new` 作为**叠加层合成在
 > 输入 / 生成画布之上**（`zOrder` 未给从 0 起自增；`file` 资产按当前工作目录解析）。合成统一走 `buildLayerCanvas` 一条展平路径。
 > `transform` 的 `x/y/width/height` 可写百分比串（如 `"50%"`，>100% 与负值合法），基准＝**画布**尺寸（`extract`/`erase`/`grid`/`new` 为输入图 /
 > 生成画布，`config` 为解出的画布）——需先解图才有基准，故换算与形态校验发生在读图之后（仍为退出码 1）。
 > 解析委托 Core 的 `parseImageLayersFromJsonText`（内联与文件同一入口），CLI 不自行解析 JSON；
-> 非法 JSON / 根类型非法 / 解析不出有效图层 → 参数错误（退出码 1），`file` 层相对名越界仍按退出码 3。
+> 非法 JSON / 根类型非法 / 解析不出有效图层 → 参数错误（退出码 1），`image.file` 相对名越界仍按退出码 3。
 > `--save-config` dry-run 会把「配置自带 + 命令行」图层一并透写 `layers` 段（往返不丢）。
 
 ## 多层画布与资源打包（`layers` 段 / `--assets-dir`）
 
 `config --load` 的配置可携带 SPEC §7 `layers` 段（可选）描述叠于底图之上的**叠加图层**（`layers` 仅承载叠加层、不含底图——底图走 `--input`/`--size`/`generate` 段）：
 
-> **术语对齐 [SPEC §2.2](../../SPEC.md)**：此处「底图 base」即 §2.2 的**底图**（同构 `ImageLayer`、钉最底、不入 `layers`），`--input` 读入的原图 / `generate` 段图案（+附图片落位）承载的即**底图图片**；`layers` 数组的成员即**图层**，其 `file` 层引用的源图为**图层图片**（位图靠 `<配置名>.assets/` 引用、不入配置），`recipe` 层为程序图案（非图片）。
+> **术语对齐 [SPEC §2.2](../../SPEC.md)**：此处「底图 base」即 §2.2 的**底图**（同构 `ImageLayer`、钉最底、不入 `layers`），`--input` 读入的原图 / `generate` 段图案（+附图片落位）承载的即**底图图片**；`layers` 数组的成员即**图层**（＝图层框节点：有**图片元素**即图片层、其 `image.file` 引用的源图为**图层图片**（位图靠 `<配置名>.assets/` 引用、不入配置）；无图片元素而有**图案元素**（`backdrop`）即纯图案层（非图片））。
 
 - **叠加层构成**：`layers` = 叠加 `ImageLayer` **数组**（不含底图）；画布**无级背景**（`composeCanvas` 恒铺全透明底）；每层携
-  `source`（`recipe` 配方，与 `generate` 同源不留文件名 | `file` 相对文件名 | 无源→空占位）、
-  `transform`（画布锚点 + 图片枢轴 + 自由 `x,y` + 目标宽高 + **不透明度 `opacity`**——合成期 alpha 乘子 `a'=(a·opacity+127)/255`，缺省 255＝不透明、灰度层亦生效）、`zOrder`（叠放序）、逐层 `preprocess`（**不含 `opacity`**——不透明度只由 `transform.opacity` 承载；队列中出现 `opacity` 步时按未知步跳过，见 SPEC §7）。
-- **执行链**（`buildLayerCanvas`）：逐层解码 `file` 源图（先「`<配置名>.assets / 相对名」后「配置目录 / 相对名」，assets 优先）注入像素
+  `image` 图片元素（可选：`file` 相对文件名 + `fit`/`boxWidth`/`boxHeight`/`anchor`/`pivot`/`x`/`y` 内层落位 + 元素外观 `preprocess`/`opacity`）、
+  `backdrop` 图案元素（可选，缺省透明底：图案键族与 `generate` 同源 + 元素外观 `preprocess`/`opacity`）、
+  `transform`（画布锚点 + 图片枢轴 + 自由 `x,y` + 目标宽高 + **不透明度 `opacity`**——合成期 alpha 乘子 `a'=(a·opacity+127)/255`，缺省 255＝不透明、灰度层亦生效）、`zOrder`（叠放序）、节点外观 `preprocess`（**不含 `opacity`**——不透明度只由 `transform.opacity` 承载；队列中出现 `opacity` 步时按未知步跳过，见 SPEC §7）。
+- **执行链**（`buildLayerCanvas`）：逐层解码 `image.file` 源图（先「`<配置名>.assets / 相对名」后「配置目录 / 相对名」，assets 优先）注入像素
   → `canvas::composeCanvas(layers, w, h, base)` 依底图 base→叠加层展平（画布无级背景、恒铺全透明底；base 由 `--input`/`--size`/`generate` 得来、非空则先铺 (0,0)），叠加层按 z 序逐层物化（已含缩放与逐层预处理）→按 `transform.opacity` 逐像素乘 alpha→source-over 落位、越界自然裁剪 → 得展平画布图 → 交 `runEngine`（引擎零改动）；
   **缺文件降级为空占位**（合成时跳过），不报错；但**恒向 `stderr` 打一条 `idc: warn:` 汇总**（与 `--verbose` 无关）（提示缺失个数），使无人值守批量运行可见产出降级。加全局 **`--strict`** 则缺文件不再降级，**直接报退出码 3**。
   解码失败（文件存在但非图像 / 不可读）始终报退出码 3，与 `--strict` 无关。
-- **`--assets-dir` 三态**（作业级通用选项，写在子命令之后）：缺省＝不打包、纯约定查找；flag＝与 `--save-config` 同用时把各 `file` 层源图按**相对名**（不哈希）
+- **`--assets-dir` 三态**（作业级通用选项，写在子命令之后）：缺省＝不打包、纯约定查找；flag＝与 `--save-config` 同用时把各图片层 `image.file` 源图按**相对名**（不哈希）
   复制进 `<配置名>.assets/`，使配置可携资源整体分发。相对名含 `..` / 绝对路径 / 盘符 / root_name 一律**越界拒绝**
   （执行时退出码 3；打包时退出码 1）。`=path` 形式：加载时插查找链最前、打包输出到该目录、目录在保存配置目录之内时写 §7 `assetsDir` 字段；同路径（src==dst）幂等跳过。
-- **可复现性**：C++/Rust 逐像素对拍仅覆盖 `recipe` 层（据配方现算）；`file` 层只对拍**结构**（落位 / z 序 / 管线声明）。
+- **可复现性**：C++/Rust 逐像素对拍仅覆盖纯图案层（backdrop 图案据配方现算）；图片层只对拍**结构**（落位 / z 序 / 管线声明）。
 
 ```bash
 # 读取含 layers 段的配置（file 层从配置同目录或 <配置名>.assets/ 取图）

@@ -1,15 +1,19 @@
 // ============================================================================
 // 文件：include/canvas/layer.h
-// 作用：多层画布的数据模型与像素合成（纯逻辑、零 GUI 依赖）——ImageLayer（叠加层的来源 +
-//       落位变换 + 逐层声明式预处理）与 composeCanvas（先落**底图 base**、再按 zOrder 逐层物化（组装+缩放+预处理）→
-//       source-over 落位，写入画布尺寸缓冲，越界自然裁剪）。叠加层集合直接以
+// 作用：多层画布的数据模型与像素合成（纯逻辑、零 GUI 依赖）——ImageLayer（图层框节点：
+//       图案元素 + 图片元素 + 节点外观）与 composeCanvas（先落**底图 base**、再按 zOrder 逐层物化
+//       （组装+缩放+预处理）→ source-over 落位，写入画布尺寸缓冲，越界自然裁剪）。叠加层集合直接以
 //       std::vector<ImageLayer> 承载（无 LayerStack 包装；画布恒铺透明底，无画布级背景概念）。
 // 分块依据：Core 只承载「无头侧也成立」的数据与像素能力；每层的**交互会话态**（选中/编辑/
 //       base_ 缓存编排）归 GUI 的 PreprocessSession，Core 绝不引用 GUI 类型（分层纪律）。
-// 说明：图片只有一个概念——本模块的 ImageLayer「图片图层」（可指文件 / 配方 / 空占位）。
-//       适应模式（ImageFit）与两级落位（图层框→底图 = transform，源图→图层框 = image* 内层字段）
-//       为**持久字段**，使 config 仅凭 fileName（原始源）+ 内/外落位 + 图层框底色即可完整复现，reload 一致。
-//       **底图（画布基座）不是图层**：它走既有输入生态位（file＝外部输入图 / recipe＝generate 段），
+// 说明：SPEC §2.2a「合成模型总纲」——一切皆合成的两级树。图层 = 图层框节点：
+//       · 图案元素 backdrop（可选：图案配方 + 元素外观 backdropPreprocess/backdropOpacity；缺省透明底）；
+//       · 图片元素 image（可选：文件源 + 内层落位 + 元素外观 imagePreprocess/imageOpacity；缺省 = 纯图案层）；
+//       · 节点外观 preprocess + transform.opacity（= 画布节点该内容元素的外观）。
+//       来源判定＝有无图片元素：fileName / decodedPixels / 内层落位任一非空即图片层；无图片元素而有
+//       backdrop 即纯图案层。装配序（materializeLayer / composeBase 唯一口径）：图案元素（生成→其预处理→
+//       其透明度）→ 图片元素（源→适应重采样→其预处理→落位合成施其透明度）→ 区域缩放 → 节点外观。
+//       **底图（画布基座）不是图层**：它走既有输入生态位（file＝外部输入图 / backdrop＝generate 段），
 //       由调用方作为 base 传入 composeCanvas，恒铺满画布、无 transform、不入 layers、不可拖拽；
 //       layers 只装「叠加其上的图片图层」。引擎仍只收一张展平画布图：composeCanvas 的产物即喂给
 //       runEngine 的工作图，引擎零改动。
@@ -28,15 +32,12 @@
 
 namespace idc::canvas {
 
-// 来源类型无显式枚举字段，由载荷三元组派生（单一真相源）：
-//   recipe 有值＝配方源（generate::makePattern 现算）；无 recipe 而 fileName/decodedPixels 有值＝文件源；
-//   三者皆空（仅落位/backdrop）＝空占位 / 运行时位图底（物化为空图，合成时跳过或待上层注入位图）。
-
 // ---------------------------------------------------------------------------
-// ImageFit：内层源图→图层框（boxW×boxH）的适应方式（仅 hasImagePlacement 为真时参与合成）。
+// ImageFit：内层源图→图层框（boxW×boxH）的适应方式（仅图片元素参与合成时生效）。
 //   Crop    —— 源图按原生尺寸贴入图层框、按内层锚点/枢轴/偏移落位，超出图层框部分自然裁掉。
 //   Stretch —— 源图重采样拉伸铺满图层框（忽略宽高比）。
-//   Native  —— 图层框尺寸已等于源图原生尺寸（调用方保证），不缩放、不变形。
+//   Native  —— 图层框恒等于源图原生尺寸：**Core 不校验调用方声明**，有框路径按源尺寸收缩区域
+//              收敛（框≠源尺寸时以源为准），不缩放、不变形。
 // ---------------------------------------------------------------------------
 enum class ImageFit { Crop, Stretch, Native };
 
@@ -63,39 +64,49 @@ struct ImageTransform {
 };
 
 // ---------------------------------------------------------------------------
-// ImageLayer：单条图层记录（来源 + 落位 + z 序 + 逐层预处理）。
-//   来源态无独立字段，由 recipe / fileName / decodedPixels 派生（见上）。
-//   decodedPixels 仅在文件源且上层已解码时非空；配方 / 占位时为空。
-//   id 为跨会话的稳定标识（GUI 引用 / 缓存键），Core 只存取不解释。
+// ImageLayer：图层框节点（SPEC §2.2a）——图案元素 + 图片元素 + 节点落位与外观。
+//   来源态无独立枚举字段：有图片元素（fileName / decodedPixels / hasImagePlacement 任一非空）
+//   → 图片层（可再叠图案元素）；无图片元素而 backdrop 有值 → 纯图案层。
+//   decodedPixels 仅在文件源且上层已解码时非空；id 为跨会话稳定标识（GUI 引用/缓存键），Core 只存取不解释。
 // ---------------------------------------------------------------------------
 struct ImageLayer {
     int id{0};
-    std::optional<generate::PatternParams> recipe;  // 配方来源（provenance，可序列化；不含位图）；有值即配方源。
-    std::string fileName;                            // 文件来源（相对 assets 目录的文件名）
+    // ---- 图片元素（可选：三者皆空 = 无图片元素，纯图案层）----
+    std::string fileName;                            // 文件来源（相对 assets 目录的文件名；layers 段合法、generate 段不落路径）
     core::Image decodedPixels;                       // 上层解码注入的源像素（文件源用；不入配置）
-    ImageTransform transform;
-    // ---- 内层：源图 → 图层框（仅 hasImagePlacement 为真时生效；供对话框附加图片图层两级落位的 config 往返）----
-    //   composeCanvas 先将 decodedPixels（原始源）按 imageFit + 内层锚点/枢轴/偏移合成进 boxWidth×boxHeight
-    //   的图层框（以 boxBackdrop 图案为底、越框裁掉），再将图层框按外层 transform 落到画布。
     bool hasImagePlacement{false};
     ImageFit imageFit{ImageFit::Crop};
-    int boxWidth{0};                                        // 图层框宽（＝对话框顶部宽）
-    int boxHeight{0};                                       // 图层框高（＝对话框顶部高）
+    int boxWidth{0};                                        // 图层框宽（节点区域）
+    int boxHeight{0};                                       // 图层框高
     generate::ImageAnchor imageAnchor{generate::ImageAnchor::Center};   // 内层源图锚点（对齐到图层框的哪个位置）
     generate::ImageAnchor imagePivot{generate::ImageAnchor::Center};    // 内层源图枢轴（源图对齐到锚点的部位）
     int imageX{0};                                          // 内层自由偏移 X
     int imageY{0};                                          // 内层自由偏移 Y
-    std::optional<generate::PatternParams> boxBackdrop;     // 图层框底色/图案（空＝透明底；solid 亦可用本字段）
+    preprocess::PreprocessPipeline imagePreprocess;         // 元素外观·预处理（作用于适应重采样后的源图，先于落位合成）
+    std::uint8_t imageOpacity{255};                         // 元素外观·不透明度（0..255，落位合成时逐像素施乘）
+    // ---- 图案元素（可选：空 = 透明底）----
+    //   纯图案层 = 有 backdrop 无图片元素；图片层的图层框衬底 = backdrop 铺满区域。
+    std::optional<generate::PatternParams> backdrop;
+    preprocess::PreprocessPipeline backdropPreprocess;      // 元素外观·预处理（作用于生成的图案）
+    std::uint8_t backdropOpacity{255};                      // 元素外观·不透明度
+    // ---- 节点落位与外观 ----
+    ImageTransform transform;
+    preprocess::PreprocessPipeline preprocess;              // 节点外观（层级预处理，先物化再落位；口径与顶层 preprocess 一致）
     int zOrder{0};                                   // 叠放次序：0＝最底、越大越靠顶
-    preprocess::PreprocessPipeline preprocess;       // 逐层声明式预处理（进入合成前物化）
 };
 
+// 图片元素是否存在（fileName / 解码像素 / 内层落位任一非空即视为有图片元素）。
+bool hasImageElement(const ImageLayer& layer);
+
 // ---------------------------------------------------------------------------
-// materializeLayer：物化单层的「整层位图」（已组装·已缩放·已预处理·未落位）：取源（配方→makePattern /
-//   文件→解码像素 / 空→空图）→（启用两级落位时）合成进带 boxBackdrop 底色的图层框 → 按 transform 缩放 →
-//   **最后**跑该层 preprocess.applyExec。预处理置于组装/缩放之后：色彩连图层框底色一起变、几何改变最终落位足迹。
-//   不含落位定位（那是 composeCanvas 的合成期职责），故 GUI 可按 (layerId, 来源/框/预处理/目标尺寸签名)
-//   缓存本结果，改 transform.x/y/锚点/不透明度时不重跑。不读取磁盘：File 源依赖 decodedPixels 已被上层注入；未注入则视为空图（占位）。
+// materializeLayer：物化单层的「整层位图」（已组装·已缩放·已预处理·未落位）——装配序（SPEC §2.2a，唯一口径）：
+//   图片元素源处理（适应重采样 → 元素预处理；**源处理前移是无框路径区域尺寸自洽的前提**）→ 区域定尺寸
+//   （有框＝box、Native 按源尺寸收敛；无框＝预处理后源尺寸；纯图案＝transform 目标）→ 图案元素
+//   （生成→其预处理→其透明度）→ 图片元素落位合成施其透明度（source-over 叠于图案之上）→ 区域缩放 →
+//   节点外观（preprocess）。
+//   不含落位定位（那是 composeCanvas 的合成期职责），故 GUI 可按 (layerId, 元素+节点签名)
+//   缓存本结果，改 transform.x/y/锚点/不透明度时不重跑。不读取磁盘：File 源依赖 decodedPixels 已被上层注入；
+//   未注入且无落位则视为空图（占位）。
 // ---------------------------------------------------------------------------
 core::Image materializeLayer(const ImageLayer& layer);
 

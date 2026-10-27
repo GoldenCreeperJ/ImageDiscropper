@@ -9,7 +9,7 @@
 //       返回空图（0×0），调用方据此判失败。护栏在分配像素前短路，绝不至 bad_alloc。
 //       底色 alpha 直接写入像素，alpha<255 即得透明/半透明画布。
 //       图片不作为程序化图案类型：它是 canvas::ImageLayer「图片图层」（见 include/canvas/layer.h），
-//       由 GUI 附加层入口经两段合成（图片→图层框→底图，composeCanvas）落入画布，本模块无图片像素逻辑。
+//       由 canvas::ImageLayer 图片元素经 materializeLayer / composeCanvas 装配序落入画布，本模块无图片像素逻辑。
 // ============================================================================
 #pragma once
 

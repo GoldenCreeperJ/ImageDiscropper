@@ -188,7 +188,7 @@ core::Image EngineBridge::materializeLayer(const canvas::ImageLayer& layer) {
     return canvas::materializeLayer(layer);
 }
 
-// 底图展平：委托 Core canvas::composeBase（纯图案底按 source 尺寸现算；文件底转调 composeCanvas 两段合成）。
+// 底图展平：委托 Core canvas::composeBase（纯图案底按 source 尺寸现算；图片底转调 composeCanvas 装配序合成）。
 core::Image EngineBridge::composeBase(const canvas::ImageLayer& base, const int width, const int height) {
     return canvas::composeBase(base, width, height);
 }

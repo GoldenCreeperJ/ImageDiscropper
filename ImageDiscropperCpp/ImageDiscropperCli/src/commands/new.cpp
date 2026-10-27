@@ -95,9 +95,9 @@ int cmdNew(const std::vector<std::string>& tokens, const GlobalOptions& go) {
     engine::EngineConfig config;
     config.source.width = width;
     config.source.height = height;
-    // 程序生成底图：同构 canvas::ImageLayer（有 recipe、transform 恒等），序列化后即为配置的 generate 段。
+    // 程序生成底图：同构 canvas::ImageLayer（图案元素、无图片元素、transform 恒等），序列化后即为配置的 generate 段。
     canvas::ImageLayer base;
-    base.recipe = params;
+    base.backdrop = params;
     config.base = base;
     config.exportParams = exportParams;
     // 全幅保留的切割段：使配置经 config --load 可直接复现画布（全幅保留＝整图输出，语义无损）。

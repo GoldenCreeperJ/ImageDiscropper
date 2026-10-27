@@ -196,6 +196,7 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"msg::kLogGenCanvas", "generated canvas input "},
     {"msg::kErrAnnoFileUnreadable", "annotation file does not exist or is unreadable: "},
     {"msg::kErrLayerFileUnreadable", "layer file does not exist or is unreadable: "},
+    {"msg::kErrLayerFlatSyntax", "layer argument syntax error: "},
     {"msg::kErrMissingInput", "missing input image"},
         {"msg::kErrPatternNeedsSize", "pattern arguments must be given together with --size"},
     {"msg::kHintPatternNeedsSize", "--pattern and the other generation arguments only apply to a --size generated canvas: add --size WxH"},

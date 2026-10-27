@@ -98,7 +98,7 @@ void SessionController::onNew() const {
     history_->reset();                        // 换底图开新撤销会话。
     // 附加图片底（新建画布内选源图）也接入 MRU：与「打开图像」同口径——仅本地可再开路径登记、跳过 content://
     //（Android SAF 原始 URI 不可复用，provenance 另存的私有副本亦不入最近列表）。
-    if (const auto& base = dlg.resultBaseLayer(); base && !base->recipe.has_value() && !base->decodedPixels.empty()) {
+    if (const auto& base = dlg.resultBaseLayer(); base && !base->backdrop.has_value() && !base->decodedPixels.empty()) {
         if (const QString& src = dlg.imageSourceOriginalPath(); !src.isEmpty() && !src.startsWith(QString::fromUtf8(texts::ident::kContentUriScheme))) {
             UiPrefs::instance().addRecentFile(src);
             UiPrefs::instance().setLastOpenDir(QFileInfo(src).absolutePath());
@@ -109,8 +109,8 @@ void SessionController::onNew() const {
 
 // 图层编辑「添加图片」：复用「新建画布」对话框采参，往现有画布追加一个图片图层（SPEC §8.2：不撑大，
 // 超出画布部分合成时自然裁剪）。有图即图层画布；ensureLayerCanvas 仅作空文档兜底。
-//   · 勾选附加图片 路 → File 层：携「适应 + 图片相对图层」内层落位烘进图层框的像素（图层内容）+ 外层「图层相对底图」落位作 transform，另携源图相对名 provenance（位图不入配置、无法由配方复现）。
-//   · 未勾选（纯图案）路 → Recipe 层：携 PatternParams，合成时按 transform 尺寸经 makePattern 现算（配方入 config、可导出、可复现）。
+//   · 勾选附加图片 路 → 图片层：携「适应 + 图片相对图层」内层落位烘进图层框的像素（图层内容）+ 外层「图层相对底图」落位作 transform，另携源图相对名 provenance（位图不入配置、无法由配方复现）。
+//   · 未勾选（纯图案）路 → 纯图案层：携 PatternParams，合成时按 transform 尺寸经 makePattern 现算（配方入 config、可导出、可复现）。
 // id / zOrder 由 Document::addImageLayer 统一分配。
 void SessionController::onAddImageLayer() const {
     if (!doc_->hasImage()) {
@@ -125,13 +125,16 @@ void SessionController::onAddImageLayer() const {
 
     canvas::ImageLayer layer;
     if (dlg.producesLayerCanvas()) {
-        // 附加图片路：取对话框构造的可序列化 File 层（原始源 + 两级落位 + 图层框底色），仅补 fileName（相对名作 provenance、供落 assets）。
+        // 附加图片路：取对话框构造的可序列化图片层（原始源 + 两级落位 + 图案元素与两元素外观），仅补 fileName（相对名作 provenance、供落 assets）。
         layer = dlg.resultLayer();
         if (const QString& srcPath = dlg.imageSourcePath(); !srcPath.isEmpty())
             layer.fileName = QFileInfo(srcPath).fileName().toStdString();
     } else {
-        // 未勾附加图片的程序化图案：作配方层——recipe 可序列化供 config 导出、合成时 makePattern 现算（与对话框预览逐像素一致）。
-        layer.recipe = dlg.resultParams();
+        // 未勾附加图片的程序化图案：作纯图案层——backdrop 图案元素可序列化供 config 导出、合成时 makePattern 现算（与对话框预览逐像素一致）。
+        layer.backdrop = dlg.resultParams();
+        layer.backdropPreprocess = dlg.resultBackdropPreprocess();   // 图案元素外观（对话框采集）。
+        layer.backdropOpacity = static_cast<std::uint8_t>(std::clamp(dlg.resultBackdropOpacity(), 0, 255));
+        layer.preprocess = dlg.resultNodePreprocess();   // 节点外观预处理（对话框第三简表采集）。
         const core::Image& generated = dlg.resultImage();
         layer.transform.width = generated.width();    // 目标尺寸＝对话框生成的图案尺寸。
         layer.transform.height = generated.height();

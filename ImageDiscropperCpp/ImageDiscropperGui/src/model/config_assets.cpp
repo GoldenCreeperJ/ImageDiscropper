@@ -52,20 +52,17 @@ std::filesystem::path resolveLayerAsset(const std::string& configPath,
 
     // ① 显式「从哪里导入」（对话框资产来源）——最优先；相对路径按配置所在目录解析（绝对路径原样）。
     if (!assetsDirOverride.empty()) {
-        const std::filesystem::path hit = firstExisting(baseDir / core::pathFromUtf8(assetsDirOverride), assetName);
-        if (!hit.empty()) return hit;
+        if (const std::filesystem::path hit = firstExisting(baseDir / core::pathFromUtf8(assetsDirOverride), assetName); !hit.empty()) return hit;
     }
     // ② config.assetsDir 声明（相对配置目录；若与显式来源相同已查过，跳过）。
     if (!assetsDirDeclared.empty() && assetsDirDeclared != assetsDirOverride) {
-        const std::filesystem::path hit = firstExisting(baseDir / core::pathFromUtf8(assetsDirDeclared), assetName);
-        if (!hit.empty()) return hit;
+        if (const std::filesystem::path hit = firstExisting(baseDir / core::pathFromUtf8(assetsDirDeclared), assetName); !hit.empty()) return hit;
     }
     // ③ <配置名>.assets/（约定目录，仅当有配置文件）。
     if (!configPath.empty()) {
         std::filesystem::path assetsName = core::pathFromUtf8(configPath).stem();
         assetsName += std::filesystem::path(L".assets");
-        const std::filesystem::path hit = firstExisting(baseDir / assetsName, assetName);
-        if (!hit.empty()) return hit;
+        if (const std::filesystem::path hit = firstExisting(baseDir / assetsName, assetName); !hit.empty()) return hit;
     }
     // ④ 配置所在目录（兜底）。
     return firstExisting(baseDir, assetName);
@@ -76,7 +73,7 @@ bool decodeFileLayers(engine::EngineConfig& config, const std::string& configPat
     if (!config.layers.has_value()) return true;
     missing = 0;
     for (canvas::ImageLayer& layer : *config.layers) {
-        if (layer.fileName.empty() || layer.recipe.has_value()) continue;
+        if (layer.fileName.empty()) continue;   // 无图片元素（纯图案层）→ 无资产可解码
         if (!isSafeLayerAsset(layer.fileName)) {
             err = layer.fileName;   // 越界拒绝：调用方据此拼报因（拒绝优先于静默）。
             return false;
@@ -96,7 +93,7 @@ bool bundleFileLayers(const engine::EngineConfig& config, const std::filesystem:
     if (!config.layers.has_value()) return true;
     std::error_code ec;
     for (const canvas::ImageLayer& layer : *config.layers) {
-        if (layer.fileName.empty() || layer.recipe.has_value()) continue;
+        if (layer.fileName.empty()) continue;   // 无图片元素（纯图案层）→ 无资产可打包
         if (!isSafeLayerAsset(layer.fileName)) { err = layer.fileName; return false; }
         if (layer.decodedPixels.empty()) { err = layer.fileName; return false; }   // 缺像素不静默。
         const std::filesystem::path dst = targetDir / core::pathFromUtf8(layer.fileName);

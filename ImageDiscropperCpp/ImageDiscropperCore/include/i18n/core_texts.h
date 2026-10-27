@@ -9,7 +9,7 @@
 //       · common —— 跨段复用的同名键（width/height/x/y/kind/opacity/…）只定义一次，
 //         避免同一键名在写出侧与读取侧各写一份而漂移（这是本文件存在的核心理由）。
 //       · config —— §7 顶层与 source/cut/select/order/export/merge/arrange 段（src/engine/config_json/engine_config_json.cpp）。
-//       · layer  —— generate 段与 layers[i] 的 source/transform/imagePlacement（同上 + config_json/engine_config_json_internal.h；
+//       · layer  —— generate 段与 layers[i] 的 image/backdrop/transform 段内键（同上 + config_json/engine_config_json_internal.h；
 //                  config_json/schema_validate.cpp 校验、config_json/percent_coords.cpp 换算 transform 百分比）。
 //       · anno   —— annotations 段逐条元素（src/annotation/annotation_json.cpp 写侧 / annotation_json_parse.cpp 读侧）。
 //       · pre    —— 预处理步骤 {op, ...params}（写出在 config_json/engine_config_json_internal.h，读取在 config_json/engine_config_json.cpp；
@@ -95,12 +95,15 @@ inline constexpr char kArrange[] = "arrange";         // export.merge.arrange �
 } // namespace config
 
 // ---------------------------------------------------------------------------
-// layer：generate 段（底图）与 layers[i]（图层）的 source / transform / imagePlacement
-//       （src/engine/config_json/engine_config_json.cpp + config_json/engine_config_json_internal.h；
-//        config_json/schema_validate.cpp 校验、config_json/percent_coords.cpp 换算 transform 百分比）。
+// layer：generate 段（底图）与 layers[i]（图层）的元素分块键（v2 schema，SPEC §2.2a/§7）——
+//       image（图片元素）/ backdrop（图案元素）两对象 + transform / zOrder / preprocess。
+//       旧版（v1）键不再受支持：不识别、按未知键静默忽略（破坏性更新，无迁移）。
 // ---------------------------------------------------------------------------
 namespace layer {
-inline constexpr char kRecipe[] = "recipe";           // source.recipe（图案配方）。
+inline constexpr char kImage[] = "image";             // 图片元素对象（v2：file/fit/box*/anchor/pivot/x/y/preprocess/opacity）。
+inline constexpr char kAnchor[] = "anchor";           // image 元素内：源图锚点（9 向）。
+inline constexpr char kPivot[] = "pivot";             // image 元素内：源图枢轴（9 向）。
+inline constexpr char kBackdrop[] = "backdrop";       // 图案元素对象（v2：图案键族 + preprocess/opacity）。
 inline constexpr char kBackground[] = "background";   // 图案背景色（十六进制串）。与 GUI palette 键名 gui_texts::ident::kPaletteBackground 同字纯属巧合，不是同一个值。
 inline constexpr char kForeground[] = "foreground";   // 图案前景色。
 inline constexpr char kOrientation[] = "orientation"; // 图案方向（gradient/stripes 用）。
@@ -120,13 +123,9 @@ inline constexpr char kAxisCount[] = "count";          // 分轴分割数形态�
 inline constexpr char kAxisWeights[] = "weights";      // 分轴比例形态：权重数组。
 inline constexpr char kInCanvasAnchor[] = "inCanvasAnchor"; // transform：层在画布内的锚点。
 inline constexpr char kLayerPivot[] = "layerPivot";   // transform：层旋转枢轴。
-inline constexpr char kImagePlacement[] = "imagePlacement"; // 图层内层两级落位段（可选）。
 inline constexpr char kFit[] = "fit";                 // 源图→图层框适应方式（crop/stretch/native）。
 inline constexpr char kBoxWidth[] = "boxWidth";       // 落位框宽。
 inline constexpr char kBoxHeight[] = "boxHeight";     // 落位框高。
-inline constexpr char kImageAnchor[] = "imageAnchor"; // 源图在框内锚点。
-inline constexpr char kImagePivot[] = "imagePivot";   // 源图旋转枢轴。
-inline constexpr char kBackdrop[] = "backdrop";       // 落位框背板图案（复用 patternParams 键集）。
 } // namespace layer
 
 // ---------------------------------------------------------------------------
@@ -188,7 +187,7 @@ inline constexpr char kExportModeMerged[] = "merged";              // 缺 export
 inline constexpr char kFormatPng[] = "png";                      // 缺 export.format。
 inline constexpr char kLayoutCollapse[] = "collapse";            // 缺 export.merge.layout。
 inline constexpr char kRemainderDiscard[] = "discard";           // 缺 cut.params.grid.remainder。
-inline constexpr char kPatternKindSolid[] = "solid";             // 缺 generate.kind / 图层 recipe.kind。
+inline constexpr char kPatternKindSolid[] = "solid";             // 缺图案元素 kind（generate.backdrop / layers[i].backdrop）。
 inline constexpr char kPatternBackground[] = "#FFFFFFFF";        // 缺配方 background：白底不透明。
 inline constexpr char kPatternForeground[] = "#FF000000";        // 缺配方 foreground：黑前景（与 background 可各自演化，故不合并）。
                                                                   // 与 defaults::kAnnotationColor 同字不同义（图案前景 / 标注色），各立一条。
@@ -272,11 +271,13 @@ inline constexpr char kErrAnnoParseFailed[] = "标注 JSON 解析失败：";  //
 inline constexpr char kErrAnnoPercentNoBasis[] = "标注几何 '%1' 使用了百分比，但坐标基准尺寸未知（须先确定工作图宽高）";
 
 // §7 配置 schema 严格校验报因（src/engine/config_json/schema_validate.cpp::validateSchema）：
-//   仅当键「显式写出且值非 null」而类型/取值非法时才报错；缺失/null 仍走默认（向后兼容不变）。
-//   %1＝JSON 路径（如 cut.tier / layers[0].source.recipe.kind），%2＝原值——皆数据，不译。
+//   仅当键「显式写出且值非 null」而类型/取值非法时才报错；缺失/null 仍走默认。旧版（v1）键不识别、按未知键静默忽略。
+//   %1＝JSON 路径（如 cut.tier / layers[0].image.anchor），%2＝原值——皆数据，不译。
 inline constexpr char kErrConfigNotObject[] = "配置字段 '%1' 须为对象";
 inline constexpr char kErrConfigNotArray[] = "配置字段 '%1' 须为数组";
 inline constexpr char kErrConfigNotInteger[] = "配置字段 '%1' 须为整数";
+// 已知 v2 键写错段（如 generate.image 内写 file/boxWidth/boxHeight）：显式报因，防静默丢字段。
+inline constexpr char kErrConfigIllegalKey[] = "配置字段 '%1' 不是本段合法键";
 // 坐标键专有：整数或百分比串（几何量有明确基准尺寸，可用 "50%" 表达相对位置/尺寸）。
 inline constexpr char kErrConfigNotCoord[] = "配置字段 '%1' 须为整数或百分比串（如 \"50%\"），实际为 %2";
 // 百分比已给出但基准尺寸未知（source 宽高缺失 / 非正）：无法换算成像素。

@@ -32,23 +32,28 @@
 namespace idc::gui {
 
 // ---------------------------------------------------------------------------
-// LayerSig：图层物化签名——覆盖 materializeLayer（整层位图：组装含底色框→缩放→预处理）读取的全部输入：
-//   来态（无独立 kind 字段）由 fileName / hasRecipe / 解码像素布局派生，已由下列字段入键：逐层 preprocess / 文件名 /
-//   解码像素布局 / 配方参数 / 目标尺寸 / 内层落位与图层框
-//   （hasImagePlacement / box / fit / 锚点枢轴偏移 / boxBackdrop）。缩放与进框发生在 materializeLayer 内，
-//   整层位图依赖它们，故均入键；transform.x/y/anchor/layerPivot/opacity/zOrder 恒不入键——改落位或不透明度
-//   只重组、不重跑。解码像素以「空态 + 宽高」作内容代理。
+// LayerSig：图层物化签名——覆盖 materializeLayer（装配序见 SPEC §2.2a 唯一口径）读取的全部输入：
+//   来源态（图片元素有无由 fileName / 解码像素布局 / 内层落位派生）+ 元素外观（image/backdrop 两段 preprocess/opacity）+
+//   图案元素配方 + 目标尺寸 + 内层落位与图层框。缩放与进框发生在 materializeLayer 内，整层位图依赖它们，故均入键；
+//   transform.x/y/anchor/layerPivot/opacity/zOrder 恒不入键——改落位或不透明度只重组、不重跑。
+//   解码像素以「空态 + 宽高」作内容代理。
 // ---------------------------------------------------------------------------
 struct LayerSig {
-    preprocess::PreprocessPipeline pre;           // 逐层预处理（物化输入）
+    preprocess::PreprocessPipeline pre;           // 节点外观（层级预处理，物化输入）
     std::string fileName;                         // 文件层相对名
     int decW{0};
     int decH{0};
     bool decEmpty{true};                          // 文件层解码像素布局（空态/尺寸）作内容代理
     int tw{0};
     int th{0};                                    // 目标尺寸（恒入键：materializeLayer 按此缩放）
-    bool hasRecipe{false};
-    std::optional<generate::PatternParams> recipe;
+    // ---- 图片元素外观（物化输入）----
+    preprocess::PreprocessPipeline imagePre;      // imagePreprocess
+    std::uint8_t imageOpacity{255};               // imageOpacity
+    // ---- 图案元素（物化输入）----
+    bool hasBackdrop{false};
+    std::optional<generate::PatternParams> backdrop;
+    preprocess::PreprocessPipeline backdropPre;   // backdropPreprocess
+    std::uint8_t backdropOpacity{255};            // backdropOpacity
     // ---- 内层落位 / 图层框（materializeLayer 组装阶段读取，故入键）----
     bool hasPlacement{false};                      // canvas::ImageLayer.hasImagePlacement
     int boxW{0};
@@ -58,15 +63,15 @@ struct LayerSig {
     int imagePivot{0};                              // 内层锚点/枢轴（generate::ImageAnchor 序号）
     int imageX{0};
     int imageY{0};                                  // 内层自由偏移
-    bool hasBackdrop{false};
-    std::optional<generate::PatternParams> backdrop; // 图层框底色/图案
 
     bool operator==(const LayerSig& o) const {
         if (fileName != o.fileName) return false;
         if (decEmpty != o.decEmpty || decW != o.decW || decH != o.decH) return false;
         if (pre != o.pre) return false;   // 预处理队列逐项相等（复用 PreprocessPipeline::operator==）
-        if (hasRecipe != o.hasRecipe) return false;
-        if (hasRecipe && !(recipe == o.recipe)) return false;
+        if (imagePre != o.imagePre || imageOpacity != o.imageOpacity) return false;
+        if (backdropPre != o.backdropPre || backdropOpacity != o.backdropOpacity) return false;
+        if (hasBackdrop != o.hasBackdrop) return false;
+        if (hasBackdrop && !(backdrop == o.backdrop)) return false;
         // 缩放发生在 materializeLayer 内（整层位图）→ 目标尺寸恒入键。
         if (tw != o.tw || th != o.th) return false;
         // 内层落位 / 图层框：仅启用两级落位时参与（决定组装后的框位图）。
@@ -75,8 +80,6 @@ struct LayerSig {
             if (boxW != o.boxW || boxH != o.boxH) return false;
             if (imageFit != o.imageFit || imageAnchor != o.imageAnchor || imagePivot != o.imagePivot) return false;
             if (imageX != o.imageX || imageY != o.imageY) return false;
-            if (hasBackdrop != o.hasBackdrop) return false;
-            if (hasBackdrop && !(backdrop == o.backdrop)) return false;
         }
         return true;
     }

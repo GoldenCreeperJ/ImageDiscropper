@@ -749,19 +749,19 @@ static void testConfigAssets() {
     const std::string cfgPath = (dir / "cfg.json").string();
 
     // 查找链：约定 .assets → 配置目录；声明目录（config.assetsDir）优于约定；显式来源最优先。
-    CHECK(gui::resolveLayerAsset(cfgPath, /*declared=*/"", /*override=*/"", "sub/b.png") == dir / "cfg.assets" / "sub" / "b.png");
+    CHECK(gui::resolveLayerAsset(cfgPath, "", "", "sub/b.png") == dir / "cfg.assets" / "sub" / "b.png");
     CHECK(gui::resolveLayerAsset(cfgPath, "", "", "sub/a.png") == dir / "sub" / "a.png");
     CHECK(gui::resolveLayerAsset(cfgPath, "custom", "", "c.png") == dir / "custom" / "c.png");
     CHECK(gui::resolveLayerAsset(cfgPath, "", (dir / "override").string(), "d.png") == dir / "override" / "d.png");
     CHECK(gui::resolveLayerAsset(cfgPath, "", "", "nope.png").empty());
 
-    // decodeFileLayers：file 层按链解码注入（含子目录相对名）；缺文件计数、保持空像素；recipe 层不动。
+    // decodeFileLayers：file 层按链解码注入（含子目录相对名）；缺文件计数、保持空像素；纯图案层（无图片元素）不动。
     {
         engine::EngineConfig cfg;
         std::vector<canvas::ImageLayer> layers(3);
         layers[0].fileName = "sub/a.png";
         layers[1].fileName = "missing.png";
-        layers[2].recipe = generate::PatternParams{};
+        layers[2].backdrop = generate::PatternParams{};
         cfg.layers = std::move(layers);
         int missing = 0;
         std::string err;
@@ -769,7 +769,7 @@ static void testConfigAssets() {
         CHECK(missing == 1);
         CHECK(!(*cfg.layers)[0].decodedPixels.empty());
         CHECK((*cfg.layers)[1].decodedPixels.empty());
-        CHECK((*cfg.layers)[2].recipe.has_value());
+        CHECK((*cfg.layers)[2].backdrop.has_value());
     }
 
     // decodeFileLayers：越界名 → 拒绝（false + err 非空）。
@@ -1540,7 +1540,7 @@ static void testGenerate() {
     CHECK(gp.r == gp.g && gp.g == gp.b && gp.a == 255);
 
     // 图片不是程序化图案类型：落位统一走 composeCanvas
-    //   两段合成（见 testCanvas 的 File 层缩放/锚点落位/越界裁剪用例）。
+    //   装配序（见 testCanvas 的图片层缩放/锚点落位/越界裁剪用例）。
 
     std::cout << "[generate] OK\n";
 }
@@ -1631,19 +1631,109 @@ static void testCanvas() {
         CHECK(out2.getPixel(1, 0).a == 0);
     }
 
-    // ---- 配方层：recipe 经 makePattern 现算（Solid 绿 2×2），居中入 4×4 ----
+    // ---- 纯图案层：backdrop 经 makePattern 现算（Solid 绿 2×2），居中入 4×4 ----
     {
         std::vector<ImageLayer> st;
         ImageLayer rl;
         generate::PatternParams pp; pp.kind = generate::PatternKind::Solid; pp.background = green;
-        rl.recipe = pp; rl.transform.width = 2; rl.transform.height = 2; rl.zOrder = 0;
+        rl.backdrop = pp; rl.transform.width = 2; rl.transform.height = 2; rl.zOrder = 0;
         st = {rl};
         const core::Image out = composeCanvas(st, 4, 4);
         CHECK(out.getPixel(1, 1) == green);   // 居中偏移 (1,1)
         CHECK(out.getPixel(0, 0).a == 0);     // 画布外区域透明
     }
 
-    // ---- 逐层预处理物化：File 层不透明红 + Invert → materialize 反色、alpha 不变（不透明度属合成期，非预处理步）----
+    // ---- 无内层落位的图片元素：source-over 叠于图案之上（图案元素不因图片而丢） ----
+    {
+        ImageLayer a;
+        generate::PatternParams pp; pp.kind = generate::PatternKind::Solid; pp.background = green;
+        a.backdrop = pp;   // 无落位 → 区域＝源尺寸（2×2），图案先生成
+        a.decodedPixels = core::Image(2, 2, core::ImageFormat::Rgba);
+        a.decodedPixels.setPixel(0, 0, core::Color(0, 0, 0, 0));   // 透明 → 透出图案
+        a.decodedPixels.setPixel(1, 0, red);                       // 不透明 → 盖住图案
+        a.decodedPixels.setPixel(0, 1, core::Color(0, 0, 0, 0));
+        a.decodedPixels.setPixel(1, 1, red);
+        const core::Image mat = materializeLayer(a);
+        CHECK(mat.getPixel(0, 0) == green);
+        CHECK(mat.getPixel(1, 0) == red);
+        CHECK(mat.getPixel(1, 1) == red);
+        // 元素不透明度只作用于图片：red a=255 × opacity128 → (255·128+127)/255=128，叠绿底；图案不受影响。
+        a.imageOpacity = 128;
+        const core::Image mat2 = materializeLayer(a);
+        CHECK(mat2.getPixel(1, 0) == core::compositeOver(green, core::Color(255, 0, 0, 128)));
+        CHECK(mat2.getPixel(0, 0) == green);
+    }
+
+    // ---- 图层框 ≤0（退化＝无图层框）：源图按源尺寸直接叠于图案（不整层丢弃） ----
+    {
+        ImageLayer a;
+        generate::PatternParams pp; pp.kind = generate::PatternKind::Solid; pp.background = green;
+        a.backdrop = pp;
+        a.hasImagePlacement = true;   // 有 fit 但框 ≤0
+        a.boxWidth = 0; a.boxHeight = 0;
+        a.decodedPixels = core::Image(2, 2, core::ImageFormat::Rgba);
+        a.decodedPixels.setPixel(0, 0, core::Color(0, 0, 0, 0));
+        a.decodedPixels.setPixel(1, 1, red);
+        const core::Image mat = materializeLayer(a);
+        CHECK(!mat.empty());   // 不再整层丢弃
+        CHECK(mat.width() == 2 && mat.height() == 2);
+        CHECK(mat.getPixel(0, 0) == green);
+        CHECK(mat.getPixel(1, 1) == red);
+    }
+
+    // ---- 图片元素外观几何步：落位前施于源，区域（图层框）尺寸不被改写 ----
+    {
+        ImageLayer a;
+        a.hasImagePlacement = true;
+        a.boxWidth = 4; a.boxHeight = 4;
+        a.imageAnchor = generate::ImageAnchor::TopLeft;
+        a.imagePivot = generate::ImageAnchor::TopLeft;
+        a.decodedPixels = core::Image(4, 2, core::ImageFormat::Rgba);   // 4×2：左半红右半蓝
+        for (int y = 0; y < 2; ++y) for (int x = 0; x < 4; ++x)
+            a.decodedPixels.setPixel(x, y, x < 2 ? red : blue);
+        a.imagePreprocess.add(preprocess::RotateOp{90});   // 旋转 → 2×4，落位按新宽高
+        const core::Image mat = materializeLayer(a);
+        CHECK(mat.width() == 4 && mat.height() == 4);   // 区域仍是图层框
+        bool hasRed = false; bool hasBlue = false; bool hasTransparent = false;
+        for (int y = 0; y < 4; ++y) for (int x = 0; x < 4; ++x) {
+            const core::Color c = mat.getPixel(x, y);
+            if (c == red) hasRed = true;
+            else if (c == blue) hasBlue = true;
+            if (c.a == 0) hasTransparent = true;
+        }
+        CHECK(hasRed && hasBlue && hasTransparent);   // 内容在位、框内余下透明
+    }
+
+    // ---- Native 有框路径：区域按源尺寸收敛（框≠源尺寸时以源为准，Core 不校验调用方） ----
+    {
+        ImageLayer a;
+        a.hasImagePlacement = true;
+        a.imageFit = ImageFit::Native;
+        a.boxWidth = 4; a.boxHeight = 4;   // 框 4×4 ≠ 源 2×2：Native 收敛到源尺寸
+        a.decodedPixels = solid(2, 2, red);
+        const core::Image mat = materializeLayer(a);
+        CHECK(mat.width() == 2 && mat.height() == 2);
+        CHECK(mat.getPixel(0, 0) == red && mat.getPixel(1, 1) == red);
+    }
+
+    // ---- 无框 + 图片元素外观几何步：区域＝预处理后源尺寸（不被原尺寸裁剪/留白；Core 侧防线收口） ----
+    {
+        ImageLayer a;
+        generate::PatternParams pp; pp.kind = generate::PatternKind::Solid; pp.background = green;
+        a.backdrop = pp;
+        a.decodedPixels = core::Image(4, 2, core::ImageFormat::Rgba);   // 4×2：左半红右半蓝
+        for (int y = 0; y < 2; ++y) for (int x = 0; x < 4; ++x)
+            a.decodedPixels.setPixel(x, y, x < 2 ? red : blue);
+        a.imagePreprocess.add(preprocess::RotateOp{90});   // 旋转 → 2×4：无框区域随之后移
+        const core::Image mat = materializeLayer(a);
+        CHECK(mat.width() == 2 && mat.height() == 4);   // 区域＝旋转后 2×4（非原 4×2）
+        for (int y = 0; y < 4; ++y) for (int x = 0; x < 2; ++x) {
+            const core::Color c = mat.getPixel(x, y);
+            CHECK(c == red || c == blue);   // 整幅被源覆盖：无裁剪缺失、无图案留白
+        }
+    }
+
+    // ---- 节点外观预处理物化：图片层不透明红 + Invert → materialize 反色、alpha 不变（不透明度属合成期，非预处理步）----
     {
         ImageLayer a; a.decodedPixels = solid(2, 2, red);
         a.preprocess.add(preprocess::InvertOp{"111"});
@@ -1744,7 +1834,7 @@ static void testCanvas() {
         generate::PatternParams pp;
         pp.kind = generate::PatternKind::Solid;
         pp.background = green;
-        base.recipe = pp;   // transform 恒等（width/height=0），不走 materializeLayer 的尺寸回归
+        base.backdrop = pp;   // transform 恒等（width/height=0），不走 materializeLayer 的尺寸回归
         const core::Image pat = composeBase(base, 4, 4);
         CHECK(pat.width() == 4 && pat.height() == 4);
         CHECK(pat.getPixel(0, 0) == green && pat.getPixel(3, 3) == green);
@@ -1772,7 +1862,7 @@ static void testCanvas() {
         ImageLayer a; a.id = 20;   // decodedPixels 空（仅靠底色框呈现）
         a.hasImagePlacement = true; a.boxWidth = 2; a.boxHeight = 2;
         generate::PatternParams bd; bd.kind = generate::PatternKind::Solid; bd.background = green;
-        a.boxBackdrop = bd;
+        a.backdrop = bd;
         a.preprocess.add(preprocess::InvertOp{"111"});
         a.transform.inCanvasAnchor = generate::ImageAnchor::TopLeft;
         a.transform.layerPivot = generate::ImageAnchor::TopLeft;
@@ -1785,7 +1875,7 @@ static void testCanvas() {
     {
         ImageLayer a; a.id = 21;
         a.decodedPixels = solid(2, 4, red);
-        a.transform.width = 2; a.transform.height = 4;    // scaleToTarget 不覆盖几何步：旋转后宽高互换，不被拉回 2×4
+        a.transform.width = 2; a.transform.height = 4;    // 区域缩放不覆盖几何步：旋转后宽高互换，不被拉回 2×4
         a.preprocess.add(preprocess::RotateOp{90});
         const auto p = layerPlacement(a, 8, 8);
         CHECK(p.has_value() && p->width == 4 && p->height == 2);   // 几何步改变最终足迹（4×2）

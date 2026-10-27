@@ -33,14 +33,14 @@ std::filesystem::path resolveLayerAsset(const std::string& configPath,
 
 // 加载侧「导入图层资产」：遍历 config.layers 的 file 层按查找链解码注入 decodedPixels（Core readImageFile）；
 // 未命中 → 保持空（降级占位）并计入 missing；file 名越界 → 写 err 返回 false（拒绝优先，不静默）。
-// 无 layers / 全 recipe 层时无操作返回 true。
+// 无 layers / 全纯图案层时无操作返回 true。
 bool decodeFileLayers(engine::EngineConfig& config, const std::string& configPath,
                       const std::string& assetsDirOverride, int& missing, std::string& err);
 
 // 保存侧「打包图层资产」：遍历 config.layers 的 file 层，把非空 decodedPixels 按相对名写盘进
 //   targetDir（调用方传「导出到哪里」；为空则写进 <保存配置名>.assets/，由调用方算好传入）。
 //   decodedPixels 为空 → 写 err 返回 false（缺像素不静默，调用方据此报因）；file 名越界 → err。
-// 无 layers / 全 recipe 层时无操作返回 true。
+// 无 layers / 全纯图案层时无操作返回 true。
 bool bundleFileLayers(const engine::EngineConfig& config, const std::filesystem::path& targetDir,
                       std::string& err);
 

@@ -370,7 +370,7 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"tooltip::kPatternSeedSpin", "Noise seed: same seed + size always gives the same image"},
     {"tooltip::kLayerPlaceRowTip", "Placement of the layer box relative to the base (segment 2: where the layer box is placed on the base)."},
     {"tooltip::kImagePlaceRowTip", "Placement of the image relative to the layer box (segment 1: where the source is placed within the layer box)."},
-    {"tooltip::kAttachImageTip", "When checked, place a source image into the layer box by the fit mode, then set it on the base by the layer placement (two-segment composite);\nwhen unchecked, you can export a pure-pattern canvas directly."},
+    {"tooltip::kAttachImageTip", "When checked, place a source image into the layer box by the fit mode, then set it on the base by the layer placement;\nwhen unchecked, you can export a pure-pattern canvas directly."},
     {"tooltip::kPickSourceImageBtn", "Choose the source image to attach (PNG/JPG/BMP/WebP, etc.), decoded by the engine"},
 };
 

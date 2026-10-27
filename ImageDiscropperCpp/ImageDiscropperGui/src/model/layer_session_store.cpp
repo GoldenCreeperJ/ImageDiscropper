@@ -7,8 +7,8 @@
 
 namespace idc::gui {
 
-// 依图层现声明算其物化签名：字段口径见 LayerSig 头注（来源由 fileName/hasRecipe/解码像素派生 + 目标尺寸 +
-// 内层落位/图层框；恒不含 transform 落位/不透明度——改这些只重组、不重跑）。
+// 依图层现声明算其物化签名：字段口径见 LayerSig 头注（图片元素由 fileName/解码像素布局/内层落位派生 +
+// 元素外观 + 图案元素 + 目标尺寸 + 内层落位/图层框；恒不含 transform 落位/不透明度——改这些只重组、不重跑）。
 LayerSig LayerSessionStore::makeSig(const canvas::ImageLayer& layer) {
     LayerSig s;
     s.pre = layer.preprocess;
@@ -18,8 +18,12 @@ LayerSig LayerSessionStore::makeSig(const canvas::ImageLayer& layer) {
     s.decH = layer.decodedPixels.height();
     s.tw = layer.transform.width;
     s.th = layer.transform.height;
-    s.hasRecipe = layer.recipe.has_value();
-    s.recipe = layer.recipe;
+    s.imagePre = layer.imagePreprocess;
+    s.imageOpacity = layer.imageOpacity;
+    s.hasBackdrop = layer.backdrop.has_value();
+    s.backdrop = layer.backdrop;
+    s.backdropPre = layer.backdropPreprocess;
+    s.backdropOpacity = layer.backdropOpacity;
     s.hasPlacement = layer.hasImagePlacement;
     s.boxW = layer.boxWidth;
     s.boxH = layer.boxHeight;
@@ -28,8 +32,6 @@ LayerSig LayerSessionStore::makeSig(const canvas::ImageLayer& layer) {
     s.imagePivot = static_cast<int>(layer.imagePivot);
     s.imageX = layer.imageX;
     s.imageY = layer.imageY;
-    s.hasBackdrop = layer.boxBackdrop.has_value();
-    s.backdrop = layer.boxBackdrop;
     return s;
 }
 

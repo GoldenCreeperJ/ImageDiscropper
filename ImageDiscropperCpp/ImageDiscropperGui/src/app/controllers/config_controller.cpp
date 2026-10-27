@@ -55,7 +55,7 @@ void ConfigController::onSaveConfig() {
 
     // 资产四选项显式化：对话框采集「是否导出（打包图层资产）+ 导出到哪里（资产目录，空＝默认 <配置名>.assets/）」。
     const bool hasFileLayers = std::ranges::any_of(doc_->layersSnapshot(),
-                                                  [](const canvas::ImageLayer& l) { return !l.fileName.empty() && !l.recipe.has_value(); });
+                                                  [](const canvas::ImageLayer& l) { return !l.fileName.empty(); });
     ConfigIoDialog dlg(ConfigIoDialog::Mode::Save, dialogParent_, hasFileLayers);
     dlg.setPath(path);
     if (dlg.exec() != QDialog::Accepted) return;
@@ -174,8 +174,8 @@ void ConfigController::onLoadConfig() {
             // 空文档 + 无图层：程序/图案底经 setImage 建「含底图图层画布」（baseImage_=genBase、layersActive_ 真）。
             doc_->setImage(std::move(genBase), QString{});
         }
-        // 底图声明需外部位图（有 base 且无 recipe）→ 空文档无从注入像素，实际已退白/透明底：标记以便末尾提示。
-        baseBitmapMissing = cfg.base.has_value() && !cfg.base->recipe.has_value();
+        // 底图声明需外部位图（有图片元素而无图案元素 → 落位声明底）→ 空文档无从注入像素，实际已退白/透明底：标记以便末尾提示。
+        baseBitmapMissing = cfg.base.has_value() && canvas::hasImageElement(*cfg.base) && !cfg.base->backdrop.has_value();
     }
     history_->recordConfigLoad(cfg, preserveBase);   // 还原切割/选择/排序/导出参数（preserveBase=true 时底图像素与声明均不动）。
     // 预处理队列单独从 original_ 重放物化（过尺寸门）：压栈快照走 buildEngineConfig（运行态，preprocess 恒空），
