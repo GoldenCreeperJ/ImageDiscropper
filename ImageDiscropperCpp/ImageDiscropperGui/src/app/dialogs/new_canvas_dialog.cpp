@@ -40,6 +40,7 @@
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QSplitter>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -333,8 +334,11 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
                            + 2 * nums::dialog::kTouchFieldMinHeightPx + nums::panels::kPanelSpacingPx;
     limitDialogToScreen(this, QSize(preferredW, preferredH));
     resize(preferredW, preferredH);   // 构造期即定宽：不依赖护栏首显回调（双保险；护栏仍管超屏钳制）。
-    // 屏幕几何变化（旋转）→ 宽/窄形态动态切换（节内方向、外观组操作行、表单/预览外壳随之重排）。
-    if (sc) connect(sc, &QScreen::availableGeometryChanged, this, [this] { applyLayoutMode(); });
+    // 屏幕几何变化（旋转）→ 宽/窄形态动态切换。延迟一拍执行：旋转时序里平台在事件批处理之后
+    //   才重摆窗口，立即改会被覆盖。
+    if (sc) connect(sc, &QScreen::availableGeometryChanged, this, [this] {
+        QTimer::singleShot(0, this, [this] { applyLayoutMode(); });
+    });
 }
 
 // 依附加图片开关/语境/适应方式显隐落位组并锁定尺寸（图案相关行显隐与文案在 PatternFormWidget 内）。
@@ -481,15 +485,27 @@ void NewCanvasDialog::applyLayoutMode() {
         wantH = qMin(wantH, static_cast<int>(avail.height() * nums::mobile::kDialogMaxHeightRatio));
     }
     resize(wantW, wantH);
-    QRect ref;
-    if (auto* p = parentWidget()) {
+    // 以当前屏可用几何为基准（屏幕几何是本次触发的权威来源，父窗口几何可能尚未更新）：
+    //   框内居中 + 四边越界强制拉回——保证恒不超出屏幕。
+    if (!avail.isNull()) {
+        QRect dlg = geometry();
+        dlg.moveCenter(avail.center());
+        if (dlg.right() > avail.right()) dlg.moveRight(avail.right());
+        if (dlg.bottom() > avail.bottom()) dlg.moveBottom(avail.bottom());
+        if (dlg.left() < avail.left()) dlg.moveLeft(avail.left());
+        if (dlg.top() < avail.top()) dlg.moveTop(avail.top());
+        move(dlg.topLeft());
+    } else if (auto* p = parentWidget()) {
         const QPoint tl = p->isWindow() ? p->frameGeometry().topLeft() : p->mapToGlobal(QPoint(0, 0));
         const QSize ps = p->isWindow() ? p->frameGeometry().size() : p->size();
-        ref = QRect(tl, ps);
-    } else if (!avail.isNull()) {
-        ref = avail;
+        move(tl.x() + (ps.width() - width()) / 2, tl.y() + (ps.height() - height()) / 2);
     }
-    if (!ref.isNull()) move(ref.center().x() - width() / 2, ref.center().y() - height() / 2);
+    // 【临时诊断】标题栏实时几何（对话框 尺寸×屏可用几何 ×父窗口尺寸）：定位后移除。
+    QString refInfo;
+    if (auto* p = parentWidget()) refInfo = QStringLiteral("/parent %1x%2").arg(p->width()).arg(p->height());
+    setWindowTitle(IDC_GTR(label, kDlgTitleNewCanvas) + QStringLiteral(" [%1x%2 / avail %3x%4%5]")
+                       .arg(width()).arg(height())
+                       .arg(avail.width()).arg(avail.height()).arg(refInfo));
 }
 
 // 切「添加图层」语境：顶部宽/高 spin（即图层尺寸）预填真实画布 W×H 并保持可编辑（改小即裁剪、改大即留白）。
