@@ -336,6 +336,9 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
                            + 2 * nums::dialog::kTouchFieldMinHeightPx + nums::panels::kPanelSpacingPx;
     limitDialogToScreen(this, QSize(preferredW, preferredH));
     resize(preferredW, preferredH);   // 构造期即定宽：不依赖护栏首显回调（双保险；护栏仍管超屏钳制）。
+    // 形态链首跑（与旋转共用）：横屏首开时全宽操作行会把整窗最小宽顶过屏宽钳值，首显护栏按钳值
+    //   收尺寸时收不住（下限卡死）；先按实际最小宽量测降档，护栏首显再收即可入屏。
+    applyModeChain(sc ? sc->availableGeometry() : QRect());
     // 屏幕几何变化（旋转）→ 宽/窄形态动态切换 + 几何收钳。旋转动画时序里平台会在我们钳位之后再摆
     //   一次窗口（间歇性推出屏边），故多拍重钳：0/250/600ms 三次，等动画落定后再定一次。
     if (sc) connect(sc, &QScreen::availableGeometryChanged, this, [this] {
@@ -421,67 +424,89 @@ void NewCanvasDialog::resizeToContent() {
     if (wantW > width()) resize(wantW, height());
 }
 
-// 屏幕几何变化（旋转）→ 宽/窄形态动态切换：三段节内方向、外观组操作行形态、表单/预览外壳
-//   随之重排，并按新形态的舒适尺寸重收整窗（护栏继续钳超屏）。
+// 形态候选链：宽-全宽 → 宽-紧凑 → 窄（窄恒紧凑）。逐级按整窗实际最小宽量测、装不下退一级——
+//   不靠固定阈值赌屏宽（全宽操作行会把整窗最小宽顶过小屏钳值，护栏收不住、窗口恒超出）。
+//   幂等：多拍重跑（旋转落定重钳）只在量测出装不下时降档，形态已合适即全跳过。
+void NewCanvasDialog::applyModeChain(const QRect& avail) {
+    if (avail.width() < nums::mobile::kStackColumnsMaxWidthPx) {
+        arrangeSections(true, true);   // 窄屏直取窄形态（宽形态两级的最小宽都超出该档屏宽）。
+        return;
+    }
+    const auto fits = [this, &avail] {
+        layout()->activate();   // 编排刚变：激活布局刷新最小宽快照（否则量测读到旧形态缓存）。
+        return minimumSizeHint().width() <= avail.width();
+    };
+    arrangeSections(false, false);
+    if (fits()) return;
+    arrangeSections(false, true);
+    if (!fits()) arrangeSections(true, true);   // 两级宽形态都装不下：整形态落回窄纵叠。
+}
+
+// 形态编排（窄/紧凑任一变化才重建；未变即跳过，多拍重跑不打扰用户分隔条）：节内方向 + 外观组
+//   操作行形态 + 预览最小高 + 表单/预览外壳重挂，随后按内容重算滚动区最小宽。
+void NewCanvasDialog::arrangeSections(const bool narrow, const bool compact) {
+    if (narrow == narrow_ && compact == compact_) return;
+    narrow_ = narrow;
+    compact_ = compact;
+
+    // 节内方向 + 外观组操作行形态 + 预览最小高。
+    const QBoxLayout::Direction dir = narrow ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight;
+    nodeLay_->setDirection(dir);
+    backdropLay_->setDirection(dir);
+    imageLay_->setDirection(dir);
+    nodeAppearance_->setCompactLayout(compact);
+    backdropAppearance_->setCompactLayout(compact);
+    imageAppearance_->setCompactLayout(compact);
+    previewLabel_->setMinimumHeight(narrow ? 120 : nums::dialog::kNewCanvasPreviewMinHeightPx);
+
+    // 表单/预览外壳：窄屏纵向堆叠 ↔ 宽屏可拖分隔条（布局重挂会自动改父）。
+    rootLayout_->removeWidget(formScroll_);
+    rootLayout_->removeWidget(previewCol_);
+    if (splitter_) rootLayout_->removeWidget(splitter_);
+    if (!narrow) {
+        if (!splitter_) {
+            splitter_ = new QSplitter(Qt::Horizontal, this);
+            splitter_->setChildrenCollapsible(false);
+            splitter_->setStretchFactor(0, 1);
+            splitter_->setStretchFactor(1, 0);
+        }
+        // 宽形态下限随屏自适应（构造期与旋转切换同一口径）。
+        applyWideMinimums(screen() ? screen()->availableGeometry() : QRect());
+        splitter_->addWidget(formScroll_);
+        splitter_->addWidget(previewCol_);
+        rootLayout_->insertWidget(0, splitter_, 1);
+    } else {
+        if (splitter_) {
+            // 子件先摘出再删分隔条（QSplitter 无 removeWidget；子件为其 QObject 子级、不摘出会随删）。
+            formScroll_->setParent(nullptr);
+            previewCol_->setParent(nullptr);
+            delete splitter_;
+            splitter_ = nullptr;
+        }
+        formScroll_->setMinimumHeight(0);
+        rootLayout_->insertWidget(0, formScroll_, 1);   // 布局接管（重挂父）。
+        rootLayout_->insertWidget(1, previewCol_);
+    }
+    resizeToContent();
+}
+
+// 屏幕几何变化（旋转）→ 形态链降档 + 按新形态的舒适尺寸重收整窗（护栏继续钳超屏）。
+//   几何收钳部分每次调用都做——旋转落定多拍重钳，抵消平台在动画时序里的事后摆位。
 void NewCanvasDialog::applyLayoutMode() {
     const QScreen* sc = screen();
     if (!sc) sc = QGuiApplication::primaryScreen();
-    const bool narrow = !sc || sc->availableGeometry().width() < nums::mobile::kStackColumnsMaxWidthPx;
-    if (narrow != narrow_) {
-        // 形态切换（仅模式变化时执行；几何收钳部分每次调用都做——旋转落定多拍重钳）。
-        narrow_ = narrow;
-
-        // 节内方向 + 外观组操作行形态 + 预览最小高。
-        const QBoxLayout::Direction dir = narrow ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight;
-        nodeLay_->setDirection(dir);
-        backdropLay_->setDirection(dir);
-        imageLay_->setDirection(dir);
-        nodeAppearance_->setCompactLayout(narrow);
-        backdropAppearance_->setCompactLayout(narrow);
-        imageAppearance_->setCompactLayout(narrow);
-        previewLabel_->setMinimumHeight(narrow ? 120 : nums::dialog::kNewCanvasPreviewMinHeightPx);
-
-        // 表单/预览外壳：窄屏纵向堆叠 ↔ 宽屏可拖分隔条（布局重挂会自动改父）。
-        rootLayout_->removeWidget(formScroll_);
-        rootLayout_->removeWidget(previewCol_);
-        if (splitter_) rootLayout_->removeWidget(splitter_);
-        if (!narrow) {
-            if (!splitter_) {
-                splitter_ = new QSplitter(Qt::Horizontal, this);
-                splitter_->setChildrenCollapsible(false);
-                splitter_->setStretchFactor(0, 1);
-                splitter_->setStretchFactor(1, 0);
-            }
-            // 宽形态下限随屏自适应（构造期与旋转切换同一口径）。
-            applyWideMinimums(sc ? sc->availableGeometry() : QRect());
-            splitter_->addWidget(formScroll_);
-            splitter_->addWidget(previewCol_);
-            rootLayout_->insertWidget(0, splitter_, 1);
-        } else {
-            if (splitter_) {
-                // 子件先摘出再删分隔条（QSplitter 无 removeWidget；子件为其 QObject 子级、不摘出会随删）。
-                formScroll_->setParent(nullptr);
-                previewCol_->setParent(nullptr);
-                delete splitter_;
-                splitter_ = nullptr;
-            }
-            formScroll_->setMinimumHeight(0);
-            rootLayout_->insertWidget(0, formScroll_, 1);   // 布局接管（重挂父）。
-            rootLayout_->insertWidget(1, previewCol_);
-        }
-        resizeToContent();
-    }
+    const QRect avail = sc ? sc->availableGeometry() : QRect();
+    applyModeChain(avail);
     body_->updateGeometry();
     const QSize formHint = body_->sizeHint();
     const QMargins m = layout()->contentsMargins();
-    int wantW = qMax(formHint.width(), narrow ? 0 : 640)
-                + (narrow ? 0 : nums::dialog::kNewCanvasPreviewMinWidthPx + 60)
+    int wantW = qMax(formHint.width(), narrow_ ? 0 : 640)
+                + (narrow_ ? 0 : nums::dialog::kNewCanvasPreviewMinWidthPx + 60)
                 + m.left() + m.right();
-    int wantH = formHint.height() + (narrow ? 120 : 0)
+    int wantH = formHint.height() + (narrow_ ? 120 : 0)
                 + 2 * nums::dialog::kTouchFieldMinHeightPx + nums::panels::kPanelSpacingPx;
     // 显式钳到护栏口径（不依赖 Resize 事件次序）；随后按父窗口居中（无父则按屏居中）——
     //   旋转时序里屏幕几何先变、父窗口后变，护栏的父窗口处理器会随后再居中回正一次。
-    const QRect avail = sc ? sc->availableGeometry() : QRect();
     if (!avail.isNull()) {
         wantW = qMin(wantW, static_cast<int>(avail.width() * nums::mobile::kDialogMaxWidthRatio));
         wantH = qMin(wantH, static_cast<int>(avail.height() * nums::mobile::kDialogMaxHeightRatio));

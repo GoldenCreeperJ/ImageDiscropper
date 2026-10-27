@@ -120,7 +120,9 @@ private:
     void updateControlAvailability() const;                       // 依附加图片开关/语境/适应方式显隐落位组并锁定尺寸（图案相关显隐在 PatternFormWidget 内）。
     void syncCanvasSizeToSource() const;                           // Native 适应下把顶部宽/高（图层尺寸）回填为源图原生尺寸。
     void resizeToContent();                                        // 折叠/展开变化：重算表单滚动区最小宽并让窗口跟上（同主窗页签切换更新滚动区最小宽手法）。
-    void applyLayoutMode();                                        // 屏幕几何变化（旋转）→ 宽/窄形态切换：节内方向、外观组操作行、表单/预览外壳重排并收尺寸。
+    void applyModeChain(const QRect& avail);                       // 形态候选链（宽-全宽 → 宽-紧凑 → 窄，窄恒紧凑）：逐级量测整窗最小宽，装不下退一级；幂等可多拍重跑。
+    void arrangeSections(bool narrow, bool compact);               // 形态编排：节内方向 + 外观组操作行形态 + 表单/预览外壳重挂 + 内容最小宽重算（形态未变即跳过）。
+    void applyLayoutMode();                                        // 屏幕几何变化（旋转）→ 形态链降档 + 按新形态舒适尺寸重收整窗（几何收钳每次调用都做）。
     void applyWideMinimums(const QRect& avail);                    // 宽形态下限随屏自适应（构造期与旋转切换共用）：固定 480/280 下限会顶过小屏护栏钳值而溢出。
     void refreshDiag() const;                                     // 【临时诊断】刷新体内几何信息行（移动端无标题栏；定位后移除）。
     // 内层构造：按当前落位/适应/图案元素（backdrop）与两元素外观组装一个图片层（decodedPixels 预缩 factor 为预览代理，
@@ -174,7 +176,8 @@ private:
     bool producesLayerCanvas_{false};   // accept()：「添加图片图层」语境且勾选附加图片时置真（新建画布语境恒假）。
     bool addLayerMode_{false};          // 语境标志：setAddLayerMode() 置真（区分「添加图片图层」与「新建画布」）。
     bool busyOverlay_{false};   // 忙碌全屏遮罩形态（SessionController 依 busyOverlayMode() 下发，MobileShell 下为 true；SPEC §8.2）。
-    bool narrow_{false};        // 窄屏（<kStackColumnsMaxWidthPx）：节内上下叠 + 预览固定底部。
+    bool narrow_{false};        // 窄形态（kStackColumnsMaxWidthPx 起判）：节内上下叠 + 预览固定底部；宽形态装不下时形态链仍可落回窄。
+    bool compact_{false};       // 操作行紧凑形态（2×2 按钮行压最小宽）：窄形态恒紧凑；宽形态装不下全宽操作行时经形态链降档启用。
     QWidget* body_{nullptr};    // 滚动表单主体（resizeToContent 据其最小宽重算）。
     QScrollArea* formScroll_{nullptr};   // 表单滚动区（resizeToContent 更新其最小宽）。
     QVBoxLayout* rootLayout_{nullptr};   // 对话框根布局（applyLayoutMode 重排表单/预览外壳）。
