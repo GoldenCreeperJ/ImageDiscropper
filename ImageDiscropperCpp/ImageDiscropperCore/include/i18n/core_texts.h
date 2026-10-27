@@ -95,15 +95,14 @@ inline constexpr char kArrange[] = "arrange";         // export.merge.arrange �
 } // namespace config
 
 // ---------------------------------------------------------------------------
-// layer：generate 段（底图）与 layers[i]（图层）的元素分块键（v2 schema，SPEC §2.2a/§7）——
+// layer：generate 段（底图）与 layers[i]（图层）的元素分块键（SPEC §2.2a/§7）——
 //       image（图片元素）/ backdrop（图案元素）两对象 + transform / zOrder / preprocess。
-//       旧版（v1）键不再受支持：不识别、按未知键静默忽略（破坏性更新，无迁移）。
 // ---------------------------------------------------------------------------
 namespace layer {
-inline constexpr char kImage[] = "image";             // 图片元素对象（v2：file/fit/box*/anchor/pivot/x/y/preprocess/opacity）。
+inline constexpr char kImage[] = "image";             // 图片元素对象（file/fit/box*/anchor/pivot/x/y/preprocess/opacity）。
 inline constexpr char kAnchor[] = "anchor";           // image 元素内：源图锚点（9 向）。
 inline constexpr char kPivot[] = "pivot";             // image 元素内：源图枢轴（9 向）。
-inline constexpr char kBackdrop[] = "backdrop";       // 图案元素对象（v2：图案键族 + preprocess/opacity）。
+inline constexpr char kBackdrop[] = "backdrop";       // 图案元素对象（图案键族 + preprocess/opacity）。
 inline constexpr char kBackground[] = "background";   // 图案背景色（十六进制串）。与 GUI palette 键名 gui_texts::ident::kPaletteBackground 同字纯属巧合，不是同一个值。
 inline constexpr char kForeground[] = "foreground";   // 图案前景色。
 inline constexpr char kOrientation[] = "orientation"; // 图案方向（gradient/stripes 用）。
@@ -271,12 +270,12 @@ inline constexpr char kErrAnnoParseFailed[] = "标注 JSON 解析失败：";  //
 inline constexpr char kErrAnnoPercentNoBasis[] = "标注几何 '%1' 使用了百分比，但坐标基准尺寸未知（须先确定工作图宽高）";
 
 // §7 配置 schema 严格校验报因（src/engine/config_json/schema_validate.cpp::validateSchema）：
-//   仅当键「显式写出且值非 null」而类型/取值非法时才报错；缺失/null 仍走默认。旧版（v1）键不识别、按未知键静默忽略。
+//   仅当键「显式写出且值非 null」而类型/取值非法时才报错；缺失/null 仍走默认；未识别键静默忽略。
 //   %1＝JSON 路径（如 cut.tier / layers[0].image.anchor），%2＝原值——皆数据，不译。
 inline constexpr char kErrConfigNotObject[] = "配置字段 '%1' 须为对象";
 inline constexpr char kErrConfigNotArray[] = "配置字段 '%1' 须为数组";
 inline constexpr char kErrConfigNotInteger[] = "配置字段 '%1' 须为整数";
-// 已知 v2 键写错段（如 generate.image 内写 file/boxWidth/boxHeight）：显式报因，防静默丢字段。
+// 已知键写错段（如 generate.image 内写 file/boxWidth/boxHeight）：显式报因，防静默丢字段。
 inline constexpr char kErrConfigIllegalKey[] = "配置字段 '%1' 不是本段合法键";
 // 坐标键专有：整数或百分比串（几何量有明确基准尺寸，可用 "50%" 表达相对位置/尺寸）。
 inline constexpr char kErrConfigNotCoord[] = "配置字段 '%1' 须为整数或百分比串（如 \"50%\"），实际为 %2";

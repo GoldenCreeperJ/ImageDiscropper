@@ -50,7 +50,7 @@ constexpr core::I18nEntry kEntriesEnHelp[] = {
     {"help::kDescOutputDirConfigSeparate", "Separate output directory (used when the config has export.mode=separate)"},
     {"help::kDescAnnoInline", "[repeatable] inline one annotation object, or an array of annotation objects"},
     {"help::kDescAnnoFile", "[repeatable] read from a JSON file whose root is an annotation array"},
-    {"help::kDescLayerInline", R"([repeatable] inline one layer (v2 JSON object / array), or the two equivalent shorthands: flat {file=a.png,imageOpacity=200,backdrop={"kind":"solid"}} / block image={...} backdrop={...})"},
+    {"help::kDescLayerInline", R"([repeatable] inline one layer (JSON object / array), or the two equivalent shorthands: flat {file=a.png,imageOpacity=200,backdrop={"kind":"solid"}} / block image={...} backdrop={...})"},
     {"help::kDescLayerFile", "[repeatable] read from a JSON file whose root is a layer array"},
     {"help::kDescGrid", "Whole-canvas period: origin + cell size (the origin may be negative, cw/ch must be positive after conversion; each value may be a percentage such as \"50%\")"},
     {"help::kDescGridX", "Horizontal period: origin x0 + cell width cw (percentages convert against the image width); an undefined vertical axis = one whole span"},

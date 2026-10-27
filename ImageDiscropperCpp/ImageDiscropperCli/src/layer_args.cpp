@@ -111,9 +111,9 @@ std::string valueToJson(const std::string& v) {
     return out;
 }
 
-// 把 --layer 内联值归一为 §7 v2 JSON 对象文本（平铺 / 块形两种语法等价）。
+// 把 --layer 内联值归一为 §7 JSON 对象文本（平铺 / 块形两种语法等价）。
 //   已是标准 JSON（含引号）→ 原样；平铺 {file=icon.png,imageOpacity=200,...}（外层大括号可省）/
-//   块形 image={...} backdrop={...}（可带外层大括号）→ 拼 §7 v2 对象。
+//   块形 image={...} backdrop={...}（可带外层大括号）→ 拼 §7 对象。
 //   平铺键映射：file/imageFit/imageOpacity/imagePreprocess/imageAnchor/imagePivot/imageX/imageY/
 //   boxWidth/boxHeight → image.*；backdropPreprocess/backdropOpacity → backdrop.*；
 //   image/backdrop/transform/preprocess/zOrder → 顶层透传。嵌套对象内仍用标准 JSON 写法。
@@ -202,7 +202,7 @@ bool hasLayerOptions(const ArgParser& args) {
 
 bool collectLayers(const ArgParser& args, std::vector<canvas::ImageLayer>& out, std::string& err,
                    const int basisWidth, const int basisHeight) {
-    // 1) 内联：--layer 可重复，逐条归一（平铺/块形 → v2 JSON 对象）后解析追加（保持出现顺序）。
+    // 1) 内联：--layer 可重复，逐条归一（平铺/块形 → JSON 对象）后解析追加（保持出现顺序）。
     for (const std::string& item : args.getAll(opts::kLayer)) {
         std::string json;
         if (std::string normalizeErr; !normalizeLayerArg(item, json, normalizeErr)) {

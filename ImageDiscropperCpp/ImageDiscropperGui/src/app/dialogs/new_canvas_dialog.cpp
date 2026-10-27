@@ -267,6 +267,9 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     //   「内容最小宽 + 纵滚条宽」；后续折叠/展开变化经 resizeToContent 动态重算。
     formScroll_ = wrapScrollable(body_);
     if (narrow) {
+        // 横屏高度紧张：滚动区最小高归零、预览最小高收缩，整窗下限让位于护栏钳制（不超出屏幕）。
+        formScroll_->setMinimumHeight(0);
+        previewLabel_->setMinimumHeight(120);
         root->addWidget(formScroll_, 1);
         root->addWidget(previewCol);
     } else {
@@ -325,7 +328,7 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     const int preferredW = qMax(expandedFormW, 640)
                            + (narrow ? 0 : nums::dialog::kNewCanvasPreviewMinWidthPx + 60)
                            + rootMargin.left() + rootMargin.right();
-    const int preferredH = formHint.height() + (narrow ? nums::dialog::kNewCanvasPreviewMinHeightPx : 0)
+    const int preferredH = formHint.height() + (narrow ? 120 : 0)
                            + 2 * nums::dialog::kTouchFieldMinHeightPx + nums::panels::kPanelSpacingPx;
     limitDialogToScreen(this, QSize(preferredW, preferredH));
     resize(preferredW, preferredH);   // 构造期即定宽：不依赖护栏首显回调（双保险；护栏仍管超屏钳制）。

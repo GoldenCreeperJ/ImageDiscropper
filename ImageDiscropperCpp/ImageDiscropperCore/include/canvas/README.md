@@ -5,7 +5,7 @@
 `composeCanvas`（画布**先铺满全透明底**，再落底图 base、最后按 zOrder 叠叠加层：可选末位参 `base`（非空则 source-over 铺 (0,0)）；叠加层逐层物化 → 缩放 → 施 `transform.opacity` → source-over 落位，写入画布尺寸缓冲、越界自然裁剪；叠加层整体显隐由调用方以传空 `layers` 实现，Core 不持显隐态）。
 承载「画布层」概念，是 GUI 图层编辑与 CLI `layers` 段共用的单一真相源。
 
-> **术语对齐 [`SPEC.md` §2.2](../../../../SPEC.md)（权威定义）**：本模块的 `ImageLayer` 即「**图层（layer）**」——§7 `layers` 叠加层数组的一员，＝**图层框节点**（SPEC §2.2a）：有**图片元素**（`fileName` / `decodedPixels` / 内层落位任一非空）即图片层（`fileName` 引用 `<配置名>.assets/` 源图＝「**图层图片**」）；无图片元素而有**图案元素**（`backdrop`）即纯图案层（原 recipe 层合流形态，非图片）。**底图（base）**为与之同构的一条 `ImageLayer`（钉最底、恒铺满、**不入 `layers`**、不可拖拽 / 删除 / 排序），其内承载的那张图即「**底图图片**」（凭 §7 `generate` 段的内层落位声明、只存落位不存路径，位图运行时由 `--input` 供）。图片不作为程序化图案类型（`generate::PatternKind` 无 Image 枚举），仅作为 GUI「附加图片」交互入口按落点归入底图图片 / 图层图片。
+> **术语对齐 [`SPEC.md` §2.2](../../../../SPEC.md)（权威定义）**：本模块的 `ImageLayer` 即「**图层（layer）**」——§7 `layers` 叠加层数组的一员，＝**图层框节点**（SPEC §2.2a）：有**图片元素**（`fileName` / `decodedPixels` / 内层落位任一非空）即图片层（`fileName` 引用 `<配置名>.assets/` 源图＝「**图层图片**」）；无图片元素而有**图案元素**（`backdrop`）即纯图案层（非图片）。**底图（base）**为与之同构的一条 `ImageLayer`（钉最底、恒铺满、**不入 `layers`**、不可拖拽 / 删除 / 排序），其内承载的那张图即「**底图图片**」（凭 §7 `generate` 段的内层落位声明、只存落位不存路径，位图运行时由 `--input` 供）。图片不作为程序化图案类型（`generate::PatternKind` 无 Image 枚举），仅作为 GUI「附加图片」交互入口按落点归入底图图片 / 图层图片。
 >
 > **引擎零改动**：多图层是「画布层」而非「引擎层」——`composeCanvas` 的产物即喂给 `runEngine` 的工作图，
 > 引擎永远只收**一张展平的画布图 + 空 preprocess**。

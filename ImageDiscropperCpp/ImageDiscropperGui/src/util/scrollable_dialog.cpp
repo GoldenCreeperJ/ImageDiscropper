@@ -84,8 +84,10 @@ protected:
                     break;
             }
         } else if (obj == parent_) {
-            // 父窗口尺寸或位置变化（旋转 / 桌面拖窗 / 最大化等）→ 居中回正。
+            // 父窗口尺寸或位置变化（旋转 / 桌面拖窗 / 最大化等）→ 重钳上限 + 收尺寸回新几何 + 居中回正。
+            //   旋转只触发父窗口事件、对话框自身无 Resize，不在此重钳则旧上限残留、窗口超出新屏。
             if (ev->type() == QEvent::Resize || ev->type() == QEvent::Move) {
+                clampMaximum();
                 reCenterIfNeeded();
             }
         }
@@ -106,12 +108,15 @@ private:
         return QRect(tl, parent_->size());
     }
 
-    void clampMaximum() const {
+    void clampMaximum() {
         const QRect avail = availableGeometry();
         if (avail.isNull()) return;
         const int maxW = static_cast<int>(avail.width() * nums::mobile::kDialogMaxWidthRatio);
         const int maxH = static_cast<int>(avail.height() * nums::mobile::kDialogMaxHeightRatio);
         dialog_->setMaximumSize(maxW, maxH);
+        // 只设最大尺寸不会收缩已超出的窗口：当前尺寸越界即收进新上限（旋转后不再超出屏幕）。
+        if (dialog_->width() > maxW || dialog_->height() > maxH)
+            dialog_->resize(qMin(dialog_->width(), maxW), qMin(dialog_->height(), maxH));
     }
 
     // 首次显示：把整窗尺寸收到「首选整窗尺寸（未提供则对话框自身 sizeHint）与可用几何钳值」的较小者。

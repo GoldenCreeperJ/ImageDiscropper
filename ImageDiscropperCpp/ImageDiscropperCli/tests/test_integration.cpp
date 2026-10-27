@@ -906,7 +906,7 @@ void testIntegration() {
         CHECK(isRed(o.getPixel(35, 35)));   // 未被标注覆盖，仍为底色红
     }
 
-    // ---- IT-46.7b：--layer 双语法（平铺带外层大括号 / 块形）等价归一 → v2 元素字段落位。----
+    // ---- IT-46.7b：--layer 双语法（平铺带外层大括号 / 块形）等价归一 → 元素字段落位。----
     {
         const std::string base = (root / "it467b_base.json").string();
         {
@@ -1464,7 +1464,7 @@ void testIntegration() {
         CHECK(text.find("\"generate\"") != std::string::npos);
         CHECK(text.find("sub49/base.png") == std::string::npos);   // 文件路径不入配置
         CHECK(text.find("\"file\"") == std::string::npos);
-        CHECK(text.find("\"anchor\"") != std::string::npos);   // v2：落位键位于 image 元素内
+        CHECK(text.find("\"anchor\"") != std::string::npos);   // 落位键位于 image 元素内
         CHECK(text.find("backdrop") != std::string::npos);
         CHECK(text.find("opacity") != std::string::npos);   // generate 段携带底图整体不透明度键（缺省 255）
         CHECK(text.find("boxWidth") == std::string::npos);   // 底图落位框尺寸不落盘（恒＝source，载入由 source 回填）

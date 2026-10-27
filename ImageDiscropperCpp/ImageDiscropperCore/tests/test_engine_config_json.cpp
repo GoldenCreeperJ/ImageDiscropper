@@ -351,7 +351,7 @@ void testEngineConfigJson() {
             std::ifstream ifs(fileBase);
             const std::string text((std::istreambuf_iterator(ifs)), std::istreambuf_iterator<char>());
             CHECK(text.find("boxWidth") == std::string::npos);   // 底图落位框尺寸不落盘（恒＝source，载入由 source 回填）
-            CHECK(text.find("\"anchor\"") != std::string::npos); // v2：落位键位于 image 元素内
+            CHECK(text.find("\"anchor\"") != std::string::npos); // 落位键位于 image 元素内
         }
         engine::EngineConfig fg;
         CHECK(engine::loadEngineConfig(fileBase.string(), fg));
@@ -371,7 +371,7 @@ void testEngineConfigJson() {
             CHECK(b.transform.opacity == 64);   // 底图整体不透明度往返一致
         }
 
-        // ③ v1 旧 generate 段（顶层 kind 平铺）→ 破坏性更新：旧键不识别、按未知键静默忽略（无迁移）。
+        // ③ 顶层 kind 平铺（非本段键）：不识别、按未知键静默忽略。
         const fs::path legacyGen = dir / "legacy_gen.json";
         {
             std::ofstream ofs(legacyGen);
@@ -381,7 +381,7 @@ void testEngineConfigJson() {
         CHECK(engine::loadEngineConfig(legacyGen.string(), lg));   // 载入成功（不再拒载）
         CHECK(lg.base.has_value());                                // 有 generate 段 → 底图声明在
         if (lg.base.has_value()) {
-            CHECK(!lg.base->backdrop.has_value());                 // v1 平铺图案键被忽略：无图案元素
+            CHECK(!lg.base->backdrop.has_value());                 // 平铺图案键被忽略：无图案元素
             CHECK(!canvas::hasImageElement(*lg.base));             // 亦无图片元素
         }
     }
@@ -438,7 +438,7 @@ void testEngineConfigJson() {
         CHECK(engine::loadEngineConfig(clampFile.string(), clamped));
         CHECK(clamped.canvasOpacity == 255);
 
-        // 缺顶层 opacity → 缺省 255、行为不变；generate 段无 preprocess → 底图预处理为空（v2 backdrop 元素形态）。
+        // 缺顶层 opacity → 缺省 255、行为不变；generate 段无 preprocess → 底图预处理为空（backdrop 元素形态）。
         const fs::path legacyNoOp = dir / "no_opacity.json";
         {
             std::ofstream ofs(legacyNoOp);
@@ -670,7 +670,7 @@ void testLayerParseText() {
         CHECK(out[0].transform.x == 10 && out[0].transform.y == -5 && out[0].transform.opacity == 128);
     }
 
-    // ② 根数组 → 按序追加 2 条（纯图案层与图片层混排，v2 元素分块）。
+    // ② 根数组 → 按序追加 2 条（纯图案层与图片层混排，元素分块）。
     {
         std::vector<canvas::ImageLayer> out;
         std::string err;
@@ -929,7 +929,7 @@ void testEngineConfigStrict() {
         engine::EngineConfig cfg;
         CHECK(!loadText("badobj.json", R"J({"cut":[]})J", cfg).has_value());
     }
-    // ⑩ v1 旧键（layers[0].source.recipe）→ 破坏性更新：旧键不识别、按未知键静默忽略，层退化为空占位（无元素）。
+    // ⑩ 非本段键（layers[0].source.recipe）：不识别、按未知键静默忽略，层退化为空占位（无元素）。
     {
         engine::EngineConfig cfg;
         CHECK(loadText("badrecipe.json", R"J({"layers":[{"source":{"recipe":{"kind":"chekboard"}}}]})J", cfg).has_value());

@@ -117,7 +117,7 @@ inline constexpr char kDescOutputConfigMerged[] = "合并输出路径（配置 e
 inline constexpr char kDescOutputDirConfigSeparate[] = "分离输出目录（配置 export.mode=separate 时用）";
 inline constexpr char kDescAnnoInline[] = "[可重复] 内联一条标注对象，或一个标注对象数组";
 inline constexpr char kDescAnnoFile[] = "[可重复] 从「根为标注数组」的 JSON 文件读取";
-inline constexpr char kDescLayerInline[] = "[可重复] 内联一条图层（v2 JSON 对象 / 数组），或两种等价简写：平铺 {file=a.png,imageOpacity=200,backdrop={\"kind\":\"solid\"}} / 块形 image={...} backdrop={...}";
+inline constexpr char kDescLayerInline[] = "[可重复] 内联一条图层（JSON 对象 / 数组），或两种等价简写：平铺 {file=a.png,imageOpacity=200,backdrop={\"kind\":\"solid\"}} / 块形 image={...} backdrop={...}";
 inline constexpr char kDescLayerFile[] = "[可重复] 从「根为图层数组」的 JSON 文件读取";
 inline constexpr char kDescGrid[] = "整幅周期：基准点 + 单元尺寸（基准点可为负，cw/ch 换算后必须为正；各值可写百分比，如 \"50%\"）";
 inline constexpr char kDescGridX[] = "横向周期：基准点 x0 + 单元宽 cw（百分比按图宽换算）；纵向未定义时＝整幅 1 份";

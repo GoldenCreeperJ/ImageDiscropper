@@ -54,12 +54,11 @@ bool preprocessFromJson(const json& v, preprocess::PreprocessConfig& out) {
 }
 
 // ---------------------------------------------------------------------------
-// std::vector<canvas::ImageLayer> ↔ SPEC §7 layers 段（可选，直接以数组承载）。v2 元素分块（SPEC §2.2a）：
+// std::vector<canvas::ImageLayer> ↔ SPEC §7 layers 段（可选，直接以数组承载）。元素分块（SPEC §2.2a）：
 //   每层 = 图层框节点 { image?, backdrop?, transform, zOrder, preprocess }。
 //   image（图片元素，可选）：file / fit / box* / anchor / pivot / x / y / preprocess / opacity；
 //   backdrop（图案元素，可选）：图案键族 + preprocess / opacity。
-//   decodedPixels 不入配置。旧版（v1）键（source / imagePlacement / 顶层 kind 等）不再受支持：不识别、
-//   按未知键静默忽略。
+//   decodedPixels 不入配置；未识别键静默忽略。
 // ---------------------------------------------------------------------------
 // 声明式队列 → JSON 数组（图层各元素外观/节点外观共用）。
 json pipelineToJson(const preprocess::PreprocessPipeline& pipeline) {
@@ -190,7 +189,7 @@ canvas::ImageLayer layerFromJson(const json& v) {
 }
 
 // ---------------------------------------------------------------------------
-// 底图 canvas::ImageLayer ↔ SPEC §7「generate」段（v2 元素分块，与 layers 同构）。
+// 底图 canvas::ImageLayer ↔ SPEC §7「generate」段（元素分块，与 layers 同构）。
 //   键名仍叫 "generate"（不破外部/CLI 选项名）。底图不外传文件：图片元素恒无 file（位图由运行时
 //   --input 供给，配置可跨输入批处理复用）；box 尺寸恒＝画布(source)、不落盘（读取端据 source 回填）。
 //   底图钉住最底：transform 恒等、zOrder 固定、不入本段（读取端复位默认）。

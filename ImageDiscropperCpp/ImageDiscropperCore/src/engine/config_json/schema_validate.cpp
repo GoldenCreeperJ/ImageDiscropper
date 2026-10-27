@@ -361,7 +361,7 @@ bool validateBackdropElement(const json& o, const std::string& path, std::string
     return true;
 }
 
-// 底图 generate 段（v2）：{ backdrop?, image?, opacity, preprocess }；旧版（v1）平铺键不识别、按未知键静默忽略。
+// 底图 generate 段：{ backdrop?, image?, opacity, preprocess }。
 bool validateGenerateSeg(const json& gen, const std::string& path, std::string& reason) {
     if (!gen.is_object()) { reason = IDC_KTRF(msg, kErrConfigNotObject, path); return false; }
     if (!checkInt(gen, keys::common::kOpacity, path + "." + keys::common::kOpacity, reason)) return false;

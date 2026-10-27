@@ -193,7 +193,7 @@ bool resolvePercentCoords(jsonutil::json& root, core::PercentHints& hints, std::
         }
     }
 
-    // generate：底图落位 x/y（v2 在 image 元素内；落位框恒＝画布）。
+    // generate：底图落位 x/y（image 元素内；落位框恒＝画布）。
     if (json* gen = mutableAt(root, keys::config::kGenerate)) {
         if (json* im = mutableAt(*gen, keys::layer::kImage)) {
             const std::string gpt = joinPtr(joinPtr("", keys::config::kGenerate), keys::layer::kImage);
