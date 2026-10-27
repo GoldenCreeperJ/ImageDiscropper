@@ -245,9 +245,8 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
         imageSection->setExpanded(on);   // 勾选=展开、取消=自动收起（箭头仍可独立折叠，勾选语义不丢）。
     });
     imageSection->setExpanded(false);   // 初始收起（未勾附加图片）：勾选才展开。
-    imageSection->setExpanded(true);    // 暂开取「展开态」两个宽度口径：舒适宽（初始列宽）与内容最小宽（左列拖窄下限）。
+    imageSection->setExpanded(true);    // 暂开取「展开态」舒适宽（初始列宽预算）。
     const int expandedFormW = body->sizeHint().width();
-    const int expandedFormMinW = body->minimumSizeHint().width();
     imageSection->setExpanded(false);
     grid->addWidget(imageSection, row, 0);
     ++row;
@@ -275,8 +274,9 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
         root->addWidget(formScroll_, 1);
         root->addWidget(previewCol);
     } else {
-        // 左列最小宽护栏＝展开态内容最小宽 + 纵滚条宽（下限不裁输入；拖窄分隔条到此即止）。
-        formScroll_->setMinimumWidth(qMax(expandedFormMinW + verticalScrollBarExtent(formScroll_), 480));
+        // 宽形态下限随屏自适应（小屏横屏下固定 480/280 会顶过护栏钳值而溢出）。
+        const QRect availAtCtor = sc ? sc->availableGeometry() : QRect();
+        applyWideMinimums(availAtCtor);
         auto* splitter = splitter_ = new QSplitter(Qt::Horizontal, this);
         splitter->addWidget(formScroll_);
         previewCol->setMinimumWidth(nums::dialog::kNewCanvasPreviewMinWidthPx);
@@ -292,6 +292,8 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     buttons->button(QDialogButtonBox::Ok)->setText(IDC_GTR(label, kDialogOkButton));
     buttons->button(QDialogButtonBox::Cancel)->setText(IDC_GTR(label, kDialogCancelButton));
+    diagLabel_ = new QLabel(this);   // 【临时诊断】移动端无标题栏：几何信息放按钮行上方。
+    root->addWidget(diagLabel_);
     root->addWidget(buttons);
 
     // ---- 连接 ----
@@ -339,6 +341,7 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     if (sc) connect(sc, &QScreen::availableGeometryChanged, this, [this] {
         QTimer::singleShot(0, this, [this] { applyLayoutMode(); });
     });
+    QTimer::singleShot(0, this, [this] { refreshDiag(); });   // 【临时诊断】首显后刷新真实几何。
 }
 
 // 依附加图片开关/语境/适应方式显隐落位组并锁定尺寸（图案相关行显隐与文案在 PatternFormWidget 内）。
@@ -445,14 +448,8 @@ void NewCanvasDialog::applyLayoutMode() {
             splitter_->setStretchFactor(0, 1);
             splitter_->setStretchFactor(1, 0);
         }
-        // 宽形态最小宽随屏自适应：小屏（手机横屏）下 480/280 固定下限会顶过护栏钳值而溢出。
-        const QRect avail = sc ? sc->availableGeometry() : QRect();
-        const int availW = avail.isNull() ? INT_MAX : avail.width();
-        const int previewMinW = qMin(nums::dialog::kNewCanvasPreviewMinWidthPx, availW / 3);
-        previewCol_->setMinimumWidth(previewMinW);
-        const int contentMin = body_->minimumSizeHint().width() + verticalScrollBarExtent(formScroll_);
-        formScroll_->setMinimumWidth(qMax(contentMin, qMin(480, availW - previewMinW - 60)));
-        formScroll_->setMinimumHeight(0);
+        // 宽形态下限随屏自适应（构造期与旋转切换同一口径）。
+        applyWideMinimums(sc ? sc->availableGeometry() : QRect());
         splitter_->addWidget(formScroll_);
         splitter_->addWidget(previewCol_);
         rootLayout_->insertWidget(0, splitter_, 1);
@@ -500,12 +497,34 @@ void NewCanvasDialog::applyLayoutMode() {
         const QSize ps = p->isWindow() ? p->frameGeometry().size() : p->size();
         move(tl.x() + (ps.width() - width()) / 2, tl.y() + (ps.height() - height()) / 2);
     }
-    // 【临时诊断】标题栏实时几何（对话框 尺寸×屏可用几何 ×父窗口尺寸）：定位后移除。
+    // 【临时诊断】移动端无标题栏：几何信息放按钮行上方（定位后移除）。
     QString refInfo;
     if (auto* p = parentWidget()) refInfo = QStringLiteral("/parent %1x%2").arg(p->width()).arg(p->height());
-    setWindowTitle(IDC_GTR(label, kDlgTitleNewCanvas) + QStringLiteral(" [%1x%2 / avail %3x%4%5]")
-                       .arg(width()).arg(height())
-                       .arg(avail.width()).arg(avail.height()).arg(refInfo));
+    if (diagLabel_) diagLabel_->setText(QStringLiteral("dlg %1x%2 / avail %3x%4%5")
+                                            .arg(width()).arg(height())
+                                            .arg(avail.width()).arg(avail.height()).arg(refInfo));
+}
+
+// 【临时诊断】刷新体内几何信息行（首显后取真实几何；定位后移除）。
+void NewCanvasDialog::refreshDiag() const {
+    if (!diagLabel_) return;
+    const QRect avail = screen() ? screen()->availableGeometry() : QRect();
+    QString refInfo;
+    if (auto* p = parentWidget()) refInfo = QStringLiteral("/parent %1x%2").arg(p->width()).arg(p->height());
+    diagLabel_->setText(QStringLiteral("dlg %1x%2 / avail %3x%4%5")
+                            .arg(width()).arg(height())
+                            .arg(avail.width()).arg(avail.height()).arg(refInfo));
+}
+
+// 宽形态下限随屏自适应：小屏（手机横屏）下固定 480/280 下限会顶过护栏钳值（可用宽×0.95）而溢出
+//   ——预览下限降为屏宽/3、表单下限降为 min(480, 屏宽−预览−60)，且恒 ≥ 内容最小宽（不裁输入）。
+void NewCanvasDialog::applyWideMinimums(const QRect& avail) {
+    const int availW = avail.isNull() ? INT_MAX : avail.width();
+    const int previewMinW = qMin(nums::dialog::kNewCanvasPreviewMinWidthPx, availW / 3);
+    previewCol_->setMinimumWidth(previewMinW);
+    const int contentMin = body_->minimumSizeHint().width() + verticalScrollBarExtent(formScroll_);
+    formScroll_->setMinimumWidth(qMax(contentMin, qMin(480, availW - previewMinW - 60)));
+    formScroll_->setMinimumHeight(0);
 }
 
 // 切「添加图层」语境：顶部宽/高 spin（即图层尺寸）预填真实画布 W×H 并保持可编辑（改小即裁剪、改大即留白）。

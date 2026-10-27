@@ -121,6 +121,8 @@ private:
     void syncCanvasSizeToSource() const;                           // Native 适应下把顶部宽/高（图层尺寸）回填为源图原生尺寸。
     void resizeToContent();                                        // 折叠/展开变化：重算表单滚动区最小宽并让窗口跟上（同主窗页签切换更新滚动区最小宽手法）。
     void applyLayoutMode();                                        // 屏幕几何变化（旋转）→ 宽/窄形态切换：节内方向、外观组操作行、表单/预览外壳重排并收尺寸。
+    void applyWideMinimums(const QRect& avail);                    // 宽形态下限随屏自适应（构造期与旋转切换共用）：固定 480/280 下限会顶过小屏护栏钳值而溢出。
+    void refreshDiag() const;                                     // 【临时诊断】刷新体内几何信息行（移动端无标题栏；定位后移除）。
     // 内层构造：按当前落位/适应/图案元素（backdrop）与两元素外观组装一个图片层（decodedPixels 预缩 factor 为预览代理，
     //   boxWidth/Height = 传入尺寸，transform = 图层落位）；预览与定稿共用，保证与 Core 合成单一真相源。
     canvas::ImageLayer buildAttachedLayer(double factor, const canvas::ImageTransform& layerPlace,
@@ -181,6 +183,7 @@ private:
     QBoxLayout* imageLay_{nullptr};      // 图片元素节内方向（同上）。
     QSplitter* splitter_{nullptr};       // 宽屏表单/预览分隔条（窄屏为 null）。
     QWidget* previewCol_{nullptr};       // 预览列（宽屏＝右侧列、窄屏＝底部固定）。
+    QLabel* diagLabel_{nullptr};        // 【临时诊断】几何信息行（按钮行上方；移动端无标题栏故放体内；定位后移除）。
 
     static constexpr int kPreviewMaxDim = 256;   // 预览代理最长边（越小越流畅）。
 };
