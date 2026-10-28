@@ -115,10 +115,10 @@ public:
     // 父窗口 Resize/Move（旋转）→ 重跑形态链：与屏幕几何信号互为备份——Android 旋转会重建 QScreen
     //   对象，旧屏对象上的信号连接随其销毁失效；父窗口事件恒定存活（同护栏挂父窗口的口径）。
     bool eventFilter(QObject* watched, QEvent* event) override;
-    // 移动端旋转的可靠触发器：平台旋转直接改本窗尺寸/位置（护栏按此钳高即证）——本窗 Resize/Move
-    //   即重跑形态链并收钳（幂等：同尺寸/同位不再触发事件）。仅移动端启用——桌面用户手动拖窗不可被打扰。
+    // 移动端旋转的尺寸触发器：平台旋转直接改本窗尺寸（护栏按此钳高即证）——本窗 Resize 即重跑形态链
+    //   并收尺寸（幂等：同尺寸不再触发事件）。**不摆位置**：Android 对话框位置由平台管理（居中/贴边），
+    //   本窗主动 move 会与平台摆位成环（打开卡死/旋转闪退）；位置交给平台与护栏的父窗口回中。
     void resizeEvent(QResizeEvent* event) override;
-    void moveEvent(QMoveEvent* event) override;
 
 private slots:
     void onPickImage();          // 弹出文件对话框选源图，经 EngineBridge::loadImage 解码到 imageSource_。
@@ -132,7 +132,7 @@ private:
     void refreshModeChain();                                       // 内容最小宽变化（折叠/展开、控件显隐、语境切换）后重算最小宽并重跑形态链（防展开后最小宽顶超屏宽）。
     void applyModeChain(const QRect& avail);                       // 形态候选链（宽-全宽 → 宽-紧凑 → 窄，窄恒紧凑）：逐级量测整窗最小宽，装不下退一级；幂等可多拍重跑。
     void arrangeSections(bool narrow, bool compact);               // 形态编排：节内方向 + 外观组操作行形态 + 表单/预览外壳重挂 + 内容最小宽重算（形态未变即跳过）。
-    void applyLayoutMode();                                        // 屏幕几何变化（旋转）→ 形态链降档 + 按新形态舒适尺寸重收整窗（几何收钳每次调用都做）。
+    void applyLayoutMode(bool position = true);                   // 屏幕几何变化（旋转）→ 形态链降档 + 按新形态舒适尺寸重收整窗；position=false 仅收尺寸不摆位置（移动端本窗 Resize 触发用——位置归平台管）。
     void applyWideMinimums(const QRect& avail);                    // 宽形态下限随屏自适应（构造期与旋转切换共用）：固定 480/280 下限会顶过小屏护栏钳值而溢出。
     void refreshDiag() const;                                     // 【临时诊断】刷新体内几何信息行（移动端无标题栏；定位后移除）。
     // 内层构造：按当前落位/适应/图案元素（backdrop）与两元素外观组装一个图片层（decodedPixels 预缩 factor 为预览代理，

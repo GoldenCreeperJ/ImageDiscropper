@@ -519,7 +519,7 @@ void NewCanvasDialog::arrangeSections(const bool narrow, const bool compact) {
 
 // 屏幕几何变化（旋转）→ 形态链降档 + 按新形态的舒适尺寸重收整窗（护栏继续钳超屏）。
 //   几何收钳部分每次调用都做——旋转落定多拍重钳，抵消平台在动画时序里的事后摆位。
-void NewCanvasDialog::applyLayoutMode() {
+void NewCanvasDialog::applyLayoutMode(const bool position) {
     if (!formScroll_ || !previewCol_) return;   // 外壳未就绪（构造期事件旁路）：构造末形态链首跑会补跑。
     const QScreen* sc = screen();
     if (!sc) sc = QGuiApplication::primaryScreen();
@@ -541,19 +541,22 @@ void NewCanvasDialog::applyLayoutMode() {
     }
     resize(wantW, wantH);
     // 以当前屏可用几何为基准（屏幕几何是本次触发的权威来源，父窗口几何可能尚未更新）：
-    //   框内居中 + 四边越界强制拉回——保证恒不超出屏幕。
-    if (!avail.isNull()) {
-        QRect dlg = geometry();
-        dlg.moveCenter(avail.center());
-        if (dlg.right() > avail.right()) dlg.moveRight(avail.right());
-        if (dlg.bottom() > avail.bottom()) dlg.moveBottom(avail.bottom());
-        if (dlg.left() < avail.left()) dlg.moveLeft(avail.left());
-        if (dlg.top() < avail.top()) dlg.moveTop(avail.top());
-        move(dlg.topLeft());
-    } else if (auto* p = parentWidget()) {
-        const QPoint tl = p->isWindow() ? p->frameGeometry().topLeft() : p->mapToGlobal(QPoint(0, 0));
-        const QSize ps = p->isWindow() ? p->frameGeometry().size() : p->size();
-        move(tl.x() + (ps.width() - width()) / 2, tl.y() + (ps.height() - height()) / 2);
+    //   框内居中 + 四边越界强制拉回——保证恒不超出屏幕。position=false（移动端本窗 Resize 触发）
+    //   不摆位置：Android 对话框位置由平台管理，主动 move 会与平台摆位成环。
+    if (position) {
+        if (!avail.isNull()) {
+            QRect dlg = geometry();
+            dlg.moveCenter(avail.center());
+            if (dlg.right() > avail.right()) dlg.moveRight(avail.right());
+            if (dlg.bottom() > avail.bottom()) dlg.moveBottom(avail.bottom());
+            if (dlg.left() < avail.left()) dlg.moveLeft(avail.left());
+            if (dlg.top() < avail.top()) dlg.moveTop(avail.top());
+            move(dlg.topLeft());
+        } else if (auto* p = parentWidget()) {
+            const QPoint tl = p->isWindow() ? p->frameGeometry().topLeft() : p->mapToGlobal(QPoint(0, 0));
+            const QSize ps = p->isWindow() ? p->frameGeometry().size() : p->size();
+            move(tl.x() + (ps.width() - width()) / 2, tl.y() + (ps.height() - height()) / 2);
+        }
     }
     // 【临时诊断】移动端无标题栏：几何信息放按钮行上方（定位后移除）。
     const QString mode = narrow_ ? QStringLiteral("窄") : (compact_ ? QStringLiteral("宽紧") : QStringLiteral("宽全"));
@@ -575,12 +578,7 @@ bool NewCanvasDialog::eventFilter(QObject* watched, QEvent* event) {
 
 void NewCanvasDialog::resizeEvent(QResizeEvent* event) {
     QDialog::resizeEvent(event);
-    if (busyOverlay_) applyLayoutMode();   // 移动端：平台旋转改本窗尺寸即重跑（同尺寸不再触发事件，幂等收敛）。
-}
-
-void NewCanvasDialog::moveEvent(QMoveEvent* event) {
-    QDialog::moveEvent(event);
-    if (busyOverlay_) applyLayoutMode();   // 移动端：平台事后摆位即收钳回屏（同位不再触发事件，幂等收敛）。
+    if (busyOverlay_) applyLayoutMode(false);   // 移动端：平台旋转改本窗尺寸即重跑形态链、收尺寸（不摆位置——位置归平台管）。
 }
 
 // 【临时诊断】刷新体内几何信息行（首显后取真实几何；定位后移除）。
