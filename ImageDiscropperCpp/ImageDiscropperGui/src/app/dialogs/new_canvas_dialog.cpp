@@ -188,7 +188,7 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     nodeAppearance_ = new ElementAppearanceGroup(nodeBox, false, false);   // 右列：节点外观简表（默认仅色彩步；不显示不透明度行——由左列「不透明度」独家采集；setAddLayerMode 放开几何步）。
     nodeLay->addWidget(pinnedTop(nodeAppearance_), 1);
     grid->addWidget(new CollapsibleSection(IDC_GTR(label, kNodeAppearanceBox), nodeBox, body, nullptr,
-                                           [this](const bool) { resizeToContent(); }), row, 0);
+                                           [this](const bool) { refreshModeChain(); }), row, 0);
     ++row;
 
     // ---- 图案元素节（横贯，可折叠）：图案采参表单 | 色彩外观组 左右并排（窄屏上下叠）。----
@@ -201,7 +201,7 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     backdropAppearance_ = new ElementAppearanceGroup(backdropBox, false);   // 图案元素外观：仅色彩步（图案＝底图口径，几何步改区域尺寸）。
     backdropLay->addWidget(pinnedTop(backdropAppearance_), 1);
     grid->addWidget(new CollapsibleSection(IDC_GTR(label, kBackdropElementBox), backdropBox, body, nullptr,
-                                           [this](const bool) { resizeToContent(); }), row, 0);
+                                           [this](const bool) { refreshModeChain(); }), row, 0);
     ++row;
     // ---- 图片元素节（横贯，可折叠）：「附加图片」开关放节标题行（勾选＝启用并展开、取消＝自动收起）；
     //      内容＝[源图/适应/图片落位 | 两区外观] 左右并排（窄屏上下叠）。----
@@ -239,8 +239,13 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     imageLay->addWidget(pinnedTop(imageSub_), 1);
     imageAppearance_ = new ElementAppearanceGroup(imageBox);   // 右列：图片元素外观（可含几何步，落位前施于源）。
     imageLay->addWidget(pinnedTop(imageAppearance_), 1);
+    if (narrow) {   // 窄形态外观组操作行恒 2×2 紧凑（构造期即按窄形态显式收紧；形态链随后同口径维持）。
+        nodeAppearance_->setCompactLayout(true);
+        backdropAppearance_->setCompactLayout(true);
+        imageAppearance_->setCompactLayout(true);
+    }
     auto* imageSection = new CollapsibleSection(IDC_GTR(label, kImageElementBox), imageBox, body, attachImageCheck_,
-                                                [this](const bool) { resizeToContent(); });
+                                                [this](const bool) { refreshModeChain(); });
     connect(attachImageCheck_, &QCheckBox::toggled, imageSection, [imageSection](const bool on) {
         imageSection->setExpanded(on);   // 勾选=展开、取消=自动收起（箭头仍可独立折叠，勾选语义不丢）。
     });
@@ -336,16 +341,18 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
                            + 2 * nums::dialog::kTouchFieldMinHeightPx + nums::panels::kPanelSpacingPx;
     limitDialogToScreen(this, QSize(preferredW, preferredH));
     resize(preferredW, preferredH);   // 构造期即定宽：不依赖护栏首显回调（双保险；护栏仍管超屏钳制）。
-    // 形态链首跑（与旋转共用）：横屏首开时全宽操作行会把整窗最小宽顶过屏宽钳值，首显护栏按钳值
-    //   收尺寸时收不住（下限卡死）；先按实际最小宽量测降档，护栏首显再收即可入屏。
+    // 形态链首跑（与旋转共用）：横屏首开时全宽操作行会把整窗最小宽顶过屏宽钳值，护栏按钳值收尺寸时
+    //   收不住（下限卡死）；先按实际最小宽量测降档，护栏首显再收即可入屏。
     applyModeChain(sc ? sc->availableGeometry() : QRect());
-    // 屏幕几何变化（旋转）→ 宽/窄形态动态切换 + 几何收钳。旋转动画时序里平台会在我们钳位之后再摆
-    //   一次窗口（间歇性推出屏边），故多拍重钳：0/250/600ms 三次，等动画落定后再定一次。
+    // 屏幕几何变化（旋转）→ 宽/窄形态动态切换 + 几何收钳。旋转动画收尾时平台会按窗口 sizeHint 再摆
+    //   一次（宽形态 sizeHint 超屏宽时推出屏边/顶回最小宽），故多拍重钳：0/250/600/1200ms 四次，等动画
+    //   落定后再定一次；形态链恒保证当前形态最小宽 ≤ 屏宽，护栏随后收钳必成功。
     if (sc) connect(sc, &QScreen::availableGeometryChanged, this, [this] {
         const auto settle = [this] { applyLayoutMode(); };
         QTimer::singleShot(0, this, settle);
         QTimer::singleShot(250, this, settle);
         QTimer::singleShot(600, this, settle);
+        QTimer::singleShot(1200, this, settle);
     });
     QTimer::singleShot(0, this, [this] { refreshDiag(); });   // 【临时诊断】首显后刷新真实几何。
 }
@@ -404,10 +411,11 @@ void NewCanvasDialog::syncCanvasSizeToSource() const {
     heightSpin_->setValue(imageSource_.height());
 }
 
-void NewCanvasDialog::onParamsChanged() const {
+void NewCanvasDialog::onParamsChanged() {
     patternForm_->updateAvailability();
     updateControlAvailability();
     refreshPreview();
+    refreshModeChain();   // 落位组显隐随适应方式/开关变化改变内容最小宽：重算并重跑形态链（量测以当前内容为准）。
 }
 
 // 折叠/展开改变内容最小宽 → 重算表单滚动区最小宽，并在宽屏下让窗口跟上（只增长不收缩：
@@ -422,6 +430,16 @@ void NewCanvasDialog::resizeToContent() {
                       + nums::dialog::kNewCanvasPreviewMinWidthPx + 60
                       + m.left() + m.right();
     if (wantW > width()) resize(wantW, height());
+}
+
+// 内容最小宽变化（折叠/展开、附加图片开关、适应方式显隐、语境切换）后：先按新内容重算滚动区最小宽，
+//   再重跑形态链。不重跑会把「折叠态量测判宽形态」的结论带到展开态——展开后最小宽顶超屏宽，平台旋转
+//   摆位后护栏收不住、窗口卡在超宽值（985 卡死即此路径）。
+void NewCanvasDialog::refreshModeChain() {
+    resizeToContent();
+    const QScreen* sc = screen();
+    if (!sc) sc = QGuiApplication::primaryScreen();
+    applyModeChain(sc ? sc->availableGeometry() : QRect());
 }
 
 // 形态候选链：宽-全宽 → 宽-紧凑 → 窄（窄恒紧凑）。逐级按整窗实际最小宽量测、装不下退一级——
@@ -548,7 +566,7 @@ void NewCanvasDialog::refreshDiag() const {
                             .arg(avail.width()).arg(avail.height()).arg(refInfo));
 }
 
-// 宽形态下限随屏自适应：小屏（手机横屏）下固定 480/280 下限会顶过护栏钳值（可用宽×0.95）而溢出
+// 宽形态下限随屏自适应（构造期与旋转切换共用）：固定 480/280 下限会顶过护栏钳值（可用宽×0.95）而溢出
 //   ——预览下限降为屏宽/3、表单下限降为 min(480, 屏宽−预览−60)，且恒 ≥ 内容最小宽（不裁输入）。
 void NewCanvasDialog::applyWideMinimums(const QRect& avail) {
     const int availW = avail.isNull() ? INT_MAX : avail.width();

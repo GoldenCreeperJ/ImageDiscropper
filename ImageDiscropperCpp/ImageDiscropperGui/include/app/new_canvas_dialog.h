@@ -3,10 +3,11 @@
 // 作用：「文件 → 新建」模态对话框——SPEC §2.2a 合成模型的采参视图：**三段纵向折叠**（节点外观＝宽/高/
 //       整体不透明度 + 图层落位（仅「添加图片图层」语境显示）+ 节点外观简表；图案元素＝PatternFormWidget
 //       采参 | 色彩外观组（仅色彩步）左右并排；图片元素＝「附加图片」开关放节标题行（勾选＝启用并展开、
-//       取消＝自动收起）+ [源图/适应/图片落位 | 两区外观（可含几何步）] 左右并排，节内窄屏（<900px）自动
-//       上下叠）。三节皆纯折叠（标题行箭头按钮，无勾选语义——开关与折叠分离）。**预览独立固定列**：
-//       宽屏＝表单右侧恒可见、窄屏＝表单下方恒可见（滚动区外）。实时预览，接受后经 EngineBridge
-//       （委托 Core generate::makePattern / composeCanvas）产出初始画布。
+//       取消＝自动收起）+ [源图/适应/图片落位 | 两区外观（可含几何步）] 左右并排；屏宽 <900px 上下叠）。
+//       三节皆纯折叠（标题行箭头按钮，无勾选语义——开关与折叠分离）。**预览独立固定列**：宽屏＝表单右侧
+//       恒可见、窄屏＝表单下方恒可见（滚动区外）。屏幕旋转触发宽/窄形态切换，形态链按实际最小宽量测
+//       降档（宽-全宽 → 宽-紧凑 → 窄），且折叠/展开等任何最小宽变化后重跑；旋转收钳/居中另有屏幕尺寸护栏兜底。
+//       实时预览，接受后经 EngineBridge（委托 Core generate::makePattern / composeCanvas）产出初始画布。
 //       图片不是图案类型，而是**图片元素**的可选来源：勾选后可选源图 + 三适应（裁剪/拉伸/原生）+ 图片落位
 //       （图片 相对 图层：锚点/枢轴/偏移，随附加图片开关显示）；「图层 相对 底图」图层落位**仅「添加图片图层」
 //       语境显示、不随附加图片开关隐藏**——新建画布产扁平整幅、无叠层概念。
@@ -113,13 +114,14 @@ public:
 
 private slots:
     void onPickImage();          // 弹出文件对话框选源图，经 EngineBridge::loadImage 解码到 imageSource_。
-    void onParamsChanged() const;      // 任一控件变更 → 图案表单可用性 + 图层/图片落位显隐 + 重生成预览。
+    void onParamsChanged();      // 任一控件变更 → 图案表单可用性 + 图层/图片落位显隐 + 重生成预览 + 重跑形态链（显隐改变内容最小宽）。
     void accept() override;      // 全尺寸生成结果并交存后接受。
 
 private:
     void updateControlAvailability() const;                       // 依附加图片开关/语境/适应方式显隐落位组并锁定尺寸（图案相关显隐在 PatternFormWidget 内）。
     void syncCanvasSizeToSource() const;                           // Native 适应下把顶部宽/高（图层尺寸）回填为源图原生尺寸。
     void resizeToContent();                                        // 折叠/展开变化：重算表单滚动区最小宽并让窗口跟上（同主窗页签切换更新滚动区最小宽手法）。
+    void refreshModeChain();                                       // 内容最小宽变化（折叠/展开、控件显隐、语境切换）后重算最小宽并重跑形态链（防展开后最小宽顶超屏宽）。
     void applyModeChain(const QRect& avail);                       // 形态候选链（宽-全宽 → 宽-紧凑 → 窄，窄恒紧凑）：逐级量测整窗最小宽，装不下退一级；幂等可多拍重跑。
     void arrangeSections(bool narrow, bool compact);               // 形态编排：节内方向 + 外观组操作行形态 + 表单/预览外壳重挂 + 内容最小宽重算（形态未变即跳过）。
     void applyLayoutMode();                                        // 屏幕几何变化（旋转）→ 形态链降档 + 按新形态舒适尺寸重收整窗（几何收钳每次调用都做）。
@@ -176,8 +178,8 @@ private:
     bool producesLayerCanvas_{false};   // accept()：「添加图片图层」语境且勾选附加图片时置真（新建画布语境恒假）。
     bool addLayerMode_{false};          // 语境标志：setAddLayerMode() 置真（区分「添加图片图层」与「新建画布」）。
     bool busyOverlay_{false};   // 忙碌全屏遮罩形态（SessionController 依 busyOverlayMode() 下发，MobileShell 下为 true；SPEC §8.2）。
-    bool narrow_{false};        // 窄形态（kStackColumnsMaxWidthPx 起判）：节内上下叠 + 预览固定底部；宽形态装不下时形态链仍可落回窄。
-    bool compact_{false};       // 操作行紧凑形态（2×2 按钮行压最小宽）：窄形态恒紧凑；宽形态装不下全宽操作行时经形态链降档启用。
+    bool narrow_{false};        // 窄形态（<kStackColumnsMaxWidthPx 起判）：节内上下叠 + 预览固定底部；宽形态装不下时形态链仍可落回窄。
+    bool compact_{false};       // 操作行紧凑形态（2×2 按钮行压最小宽）：窄形态恒紧凑；宽形态装不下全宽操作行时经形态链启用。
     QWidget* body_{nullptr};    // 滚动表单主体（resizeToContent 据其最小宽重算）。
     QScrollArea* formScroll_{nullptr};   // 表单滚动区（resizeToContent 更新其最小宽）。
     QVBoxLayout* rootLayout_{nullptr};   // 对话框根布局（applyLayoutMode 重排表单/预览外壳）。
