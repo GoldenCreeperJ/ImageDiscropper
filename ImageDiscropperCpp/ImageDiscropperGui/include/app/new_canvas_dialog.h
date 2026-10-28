@@ -129,12 +129,12 @@ private:
     void updateControlAvailability() const;                       // 依附加图片开关/语境/适应方式显隐落位组并锁定尺寸（图案相关显隐在 PatternFormWidget 内）。
     void syncCanvasSizeToSource() const;                           // Native 适应下把顶部宽/高（图层尺寸）回填为源图原生尺寸。
     void resizeToContent();                                        // 折叠/展开变化：重算表单滚动区最小宽并让窗口跟上（同主窗页签切换更新滚动区最小宽手法）。
-    void updateFormMinWidth();                                     // 仅重算表单滚动区最小宽（不动窗口）：形态编排内部用——窗口尺寸统一由 applyLayoutMode 几何部分定。
+    void updateFormMinWidth() const;                                     // 仅重算表单滚动区最小宽（不动窗口）：形态编排内部用——窗口尺寸统一由 applyLayoutMode 几何部分定。
     void refreshModeChain();                                       // 内容最小宽变化（折叠/展开、控件显隐、语境切换）后重算最小宽并重跑形态链（防展开后最小宽顶超屏宽）。
     void applyModeChain(const QRect& avail);                       // 形态候选链（宽-全宽 → 宽-紧凑 → 窄，窄恒紧凑）：逐级量测整窗最小宽，装不下退一级；幂等可多拍重跑。
     void arrangeSections(bool narrow, bool compact);               // 形态编排：节内方向 + 外观组操作行形态 + 表单/预览外壳重挂 + 内容最小宽重算（形态未变即跳过）。
     void applyLayoutMode(bool position = true);                   // 屏幕几何变化（旋转）→ 形态链降档 + 按新形态舒适尺寸重收整窗；position=false 仅收尺寸不摆位置（移动端本窗 Resize 触发用——位置归平台管）。
-    void applyWideMinimums(const QRect& avail);                    // 宽形态下限随屏自适应（构造期与旋转切换共用）：固定 480/280 下限会顶过小屏护栏钳值而溢出。
+    void applyWideMinimums(const QRect& avail) const;                    // 宽形态下限随屏自适应（构造期与旋转切换共用）：固定 480/280 下限会顶过小屏护栏钳值而溢出。
     void refreshDiag() const;                                     // 【临时诊断】刷新体内几何信息行（移动端无标题栏；定位后移除）。
     // 内层构造：按当前落位/适应/图案元素（backdrop）与两元素外观组装一个图片层（decodedPixels 预缩 factor 为预览代理，
     //   boxWidth/Height = 传入尺寸，transform = 图层落位）；预览与定稿共用，保证与 Core 合成单一真相源。

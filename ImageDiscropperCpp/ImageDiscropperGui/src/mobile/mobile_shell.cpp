@@ -12,6 +12,7 @@
 // ============================================================================
 #include "mobile/mobile_shell.h"
 
+#include <QApplication>
 #include <QDockWidget>
 #include <QGridLayout>
 #include <QMainWindow>
@@ -41,7 +42,9 @@ MobileShell::MobileShell(QWidget* parent) : MainWindow(MobileShellTag{}, parent)
         setWindowTitle(i18n::qs(titleRef).arg(QStringLiteral(IDC_GUI_VERSION)));
     });
     resize(nums::mobile::kWindowWidthPx, nums::mobile::kWindowHeightPx);   // 竖屏典型比例；横屏同为合法形态（§8.3 双布局）。
-    setStyleSheet(QLatin1String(kTouchChromeStyle));
+    // 触控样式应用级注入：抽屉/工具条规则（#mobileDrawer 限定）+ 对话框规则（QDialog 限定）——
+    //   独立窗口的对话框不继承壳窗口样式表，须经 QApplication 全应用生效；桌面构建不含本壳、不受影响。
+    qApp->setStyleSheet(QLatin1String(kTouchChromeStyle) + QLatin1String(kDialogTouchStyle));
 
     MobileShellUi::buildCentral(this);
     MobileShellUi::buildDrawer(this);

@@ -113,6 +113,13 @@ inline constexpr int kColorSwatchHeightPx = 22;
 inline constexpr int kNewCanvasPreviewMinWidthPx = 280;  // 新建画布预览区最小尺寸（小于此预览不可读）。
 inline constexpr int kNewCanvasPreviewMinHeightPx = 200;
 inline constexpr int kNewCanvasPreviewTightMinWidthPx = 200;  // 预览列收紧下限：宽形态装不下时表单不裁、预览让宽（仍可拖分隔条回大）。
+inline constexpr int kNewCanvasPreviewMinHeightNarrowPx = 120;  // 窄形态（竖屏）预览固定底栏最小高（宽形态用 kNewCanvasPreviewMinHeightPx）。
+inline constexpr int kNewCanvasFormMinWidthPx = 480;            // 宽形态表单滚动区最小宽下限（内容更宽时随内容，不裁输入）。
+inline constexpr int kNewCanvasWideFormFloorPx = 640;           // 宽形态整窗宽的表单宽目标下限（初始预算/旋转收尺寸共用口径）。
+inline constexpr int kNewCanvasWideShellExtraPx = 60;           // 宽形态外壳余量：预览列最小宽之外的窗口宽（预览列初值增量/分隔条/边距余量）。
+inline constexpr int kNewCanvasShellFitSlackPx = 12;            // 形态链量测的外壳余量（根边距之外的分隔条把手+容差）。
+inline constexpr int kNewCanvasSplitterHandleWidthPx = 12;      // 表单/预览分隔条把手宽（触控可拖，默认 ~5px 拖不动）。
+inline constexpr int kNewCanvasSectionToggleMinPx = 32;         // 折叠节箭头/标题行触控下限（与数值框触控下限同口径）。
 inline constexpr int kPatternPeriodMaxPx = 4096;    // 周期 / 格子边长 / 环间距上限（下限转引 Core kMinPeriod）。
 inline constexpr int kPatternParamMaxPx = 256;      // 线宽与点半径共用的上限。
 inline constexpr int kPatternHuePeriodPx = 128;     // 进入色相渐变时写入的色相波长初值（一个彩虹循环的像素宽）。
@@ -123,6 +130,9 @@ inline constexpr int kPatternHuePeriodPx = 128;     // 进入色相渐变时写�
 namespace mobile {
 inline constexpr int kWindowWidthPx = 480;  // 移动壳初启尺寸（竖屏典型比例；横屏同为合法形态，SPEC §8.3 双布局）。
 inline constexpr int kWindowHeightPx = 960;
+// 对话框旋转落定重钳时刻：动画期间每拍只收尺寸不摆位置（平台在摆位，抢位即抖动），
+// 末拍带位置收钳（仅越界拉回）。
+inline constexpr int kRotationSettleMs[] = {0, 250, 600, 800};
 inline constexpr int kDrawerMinWidthPx = 320;   // 抽屉最小尺寸＝设计下限（真机横/竖屏均放得下；
                                                 // 防内容自然 hint 无界回压，取值依据见 src/mobile/README.md「触控精度与方向」）。
 inline constexpr int kDrawerMinHeightPx = 240;

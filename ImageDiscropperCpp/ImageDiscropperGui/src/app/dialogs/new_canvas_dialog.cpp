@@ -44,6 +44,8 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
+#include <iterator>   // std::size（旋转重钳时刻数组遍历）
+
 #include "generate/pattern.h"
 #include "app/controllers/preprocess_controller.h" // runInBusyDialog（全尺寸生成包忙碌框，避免 UI 冻结）
 #include "app/canvas_prefs.h"                        // 新建画布默认尺寸（取初值 + 记住上次）
@@ -95,12 +97,16 @@ public:
         arrow_->setAutoRaise(true);
         arrow_->setCheckable(true);
         arrow_->setChecked(true);
-        auto* label = new QLabel(title, this);
-        QFont f = label->font();
+        arrow_->setMinimumSize(nums::dialog::kNewCanvasSectionToggleMinPx, nums::dialog::kNewCanvasSectionToggleMinPx);   // 触控下限（与抽屉按钮同口径；移动端对话框样式表同时兜底）。
+        arrow_->setCursor(Qt::PointingHandCursor);
+        titleLabel_ = new QLabel(title, this);
+        QFont f = titleLabel_->font();
         f.setBold(true);
-        label->setFont(f);
+        titleLabel_->setFont(f);
+        titleLabel_->setCursor(Qt::PointingHandCursor);
+        titleLabel_->installEventFilter(this);   // 标题文字点击转发到箭头（命中面从小箭头扩到整行）。
         head->addWidget(arrow_);
-        head->addWidget(label, 1);
+        head->addWidget(titleLabel_, 1);
         lay->addLayout(head);
         lay->addWidget(content_);
         lay->addStretch(1);   // 内容钉顶：折叠节被所在列等高拉伸时，多余空间沉底（不居中浮空）。
@@ -114,8 +120,18 @@ public:
     // 程序化展开/收起（开关联动：勾选=展开、取消=收起）。
     void setExpanded(const bool expanded) const { arrow_->setChecked(expanded); }
 
+    // 标题行整行可点：标题文字按下即切换（与箭头同义）。
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (watched == titleLabel_ && event->type() == QEvent::MouseButtonRelease) {
+            arrow_->toggle();
+            return true;
+        }
+        return QWidget::eventFilter(watched, event);
+    }
+
 private:
     QToolButton* arrow_{nullptr};
+    QLabel* titleLabel_{nullptr};
     QWidget* content_{nullptr};
     std::function<void(bool)> onToggled_;
 };
@@ -276,22 +292,23 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     if (narrow) {
         // 横屏高度紧张：滚动区最小高归零、预览最小高收缩，整窗下限让位于护栏钳制（不超出屏幕）。
         formScroll_->setMinimumHeight(0);
-        previewLabel_->setMinimumHeight(120);
+        previewLabel_->setMinimumHeight(nums::dialog::kNewCanvasPreviewMinHeightNarrowPx);
         root->addWidget(formScroll_, 1);
         root->addWidget(previewCol);
     } else {
-        // 宽形态下限随屏自适应（小屏横屏下固定 480/280 会顶过护栏钳值而溢出）。
+        // 宽形态下限随屏自适应（小屏横屏下固定表单/预览下限会顶过护栏钳值而溢出）。
         const QRect availAtCtor = sc ? sc->availableGeometry() : QRect();
         applyWideMinimums(availAtCtor);
         auto* splitter = splitter_ = new QSplitter(Qt::Horizontal, this);
+        splitter->setHandleWidth(nums::dialog::kNewCanvasSplitterHandleWidthPx);   // 触控把手：默认 ~5px 细条手指拖不动。
         splitter->addWidget(formScroll_);
         previewCol->setMinimumWidth(nums::dialog::kNewCanvasPreviewMinWidthPx);
         splitter->addWidget(previewCol);
         splitter->setChildrenCollapsible(false);
         splitter->setStretchFactor(0, 1);
         splitter->setStretchFactor(1, 0);
-        const int formW = qMax(expandedFormW, 640);
-        splitter->setSizes({formW, nums::dialog::kNewCanvasPreviewMinWidthPx + 60});   // 预览列初值 340，可拖分隔条调整。
+        const int formW = qMax(expandedFormW, nums::dialog::kNewCanvasWideFormFloorPx);
+        splitter->setSizes({formW, nums::dialog::kNewCanvasPreviewMinWidthPx + nums::dialog::kNewCanvasWideShellExtraPx});   // 预览列初值 340，可拖分隔条调整。
         root->addWidget(splitter, 1);
     }
 
@@ -333,12 +350,12 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     // 屏幕尺寸护栏：按可用几何钳最大宽 / 高（比例见 nums::mobile::kDialogMax*），首次显示收到
     // 「表单自然尺寸 + 预览列 + 按钮行」与可用几何的较小者；小屏 / 横屏超出即内部滚动、按钮常驻，
     // 勾选附加图片增删的行落在滚动内容里、外层窗口不被撑大；桌面大屏下钳值远超内容、等效无约束。
-    const QSize formHint = body->sizeHint();        // 高度口径（初始宽度用「展开态舒适宽」预算 + 640 下限）。
+    const QSize formHint = body->sizeHint();        // 高度口径（初始宽度用「展开态舒适宽」预算 + kNewCanvasWideFormFloorPx 下限）。
     const QMargins rootMargin = root->contentsMargins();
-    const int preferredW = qMax(expandedFormW, 640)
-                           + (narrow ? 0 : nums::dialog::kNewCanvasPreviewMinWidthPx + 60)
+    const int preferredW = qMax(expandedFormW, nums::dialog::kNewCanvasWideFormFloorPx)
+                           + (narrow ? 0 : nums::dialog::kNewCanvasPreviewMinWidthPx + nums::dialog::kNewCanvasWideShellExtraPx)
                            + rootMargin.left() + rootMargin.right();
-    const int preferredH = formHint.height() + (narrow ? 120 : 0)
+    const int preferredH = formHint.height() + (narrow ? nums::dialog::kNewCanvasPreviewMinHeightNarrowPx : 0)
                            + 2 * nums::dialog::kTouchFieldMinHeightPx + nums::panels::kPanelSpacingPx;
     limitDialogToScreen(this, QSize(preferredW, preferredH));
     resize(preferredW, preferredH);   // 构造期即定宽：不依赖护栏首显回调（双保险；护栏仍管超屏钳制）。
@@ -347,13 +364,13 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     applyModeChain(sc ? sc->availableGeometry() : QRect());
     // 屏幕几何变化（旋转）→ 宽/窄形态动态切换 + 几何收钳。旋转动画收尾时平台会按窗口 sizeHint 再摆
     //   一次（宽形态 sizeHint 超屏宽时推出屏边/顶回最小宽），故多拍重钳：动画期间（0/250/600ms）只收
-    //   尺寸不摆位置（平台在摆位，抢位即抖动），位置仅最末拍（1200ms）定一次；形态链恒保证当前形态
-    //   最小宽 ≤ 屏宽，护栏随后收钳必成功。
+    //   尺寸不摆位置（平台在摆位，抢位即抖动），末拍（800ms）也只做越界拉回；每拍仅在几何不对时才动，
+    //   正常情形全程无可见动作。
     if (sc) connect(sc, &QScreen::availableGeometryChanged, this, [this] {
-        QTimer::singleShot(0, this, [this] { applyLayoutMode(false); });
-        QTimer::singleShot(250, this, [this] { applyLayoutMode(false); });
-        QTimer::singleShot(600, this, [this] { applyLayoutMode(false); });
-        QTimer::singleShot(1200, this, [this] { applyLayoutMode(); });
+        // 前三拍只收尺寸（平台在摆位，抢位即抖动）；末拍（数组末元素）带位置收钳（仅越界拉回）。
+        constexpr int last = static_cast<int>(std::size(nums::mobile::kRotationSettleMs)) - 1;
+        for (int i = 0; i <= last; ++i)
+            QTimer::singleShot(nums::mobile::kRotationSettleMs[i], this, [this, i, last] { applyLayoutMode(i == last); });
     });
     // 旋转主通道：父窗口 Resize/Move 事件（Android 旋转会重建 QScreen 对象，上面的屏幕信号连接随旧
     //   屏对象销毁失效；父窗口事件恒定存活——与护栏挂父窗口同口径，屏幕信号仅作备份）。
@@ -424,10 +441,10 @@ void NewCanvasDialog::onParamsChanged() {
 
 // 仅按当前内容重算表单滚动区最小宽（不动窗口）：形态编排内部用——窗口尺寸统一由 applyLayoutMode
 //   几何部分定，避免「试装增窗 → 收钳缩窗 → 本窗 Resize 重入」的事件环。
-void NewCanvasDialog::updateFormMinWidth() {
+void NewCanvasDialog::updateFormMinWidth() const {
     if (!formScroll_ || !body_) return;
     const int contentMin = body_->minimumSizeHint().width() + verticalScrollBarExtent(formScroll_);
-    formScroll_->setMinimumWidth(narrow_ ? contentMin : qMax(480, contentMin));
+    formScroll_->setMinimumWidth(narrow_ ? contentMin : qMax(nums::dialog::kNewCanvasFormMinWidthPx, contentMin));
 }
 
 // 折叠/展开改变内容最小宽 → 重算表单滚动区最小宽，并在宽屏下让窗口跟上（只增长不收缩：
@@ -436,8 +453,8 @@ void NewCanvasDialog::resizeToContent() {
     updateFormMinWidth();
     if (narrow_) return;   // 窄屏纵向：窗口宽由护栏管，无需调整。
     const QMargins m = layout()->contentsMargins();
-    const int wantW = qMax(body_->sizeHint().width(), 480)
-                      + nums::dialog::kNewCanvasPreviewMinWidthPx + 60
+    const int wantW = qMax(body_->sizeHint().width(), nums::dialog::kNewCanvasFormMinWidthPx)
+                      + nums::dialog::kNewCanvasPreviewMinWidthPx + nums::dialog::kNewCanvasWideShellExtraPx
                       + m.left() + m.right();
     if (wantW > width()) resize(wantW, height());
 }
@@ -473,7 +490,8 @@ void NewCanvasDialog::applyModeChain(const QRect& avail) {
     }
     // 宽形态整窗最小宽 = 表单最小宽（applyWideMinimums 刚按当前内容量测写入）+ 预览最小宽 + 外壳
     //   （根边距 + 分隔条把手 12px 余量）。量测须在 arrangeSections 之后（其内已重写两最小宽）。
-    const int shellW = layout()->contentsMargins().left() + layout()->contentsMargins().right() + 12;
+    const int shellW = layout()->contentsMargins().left() + layout()->contentsMargins().right()
+                       + nums::dialog::kNewCanvasShellFitSlackPx;
     const auto fits = [this, &avail, shellW] {
         return formScroll_->minimumWidth() + previewCol_->minimumWidth() + shellW <= avail.width();
     };
@@ -504,7 +522,7 @@ void NewCanvasDialog::arrangeSections(const bool narrow, const bool compact) {
     nodeAppearance_->setCompactLayout(compact);
     backdropAppearance_->setCompactLayout(compact);
     imageAppearance_->setCompactLayout(compact);
-    previewLabel_->setMinimumHeight(narrow ? 120 : nums::dialog::kNewCanvasPreviewMinHeightPx);
+    previewLabel_->setMinimumHeight(narrow ? nums::dialog::kNewCanvasPreviewMinHeightNarrowPx : nums::dialog::kNewCanvasPreviewMinHeightPx);
 
     // 表单/预览外壳：窄屏纵向堆叠 ↔ 宽屏可拖分隔条（布局重挂会自动改父）。
     rootLayout_->removeWidget(formScroll_);
@@ -513,6 +531,7 @@ void NewCanvasDialog::arrangeSections(const bool narrow, const bool compact) {
     if (!narrow) {
         if (!splitter_) {
             splitter_ = new QSplitter(Qt::Horizontal, this);
+            splitter_->setHandleWidth(nums::dialog::kNewCanvasSplitterHandleWidthPx);   // 触控把手（与构造期同口径）。
             splitter_->setChildrenCollapsible(false);
             splitter_->setStretchFactor(0, 1);
             splitter_->setStretchFactor(1, 0);
@@ -548,10 +567,13 @@ void NewCanvasDialog::applyLayoutMode(const bool position) {
     body_->updateGeometry();
     const QSize formHint = body_->sizeHint();
     const QMargins m = layout()->contentsMargins();
-    int wantW = qMax(formHint.width(), narrow_ ? 0 : 640)
-                + (narrow_ ? 0 : nums::dialog::kNewCanvasPreviewMinWidthPx + 60)
+    // 窄形态宽度目标 = 表单最小宽（内容恰好不裁的宽度）：不用 sizeHint——其含横屏构造烘焙的宽网格与
+    //   大数值 spin 的提示宽（约 449），竖屏下该目标本身超屏、钳值未收住即露出 469 超宽。
+    const int formW = narrow_ ? body_->minimumSizeHint().width() : qMax(formHint.width(), nums::dialog::kNewCanvasWideFormFloorPx);
+    int wantW = formW
+                + (narrow_ ? 0 : nums::dialog::kNewCanvasPreviewMinWidthPx + nums::dialog::kNewCanvasWideShellExtraPx)
                 + m.left() + m.right();
-    int wantH = formHint.height() + (narrow_ ? 120 : 0)
+    int wantH = formHint.height() + (narrow_ ? nums::dialog::kNewCanvasPreviewMinHeightNarrowPx : 0)
                 + 2 * nums::dialog::kTouchFieldMinHeightPx + nums::panels::kPanelSpacingPx;
     // 显式钳到护栏口径（不依赖 Resize 事件次序）；随后按父窗口居中（无父则按屏居中）——
     //   旋转时序里屏幕几何先变、父窗口后变，护栏的父窗口处理器会随后再居中回正一次。
@@ -559,31 +581,23 @@ void NewCanvasDialog::applyLayoutMode(const bool position) {
         wantW = qMin(wantW, static_cast<int>(avail.width() * nums::mobile::kDialogMaxWidthRatio));
         wantH = qMin(wantH, static_cast<int>(avail.height() * nums::mobile::kDialogMaxHeightRatio));
     }
-    resize(wantW, wantH);
-    // 以当前屏可用几何为基准（屏幕几何是本次触发的权威来源，父窗口几何可能尚未更新）：
-    //   框内居中 + 四边越界强制拉回——保证恒不超出屏幕。position=false（移动端本窗 Resize 触发）
-    //   不摆位置：Android 对话框位置由平台管理，主动 move 会与平台摆位成环。
-    if (position) {
-        if (!avail.isNull()) {
-            QRect dlg = geometry();
-            dlg.moveCenter(avail.center());
-            if (dlg.right() > avail.right()) dlg.moveRight(avail.right());
-            if (dlg.bottom() > avail.bottom()) dlg.moveBottom(avail.bottom());
-            if (dlg.left() < avail.left()) dlg.moveLeft(avail.left());
-            if (dlg.top() < avail.top()) dlg.moveTop(avail.top());
-            move(dlg.topLeft());
-        } else if (auto* p = parentWidget()) {
-            const QPoint tl = p->isWindow() ? p->frameGeometry().topLeft() : p->mapToGlobal(QPoint(0, 0));
-            const QSize ps = p->isWindow() ? p->frameGeometry().size() : p->size();
-            move(tl.x() + (ps.width() - width()) / 2, tl.y() + (ps.height() - height()) / 2);
-        }
+    if (size() != QSize(wantW, wantH)) resize(wantW, wantH);   // 尺寸与目标一致即不动（每拍仅在几何不对时动作，无可见停顿）。
+    // 越界才拉回（不强制居中——居中归平台；position=false 通道即移动端本窗 Resize 触发完全不摆位置）。
+    if (position && !avail.isNull()) {
+        QRect dlg = geometry();
+        bool out = false;
+        if (dlg.right() > avail.right()) { dlg.moveRight(avail.right()); out = true; }
+        if (dlg.bottom() > avail.bottom()) { dlg.moveBottom(avail.bottom()); out = true; }
+        if (dlg.left() < avail.left()) { dlg.moveLeft(avail.left()); out = true; }
+        if (dlg.top() < avail.top()) { dlg.moveTop(avail.top()); out = true; }
+        if (out) move(dlg.topLeft());
     }
     // 【临时诊断】移动端无标题栏：几何信息放按钮行上方（定位后移除）。
-    QString mode = narrow_ ? QStringLiteral("窄") : (compact_ ? QStringLiteral("宽紧") : QStringLiteral("宽全"));
+    QString mode = narrow_ ? QStringLiteral("窄") : compact_ ? QStringLiteral("宽紧") : QStringLiteral("宽全");
     if (formScroll_ && previewCol_)
         mode += QStringLiteral(" 表%1+预%2").arg(formScroll_->minimumWidth()).arg(previewCol_->minimumWidth());
     QString refInfo;
-    if (auto* p = parentWidget()) refInfo = QStringLiteral("/parent %1x%2").arg(p->width()).arg(p->height());
+    if (const auto* p = parentWidget()) refInfo = QStringLiteral("/parent %1x%2").arg(p->width()).arg(p->height());
     if (diagLabel_) diagLabel_->setText(QStringLiteral("dlg %1x%2 @%3,%4 / avail %5x%6 %7%8")
                                             .arg(width()).arg(height())
                                             .arg(x()).arg(y())
@@ -608,11 +622,11 @@ void NewCanvasDialog::resizeEvent(QResizeEvent* event) {
 void NewCanvasDialog::refreshDiag() const {
     if (!diagLabel_) return;
     const QRect avail = screen() ? screen()->availableGeometry() : QRect();
-    QString mode = narrow_ ? QStringLiteral("窄") : (compact_ ? QStringLiteral("宽紧") : QStringLiteral("宽全"));
+    QString mode = narrow_ ? QStringLiteral("窄") : compact_ ? QStringLiteral("宽紧") : QStringLiteral("宽全");
     if (formScroll_ && previewCol_)
         mode += QStringLiteral(" 表%1+预%2").arg(formScroll_->minimumWidth()).arg(previewCol_->minimumWidth());
     QString refInfo;
-    if (auto* p = parentWidget()) refInfo = QStringLiteral("/parent %1x%2").arg(p->width()).arg(p->height());
+    if (const auto* p = parentWidget()) refInfo = QStringLiteral("/parent %1x%2").arg(p->width()).arg(p->height());
     diagLabel_->setText(QStringLiteral("dlg %1x%2 @%3,%4 / avail %5x%6 %7%8")
                             .arg(width()).arg(height())
                             .arg(x()).arg(y())
@@ -620,14 +634,16 @@ void NewCanvasDialog::refreshDiag() const {
                             .arg(mode).arg(refInfo));
 }
 
-// 宽形态下限随屏自适应（构造期与旋转切换共用）：固定 480/280 下限会顶过护栏钳值（可用宽×0.95）而溢出
-//   ——预览下限降为屏宽/3、表单下限降为 min(480, 屏宽−预览−60)，且恒 ≥ 内容最小宽（不裁输入）。
-void NewCanvasDialog::applyWideMinimums(const QRect& avail) {
+// 宽形态下限随屏自适应（构造期与旋转切换共用）：固定表单/预览下限会顶过护栏钳值（可用宽×0.95）而溢出
+//   ——预览下限降为屏宽/3、表单下限降为 min(kNewCanvasFormMinWidthPx, 屏宽−预览−kNewCanvasWideShellExtraPx)，
+//   且恒 ≥ 内容最小宽（不裁输入）。
+void NewCanvasDialog::applyWideMinimums(const QRect& avail) const {
     const int availW = avail.isNull() ? INT_MAX : avail.width();
     const int previewMinW = qMin(nums::dialog::kNewCanvasPreviewMinWidthPx, availW / 3);
     previewCol_->setMinimumWidth(previewMinW);
     const int contentMin = body_->minimumSizeHint().width() + verticalScrollBarExtent(formScroll_);
-    formScroll_->setMinimumWidth(qMax(contentMin, qMin(480, availW - previewMinW - 60)));
+    formScroll_->setMinimumWidth(qMax(contentMin, qMin(nums::dialog::kNewCanvasFormMinWidthPx,
+                                                       availW - previewMinW - nums::dialog::kNewCanvasWideShellExtraPx)));
     formScroll_->setMinimumHeight(0);
 }
 
