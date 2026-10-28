@@ -458,10 +458,10 @@ void NewCanvasDialog::applyModeChain(const QRect& avail) {
         return;
     }
     // 宽形态整窗最小宽 = 表单最小宽（applyWideMinimums 刚按当前内容量测写入）+ 预览最小宽 + 外壳
-    //   （分隔条把手 + 根边距 + 余量）。量测须在 arrangeSections 之后（其内已重写两最小宽）。
-    constexpr int kShellExtraW = 60;
+    //   （根边距 + 分隔条把手 12px 余量）。量测须在 arrangeSections 之后（其内已重写两最小宽）。
     const auto fits = [this, &avail] {
-        return formScroll_->minimumWidth() + previewCol_->minimumWidth() + kShellExtraW <= avail.width();
+        const int shellW = layout()->contentsMargins().left() + layout()->contentsMargins().right() + 12;
+        return formScroll_->minimumWidth() + previewCol_->minimumWidth() + shellW <= avail.width();
     };
     arrangeSections(false, false);
     if (fits()) return;
@@ -556,12 +556,14 @@ void NewCanvasDialog::applyLayoutMode() {
         move(tl.x() + (ps.width() - width()) / 2, tl.y() + (ps.height() - height()) / 2);
     }
     // 【临时诊断】移动端无标题栏：几何信息放按钮行上方（定位后移除）。
+    const QString mode = narrow_ ? QStringLiteral("窄") : (compact_ ? QStringLiteral("宽紧") : QStringLiteral("宽全"));
     QString refInfo;
     if (auto* p = parentWidget()) refInfo = QStringLiteral("/parent %1x%2").arg(p->width()).arg(p->height());
-    if (diagLabel_) diagLabel_->setText(QStringLiteral("dlg %1x%2 @%3,%4 / avail %5x%6%7")
+    if (diagLabel_) diagLabel_->setText(QStringLiteral("dlg %1x%2 @%3,%4 / avail %5x%6 %7%8")
                                             .arg(width()).arg(height())
                                             .arg(x()).arg(y())
-                                            .arg(avail.width()).arg(avail.height()).arg(refInfo));
+                                            .arg(avail.width()).arg(avail.height())
+                                            .arg(mode).arg(refInfo));
 }
 
 // 父窗口尺寸/位置变化（旋转）→ 重跑形态链（applyLayoutMode 幂等，动画期间连发的事件形成自然多拍重钳）。
@@ -571,16 +573,28 @@ bool NewCanvasDialog::eventFilter(QObject* watched, QEvent* event) {
     return QDialog::eventFilter(watched, event);
 }
 
+void NewCanvasDialog::resizeEvent(QResizeEvent* event) {
+    QDialog::resizeEvent(event);
+    if (busyOverlay_) applyLayoutMode();   // 移动端：平台旋转改本窗尺寸即重跑（同尺寸不再触发事件，幂等收敛）。
+}
+
+void NewCanvasDialog::moveEvent(QMoveEvent* event) {
+    QDialog::moveEvent(event);
+    if (busyOverlay_) applyLayoutMode();   // 移动端：平台事后摆位即收钳回屏（同位不再触发事件，幂等收敛）。
+}
+
 // 【临时诊断】刷新体内几何信息行（首显后取真实几何；定位后移除）。
 void NewCanvasDialog::refreshDiag() const {
     if (!diagLabel_) return;
     const QRect avail = screen() ? screen()->availableGeometry() : QRect();
+    const QString mode = narrow_ ? QStringLiteral("窄") : (compact_ ? QStringLiteral("宽紧") : QStringLiteral("宽全"));
     QString refInfo;
     if (auto* p = parentWidget()) refInfo = QStringLiteral("/parent %1x%2").arg(p->width()).arg(p->height());
-    diagLabel_->setText(QStringLiteral("dlg %1x%2 @%3,%4 / avail %5x%6%7")
+    diagLabel_->setText(QStringLiteral("dlg %1x%2 @%3,%4 / avail %5x%6 %7%8")
                             .arg(width()).arg(height())
                             .arg(x()).arg(y())
-                            .arg(avail.width()).arg(avail.height()).arg(refInfo));
+                            .arg(avail.width()).arg(avail.height())
+                            .arg(mode).arg(refInfo));
 }
 
 // 宽形态下限随屏自适应（构造期与旋转切换共用）：固定 480/280 下限会顶过护栏钳值（可用宽×0.95）而溢出

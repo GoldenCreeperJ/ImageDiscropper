@@ -115,6 +115,10 @@ public:
     // 父窗口 Resize/Move（旋转）→ 重跑形态链：与屏幕几何信号互为备份——Android 旋转会重建 QScreen
     //   对象，旧屏对象上的信号连接随其销毁失效；父窗口事件恒定存活（同护栏挂父窗口的口径）。
     bool eventFilter(QObject* watched, QEvent* event) override;
+    // 移动端旋转的可靠触发器：平台旋转直接改本窗尺寸/位置（护栏按此钳高即证）——本窗 Resize/Move
+    //   即重跑形态链并收钳（幂等：同尺寸/同位不再触发事件）。仅移动端启用——桌面用户手动拖窗不可被打扰。
+    void resizeEvent(QResizeEvent* event) override;
+    void moveEvent(QMoveEvent* event) override;
 
 private slots:
     void onPickImage();          // 弹出文件对话框选源图，经 EngineBridge::loadImage 解码到 imageSource_。
