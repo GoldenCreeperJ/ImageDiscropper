@@ -99,8 +99,8 @@ void CanvasScene::updatePendingAnnotation(const AnnotationBridge& model) {
 // 场景驱动的标注平移拖拽：按下链路选中后由上层对本方法发起，拖动跟随**选中项**而非被按项
 //（重叠时按下落在最顶图元，但拖动应作用于选中项）。此后移动/释放由 CanvasScene::mouseMove/ReleaseEvent 转发。
 void CanvasScene::beginAnnotationDrag(const int index, const QPointF& scenePos) {
-    if (index < 0 || static_cast<std::size_t>(index) >= annoItems_.size()) { annoDragItem_ = nullptr; return; }
-    AnnotationItem* it = annoItems_[static_cast<std::size_t>(index)];
+    if (index < 0 || static_cast<qsizetype>(index) >= annoItems_.size()) { annoDragItem_ = nullptr; return; }
+    AnnotationItem* it = annoItems_[static_cast<qsizetype>(index)];
     annoDragItem_ = it;
     it->beginTranslationDrag(scenePos);
 }

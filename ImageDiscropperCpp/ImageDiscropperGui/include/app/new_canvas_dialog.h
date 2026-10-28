@@ -34,6 +34,7 @@
 class QBoxLayout;
 class QCheckBox;
 class QComboBox;
+class QGridLayout;
 class QLabel;
 class QPushButton;
 class QScrollArea;
@@ -145,6 +146,12 @@ private:
                               const canvas::ImageTransform& layerPlace, const canvas::ImageTransform& imgPlace,
                               ImageFit fit) const;
     void refreshPreview() const;                                  // 小尺寸代理生成并缩放到预览标签。
+
+    // ---- 三个折叠节构建器（按节拆 TU：src/app/dialogs/new_canvas_dialog_sections.cpp；装配壳
+    //       构造依序调用，各节自登记进 body 网格、row 按节递增；共享装配件见 new_canvas_dialog_internal.h）----
+    void buildNodeSection(QWidget* body, QGridLayout* grid, int& row, bool narrow);            // 节点外观节：左列尺寸/不透明度/图层落位 + 右列节点外观简表。
+    void buildBackdropSection(QWidget* body, QGridLayout* grid, int& row, bool narrow);        // 图案元素节：图案采参表单 | 色彩外观组。
+    void buildImageSection(QWidget* body, QGridLayout* grid, int& row, bool narrow, int& expandedFormW);   // 图片元素节：开关放节标题行 + 两列内容；「展开态舒适宽」经出参回传。
 
     // 尺寸（＝图层尺寸：本对话框产出图/层的 W×H）。
     QSpinBox* widthSpin_{nullptr};

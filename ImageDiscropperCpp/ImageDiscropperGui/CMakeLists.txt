@@ -260,6 +260,9 @@ set(IDC_GUI_APP_SRC
         src/app/forms/config_io_dialog.cpp
         src/app/main_window_ui.cpp
         src/app/dialogs/new_canvas_dialog.cpp
+        src/app/dialogs/new_canvas_dialog_sections.cpp
+        src/app/dialogs/new_canvas_dialog_layout.cpp
+        src/app/dialogs/new_canvas_dialog_compose.cpp
         src/app/controllers/preprocess_controller.cpp
         src/app/controllers/preprocess_controller_canvas.cpp
         src/app/controllers/preprocess_controller_commit.cpp
