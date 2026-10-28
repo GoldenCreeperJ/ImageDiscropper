@@ -134,8 +134,7 @@ private:
     void applyModeChain(const QRect& avail);                       // 形态候选链（宽-全宽 → 宽-紧凑 → 窄，窄恒紧凑）：逐级量测整窗最小宽，装不下退一级；幂等可多拍重跑。
     void arrangeSections(bool narrow, bool compact);               // 形态编排：节内方向 + 外观组操作行形态 + 表单/预览外壳重挂 + 内容最小宽重算（形态未变即跳过）。
     void applyLayoutMode(bool position = true);                   // 屏幕几何变化（旋转）→ 形态链降档 + 按新形态舒适尺寸重收整窗；position=false 仅收尺寸不摆位置（移动端本窗 Resize 触发用——位置归平台管）。
-    void applyWideMinimums(const QRect& avail) const;                    // 宽形态下限随屏自适应（构造期与旋转切换共用）：固定 480/280 下限会顶过小屏护栏钳值而溢出。
-    void refreshDiag() const;                                     // 【临时诊断】刷新体内几何信息行（移动端无标题栏；定位后移除）。
+    void applyWideMinimums(const QRect& avail) const;                    // 宽形态下限随屏自适应（构造期与旋转切换共用）：固定表单/预览下限会顶过护栏钳值而溢出。
     // 内层构造：按当前落位/适应/图案元素（backdrop）与两元素外观组装一个图片层（decodedPixels 预缩 factor 为预览代理，
     //   boxWidth/Height = 传入尺寸，transform = 图层落位）；预览与定稿共用，保证与 Core 合成单一真相源。
     canvas::ImageLayer buildAttachedLayer(double factor, const canvas::ImageTransform& layerPlace,
@@ -197,7 +196,6 @@ private:
     QBoxLayout* imageLay_{nullptr};      // 图片元素节内方向（同上）。
     QSplitter* splitter_{nullptr};       // 宽屏表单/预览分隔条（窄屏为 null）。
     QWidget* previewCol_{nullptr};       // 预览列（宽屏＝右侧列、窄屏＝底部固定）。
-    QLabel* diagLabel_{nullptr};        // 【临时诊断】几何信息行（按钮行上方；移动端无标题栏故放体内；定位后移除）。
 
     static constexpr int kPreviewMaxDim = 256;   // 预览代理最长边（越小越流畅）。
 };

@@ -40,17 +40,17 @@ inline constexpr auto kTouchChromeStyle =
     "#mobileDrawer QListWidget::item { min-height: 40px; }"
     "#mobileDrawer QGroupBox::title { subcontrol-position: top left; padding: 4px; }";
 
-// 对话框触控样式（QDialog 子树）：弹窗交互优化——按钮/复选框 ≥32、勾选框 24×24、combo/spin/edit
-//   ≥32、列表行 ≥36、字号 14，与抽屉同口径（抽屉规则限定 #mobileDrawer 不覆盖独立窗口的对话框，故单列
+// 对话框触控样式（QDialog 子树）：弹窗交互优化——按钮/复选框 ≥28、勾选框 22×22、combo/spin/edit
+//   ≥28、列表行 ≥36、字号 14，与抽屉同口径（抽屉规则限定 #mobileDrawer 不覆盖独立窗口的对话框，故单列
 //   此段，由壳在启动时应用级注入）。定宽/定高件不受 min 影响（显式固定尺寸钳制优先，如色块按钮）。
 inline constexpr auto kDialogTouchStyle =
     "QDialog { font-size: 14px; }"
-    "QDialog QPushButton, QDialog QCheckBox { min-height: 32px; }"
-    "QDialog QCheckBox::indicator { width: 24px; height: 24px; }"
+    "QDialog QPushButton, QDialog QCheckBox { min-height: 28px; }"
+    "QDialog QCheckBox::indicator { width: 22px; height: 22px; }"
     "QDialog QCheckBox { spacing: 8px; }"
-    "QDialog QComboBox, QDialog QSpinBox, QDialog QLineEdit { min-height: 32px; }"
+    "QDialog QComboBox, QDialog QSpinBox, QDialog QLineEdit { min-height: 28px; }"
     "QDialog QListWidget::item { min-height: 36px; }"
-    "QDialog QToolButton { min-height: 32px; min-width: 32px; }"
+    "QDialog QToolButton { min-height: 28px; min-width: 28px; }"
     "QDialogButtonBox QPushButton { min-width: 88px; }";
 
 inline constexpr auto kDrawerName = "mobileDrawer";   // 抽屉 QDockWidget（工具条开合按钮 + 方向切换用）。
