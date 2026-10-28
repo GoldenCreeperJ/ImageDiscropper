@@ -112,6 +112,7 @@ inline constexpr int kColorSwatchWidthPx = 64;      // 图案表单的底色 / �
 inline constexpr int kColorSwatchHeightPx = 22;
 inline constexpr int kNewCanvasPreviewMinWidthPx = 280;  // 新建画布预览区最小尺寸（小于此预览不可读）。
 inline constexpr int kNewCanvasPreviewMinHeightPx = 200;
+inline constexpr int kNewCanvasPreviewTightMinWidthPx = 200;  // 预览列收紧下限：宽形态装不下时表单不裁、预览让宽（仍可拖分隔条回大）。
 inline constexpr int kPatternPeriodMaxPx = 4096;    // 周期 / 格子边长 / 环间距上限（下限转引 Core kMinPeriod）。
 inline constexpr int kPatternParamMaxPx = 256;      // 线宽与点半径共用的上限。
 inline constexpr int kPatternHuePeriodPx = 128;     // 进入色相渐变时写入的色相波长初值（一个彩虹循环的像素宽）。

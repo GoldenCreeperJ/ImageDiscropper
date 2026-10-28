@@ -454,10 +454,10 @@ void NewCanvasDialog::refreshModeChain() {
     applyModeChain(sc ? sc->availableGeometry() : QRect());
 }
 
-// 形态候选链：宽-全宽 → 宽-紧凑 → 窄（窄恒紧凑）。逐级按形态最小宽量测、装不下退一级——不靠固定
-//   阈值赌屏宽。量测为纯算术（表单滚动区最小宽 + 预览列最小宽 + 外壳），不依赖整窗 minimumSizeHint
-//   （其含 QSplitter 内部布局项，真机上不可靠）。
-//   幂等：已在宽形态且现状装得下即直接返回（**不再回试宽-全宽**——回试会重建操作行并使窗口在试装
+// 形态候选链：宽-全宽 → 宽-紧凑 → 宽-紧凑+预览收紧 → 窄（窄恒紧凑）。逐级按形态最小宽量测、
+//   装不下退一级——不靠固定阈值赌屏宽。量测为纯算术（表单滚动区最小宽 + 预览列最小宽 + 外壳），
+//   不依赖整窗 minimumSizeHint（其含 QSplitter 内部布局项，真机上不可靠）。
+//   幂等：已在宽形态且现状装得下即直接返回（**不再回试升级档**——回试会重建操作行并使窗口在试装
 //   与收钳之间往返，配合本窗 Resize 重入形成无限事件环，横屏打开卡死/旋转闪退）。
 void NewCanvasDialog::applyModeChain(const QRect& avail) {
     if (avail.width() < nums::mobile::kStackColumnsMaxWidthPx) {
@@ -466,26 +466,20 @@ void NewCanvasDialog::applyModeChain(const QRect& avail) {
     }
     // 宽形态整窗最小宽 = 表单最小宽（applyWideMinimums 刚按当前内容量测写入）+ 预览最小宽 + 外壳
     //   （根边距 + 分隔条把手 12px 余量）。量测须在 arrangeSections 之后（其内已重写两最小宽）。
-    const auto fits = [this, &avail] {
-        const int shellW = layout()->contentsMargins().left() + layout()->contentsMargins().right() + 12;
+    const int shellW = layout()->contentsMargins().left() + layout()->contentsMargins().right() + 12;
+    const auto fits = [this, &avail, shellW] {
         return formScroll_->minimumWidth() + previewCol_->minimumWidth() + shellW <= avail.width();
     };
-    if (!narrow_) {
-        // 已在宽形态：现状装得下即不动；装不下先按当前紧凑档升级/降级各试一次，仍不行落回窄。
-        if (fits()) return;
-        if (!compact_) arrangeSections(false, true);
-        else {
-            arrangeSections(false, false);
-            if (!fits()) arrangeSections(false, true);
-        }
-        if (!fits()) arrangeSections(true, true);
-        return;
-    }
-    // 窄形态 → 逐级升级：宽-全宽 → 宽-紧凑 → 窄。
+    if (!narrow_ && fits()) return;   // 已在宽形态且装得下：不动（防试装-收钳事件环）。
+    // 逐级尝试：宽-全宽 → 宽-紧凑 → 宽-紧凑+预览收紧（表单一字不裁、预览让宽）→ 窄。
     arrangeSections(false, false);
     if (fits()) return;
     arrangeSections(false, true);
-    if (!fits()) arrangeSections(true, true);
+    if (fits()) return;
+    previewCol_->setMinimumWidth(qMax(nums::dialog::kNewCanvasPreviewTightMinWidthPx,
+                                      avail.width() - formScroll_->minimumWidth() - shellW));
+    if (fits()) return;
+    arrangeSections(true, true);
 }
 
 // 形态编排（窄/紧凑任一变化才重建；未变即跳过，多拍重跑不打扰用户分隔条）：节内方向 + 外观组
@@ -578,7 +572,9 @@ void NewCanvasDialog::applyLayoutMode(const bool position) {
         }
     }
     // 【临时诊断】移动端无标题栏：几何信息放按钮行上方（定位后移除）。
-    const QString mode = narrow_ ? QStringLiteral("窄") : (compact_ ? QStringLiteral("宽紧") : QStringLiteral("宽全"));
+    QString mode = narrow_ ? QStringLiteral("窄") : (compact_ ? QStringLiteral("宽紧") : QStringLiteral("宽全"));
+    if (formScroll_ && previewCol_)
+        mode += QStringLiteral(" 表%1+预%2").arg(formScroll_->minimumWidth()).arg(previewCol_->minimumWidth());
     QString refInfo;
     if (auto* p = parentWidget()) refInfo = QStringLiteral("/parent %1x%2").arg(p->width()).arg(p->height());
     if (diagLabel_) diagLabel_->setText(QStringLiteral("dlg %1x%2 @%3,%4 / avail %5x%6 %7%8")
@@ -604,7 +600,9 @@ void NewCanvasDialog::resizeEvent(QResizeEvent* event) {
 void NewCanvasDialog::refreshDiag() const {
     if (!diagLabel_) return;
     const QRect avail = screen() ? screen()->availableGeometry() : QRect();
-    const QString mode = narrow_ ? QStringLiteral("窄") : (compact_ ? QStringLiteral("宽紧") : QStringLiteral("宽全"));
+    QString mode = narrow_ ? QStringLiteral("窄") : (compact_ ? QStringLiteral("宽紧") : QStringLiteral("宽全"));
+    if (formScroll_ && previewCol_)
+        mode += QStringLiteral(" 表%1+预%2").arg(formScroll_->minimumWidth()).arg(previewCol_->minimumWidth());
     QString refInfo;
     if (auto* p = parentWidget()) refInfo = QStringLiteral("/parent %1x%2").arg(p->width()).arg(p->height());
     diagLabel_->setText(QStringLiteral("dlg %1x%2 @%3,%4 / avail %5x%6 %7%8")
