@@ -8,7 +8,7 @@
 # 注意：手动触发时至少选择一个实现（全不选会产出空 Release，SHA256SUMS 步骤会失败）。
 #
 # 说明：
-#   · 手动触发（workflow_dispatch）填写标签名（如 v1.0.3 / v1.0.3-alpha.1）；
+#   · 手动触发（workflow_dispatch）填写标签名（如 v1.0.4 / v1.0.4-alpha.1）；
 #     标签不存在时由 prepare job 在当前默认分支 HEAD 上创建并推送。
 #     推 tag 不会自触发本工作流：工作流内经 GITHUB_TOKEN 的 push 事件被 GitHub 抑制。
 #   · 先建标、后按标构建：保证 tag 精确指向所构建的提交。
@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: '发布标签（如 v1.0.3 或 v1.0.3-alpha.1；不存在时会在当前 HEAD 自动创建）'
+        description: '发布标签（如 v1.0.4 或 v1.0.4-alpha.1；不存在时会在当前 HEAD 自动创建）'
         required: true
         type: string
       # 产物范围覆盖：默认 all = 当前恒全平台；移动端未验收时

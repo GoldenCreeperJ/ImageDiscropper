@@ -48,7 +48,7 @@ Source → ① cut-line set → ② induced grid → ③ selection set → ④ p
 
 ```text
 ImageDiscropper/
-├── ImageDiscropperCpp/          # C++ implementation (current mainline, v1.0.2)
+├── ImageDiscropperCpp/          # C++ implementation (current mainline, v1.0.3)
 │   ├── ImageDiscropperCore/     #   Core: Grid-Selection-Export engine + basic image processing (static library)
 │   ├── ImageDiscropperCli/      #   CLI: thin command-line shell (executable idc)
 │   └── ImageDiscropperGui/      #   GUI: Qt 6 desktop frontend (executable idc_gui)
@@ -110,12 +110,12 @@ Releases go through a **single entry point** ([`.github/workflows/cd.yml`](.gith
 
 | Tag                                              | Artifacts                                                                                                 | Release type   |
 |--------------------------------------------------|-----------------------------------------------------------------------------------------------------------|----------------|
-| `v*` (e.g. `v1.0.2`)                             | All platforms: 6 executables + Windows installer + macOS `.app` + Android APK + iOS `.app` + `SHA256SUMS` | stable Release |
-| `v*-alpha*` / `v*-beta*` (e.g. `v1.0.2-alpha.1`) | All platforms: desktop artifacts + mobile artifacts (Android APK / iOS `.app`)                            | pre-release    |
+| `v*` (e.g. `v1.0.3`)                             | All platforms: 6 executables + Windows installer + macOS `.app` + Android APK + iOS `.app` + `SHA256SUMS` | stable Release |
+| `v*-alpha*` / `v*-beta*` (e.g. `v1.0.3-alpha.1`) | All platforms: desktop artifacts + mobile artifacts (Android APK / iOS `.app`)                            | pre-release    |
 
 ```bash
-git tag v1.0.2 && git push origin v1.0.2                       # stable release
-git tag v1.0.2-alpha.1 && git push origin v1.0.2-alpha.1       # all-platform pre-release
+git tag v1.0.3 && git push origin v1.0.3                       # stable release
+git tag v1.0.3-alpha.1 && git push origin v1.0.3-alpha.1       # all-platform pre-release
 ```
 
 Releases can also be triggered manually from the Actions tab — just enter a tag name (created automatically at the current HEAD if missing; no push needed).

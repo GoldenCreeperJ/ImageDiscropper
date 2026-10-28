@@ -47,7 +47,7 @@ ImageDiscropper 是一款**本地运行**的图像切割工具。所有功能都
 
 ```text
 ImageDiscropper/
-├── ImageDiscropperCpp/          # C++ 实现（当前主体，v1.0.2）
+├── ImageDiscropperCpp/          # C++ 实现（当前主体，v1.0.3）
 │   ├── ImageDiscropperCore/     #   Core：Grid-Selection-Export 统一引擎 + 基础图像处理（静态库）
 │   ├── ImageDiscropperCli/      #   CLI：命令行薄壳（可执行 idc）
 │   └── ImageDiscropperGui/      #   GUI：Qt 6 桌面前端（可执行 idc_gui）
@@ -109,12 +109,12 @@ ctest --test-dir build
 
 | 标签                                           | 产物                                                                                  | Release 类型  |
 |----------------------------------------------|-------------------------------------------------------------------------------------|-------------|
-| `v*`（如 `v1.0.2`）                             | 全平台：6 个可执行文件 + Windows 安装包 + macOS `.app` + Android APK + iOS `.app` + `SHA256SUMS` | 正式 Release  |
-| `v*-alpha*` / `v*-beta*`（如 `v1.0.2-alpha.1`） | 全平台：桌面产物 + 移动产物（Android APK / iOS `.app`）                                           | pre-release |
+| `v*`（如 `v1.0.3`）                             | 全平台：6 个可执行文件 + Windows 安装包 + macOS `.app` + Android APK + iOS `.app` + `SHA256SUMS` | 正式 Release  |
+| `v*-alpha*` / `v*-beta*`（如 `v1.0.3-alpha.1`） | 全平台：桌面产物 + 移动产物（Android APK / iOS `.app`）                                           | pre-release |
 
 ```bash
-git tag v1.0.2 && git push origin v1.0.2                       # 正式发布
-git tag v1.0.2-alpha.1 && git push origin v1.0.2-alpha.1       # 全平台预发布
+git tag v1.0.3 && git push origin v1.0.3                       # 正式发布
+git tag v1.0.3-alpha.1 && git push origin v1.0.3-alpha.1       # 全平台预发布
 ```
 
 也可在 Actions 页面手动触发（填写标签名即可——不存在时会自动在当前 HEAD 创建，无需 push）。

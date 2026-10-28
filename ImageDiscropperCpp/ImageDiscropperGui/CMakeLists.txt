@@ -30,10 +30,10 @@ endif()
 # 版本注入（与 CLI 同一形式）：IDC_GUI_VERSION 与 IDC_CORE_VERSION 均由根 CMakeLists
 # 单一来源透传。独立配置本子目录时给出占位默认，避免空宏。
 if(NOT DEFINED IDC_GUI_VERSION)
-    set(IDC_GUI_VERSION "1.0.2")
+    set(IDC_GUI_VERSION "1.0.3")
 endif()
 if(NOT DEFINED IDC_CORE_VERSION)
-    set(IDC_CORE_VERSION "1.0.2")
+    set(IDC_CORE_VERSION "1.0.3")
 endif()
 
 # ---------------------------------------------------------------------------
