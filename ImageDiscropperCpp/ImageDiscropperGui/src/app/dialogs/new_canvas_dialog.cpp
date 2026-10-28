@@ -354,6 +354,9 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
         QTimer::singleShot(600, this, settle);
         QTimer::singleShot(1200, this, settle);
     });
+    // 旋转主通道：父窗口 Resize/Move 事件（Android 旋转会重建 QScreen 对象，上面的屏幕信号连接随旧
+    //   屏对象销毁失效；父窗口事件恒定存活——与护栏挂父窗口同口径，屏幕信号仅作备份）。
+    if (auto* p = parentWidget()) p->installEventFilter(this);
     QTimer::singleShot(0, this, [this] { refreshDiag(); });   // 【临时诊断】首显后刷新真实几何。
 }
 
@@ -445,17 +448,20 @@ void NewCanvasDialog::refreshModeChain() {
     applyModeChain(sc ? sc->availableGeometry() : QRect());
 }
 
-// 形态候选链：宽-全宽 → 宽-紧凑 → 窄（窄恒紧凑）。逐级按整窗实际最小宽量测、装不下退一级——
-//   不靠固定阈值赌屏宽（全宽操作行会把整窗最小宽顶过小屏钳值，护栏收不住、窗口恒超出）。
+// 形态候选链：宽-全宽 → 宽-紧凑 → 窄（窄恒紧凑）。逐级按形态最小宽量测、装不下退一级——不靠固定
+//   阈值赌屏宽。量测为纯算术（表单滚动区最小宽 + 预览列最小宽 + 外壳常量），不依赖整窗 minimumSizeHint
+//   （其含 QSplitter 内部布局项，真机上不可靠）。
 //   幂等：多拍重跑（旋转落定重钳）只在量测出装不下时降档，形态已合适即全跳过。
 void NewCanvasDialog::applyModeChain(const QRect& avail) {
     if (avail.width() < nums::mobile::kStackColumnsMaxWidthPx) {
         arrangeSections(true, true);   // 窄屏直取窄形态（宽形态两级的最小宽都超出该档屏宽）。
         return;
     }
+    // 宽形态整窗最小宽 = 表单最小宽（applyWideMinimums 刚按当前内容量测写入）+ 预览最小宽 + 外壳
+    //   （分隔条把手 + 根边距 + 余量）。量测须在 arrangeSections 之后（其内已重写两最小宽）。
+    constexpr int kShellExtraW = 60;
     const auto fits = [this, &avail] {
-        layout()->activate();   // 编排刚变：激活布局刷新最小宽快照（否则量测读到旧形态缓存）。
-        return minimumSizeHint().width() <= avail.width();
+        return formScroll_->minimumWidth() + previewCol_->minimumWidth() + kShellExtraW <= avail.width();
     };
     arrangeSections(false, false);
     if (fits()) return;
@@ -514,6 +520,7 @@ void NewCanvasDialog::arrangeSections(const bool narrow, const bool compact) {
 // 屏幕几何变化（旋转）→ 形态链降档 + 按新形态的舒适尺寸重收整窗（护栏继续钳超屏）。
 //   几何收钳部分每次调用都做——旋转落定多拍重钳，抵消平台在动画时序里的事后摆位。
 void NewCanvasDialog::applyLayoutMode() {
+    if (!formScroll_ || !previewCol_) return;   // 外壳未就绪（构造期事件旁路）：构造末形态链首跑会补跑。
     const QScreen* sc = screen();
     if (!sc) sc = QGuiApplication::primaryScreen();
     const QRect avail = sc ? sc->availableGeometry() : QRect();
@@ -555,6 +562,13 @@ void NewCanvasDialog::applyLayoutMode() {
                                             .arg(width()).arg(height())
                                             .arg(x()).arg(y())
                                             .arg(avail.width()).arg(avail.height()).arg(refInfo));
+}
+
+// 父窗口尺寸/位置变化（旋转）→ 重跑形态链（applyLayoutMode 幂等，动画期间连发的事件形成自然多拍重钳）。
+bool NewCanvasDialog::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == parentWidget() && (event->type() == QEvent::Resize || event->type() == QEvent::Move))
+        applyLayoutMode();
+    return QDialog::eventFilter(watched, event);
 }
 
 // 【临时诊断】刷新体内几何信息行（首显后取真实几何；定位后移除）。

@@ -112,6 +112,10 @@ public:
     // 合成语义与新建画布完全一致（装配序见 §2.2a 唯一口径 + 越界裁剪），不叠底图、不撑大。
     void setAddLayerMode(int canvasW, int canvasH);
 
+    // 父窗口 Resize/Move（旋转）→ 重跑形态链：与屏幕几何信号互为备份——Android 旋转会重建 QScreen
+    //   对象，旧屏对象上的信号连接随其销毁失效；父窗口事件恒定存活（同护栏挂父窗口的口径）。
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
 private slots:
     void onPickImage();          // 弹出文件对话框选源图，经 EngineBridge::loadImage 解码到 imageSource_。
     void onParamsChanged();      // 任一控件变更 → 图案表单可用性 + 图层/图片落位显隐 + 重生成预览 + 重跑形态链（显隐改变内容最小宽）。
