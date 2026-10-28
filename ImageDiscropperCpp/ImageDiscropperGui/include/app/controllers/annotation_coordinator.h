@@ -82,6 +82,7 @@ public slots:
     void onAnnoUndo() const;                               // 标注菜单：撤销（Core revoke）。
     void onAnnoRedo() const;                               // 标注菜单：重做（Core redo）。
     void onAnnoDeleteSelected() const;                     // 标注菜单/Delete 键：删除选中标注。
+    void onAnnoCopySelected() const;                       // 标注菜单/属性面板：复制选中标注（错位追加到顶层）。
     void onAnnoClearAll() const;                           // 标注菜单：清除全部标注。
     void onAnnoRaise() const;                              // 属性面板叠放区：选中项上移一层（向顶层）。
     void onAnnoLower() const;                              // 属性面板叠放区：选中项下移一层（向底层）。

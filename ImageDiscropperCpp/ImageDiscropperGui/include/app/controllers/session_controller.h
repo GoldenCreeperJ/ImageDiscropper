@@ -54,6 +54,7 @@ public slots:
     void onOpen() const;           // 打开图像对话框 → openImageFromPath。
     void onNew() const;            // 新建画布（**非破坏性**）：换底图、保留图层/标注/色彩预处理→注入 Document。
     void onAddImageLayer() const;  // 图层编辑：从文件添加一个图片图层到当前图层画布（解码→addImageLayer）。
+    void onCopyLayer(int id) const;  // 复制指定图片图层：深拷贝声明（含源像素/配方）追加到栈顶（默认末尾），新 id 由 Document 分配。
     void onClearAllLayers() const; // 清空全部叠加图片图层、仅留底图（保留标注/预处理）。
     void onDestroyAll() const;     // 一键重置全部：清图层（回底图）+清标注+重置预处理+清选区，仅保留底图。
 

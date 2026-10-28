@@ -528,6 +528,48 @@ static void testAnnotation() {
         CHECK(burned.width() == 1 && burned.height() == 1);
     }
 
+    // ---- AnnotationEditor：复制选中标注（错位偏移 + 追加顶层 + 选中复制件 + 清重做栈）----
+    {
+        using gui::AnnotationEditor;
+        auto makeRect = [](const double x0, const double y0, const double x1, const double y1) {
+            annotation::ShapeRequest r;
+            r.type = geometry::ShapeType::Rectangle;
+            r.p1 = {x0, y0};
+            r.p2 = {x1, y1};
+            return annotation::buildShape(r);
+        };
+
+        AnnotationEditor ed;
+        ed.addAnnotation(makeRect(0, 0, 10, 10));
+        ed.addAnnotation(makeRect(20, 20, 30, 30));
+        ed.selectAnnotation(0);
+        ed.revoke();                        // 弹尾 (20,20) 入重做栈 → 剩 1 项（revoke 清选中）
+        CHECK(ed.annotations().size() == 1);
+        ed.selectAnnotation(0);             // 重新选中余下的原件
+
+        // 复制：追加到末尾＝顶层，选中复制件；属新操作清重做栈。
+        const auto copyIdx = ed.copySelectedAnnotation();
+        CHECK(copyIdx.has_value() && *copyIdx == 1);
+        CHECK(ed.annotations().size() == 2);
+        CHECK(ed.selectedAnnotationIndex().has_value() && *ed.selectedAnnotationIndex() == 1);
+
+        // 复制件与原件样式同、几何错位（原件 (0,0)-(10,10)，复制件 (16,16)-(26,26)）。
+        CHECK(ed.annotations()[1].style.color == ed.annotations()[0].style.color);
+        if (const auto hit = ed.hitTest({5, 5}); hit.has_value()) CHECK(*hit == 0);      // 原件仍可命中
+        else CHECK(false);
+        if (const auto hit = ed.hitTest({21, 21}); hit.has_value()) CHECK(*hit == 1);    // 复制件命中且为顶层
+        else CHECK(false);
+
+        // 重做栈已被复制清空：redo 无变化。
+        ed.redo();
+        CHECK(ed.annotations().size() == 2);
+
+        // 无选中复制 → 无操作。
+        ed.selectAnnotation(std::nullopt);
+        CHECK(!ed.copySelectedAnnotation().has_value());
+        CHECK(ed.annotations().size() == 2);
+    }
+
     // ---- AnnotationEditor：重叠连击循环（pickAt / cycleAt / hitTestAll / closedForFill）回归 ----
     {
         using gui::AnnotationEditor;

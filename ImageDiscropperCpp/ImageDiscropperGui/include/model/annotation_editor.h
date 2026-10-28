@@ -115,6 +115,10 @@ public:
     void clear();    // 清集合 + 清重做栈 + 取消选中（保留底图）。
     // 删除指定下标（越界忽略）：属新操作清重做；同步修正选中下标。
     void removeAnnotation(std::size_t index);
+    // 复制选中标注：深拷贝形状后按 kAnnoCopyOffsetPx 整体错位（与原件错开可辨、可直接拖走），
+    //   追加到集合末尾（顶层，zOrder＝下标不变式内规范化）；选中复制件并清重做栈（属新操作）。
+    //   无选中/越界返回 nullopt。
+    std::optional<std::size_t> copySelectedAnnotation();
     // 层序调整：from→to（下标即 z 序，大＝顶）；越界或 from==to 忽略；属新操作清重做；选中跟随。
     void moveAnnotation(std::size_t from, std::size_t to);
     // 整体替换（配置还原专用）：集合 restore + 清重做栈 + 取消选中（不推撤销快照）。

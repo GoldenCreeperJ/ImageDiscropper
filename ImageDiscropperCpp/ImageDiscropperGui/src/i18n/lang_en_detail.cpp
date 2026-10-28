@@ -43,6 +43,7 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"status::kSessionNewOk", "Created: %1 (keeps layers/annotations/color preprocess)"},
     {"status::kSessionNeedImageForLayer", "Open or create an image before adding an image layer."},
     {"status::kSessionLayerAdded", "Image layer added (switched to Image Pick; drag on the canvas to place the frame)"},
+    {"status::kSessionLayerCopied", "Image layer duplicated (placed on top)"},
     {"status::kSessionNoLayersToClear", "There are no image layers to clear"},
     {"status::kSessionLayersCleared", "Cleared all image layers (keeps base image/annotations/preprocess)"},
     {"status::kSessionNothingToReset", "No image to reset"},
@@ -198,8 +199,8 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
         "   Drag the selection / corner handles / cut lines to adjust; arrow keys nudge (Shift for a larger step).\n"
         "4) Grid Split: the Parameters page on the right sets the origin, cell size and remainder policy; Select All / Invert / Clear Cell Selection and the order policy control the output (the Edit / Mode menus share these entries).\n"
         "5) Preprocess: the Image menu or the Preprocess page - rotate / flip / grayscale / invert / channel split + a separate canvas size (resize); the queue can be added to, trimmed and reordered.\n"
-        "6) Annotations: Annotation -> Tools picks a shape, then draw on the canvas (the left tool panel works too); the Annotation property page edits styles and removes the selected annotation.\n"
-        "7) Multi-layer canvas: Image -> Add Image Layer; in Image Pick mode drag to place the frame, the Image menu reorders and removes layers; the Layers panel toggles each layer's visibility.\n"
+        "6) Annotations: Annotation -> Tools picks a shape, then draw on the canvas (the left tool panel works too); the Annotation property page edits styles and duplicates / removes the selected annotation.\n"
+        "7) Multi-layer canvas: Image -> Add Image Layer; in Image Pick mode drag to place the frame, the Image menu reorders, duplicates and removes layers; the Layers panel toggles each layer's visibility.\n"
         "8) Export: File -> Export; File -> Export Settings switches Separate / Collapse / Rearrange, the format and the burn-in flags; the Export page carries every parameter.\n"
         "9) File -> Save Configuration / Load Configuration: the whole parameter set (annotations and layers included) can be saved/loaded, reused and undone.\n\n"
         "Shortcuts (mode/polarity/clear/delete, undo/redo, open/new/export, zoom) can be viewed and rebound in the\n"
@@ -287,6 +288,7 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"tooltip::kLayerMoveTop", "Move the selected layer to the very top (covering all other image layers)."},
     {"tooltip::kLayerMoveBottom", "Move the selected layer to the very bottom (below all image layers, above the base)."},
     {"tooltip::kLayerEditRemove", "Delete the selected layer."},
+    {"tooltip::kLayerCopy", "Duplicate the selected layer to the top (same declaration, independent pixels)."},
     {"tooltip::kLayerAnchorCombo", "Canvas anchor: which position of the canvas the layer aligns to."},
     {"tooltip::kLayerPivotCombo", "Image pivot: which part of the layer itself aligns to the anchor."},
     {"tooltip::kLayerOffsetXSpin", "Free offset X (added on top of the anchor/pivot result)."},
@@ -324,6 +326,8 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"tooltip::kStackToFrontBtn", "Move the selected annotation to the very top."},
     {"tooltip::kStackToBackBtn", "Move the selected annotation to the very bottom."},
     {"tooltip::kDeleteSelectedAnnoBtn", "Delete the selected annotation (greyed out if none; undoable)."},
+    {"tooltip::kCopySelectedAnnoBtn", "Duplicate the selected annotation to the top (slightly offset so it can be dragged away)."},
+    {"tooltip::kAnnoCopySelected", "Duplicate the selected annotation to the top (slightly offset so it can be dragged away)."},
     {"tooltip::kClearAllAnnoBtn", "Clear all annotations (base/layers/preprocessing untouched; undoable)."},
     {"tooltip::kModeMarqueeBtn", "Marquee to create / drag a selection; annotation and image boxes aren’t pickable"},
     {"tooltip::kModeImagePickBtn", "Click / drag an image layer’s placement box to reposition it"},

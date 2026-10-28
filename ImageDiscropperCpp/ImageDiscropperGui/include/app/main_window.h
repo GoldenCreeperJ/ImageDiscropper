@@ -231,12 +231,14 @@ private:
     QAction* aZFront_{nullptr};
     QAction* aZBack_{nullptr};
     QAction* aFill_{nullptr};
+    QAction* aAnnoCopy_{nullptr};   // 复制选中标注（无选中时置灰）
     // 图层菜单动作（作用画布当前拾取层；无拾取层时 syncPanels 置灰）。
     QAction* aLayerUp_{nullptr};
     QAction* aLayerDown_{nullptr};
     QAction* aLayerTop_{nullptr};
     QAction* aLayerBottom_{nullptr};
     QAction* aLayerRemove_{nullptr};
+    QAction* aLayerCopy_{nullptr};   // 复制所选图片图层（无拾取层时置灰）
     // 图片菜单整体入口：图片图层隐藏时整菜单置灰（同上；显隐开关在视图菜单/图层面板，不在此菜单内）。
     QMenu* mLayers_{nullptr};
     // 图层菜单「锚点/枢轴」子菜单（作用当前拾取层落位；动作按 generate::ImageAnchor 枚举序索引，勾选态随拾取层回同步）。

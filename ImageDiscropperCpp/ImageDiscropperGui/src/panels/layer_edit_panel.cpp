@@ -45,7 +45,7 @@ LayerEditPanel::LayerEditPanel(QWidget* parent) : QWidget(parent) {
     auto* listLay = new QVBoxLayout(listBox);
     listLay->setSpacing(nums::panels::kPanelTightSpacingPx);
 
-    // 1-2-2-2 网格：「添加图片」独占首行（跨两列），上移/下移、移至顶层/底层、删除/清空图层各占一行。
+    // 4 行 2 列网格：添加图片/清空、上移/下移、置顶/置底、删除/复制各占一行。
     auto* gridBtns = new QGridLayout();
     gridBtns->setSpacing(nums::panels::kPanelTightSpacingPx);
     addImageBtn_ = makeButton(retranslator_, listBox, IDC_GT(label, kAddImageButton));
@@ -60,15 +60,18 @@ LayerEditPanel::LayerEditPanel(QWidget* parent) : QWidget(parent) {
     i18n::bindToolTip(retranslator_, moveBottomBtn_, IDC_GT(tooltip, kLayerMoveBottom));
     removeBtn_ = makeButton(retranslator_, listBox, IDC_GT(label, kRemoveButton));
     i18n::bindToolTip(retranslator_, removeBtn_, IDC_GT(tooltip, kLayerEditRemove));
+    copyBtn_ = makeButton(retranslator_, listBox, IDC_GT(label, kCopyButton));
+    i18n::bindToolTip(retranslator_, copyBtn_, IDC_GT(tooltip, kLayerCopy));
     clearLayersBtn_ = makeButton(retranslator_, listBox, IDC_GT(label, kClearLayersButton));
     i18n::bindToolTip(retranslator_, clearLayersBtn_, IDC_GT(tooltip, kClearAllImageLayers));
-    gridBtns->addWidget(addImageBtn_, 0, 0, 1, 2);   // 首行跨两列
+    gridBtns->addWidget(addImageBtn_, 0, 0);
+    gridBtns->addWidget(clearLayersBtn_, 0, 1);
     gridBtns->addWidget(moveUpBtn_, 1, 0);
     gridBtns->addWidget(moveDownBtn_, 1, 1);
     gridBtns->addWidget(moveTopBtn_, 2, 0);
     gridBtns->addWidget(moveBottomBtn_, 2, 1);
     gridBtns->addWidget(removeBtn_, 3, 0);
-    gridBtns->addWidget(clearLayersBtn_, 3, 1);
+    gridBtns->addWidget(copyBtn_, 3, 1);
     listLay->addLayout(gridBtns);
     root->addWidget(listBox);
     auto* tfBox = makeGroupBox(retranslator_, this, IDC_GT(label, kLayerPlaceBox));
@@ -128,6 +131,7 @@ LayerEditPanel::LayerEditPanel(QWidget* parent) : QWidget(parent) {
     connect(moveTopBtn_, &QPushButton::clicked, this, &LayerEditPanel::onMoveToTop);
     connect(moveBottomBtn_, &QPushButton::clicked, this, &LayerEditPanel::onMoveToBottom);
     connect(removeBtn_, &QPushButton::clicked, this, &LayerEditPanel::onRemove);
+    connect(copyBtn_, &QPushButton::clicked, this, &LayerEditPanel::onCopy);
     connect(addImageBtn_, &QPushButton::clicked, this, &LayerEditPanel::addImageRequested);
     connect(clearLayersBtn_, &QPushButton::clicked, this, &LayerEditPanel::clearAllLayersRequested);
     connect(applyTransformBtn_, &QPushButton::clicked, this, &LayerEditPanel::onApplyTransform);
@@ -199,6 +203,7 @@ void LayerEditPanel::setControlsEnabled(const bool hasLayerCanvas, const bool ha
     moveTopBtn_->setEnabled(hasSelection);
     moveBottomBtn_->setEnabled(hasSelection);
     removeBtn_->setEnabled(hasSelection);
+    copyBtn_->setEnabled(hasSelection);
     for (QWidget* w : {static_cast<QWidget*>(anchorCombo_), static_cast<QWidget*>(pivotCombo_),
                        static_cast<QWidget*>(posXSpin_), static_cast<QWidget*>(posYSpin_),
                        static_cast<QWidget*>(widthSpin_), static_cast<QWidget*>(heightSpin_),
@@ -233,6 +238,11 @@ void LayerEditPanel::onMoveToBottom() {
 void LayerEditPanel::onRemove() {
     if (syncing_) return;
     if (const auto id = doc_ ? doc_->selectedLayerId() : std::nullopt; id) emit layerRemoveRequested(*id);
+}
+
+void LayerEditPanel::onCopy() {
+    if (syncing_) return;
+    if (const auto id = doc_ ? doc_->selectedLayerId() : std::nullopt; id) emit layerCopyRequested(*id);
 }
 
 void LayerEditPanel::onApplyTransform() {

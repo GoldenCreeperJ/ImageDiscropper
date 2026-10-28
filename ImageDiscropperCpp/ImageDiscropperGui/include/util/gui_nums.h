@@ -58,6 +58,8 @@ inline constexpr double kFitToWindowKeepRatio = 0.94;   // 适应窗口时内容
                                                         // 把内容挤到 (1－2×百分比) 乃至趋零、退化成“缩到最小尺寸”。
 inline constexpr double kPickSamePointTolScenePx = 3.0; // 连击循环选层的「近似同点」容差（场景单位）：
                                                         // 调大则手指微抖更易续上同一候选栈。
+inline constexpr double kAnnoCopyOffsetPx = 16.0;       // 复制标注的错位偏移（场景单位）：复制件与原件错开一截，
+                                                        // 一眼可辨且可直接拖走（完全重叠时难以拾取）。
 // ——触控手势判定（canvas_touch_input_adapter.cpp）：双击＝适应窗口，轻点是它的最小单位——
 inline constexpr long long kDoubleTapGapMs = 300;   // 第二击按下距上一击释放的上限；调小则双击要求更手快。
 inline constexpr int kDoubleTapPosScreenPx = 64;    // 两击落点曼哈顿距离容差（屏幕像素，手指抖动余量）。

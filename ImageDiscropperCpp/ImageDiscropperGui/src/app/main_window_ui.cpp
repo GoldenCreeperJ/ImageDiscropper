@@ -271,6 +271,7 @@ void MainWindowUi::syncUi(const MainWindow& w) {
     if (w.aLayerTop_) w.aLayerTop_->setEnabled(layerSel);
     if (w.aLayerBottom_) w.aLayerBottom_->setEnabled(layerSel);
     if (w.aLayerRemove_) w.aLayerRemove_->setEnabled(layerSel);
+    if (w.aLayerCopy_) w.aLayerCopy_->setEnabled(layerSel);
     // 锚点/枢轴子菜单：随拾取层启停 + 勾选态回同步（「图层编辑」面板两组下拉框为真相源，菜单仅镜像）。
     if (w.mLayerAnchor_) w.mLayerAnchor_->setEnabled(layerSel);
     if (w.mLayerPivot_) w.mLayerPivot_->setEnabled(layerSel);
@@ -317,6 +318,7 @@ void MainWindowUi::syncAnnoSelActions(const MainWindow& w) {
     if (w.aZLower_) w.aZLower_->setEnabled(sel);
     if (w.aZFront_) w.aZFront_->setEnabled(sel);
     if (w.aZBack_) w.aZBack_->setEnabled(sel);
+    if (w.aAnnoCopy_) w.aAnnoCopy_->setEnabled(sel);
     if (w.aFill_) w.aFill_->setChecked(w.annoBridge_.displayFill());
 }
 

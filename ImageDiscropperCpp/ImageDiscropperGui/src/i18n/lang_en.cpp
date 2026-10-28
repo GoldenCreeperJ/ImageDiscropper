@@ -125,6 +125,7 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"menu::kLayerToTop", "Move To Top(&T)"},
     {"menu::kLayerToBottom", "Move To Bottom(&B)"},
     {"menu::kLayerRemove", "Remove Layer(&R)"},
+    {"menu::kLayerCopy", "Duplicate Selected Layer"},
     {"menu::kAnchor", "Anchor(&N)"},
     {"menu::kPivot", "Pivot(&P)"},
     // 标注
@@ -132,6 +133,7 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"menu::kAnnoUndo", "Undo Annotation(&U)"},
     {"menu::kAnnoRedo", "Redo Annotation(&R)"},
     {"menu::kAnnoDeleteSelected", "Delete Selected Annotation(&D)"},
+    {"menu::kAnnoCopySelected", "Duplicate Selected Annotation"},
     {"menu::kAnnoClearAll", "Clear All Annotations(&C)"},
     {"menu::kAnnoStacking", "Stacking Order(&Z)"},
     {"menu::kAnnoToFront", "Bring To Front(&T)"},
@@ -337,6 +339,7 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"label::kToBackButton", "Send to back"},
     {"label::kDeleteSelectedAnnoButton", "Delete selected annotation"},
     {"label::kClearAllAnnoButton", "Clear all annotations"},
+    {"label::kCopyButton", "Duplicate"},
     {"label::kDefaultAnnotationText", "A"},
     {"label::kDlgTitlePickStrokeColor", "Pick border color"},
     {"label::kDlgTitlePickFillColor", "Pick fill color"},

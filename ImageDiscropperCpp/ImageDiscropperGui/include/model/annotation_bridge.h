@@ -120,6 +120,9 @@ public:
     // （不展平重建为通用 Path，故 Text 字形、参数化元数据与控制点语义均不丢失）。
     void moveSelectedBy(double dx, double dy);
     void removeSelected();                   // 删除选中标注（委托 Core removeAnnotation）
+    // 复制选中标注（深拷贝 + 错位偏移 + 追加到顶层），选中复制件；无选中忽略。
+    // 随后发 changed()/selectionChanged() 驱动画布与属性面板刷新。
+    void copySelected();
 
     // ---- 变换选中标注（缩放 / 旋转 / 翻转）----
     // 委托 Core Shape 的**非破坏性仿射矩阵** applyObbTransform（沿自身轴局部缩放 + 绕世界中心刚性旋转），

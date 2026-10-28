@@ -82,7 +82,7 @@ core::Image PreprocessController::composeLayerCanvasForExport(const bool include
     const int w = doc_->canvasWidth(), h = doc_->canvasHeight();
     if (w <= 0 || h <= 0) return doc_->working();
     // 不含叠加层：传空 layers（仅底图），Core 不持显隐态、形态由调用方传参决定。
-    static constexpr std::vector<canvas::ImageLayer> kNoLayers;
+    static const std::vector<canvas::ImageLayer> kNoLayers;
     // 复用已按签名刷新的物化缓存（命中直取、未命中 Core 回退现算）；底图取 fadedCanvasBase（折入底图色 + 淡）。
     const core::Image composed = EngineBridge::composeCanvas(kNoLayers, w, h, doc_->fadedCanvasBase(), &doc_->layerSessions().materialized());
     if (composed.empty()) return doc_->working();      // 合成失败回退当前工作图（与重组早退同口径）。

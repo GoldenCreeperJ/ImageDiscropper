@@ -83,6 +83,7 @@ inline constexpr char kLayerMoveDown[]     = "把选中图层向底层移动一�
 inline constexpr char kLayerMoveTop[]      = "把选中图层移到最顶层（盖住其余所有图片图层）。";
 inline constexpr char kLayerMoveBottom[]   = "把选中图层移到最底层（在所有图片图层之下、底图之上）。";
 inline constexpr char kLayerEditRemove[]   = "删除选中图层。";   // 菜单侧同名动作的说明见 tooltip::kLayerRemove（拾取语境措辞不同）。
+inline constexpr char kLayerCopy[]         = "复制选中图层到顶层（声明与原层同构、像素独立）。";   // 面板按钮与菜单共用。
 inline constexpr char kLayerAnchorCombo[]  = "画布锚点：图层对齐到画布的哪个位置。";
 inline constexpr char kLayerPivotCombo[]   = "图片枢轴：图层自身以哪个部位对齐到锚点。";
 inline constexpr char kLayerOffsetXSpin[]  = "自由偏移 X（叠加在锚点/枢轴结果之上）。";
@@ -123,6 +124,8 @@ inline constexpr char kStackLowerBtn[]      = "将选中标注向下移动一层
 inline constexpr char kStackToFrontBtn[]    = "将选中标注移到最顶层。";
 inline constexpr char kStackToBackBtn[]     = "将选中标注移到最底层。";
 inline constexpr char kDeleteSelectedAnnoBtn[] = "删除选中标注（无选中置灰，可撤销）。";
+inline constexpr char kCopySelectedAnnoBtn[] = "复制选中标注到顶层（错位一小段便于直接拖走）。";
+inline constexpr char kAnnoCopySelected[]   = "复制所选标注到顶层（错位一小段便于直接拖走）。";   // 菜单侧说明（措辞同面板按钮）。
 inline constexpr char kClearAllAnnoBtn[]    = "清除全部标注（不影响底图/图层/预处理，可撤销）。";
 // 以下为工具面板（src/panels/mode_tool_panel.cpp）的形状悬停说明（与菜单侧 tooltip 不共用：面板说「怎么拖」，菜单说「在哪儿选」）。
 inline constexpr char kModeMarqueeBtn[]     = "框选生成/拖动选区；标注与图片落位框不可拾取";
@@ -211,6 +214,7 @@ inline constexpr char kSessionNewFailedBadSize[] = "新建失败：尺寸非法"
 inline constexpr char kSessionNewOk[]            = "已新建：%1（保留图层/标注/色彩预处理）";   // %1 为对话框汇总行。
 inline constexpr char kSessionNeedImageForLayer[] = "请先打开或新建一张图像，再添加图片图层。";
 inline constexpr char kSessionLayerAdded[]       = "已添加图片图层（已切到「图片拾取」，可在画布上拖拽落位框）";
+inline constexpr char kSessionLayerCopied[]      = "已复制图片图层（置于顶层）";
 inline constexpr char kSessionNoLayersToClear[]  = "当前无图片图层可清空";
 inline constexpr char kSessionLayersCleared[]    = "已清空全部图片图层（保留底图/标注/预处理）";
 inline constexpr char kSessionNothingToReset[]   = "无图像可重置";
@@ -382,8 +386,8 @@ inline constexpr char kHelpUsageBody[] =
     "   拖动选区/四角手柄/切割线调整；方向键微调（Shift 大步）。\n"
     "4) 网格分割：右侧「参数」页设定基准点、单元尺寸与余量策略；全选/反选/清空单元与排序策略控制输出（编辑/模式菜单同入口）。\n"
     "5) 预处理：图像菜单或「预处理」页——旋转/翻转/黑白/反色/色道分离 + 独立画布尺寸（resize），队列可增删改序。\n"
-    "6) 标注：标注→工具选择形状后在画布绘制（亦可用左侧工具面板），「标注」属性页改样式与删除选中。\n"
-    "7) 多层画布：图层→添加图片图层；图片拾取态可拖拽落位框，图层菜单可排序/删除图层；「图层」面板控制各层显隐。\n"
+    "6) 标注：标注→工具选择形状后在画布绘制（亦可用左侧工具面板），「标注」属性页改样式，复制/删除选中。\n"
+    "7) 多层画布：图层→添加图片图层；图片拾取态可拖拽落位框，图层菜单可排序/复制/删除图层；「图层」面板控制各层显隐。\n"
     "8) 导出：文件→导出；文件→导出设置可切分离/坍缩/重排、格式与烧录开关，「导出」页有完整参数。\n"
     "9) 文件→保存配置/加载配置：整套参数（含标注与图层）可保存/加载、可复用、可撤销。\n\n"
     "快捷键（模式/极性/清除/删除、撤销重做、打开/新建/导出、缩放）均可在「视图→外观/交互…」对话框的\n"

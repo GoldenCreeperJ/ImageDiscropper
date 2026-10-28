@@ -161,10 +161,13 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     //      不依赖选中，协调器弹确认后清空并保留可撤销）---- 两者并排 1×2。
     deleteSelBtn_ = makeButton(retranslator_, this, IDC_GT(label, kDeleteSelectedAnnoButton));
     i18n::bindToolTip(retranslator_, deleteSelBtn_, IDC_GT(tooltip, kDeleteSelectedAnnoBtn));
+    copySelBtn_ = makeButton(retranslator_, this, IDC_GT(label, kCopyButton));
+    i18n::bindToolTip(retranslator_, copySelBtn_, IDC_GT(tooltip, kCopySelectedAnnoBtn));
     clearAllBtn_ = makeButton(retranslator_, this, IDC_GT(label, kClearAllAnnoButton));
     i18n::bindToolTip(retranslator_, clearAllBtn_, IDC_GT(tooltip, kClearAllAnnoBtn));
     auto* delClearRow = new QHBoxLayout();
     delClearRow->setSpacing(nums::panels::kPanelSpacingPx);
+    delClearRow->addWidget(copySelBtn_);
     delClearRow->addWidget(deleteSelBtn_);
     delClearRow->addWidget(clearAllBtn_);
     root->addLayout(delClearRow);
@@ -175,6 +178,7 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     connect(colorBtn_, &QPushButton::clicked, this, &AnnotationPropPanel::onPickColor);
     connect(fillColorBtn_, &QPushButton::clicked, this, &AnnotationPropPanel::onPickFillColor);
     connect(deleteSelBtn_, &QPushButton::clicked, this, &AnnotationPropPanel::deleteSelectedRequested);
+    connect(copySelBtn_, &QPushButton::clicked, this, &AnnotationPropPanel::copySelectedRequested);
     connect(clearAllBtn_, &QPushButton::clicked, this, &AnnotationPropPanel::clearAllRequested);
     connect(strokeSpin_, &QSpinBox::valueChanged, this, &AnnotationPropPanel::strokeChanged);
     connect(fillCheck_, &QCheckBox::toggled, this, &AnnotationPropPanel::fillChanged);
@@ -256,6 +260,7 @@ void AnnotationPropPanel::syncFromModel() {
     transformGroup_->setEnabled(hasSel);
     stackGroup_->setEnabled(hasSel);   // 叠放次序区同“变换区”：仅在有选中标注时可用
     deleteSelBtn_->setEnabled(hasSel); // 删除选中同规则：无选中无作用对象
+    copySelBtn_->setEnabled(hasSel);   // 复制选中同规则
     curObbSx_ = hasSel ? model_->displayObbScaleX() : 1.0;
     curObbSy_ = hasSel ? model_->displayObbScaleY() : 1.0;
     curObbRot_ = hasSel ? model_->displayObbRotationDeg() : 0.0;

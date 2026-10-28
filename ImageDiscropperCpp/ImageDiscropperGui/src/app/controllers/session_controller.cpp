@@ -49,6 +49,7 @@ void SessionController::connectSignals() {
             [this](const int id, const bool toTop) { doc_->moveLayerToEdge(id, toTop); });
     connect(layerEditPanel_, &LayerEditPanel::layerRemoveRequested, this,
             [this](const int id) { doc_->removeLayer(id); });
+    connect(layerEditPanel_, &LayerEditPanel::layerCopyRequested, this, &SessionController::onCopyLayer);
     connect(layerEditPanel_, &LayerEditPanel::layerTransformRequested, this,
             [this](const int id, const canvas::ImageTransform &t) {
                 doc_->updateLayerTransform(id, t);   // transform-only 就地更新：不拷贝整层声明（含源位图）。
@@ -144,6 +145,15 @@ void SessionController::onAddImageLayer() const {
     doc_->selectLayer(newId);                                  // 新层设为当前预处理/编辑目标。
     toolPanel_->setMode(CanvasMode::ImagePick);               // 切图片拾取态：落位框即时可拾取 / 拖拽且高亮。
     status_->notify(IDC_GTR(status, kSessionLayerAdded), false);
+}
+
+// 复制指定图片图层：深拷贝整层声明（含源像素/配方/两元素外观/落位）后追加到栈顶（默认末尾），
+// 新 id 与置顶 zOrder 由 addImageLayer 统一分配（zOrder≡下标不变式内重编号）；原层保持选中。
+void SessionController::onCopyLayer(const int id) const {
+    const canvas::ImageLayer* src = doc_->layerById(id);
+    if (!src) return;
+    doc_->addImageLayer(*src);   // → layersChanged → recompose → working_（复制层与原层像素独立、声明同构）。
+    status_->notify(IDC_GTR(status, kSessionLayerCopied), false);
 }
 
 // 清空全部叠加图片图层：弹确认后仅留底图（保留图层画布/标注/预处理声明），layersChanged→recompose 重放色彩预处理。

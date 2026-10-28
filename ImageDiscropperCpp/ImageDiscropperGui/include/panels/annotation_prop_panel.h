@@ -66,6 +66,8 @@ signals:
     void clearAllRequested();
     // 删除选中标注（与标注菜单/Delete 键同一入口；仅在有选中标注时按钮可用）。
     void deleteSelectedRequested();
+    // 复制选中标注（与标注菜单同一入口；深拷贝 + 错位偏移 + 追加到顶层；仅在有选中标注时按钮可用）。
+    void copySelectedRequested();
 
 private slots:
     void onPickColor();       // 打开边框色取色器
@@ -98,6 +100,7 @@ private:
     QPushButton* toFrontBtn_{nullptr};    // 置于顶层
     QPushButton* toBackBtn_{nullptr};     // 置于底层
     QPushButton* deleteSelBtn_{nullptr};  // 删除选中标注（无选中置灰）
+    QPushButton* copySelBtn_{nullptr};    // 复制选中标注（无选中置灰）
     QPushButton* clearAllBtn_{nullptr};   // 清除全部标注（一键）
     // 上次 syncFromModel 时选中形状的绝对变换基准（供 spin 改动把目标绝对值换算为单轴增量）。
     double curObbSx_{1.0};

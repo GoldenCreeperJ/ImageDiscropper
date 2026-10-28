@@ -172,6 +172,19 @@ void AnnotationEditor::removeAnnotation(const std::size_t index) {
     }
 }
 
+// 复制选中标注：深拷贝（Annotation 拷贝语义＝深拷贝 shape），按错位偏移整体平移后追加到集合末尾
+// （顶层，zOrder＝下标不变式由 add 内部规范化）；选中复制件并清重做栈（新操作切断“未来”，与删除同律）。
+// 无选中 / 下标越界不做任何事。
+std::optional<std::size_t> AnnotationEditor::copySelectedAnnotation() {
+    if (!selectedIndex_ || *selectedIndex_ >= set_.annotations().size()) return std::nullopt;
+    annotation::Annotation copy = set_.annotations()[*selectedIndex_];
+    if (copy.shape) copy.shape->translateWorld(nums::canvas::kAnnoCopyOffsetPx, nums::canvas::kAnnoCopyOffsetPx);
+    if (!set_.add(std::move(copy))) return std::nullopt;   // 空 shape 等残缺条目拒绝
+    redoStack_.clear();
+    selectedIndex_ = set_.size() - 1;
+    return selectedIndex_;
+}
+
 // 层序调整：把 from 处标注就地移到 to（下标即 z 序，大＝顶）。区间内其余项沿移动方向平移一格、
 // 相对顺序不变。不增删标注、但属用户新操作→清空重做栈；选中下标跟随被移动项。
 void AnnotationEditor::moveAnnotation(const std::size_t from, const std::size_t to) {

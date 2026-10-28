@@ -191,6 +191,7 @@ inline constexpr char kLayerDown[]         = "下移一层(&D)";   // 同上共�
 inline constexpr char kLayerToTop[]        = "移至顶层(&T)";
 inline constexpr char kLayerToBottom[]     = "移至底层(&B)";
 inline constexpr char kLayerRemove[]       = "删除图层(&R)";
+inline constexpr char kLayerCopy[]         = "复制所选图层";     // 无快捷键（Ctrl+C/V 已属复制粘贴语义，单用其一不恰）。
 inline constexpr char kAnchor[]            = "锚点(&N)";       // 两子菜单九项共用 kDir* 表（见 label 组）。
 inline constexpr char kPivot[]             = "枢轴(&P)";
 // ——标注——
@@ -198,6 +199,7 @@ inline constexpr char kMenuAnnotation[]      = "标注(&A)";
 inline constexpr char kAnnoUndo[]            = "撤销标注(&U)";   // 不绑快捷键（Ctrl+Z/Y 归编辑菜单，上下文路由）。
 inline constexpr char kAnnoRedo[]            = "重做标注(&R)";
 inline constexpr char kAnnoDeleteSelected[]  = "删除选中标注(&D)";
+inline constexpr char kAnnoCopySelected[]    = "复制所选标注";   // 无快捷键（同上 kLayerCopy 口径）。
 inline constexpr char kAnnoClearAll[]        = "清除全部标注(&C)";
 inline constexpr char kAnnoStacking[]        = "叠放次序(&Z)";
 inline constexpr char kAnnoToFront[]         = "置于顶层(&T)";
@@ -435,6 +437,7 @@ inline constexpr char kToFrontButton[]       = "置于顶层";   // 菜单同名
 inline constexpr char kToBackButton[]        = "置于底层";   // 菜单同名项带助记符见 menu::kAnnoToBack。
 inline constexpr char kDeleteSelectedAnnoButton[] = "删除选中标注";   // 菜单同名项带助记符见 menu::kAnnoDeleteSelected。
 inline constexpr char kClearAllAnnoButton[]  = "清除全部标注";   // 确认框标题同字见 msg::kClearAnnosTitle（控件文字 / 对话框标题角色不同，各立一条）。
+inline constexpr char kCopyButton[]        = "复制";   // 图层编辑面板 / 标注属性页共用按钮文字。
 // 标注默认文字初值（与 model/annotation_editor 的 currentText 初值同字：新文本标注起笔时的预置内容）。
 inline constexpr char kDefaultAnnotationText[] = "A";   // Core 读不到 text 时的占位值同字另见 core texts::defaults::kAnnotationText（跨层 char[] 不能转引，两处必须同字）。
 // 取色器窗口标题。

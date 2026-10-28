@@ -64,6 +64,11 @@ void MainWindowUi::buildLayerMenu(MainWindow* w, QMenuBar* bar) {
     QObject::connect(w->aLayerRemove_, &QAction::triggered, w, [w] {
         if (w->doc_.selectedLayerId()) w->doc_.removeLayer(*w->doc_.selectedLayerId());
     });
+    w->aLayerCopy_ = bindAddAction(w->retranslator_, mLayers, IDC_GT(menu, kLayerCopy));
+    i18n::bindToolTip(w->retranslator_, w->aLayerCopy_, IDC_GT(tooltip, kLayerCopy));
+    QObject::connect(w->aLayerCopy_, &QAction::triggered, w, [w] {
+        if (w->doc_.selectedLayerId()) w->session_->onCopyLayer(*w->doc_.selectedLayerId());
+    });
     mLayers->addSeparator();
     // 锚点/枢轴（作用当前拾取层落位，9 向枚举镜像「图层编辑」面板两组下拉框；面板为真相源，
     // syncPanels 随拾取层回同步勾选态、无拾取层置灰）。
@@ -132,6 +137,9 @@ void MainWindowUi::buildAnnoMenu(MainWindow* w, QMenuBar* bar) {
     QAction* aAnnoDel = bindAddAction(w->retranslator_, mAnno, IDC_GT(menu, kAnnoDeleteSelected));
     i18n::bindToolTip(w->retranslator_, aAnnoDel, IDC_GT(tooltip, kAnnoDeleteSelected));
     QObject::connect(aAnnoDel, &QAction::triggered, w, [w] { w->annotation_->onAnnoDeleteSelected(); });
+    w->aAnnoCopy_ = bindAddAction(w->retranslator_, mAnno, IDC_GT(menu, kAnnoCopySelected));
+    i18n::bindToolTip(w->retranslator_, w->aAnnoCopy_, IDC_GT(tooltip, kAnnoCopySelected));
+    QObject::connect(w->aAnnoCopy_, &QAction::triggered, w, [w] { w->annotation_->onAnnoCopySelected(); });
     const QAction* aAnnoClear = bindAddAction(w->retranslator_, mAnno, IDC_GT(menu, kAnnoClearAll));
     QObject::connect(aAnnoClear, &QAction::triggered, w, [w] { w->annotation_->onAnnoClearAll(); });
     // 叠放次序（与标注属性页“叠放次序”区同一入口，作用选中项；无选中时 syncAnnoSelActions 置灰）。

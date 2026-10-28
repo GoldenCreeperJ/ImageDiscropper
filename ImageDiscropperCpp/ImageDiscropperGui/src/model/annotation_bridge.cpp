@@ -123,6 +123,13 @@ void AnnotationBridge::removeSelected() {
     emit selectionChanged();
 }
 
+void AnnotationBridge::copySelected() {
+    if (!editor_.copySelectedAnnotation()) return;  // 无选中忽略；成功＝已选中复制件（新操作清空重做栈）
+    editor_.resetPickCycle();                       // 与移动同律：复制不推进连击循环
+    emit changed();
+    emit selectionChanged();
+}
+
 // 变换选中标注：缩放 + 旋转。委托 Core Shape 的**非破坏性仿射矩阵**（OBB 变换 applyObbTransform：
 // 沿形状自身轴缩放（局部系右乘）+ 绕世界中心刚性旋转（世界系左乘），二者分处矩阵左右故已拉伸形状再旋转也不剪切），
 // **保留具体类型与文字字形**（不退化）；sx/sy 为负即翻转。属性面板与画布包围盒手柄共用本入口。

@@ -50,6 +50,7 @@ signals:
     void layerMoveRequested(int id, bool up);                   // 上移（向顶，zOrder 更大）/ 下移（作用画布当前拾取层）
     void layerMoveEdgeRequested(int id, bool toTop);            // 移至顶层（toTop）/ 移至底层（作用画布当前拾取层）
     void layerRemoveRequested(int id);                          // 删除图层
+    void layerCopyRequested(int id);                            // 复制图层（深拷贝声明追加到栈顶）
     void layerTransformRequested(int id, canvas::ImageTransform transform);  // 应用落位编辑（锚点/枢轴/偏移/尺寸变化即时发出）
     void baseOpacityRequested(int opacity);    // 不透明度目标＝底图（Base，图层画布选中底图）时驱动底图整体透明度（0..255）
     void canvasOpacityRequested(int opacity);  // 不透明度目标＝画布（Canvas，图层画布未选层/底图）时驱动画布级整体透明度（0..255）
@@ -62,6 +63,7 @@ private slots:
     void onMoveToTop();
     void onMoveToBottom();
     void onRemove();
+    void onCopy();
     void onApplyTransform();
 
 private:
@@ -78,6 +80,7 @@ private:
     QPushButton* moveTopBtn_{nullptr};      // 移至顶层
     QPushButton* moveBottomBtn_{nullptr};   // 移至底层
     QPushButton* removeBtn_{nullptr};
+    QPushButton* copyBtn_{nullptr};            // 复制所选图层（追加到栈顶）
     QPushButton* addImageBtn_{nullptr};
     QPushButton* clearLayersBtn_{nullptr};   // 清空全部图片图层（回退底图）
 

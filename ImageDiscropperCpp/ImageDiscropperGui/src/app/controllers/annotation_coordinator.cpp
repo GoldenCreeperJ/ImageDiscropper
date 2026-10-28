@@ -102,6 +102,8 @@ void AnnotationCoordinator::connectSignals() {
     connect(annoPropPanel_, &AnnotationPropPanel::clearAllRequested, this, &AnnotationCoordinator::onAnnoClearAll);
     // 删除选中标注（属性面板按钮→与标注菜单/Delete 键同一入口 onAnnoDeleteSelected；移动端唯一入口）。
     connect(annoPropPanel_, &AnnotationPropPanel::deleteSelectedRequested, this, &AnnotationCoordinator::onAnnoDeleteSelected);
+    // 复制选中标注（属性面板按钮→与标注菜单同一入口 onAnnoCopySelected）。
+    connect(annoPropPanel_, &AnnotationPropPanel::copySelectedRequested, this, &AnnotationCoordinator::onAnnoCopySelected);
 }
 
 // 工具面板选择：先收笔未完成的折线/画笔路径，再切换工具（setTool 内部会放弃两点预览）。
@@ -292,6 +294,10 @@ void AnnotationCoordinator::onAnnoRedo() const { anno_->redo(); }
 void AnnotationCoordinator::onAnnoDeleteSelected() const {
     if (!anno_->selectedIndex()) return;
     anno_->removeSelected();
+}
+void AnnotationCoordinator::onAnnoCopySelected() const {
+    if (!anno_->selectedIndex()) return;
+    anno_->copySelected();
 }
 void AnnotationCoordinator::onAnnoClearAll() const {
     if (anno_->count() == 0) return;
