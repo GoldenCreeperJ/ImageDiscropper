@@ -219,7 +219,8 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
         "the Step pad replaces the arrow keys for nudging the selection."},
     {"msg::kAboutBody",
         "ImageDiscropper GUI %1 (core %2)\n"
-        "    -- An image region extraction / reverse removal / grid splitting tool."},
+        "    -- An image region extraction / reverse removal / grid splitting tool.\n"
+        "    Project: https://github.com/GoldenCreeperJ/ImageDiscropper"},
     // —— tooltip（gui_texts.h::tooltip 全量 150 条，与常量层同序）——
     // 「」/“” 圆括号释文一律以曲引号 “ ” 呈现；× ° → 等符号逐字沿用；、。等中文标点改为 ASCII 句读。
     {"tooltip::kNewCanvas", "New blank or procedural canvas (size, background, pattern)."},

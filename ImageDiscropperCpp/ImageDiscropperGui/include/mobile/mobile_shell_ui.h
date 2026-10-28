@@ -32,12 +32,13 @@ inline constexpr auto kTouchChromeStyle =
     "QToolBar QToolButton { min-height: 44px; }"
     "QToolBar { spacing: 4px; padding: 2px; }"
     "#mobileDrawer { font-size: 14px; }"
-    "#mobileDrawer QPushButton, #mobileDrawer QCheckBox { min-height: 36px; }"
-    "#mobileDrawer QCheckBox::indicator { width: 28px; height: 28px; }"
+    // 抽屉与对话框同口径（kDialogTouchStyle）：按钮/复选框 ≥28、勾选框 22×22、combo/spin/edit ≥28、列表行 ≥36。
+    "#mobileDrawer QPushButton, #mobileDrawer QCheckBox { min-height: 28px; }"
+    "#mobileDrawer QCheckBox::indicator { width: 22px; height: 22px; }"
     "#mobileDrawer QCheckBox { spacing: 8px; }"
-    "#mobileDrawer QComboBox, #mobileDrawer QLineEdit, #mobileDrawer QSpinBox { min-height: 32px; }"
+    "#mobileDrawer QComboBox, #mobileDrawer QLineEdit, #mobileDrawer QSpinBox { min-height: 28px; }"
     "#mobileDrawer QTabBar::tab { min-height: 36px; padding: 6px 14px; }"
-    "#mobileDrawer QListWidget::item { min-height: 40px; }"
+    "#mobileDrawer QListWidget::item { min-height: 36px; }"
     "#mobileDrawer QGroupBox::title { subcontrol-position: top left; padding: 4px; }";
 
 // 对话框触控样式（QDialog 子树）：弹窗交互优化——按钮/复选框 ≥28、勾选框 22×22、combo/spin/edit

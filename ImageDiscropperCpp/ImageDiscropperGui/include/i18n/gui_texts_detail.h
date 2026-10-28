@@ -404,6 +404,7 @@ inline constexpr char kMobileHelpBody[] =
     "「步进」盘替代方向键微调选区。";
 inline constexpr char kAboutBody[] =
     "ImageDiscropper GUI %1(内核 %2)\n"
-    "    -- 一款图像区域提取 / 反向剔除 / 网格分割工具。";   // %1/%2 由 IDC_GUI_VERSION / IDC_CORE_VERSION 填入。
+    "    -- 一款图像区域提取 / 反向剔除 / 网格分割工具。\n"
+    "    项目地址：https://github.com/GoldenCreeperJ/ImageDiscropper";   // %1/%2 由 IDC_GUI_VERSION / IDC_CORE_VERSION 填入。
 } // namespace msg
 } // namespace idc::gui::texts
