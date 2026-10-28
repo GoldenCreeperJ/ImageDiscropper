@@ -255,6 +255,7 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     imageSection->setExpanded(false);
     grid->addWidget(imageSection, row, 0);
     ++row;
+    grid->setRowStretch(row, 1);   // 尾行拉伸兜底：内容比视口矮时（节折叠后）多余高度沉底，三节恒钉顶（不随视口均摊浮空）。
 
     // ---- 预览独立列：滚动区外固定（宽屏＝表单右侧恒可见；窄屏＝表单下方恒可见），不随表单滚动。----
     previewLabel_ = new QLabel(IDC_GTR(label, kPreviewPlaceholder), this);
@@ -345,14 +346,14 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     //   收不住（下限卡死）；先按实际最小宽量测降档，护栏首显再收即可入屏。
     applyModeChain(sc ? sc->availableGeometry() : QRect());
     // 屏幕几何变化（旋转）→ 宽/窄形态动态切换 + 几何收钳。旋转动画收尾时平台会按窗口 sizeHint 再摆
-    //   一次（宽形态 sizeHint 超屏宽时推出屏边/顶回最小宽），故多拍重钳：0/250/600/1200ms 四次，等动画
-    //   落定后再定一次；形态链恒保证当前形态最小宽 ≤ 屏宽，护栏随后收钳必成功。
+    //   一次（宽形态 sizeHint 超屏宽时推出屏边/顶回最小宽），故多拍重钳：动画期间（0/250/600ms）只收
+    //   尺寸不摆位置（平台在摆位，抢位即抖动），位置仅最末拍（1200ms）定一次；形态链恒保证当前形态
+    //   最小宽 ≤ 屏宽，护栏随后收钳必成功。
     if (sc) connect(sc, &QScreen::availableGeometryChanged, this, [this] {
-        const auto settle = [this] { applyLayoutMode(); };
-        QTimer::singleShot(0, this, settle);
-        QTimer::singleShot(250, this, settle);
-        QTimer::singleShot(600, this, settle);
-        QTimer::singleShot(1200, this, settle);
+        QTimer::singleShot(0, this, [this] { applyLayoutMode(false); });
+        QTimer::singleShot(250, this, [this] { applyLayoutMode(false); });
+        QTimer::singleShot(600, this, [this] { applyLayoutMode(false); });
+        QTimer::singleShot(1200, this, [this] { applyLayoutMode(); });
     });
     // 旋转主通道：父窗口 Resize/Move 事件（Android 旋转会重建 QScreen 对象，上面的屏幕信号连接随旧
     //   屏对象销毁失效；父窗口事件恒定存活——与护栏挂父窗口同口径，屏幕信号仅作备份）。
@@ -448,7 +449,13 @@ void NewCanvasDialog::refreshModeChain() {
     // 构造期折叠/展开回调先于外壳装配触发（暂开取宽在 wrapScrollable 之前）：外壳未就绪即跳过，
     //   构造末的形态链首跑会以真实内容补跑。
     if (!formScroll_ || !previewCol_) return;
-    resizeToContent();
+    if (busyOverlay_) {
+        // 移动端：折叠/展开只重算滚动区最小宽，**不动窗口尺寸/位置**——内容增减走滚动，
+        //   窗口保持稳定（桌面才随内容增长）。
+        updateFormMinWidth();
+    } else {
+        resizeToContent();
+    }
     const QScreen* sc = screen();
     if (!sc) sc = QGuiApplication::primaryScreen();
     applyModeChain(sc ? sc->availableGeometry() : QRect());
@@ -584,10 +591,11 @@ void NewCanvasDialog::applyLayoutMode(const bool position) {
                                             .arg(mode).arg(refInfo));
 }
 
-// 父窗口尺寸/位置变化（旋转）→ 重跑形态链（applyLayoutMode 幂等，动画期间连发的事件形成自然多拍重钳）。
+// 父窗口尺寸/位置变化（旋转）→ 重跑形态链并收尺寸（不摆位置：动画期间平台在摆位，两方抢位即抖动；
+//   位置仅由最末拍重钳与平台定）。
 bool NewCanvasDialog::eventFilter(QObject* watched, QEvent* event) {
     if (watched == parentWidget() && (event->type() == QEvent::Resize || event->type() == QEvent::Move))
-        applyLayoutMode();
+        applyLayoutMode(false);
     return QDialog::eventFilter(watched, event);
 }
 
