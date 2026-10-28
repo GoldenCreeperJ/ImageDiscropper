@@ -436,6 +436,9 @@ void NewCanvasDialog::resizeToContent() {
 //   再重跑形态链。不重跑会把「折叠态量测判宽形态」的结论带到展开态——展开后最小宽顶超屏宽，平台旋转
 //   摆位后护栏收不住、窗口卡在超宽值（985 卡死即此路径）。
 void NewCanvasDialog::refreshModeChain() {
+    // 构造期折叠/展开回调先于外壳装配触发（暂开取宽在 wrapScrollable 之前）：外壳未就绪即跳过，
+    //   构造末的形态链首跑会以真实内容补跑。
+    if (!formScroll_ || !previewCol_) return;
     resizeToContent();
     const QScreen* sc = screen();
     if (!sc) sc = QGuiApplication::primaryScreen();
