@@ -421,12 +421,18 @@ void NewCanvasDialog::onParamsChanged() {
     refreshModeChain();   // 落位组显隐随适应方式/开关变化改变内容最小宽：重算并重跑形态链（量测以当前内容为准）。
 }
 
-// 折叠/展开改变内容最小宽 → 重算表单滚动区最小宽，并在宽屏下让窗口跟上（只增长不收缩：
-//   用户手动拖过分隔条/窗口时不打扰；护栏过滤器在超屏时钳制）。
-void NewCanvasDialog::resizeToContent() {
+// 仅按当前内容重算表单滚动区最小宽（不动窗口）：形态编排内部用——窗口尺寸统一由 applyLayoutMode
+//   几何部分定，避免「试装增窗 → 收钳缩窗 → 本窗 Resize 重入」的事件环。
+void NewCanvasDialog::updateFormMinWidth() {
     if (!formScroll_ || !body_) return;
     const int contentMin = body_->minimumSizeHint().width() + verticalScrollBarExtent(formScroll_);
     formScroll_->setMinimumWidth(narrow_ ? contentMin : qMax(480, contentMin));
+}
+
+// 折叠/展开改变内容最小宽 → 重算表单滚动区最小宽，并在宽屏下让窗口跟上（只增长不收缩：
+//   用户手动拖过分隔条/窗口时不打扰；护栏过滤器在超屏时钳制）。
+void NewCanvasDialog::resizeToContent() {
+    updateFormMinWidth();
     if (narrow_) return;   // 窄屏纵向：窗口宽由护栏管，无需调整。
     const QMargins m = layout()->contentsMargins();
     const int wantW = qMax(body_->sizeHint().width(), 480)
@@ -449,9 +455,10 @@ void NewCanvasDialog::refreshModeChain() {
 }
 
 // 形态候选链：宽-全宽 → 宽-紧凑 → 窄（窄恒紧凑）。逐级按形态最小宽量测、装不下退一级——不靠固定
-//   阈值赌屏宽。量测为纯算术（表单滚动区最小宽 + 预览列最小宽 + 外壳常量），不依赖整窗 minimumSizeHint
+//   阈值赌屏宽。量测为纯算术（表单滚动区最小宽 + 预览列最小宽 + 外壳），不依赖整窗 minimumSizeHint
 //   （其含 QSplitter 内部布局项，真机上不可靠）。
-//   幂等：多拍重跑（旋转落定重钳）只在量测出装不下时降档，形态已合适即全跳过。
+//   幂等：已在宽形态且现状装得下即直接返回（**不再回试宽-全宽**——回试会重建操作行并使窗口在试装
+//   与收钳之间往返，配合本窗 Resize 重入形成无限事件环，横屏打开卡死/旋转闪退）。
 void NewCanvasDialog::applyModeChain(const QRect& avail) {
     if (avail.width() < nums::mobile::kStackColumnsMaxWidthPx) {
         arrangeSections(true, true);   // 窄屏直取窄形态（宽形态两级的最小宽都超出该档屏宽）。
@@ -463,10 +470,22 @@ void NewCanvasDialog::applyModeChain(const QRect& avail) {
         const int shellW = layout()->contentsMargins().left() + layout()->contentsMargins().right() + 12;
         return formScroll_->minimumWidth() + previewCol_->minimumWidth() + shellW <= avail.width();
     };
+    if (!narrow_) {
+        // 已在宽形态：现状装得下即不动；装不下先按当前紧凑档升级/降级各试一次，仍不行落回窄。
+        if (fits()) return;
+        if (!compact_) arrangeSections(false, true);
+        else {
+            arrangeSections(false, false);
+            if (!fits()) arrangeSections(false, true);
+        }
+        if (!fits()) arrangeSections(true, true);
+        return;
+    }
+    // 窄形态 → 逐级升级：宽-全宽 → 宽-紧凑 → 窄。
     arrangeSections(false, false);
     if (fits()) return;
     arrangeSections(false, true);
-    if (!fits()) arrangeSections(true, true);   // 两级宽形态都装不下：整形态落回窄纵叠。
+    if (!fits()) arrangeSections(true, true);
 }
 
 // 形态编排（窄/紧凑任一变化才重建；未变即跳过，多拍重跑不打扰用户分隔条）：节内方向 + 外观组
@@ -514,7 +533,7 @@ void NewCanvasDialog::arrangeSections(const bool narrow, const bool compact) {
         rootLayout_->insertWidget(0, formScroll_, 1);   // 布局接管（重挂父）。
         rootLayout_->insertWidget(1, previewCol_);
     }
-    resizeToContent();
+    updateFormMinWidth();   // 仅重算滚动区最小宽：窗口尺寸由 applyLayoutMode 几何部分统一定（resizeToContent 的增窗语义会与收钳形成事件环）。
 }
 
 // 屏幕几何变化（旋转）→ 形态链降档 + 按新形态的舒适尺寸重收整窗（护栏继续钳超屏）。
