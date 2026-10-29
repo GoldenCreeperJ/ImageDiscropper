@@ -63,6 +63,10 @@ public:
     bool panning() const { return panning_; }            // 正在平移
     bool strokeActive() const { return annoDrawing_; }   // 标注绘制拖拽中
     bool marqueeActive() const { return rubber_; }       // 框选橡皮筋带进行中
+    // 双击消歧：视口位置处是否存在接收左键的交互图元（图层落位框/标注/选区框/网格基准手柄等；
+    // 底图不接鼠标）。命中 → 单击即时路由、双击略过适应窗口（按两次普通点击处理，同点连击循环不被
+    // 双击打断）；仅底图/空白 → 单击延迟判定与双击适应窗口照常。
+    bool interactiveItemAt(const QPointF& viewportPos) const;
 
     // ——场景事件交付（供适配器：把原始事件交给 QGraphicsView 默认实现，图元优先抓取）——
     void dispatchScenePress(QMouseEvent* event) { QGraphicsView::mousePressEvent(event); }
@@ -151,6 +155,9 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;   // 双击：适配器路由（仅框选态空白＝适应窗口；交互图元/其余模式＝补发两次普通点击）。
+                                                              // 不调基类：图元恒收不到 DblClick——将来「双击标注＝编辑文字」等图元级双击语义
+                                                              // 需在适配器里按落点显式下发。
     void keyPressEvent(QKeyEvent* event) override;
     void keyReleaseEvent(QKeyEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;

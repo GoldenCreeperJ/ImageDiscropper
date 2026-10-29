@@ -153,10 +153,12 @@ void CanvasView::resizeEvent(QResizeEvent* event) {
 }
 
 // 画布四态互斥模式：切换当前交互态；离开标注创建态时复位拖拽手势标志，并按态设光标。
+// 切态即换交互目标：等待中的延迟单击不再落地（避免切到绘制态后补出一记迟到的退化顶点等）。
 void CanvasView::setCanvasMode(const CanvasMode mode) {
     mode_ = mode;
     const bool draw = mode == CanvasMode::AnnoCreate;
     if (!draw) annoDrawing_ = false;
+    if (input_) input_->cancelPendingClick();
     viewport()->setCursor(draw ? Qt::CrossCursor : Qt::ArrowCursor);
 }
 
@@ -177,6 +179,10 @@ void CanvasView::wheelEvent(QWheelEvent* event) { input_->onWheel(*this, event);
 // 鼠标按下：交给适配器路由（平移 / 绘制 / 图元优先 / 框选）。
 void CanvasView::mousePressEvent(QMouseEvent* event) { input_->onPress(*this, event); }
 
+// 双击：适配器路由（框选态空白＝适应窗口；交互图元/其余模式＝补发两次普通点击；触控＝窗口内
+//   适应窗口、越界中速连击补发普通点击——快速双轻点被 QPA 合成为本事件而非第二次 press，双击检测的正主在此）。
+void CanvasView::mouseDoubleClickEvent(QMouseEvent* event) { input_->onDoubleClick(*this, event); }
+
 // 鼠标移动：交给适配器路由（平移 / 绘制 / 图元拖拽 / 框选更新 / 光标回报）。
 void CanvasView::mouseMoveEvent(QMouseEvent* event) { input_->onMove(*this, event); }
 
@@ -187,7 +193,11 @@ void CanvasView::mouseReleaseEvent(QMouseEvent* event) { input_->onRelease(*this
 void CanvasView::contextMenuEvent(QContextMenuEvent* event) { input_->onContextMenu(*this, event); }
 
 // 手势事件（pinch 等）：交适配器消费；未消费（桌面适配器）照常下发基类。
+// 焦点离开 / 窗口失活：等待中的延迟单击不再落地——否则 300ms 内点别的控件/切窗后，
+// 补发会在画布旧位置落一记迟到点击（误反选/误起框选）。
 bool CanvasView::event(QEvent* event) {
+    if (input_ && (event->type() == QEvent::FocusOut || event->type() == QEvent::WindowDeactivate))
+        input_->cancelPendingClick();
     if (event->type() == QEvent::Gesture && input_
         && input_->onGestureEvent(*this, dynamic_cast<QGestureEvent*>(event)))
         return true;
@@ -195,13 +205,18 @@ bool CanvasView::event(QEvent* event) {
 }
 
 // 键盘：空格切换平移预备态；方向键微调选区（Shift 大步）。
+// Esc / 空格都改变交互目标：等待中的延迟单击不再落地（避免切目标后补出一记迟到点击）。
 void CanvasView::keyPressEvent(QKeyEvent* event) {
-    if (event->key() == Qt::Key_Escape && annotationDrawActive()) {
-        emit annoEscape();   // 绘制态 Esc：交上层收笔（折线/画笔）或取消预览
-        event->accept();
-        return;
+    if (event->key() == Qt::Key_Escape) {
+        if (input_) input_->cancelPendingClick();   // 任一模式 Esc 均作废等待中的单击（框选态 Esc 亦如此）
+        if (annotationDrawActive()) {
+            emit annoEscape();   // 绘制态 Esc：交上层收笔（折线/画笔）或取消预览
+            event->accept();
+            return;
+        }
     }
     if (event->key() == Qt::Key_Space && !event->isAutoRepeat()) {
+        if (input_) input_->cancelPendingClick();
         spacePan_ = true;
         viewport()->setCursor(Qt::OpenHandCursor);
         event->accept();
@@ -345,6 +360,19 @@ QRectF CanvasView::snappedMarqueeSceneRect(const QPoint& a, const QPoint& b) con
 
 // 标注选取态空白按下：纯意图转发，无任何本地状态（选中清除由上层协调器落地）。
 void CanvasView::gestureAnnoBlankPress() { emit annoBlankPressed(); }
+
+// 双击消歧（供输入适配器）：视口位置处是否存在接收左键的交互图元，见头文件说明。
+// 注：scene()->items() 本身已滤除不可见图元（Qt 按 d_ptr->visible 过滤）；此处显式再判 isVisible
+// 是项目口径的自我声明——「隐藏图层=不可交互」，不依赖 Qt 内部过滤行为。
+bool CanvasView::interactiveItemAt(const QPointF& viewportPos) const {
+    if (!scene()) return false;
+    const QList<QGraphicsItem*> items =
+        scene()->items(mapToScene(viewportPos.toPoint()), Qt::IntersectsItemShape, Qt::DescendingOrder);
+    for (const QGraphicsItem* it : items) {
+        if (it->isVisible() && it->acceptedMouseButtons() & Qt::LeftButton) return true;
+    }
+    return false;
+}
 
 // 非绘制态悬停移动：回报光标场景坐标（状态栏）；图元事件交付由适配器 dispatchSceneMove 完成。
 void CanvasView::gestureCursorMoved(const QPoint& viewportPos) {

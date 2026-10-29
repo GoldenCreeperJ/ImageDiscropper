@@ -100,6 +100,7 @@ void Document::adoptRectIntoMultiRects() {
 // 故在此统一兜底（所有写回路径共用），退化输入时保持上一次有效选区不变（CONTRIBUTING.md「分层纪律」 输入校验）。
 void Document::setRect(const engine::RectRegion& r) {
     if (r.width() <= 0 || r.height() <= 0) return;
+    if (hasRect_ && r == rect_) return;   // 值未变不重发 changed：双击选区的两次零位移回写/冗余 setRect 免触发全量重算。
     rect_ = r;
     hasRect_ = true;
     emit changed();

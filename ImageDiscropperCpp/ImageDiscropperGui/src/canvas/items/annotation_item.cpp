@@ -12,6 +12,7 @@
 // ============================================================================
 #include "canvas/items/annotation_item.h"
 
+#include <QGraphicsScene>
 #include <QGraphicsSceneMouseEvent>
 #include <QPainter>
 #include <QPainterPathStroker>
@@ -38,9 +39,40 @@ double clampScale(double f) {
 } // namespace
 
 // 构造：z 序固定为标注层；默认不接受悬停，仅左键用于拖动。
+// 选中 OBB 高亮框为独立顶层图元（z=kAnnotationPreview，与橡皮筋同层），随本图元进出场景（见 itemChange）。
 AnnotationItem::AnnotationItem(QGraphicsItem* parent) : DraggableCanvasItem(parent) {
     setZValue(zorder::kAnnotation);
     setAcceptedMouseButtons(Qt::LeftButton);
+    // 几何变更通知开关：Qt 默认不派发 ItemPositionHasChanged（仅 ItemSendsGeometryChanges 置位才发——
+    // setPos 的快速路径直接跳过 itemChange）。顶层 OBB 覆盖层的位置跟随依赖该通知，必须开启，
+    // 否则拖拽平移时覆盖层停在原地、释放重建几何后才跳回。
+    setFlag(ItemSendsGeometryChanges, true);
+    obbOverlay_ = new ObbOverlayItem(this);
+}
+
+// 析构：OBB 覆盖层是顶层图元（非子图元），不随父级自动销毁，需显式释放（析构时仍在场景内，
+// delete 会自动将其移出场景）。
+AnnotationItem::~AnnotationItem() {
+    delete obbOverlay_;
+}
+
+// 同步顶层 OBB 覆盖层：进场 → 入场景；离场 → 先撤出；拖动平移 → 跟随 pos；显隐 → 同显隐。
+QVariant AnnotationItem::itemChange(const GraphicsItemChange change, const QVariant& value) {
+    if (change == ItemSceneChange) {
+        // 换场景（含离场：value 为 null）前先把覆盖层从当前场景撤出——只判 null 会在真换场景时
+        // 于旧场景留下 owner 悬垂的覆盖层继续 paint；加场由 ItemSceneHasChanged 对称补回。
+        if (obbOverlay_->scene()) obbOverlay_->scene()->removeItem(obbOverlay_);
+    } else if (change == ItemSceneHasChanged) {
+        if (auto* sc = value.value<QGraphicsScene*>()) {
+            obbOverlay_->setPos(pos());
+            sc->addItem(obbOverlay_);
+        }
+    } else if (change == ItemPositionHasChanged) {
+        obbOverlay_->setPos(pos());
+    } else if (change == ItemVisibleHasChanged) {
+        obbOverlay_->setVisible(isVisible());
+    }
+    return QGraphicsItem::itemChange(change, value);
 }
 
 // 载入标注拷贝并重建渲染路径。
@@ -59,6 +91,7 @@ void AnnotationItem::rebuildPath() {
     const qreal margin = static_cast<qreal>(ann_.style.strokeWidth)
         + handleSize_ * nums::canvas::kAnnoBoundsMarginRatio + nums::canvas::kAnnoBoundsMarginPadPx;
     bounds_ = path_.boundingRect().adjusted(-margin, -margin, margin, margin);
+    if (obbOverlay_) obbOverlay_->syncGeometry();   // OBB 覆盖层随几何重建报备并重绘
 }
 
 void AnnotationItem::setSelectedState(const bool on) {
@@ -142,34 +175,55 @@ void AnnotationItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, Q
     QPainterPath drawPath = path_;
     if (previewing && !isText && ann_.shape) drawPath = toQPainterPath(xf.applyToPath(ann_.shape->toPath()));
     paintAnnotation(*painter, ann_, drawPath, xf);
+    // 选中高亮（OBB + 手柄）由顶层图元 ObbOverlayItem 在 kAnnotationPreview 层绘制，本图元只画形状本体。
+}
 
-    // 选中高亮：定向包围盒（虚线）+ 8 个缩放手柄 + 1 个旋转手柄。
-    // 选中蓝取自 Palette（可在「视图→外观/配色…」自定义；paint 期取色，改色后随场景重绘）。
-    if (selected_ && ann_.shape) {
-        const ObbFrame f = computeObb(xf);
-        const QColor anno = Palette::instance().annotationColor();
-        QPen hi(anno);
-        hi.setWidth(1);
-        hi.setStyle(Qt::DashLine);
-        hi.setCosmetic(true);   // 高亮线宽恒定 1 屏幕px，不随缩放变粗
-        painter->setPen(hi);
-        painter->setBrush(Qt::NoBrush);
-        QPainterPath box;
-        box.moveTo(f.corner[0]);
-        for (int i = 1; i < 4; ++i) box.lineTo(f.corner[i]);
-        box.closeSubpath();
-        painter->drawPath(box);
-        painter->drawLine(f.edge[0], f.rotate);   // 旋转手柄连到顶边中点
+// ---- 选中 OBB 覆盖层（顶层图元，z=kAnnotationPreview）----
+// 只绘 OBB 虚线框 + 8 缩放手柄 + 1 旋转手柄；不接鼠标（手柄抓取仍在本图元 shape()/mousePress 判定）。
+// 顶层是硬约束：Qt 6 场景按顶层图元子树递归绘制，子图元 z 逃不出父级子树、压不过同层后画的标注；
+// pos 跟随 owner（itemChange 同步），坐标系＝owner 局部系经 pos 平移。选中蓝取自 Palette
+// （可在「视图→外观/配色…」自定义；paint 期取色，改色后随场景重绘）。
+AnnotationItem::ObbOverlayItem::ObbOverlayItem(AnnotationItem* owner) : QGraphicsItem(nullptr), owner_(owner) {
+    setZValue(zorder::kAnnotationPreview);   // 与橡皮筋同层（25）：恒位于已提交标注(20)之上，后提交标注盖不住选中框
+    setAcceptedMouseButtons(Qt::NoButton);
+}
 
-        const qreal h = handleSize_ * nums::canvas::kAnnoHandleDrawRatio;   // 略放大手柄，便于看清与点中
-        painter->setBrush(anno);
-        for (int i = 0; i < 4; ++i) {   // 8 个缩放手柄（方块）
-            painter->drawRect(QRectF(f.corner[i].x() - h / 2, f.corner[i].y() - h / 2, h, h));
-            painter->drawRect(QRectF(f.edge[i].x() - h / 2, f.edge[i].y() - h / 2, h, h));
-        }
-        painter->setBrush(QColor(255, 255, 255));   // 旋转手柄（白底蓝边圆形，与缩放手柄区分）
-        painter->drawEllipse(QRectF(f.rotate.x() - h * 0.6, f.rotate.y() - h * 0.6, h * 1.2, h * 1.2));
+QRectF AnnotationItem::ObbOverlayItem::boundingRect() const { return owner_->bounds_; }
+
+void AnnotationItem::ObbOverlayItem::syncGeometry() {
+    prepareGeometryChange();
+    update();
+}
+
+void AnnotationItem::ObbOverlayItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) {
+    if (!owner_->selected_ || !owner_->ann_.shape) return;
+    const bool previewing = owner_->activeHandle_ != Handle::None;
+    const geometry::AffineTransform xf = previewing
+        ? owner_->ann_.shape->obbPreviewTransform(owner_->previewSx_, owner_->previewSy_, owner_->previewRot_)
+        : owner_->ann_.shape->transform();
+    const ObbFrame f = owner_->computeObb(xf);
+    const QColor anno = Palette::instance().annotationColor();
+    QPen hi(anno);
+    hi.setWidth(1);
+    hi.setStyle(Qt::DashLine);
+    hi.setCosmetic(true);   // 高亮线宽恒定 1 屏幕px，不随缩放变粗
+    painter->setPen(hi);
+    painter->setBrush(Qt::NoBrush);
+    QPainterPath box;
+    box.moveTo(f.corner[0]);
+    for (int i = 1; i < 4; ++i) box.lineTo(f.corner[i]);
+    box.closeSubpath();
+    painter->drawPath(box);
+    painter->drawLine(f.edge[0], f.rotate);   // 旋转手柄连到顶边中点
+
+    const qreal h = owner_->handleSize_ * nums::canvas::kAnnoHandleDrawRatio;   // 略放大手柄，便于看清与点中
+    painter->setBrush(anno);
+    for (int i = 0; i < 4; ++i) {   // 8 个缩放手柄（方块）
+        painter->drawRect(QRectF(f.corner[i].x() - h / 2, f.corner[i].y() - h / 2, h, h));
+        painter->drawRect(QRectF(f.edge[i].x() - h / 2, f.edge[i].y() - h / 2, h, h));
     }
+    painter->setBrush(QColor(255, 255, 255));   // 旋转手柄（白底蓝边圆形，与缩放手柄区分）
+    painter->drawEllipse(QRectF(f.rotate.x() - h * 0.6, f.rotate.y() - h * 0.6, h * 1.2, h * 1.2));
 }
 
 // 依世界变换 xf 计算 OBB 的9 个手柄世界坐标：将局部包围盒四角经 xf 映射，再取边中点与中心；
@@ -225,6 +279,18 @@ void AnnotationItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     event->accept();
 }
 
+// 手柄优先穿透命中（场景按下分发前调用，标注选取态）：见头文件说明。
+bool AnnotationItem::tryHandlePress(const QPointF& scenePos) {
+    if (!selected_ || !ann_.shape) return false;
+    const ObbFrame f = computeObb(ann_.shape->transform());
+    if (const Handle h = hitHandle(scenePos, f); h != Handle::None) {
+        beginHandleDrag(h, scenePos);
+        grabMouse();   // 未经基类分发无自动抓取：显式抓取使后续移动/释放直达本图元
+        return true;
+    }
+    return false;
+}
+
 // 移动：手柄拖拽走缩放/旋转预览（本图元自身处理）；平移手势已交场景转发（dragMoveTo），此处放行
 // 让事件落到场景（被按项与选中项不同图元时，场景才能把移动转发给选中项）。
 void AnnotationItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
@@ -239,6 +305,9 @@ void AnnotationItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
         const double sx = previewSx_, sy = previewSy_, rot = previewRot_;
         activeHandle_ = Handle::None;
         previewSx_ = 1.0; previewSy_ = 1.0; previewRot_ = 0.0;
+        // 显式抓取（穿透路径 tryHandlePress::grabMouse）不随释放自动解除（场景只自动释放隐式抓取），
+        // 必须在此归还：否则残留抓取者吞掉后续所有按下事件、手柄拖拽逐步失灵（穿透选中失效）。
+        ungrabMouse();
         event->accept();
         if (std::fabs(sx - 1.0) > 1e-6 || std::fabs(sy - 1.0) > 1e-6 || std::fabs(rot) > 1e-6) {
             emit transformRequested(sx, sy, rot);   // 上层 → model.transformSelected → Core applyObbTransform
@@ -333,6 +402,7 @@ void AnnotationItem::updatePreviewBounds() {
         + handleSize_ * nums::canvas::kAnnoBoundsMarginRatio + nums::canvas::kAnnoBoundsMarginPadPx;
     prepareGeometryChange();
     bounds_ = pp.boundingRect().adjusted(-margin, -margin, margin, margin);
+    if (obbOverlay_) obbOverlay_->syncGeometry();   // OBB 覆盖层随手柄预览报备并重绘
 }
 
 } // namespace idc::gui

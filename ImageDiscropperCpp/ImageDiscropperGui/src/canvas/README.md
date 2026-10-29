@@ -2,7 +2,7 @@
 
 > **include/src 分离**：本模块头文件在 `include/canvas/`，实现（`.cpp`）与本 README 在 `src/canvas/`。
 
-按 **z 序图层化**组织画布：底图 → 图片图层像素 → 图片图层落位框 → 标注矢量叠加 → 标注绘制预览 → 遮罩 → 网格 → 选区框 → 单元编号角标 → 网格基准手柄。
+按 **z 序图层化**组织画布：底图 → 图片图层像素 → 图片图层落位框 → 标注矢量叠加 → 标注绘制预览/选中标注 OBB → 遮罩 → 网格 → 选区框 → 单元编号角标 → 网格基准手柄。
 场景坐标统一为**原图像素坐标**；底图用降采样 pixmap 经变换铺回原图尺寸，各叠加层即可直接按原图坐标绘制。
 本目录**只渲染 Core 给出的结果**（切割线来自 `generateCutLines`、保留块来自 `EngineResult.kept`），不含几何计算。
 
@@ -29,7 +29,9 @@
 
 `kBase=0 < kImageLayerPixels=5 < kImageLayer=10 < kAnnotation=20 < kAnnotationPreview=25 < kMask=30 < kGrid=40 < kSelection=50 < kCellNumber=55 < kGridHandle=60`
 
-> `kAnnotationPreview`＝标注绘制预览（橡皮筋），新建标注时逐帧更新的临时图元；须**抬到已提交标注之上**——它与 `kAnnotation` 同属一个 `AnnotationItem` 类（构造默认落在 `kAnnotation`），若与 `kAnnotation` 同值则靠插入次序叠放，会话中后提交的标注会盖住先创建的预览图元，致橡皮筋看不见。
+> `kAnnotationPreview`＝标注绘制预览（橡皮筋，新建标注时逐帧更新的临时图元）＋**选中标注的 OBB 高亮框**（AnnotationItem 持有的独立**顶层**图元，只绘 OBB/手柄、不接鼠标）。二者同层，须**抬到已提交标注之上**：若与 `kAnnotation` 同值则靠插入次序叠放，会话中后提交的标注会盖住预览/选中框。
+>
+> OBB 覆盖层顶层是硬约束：Qt 6 场景按**顶层图元子树**递归绘制（`qgraphicsscene.cpp` drawItems→drawSubtreeRecursive），子图元的 z 逃不出父级子树、压不过同层后画的标注，必须独立成层才能参与顶层排序；其场景进出/位置/显隐经 `AnnotationItem::itemChange` 跟随所属标注同步。
 
 遮罩为**单一层 `kMask`**：一个图元内先铺红色删除底、再叠绿色保留块，绿覆盖处为保留、透出红处即删除。
 
@@ -48,6 +50,9 @@
 > 触控路径不进入桌面实现；移动端行为详见 src/mobile README「移动端」。
 
 - **缩放**：滚轮以鼠标为锚点缩放（一格 ×1.15）；`zoomIn/zoomOut/resetZoom/fitToWindow`。
+- **双击＝适应窗口**：仅**框选态且落点无交互图元**（空白/底图）时生效——其余三态的左键按下是动作手势（落顶点/拾取/选中），
+  即时路由、双击补发两次普通点击；交互图元（选区框/落位框等吃左键者）上同理略过适应窗口。注意：L1/L2 切割线可见时
+  `SelectionRectItem` 的包围盒并入整幅底图（延伸段贯穿全图），此时图像区域内双击恒判为交互 → 不触发适应窗口。
 - **平移**：按住空格 + 左键，或中键拖拽。
 - **滚动范围 = 内容边界 + 外圈余量**（`canvas_scene::applySceneExtent` / `contentBounds`，余量口径由 `canvas_view` 定）：
   视图滚动条范围来自场景矩形，若场景矩形恒等于图像尺寸，「图大于窗」就推不出图像边缘一步，边缘处的选区手柄 /

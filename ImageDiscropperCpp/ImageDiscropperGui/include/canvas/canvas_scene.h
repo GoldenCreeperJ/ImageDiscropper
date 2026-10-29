@@ -205,6 +205,7 @@ protected:
     // 图层拾取模式的**场景级**命中与拖拽：重叠落位框不靠 z 序取最顶，而是同点**点击**（按下-释放无拖动）
     //   沿叠放序循环切换选中层（去 z 序依赖，仿 Figma；循环态由 pickCycle_ 承担，与标注拾取共用同实现）。
     //   按下＝resolveOnPress（保持已选层、拖动跟随选中项），无拖动释放＝advanceOnClick（沿栈推进一位）。
+    //   标注选取态另有一道**手柄优先穿透**（见实现）：选中标注的 OBB 手柄被上层标注盖住时按下仍落到手柄拖拽。
     //   非拾取模式 / 拾取点无候选 → 交基类走既有图元交互。
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
     void mouseMoveEvent(QGraphicsSceneMouseEvent* event) override;
@@ -220,6 +221,11 @@ private:
     // 手柄可交互口径：L3 + 网格线图层可见 + 不在图片拾取/标注选取态（后者让位给它们的图元）。
     // 网格线图层隐藏 → 手柄不可拖（隐藏图层=不可交互）。
     void refreshGridHandleInteraction() const;
+
+    // 场景驱动拖拽的释放收尾：清除按下时建立的鼠标抓取。本场景的释放分支自行消费事件、不交基类，
+    // 而隐式抓取只在基类释放处理里随「最后按键抬起」解除——不清理则被按图元残留抓取，后续按下全被
+    // 其吞掉（桌面靠悬停 move 触发 Qt 的自清理特例勉强恢复；触控无悬停 move，穿透选中即由此失效）。
+    void releasePressGrab() const;
 
     // 收集 scenePos 处命中的图片图层 id（按 zValue 降序、顶在前；仅拾取模式下的可见图元）。
     std::vector<int> layerStackAt(const QPointF& scenePos) const;

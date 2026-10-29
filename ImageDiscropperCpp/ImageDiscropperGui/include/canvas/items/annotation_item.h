@@ -2,9 +2,13 @@
 // 文件：canvas/items/annotation_item.h
 // 作用：画布上的「单个标注」矢量图元——持有一份 Core annotation::Annotation 拷贝，
 //       用 Shape::worldPath() → QPainterPath 以矢量方式叠加渲染（不改底图像素，CONTRIBUTING.md「分层纪律」）。
-//       选中时绘制**定向包围盒（OBB）+ 8 个缩放手柄 + 1 个旋转手柄**：拖手柄做缩放/拉伸/旋转
-//       （拖角越过对边产生负缩放＝翻转），拖拽中实时矢量预览、释放发 transformRequested(sx,sy,deg)；
-//       拖形状本体则平移，释放发 moveRequested(dx,dy)。二者均交上层委托 Core（本图元不自算几何，CONTRIBUTING.md「分层纪律」）。
+//       选中时**定向包围盒（OBB）+ 8 个缩放手柄 + 1 个旋转手柄**由独立**顶层**图元绘制在
+//       kAnnotationPreview 层（z=25，见 z_order.h）——与标注绘制预览（橡皮筋）同层、恒位于已提交
+//       标注之上；Qt 6 场景按顶层图元子树递归绘制，子图元 z 逃不出父级子树、压不过同层后画的标注，
+//       故必须独立成层；形状本体仍在本图元（标注层）。
+//       手柄拖拽做缩放/拉伸/旋转（拖角越过对边产生负缩放＝翻转），拖拽中实时矢量预览、释放发
+//       transformRequested(sx,sy,deg)；拖形状本体则平移，释放发 moveRequested(dx,dy)。
+//       二者均交上层委托 Core（本图元不自算几何，CONTRIBUTING.md「分层纪律」）。
 // 分块依据：
 //   - 继承 DraggableCanvasItem：平移手势循环与 setPos 视觉反馈在基类（见 canvas/items/draggable_canvas_item.h），
 //     本图元只留送达翻译 onDragFinished（clicked / moveRequested 信号）；手柄拖拽（缩放/旋转）自管。
@@ -35,6 +39,7 @@ class AnnotationItem : public DraggableCanvasItem {
     Q_OBJECT
 public:
     explicit AnnotationItem(QGraphicsItem* parent = nullptr);
+    ~AnnotationItem() override;   // 释放顶层 OBB 覆盖层（非子图元，不随父级自动销毁）
 
     // 载入一份标注拷贝并重建渲染路径（几何来自 Core Shape::toPath）。
     void setAnnotation(const annotation::Annotation& ann);
@@ -51,6 +56,11 @@ public:
     bool isDragging() const override {
         return DraggableCanvasItem::isDragging() || activeHandle_ != Handle::None;
     }
+
+    // 选中标注的 OBB 手柄优先命中（场景在基类分发前调用，标注选取态）：命中即进入手柄拖拽并抓取鼠标，
+    // 后续移动/释放直达本图元——上层标注盖住手柄点位时按下也能穿透落到选中标注（选中框恒可操作）。
+    // 未命中（未选中/无形状/不在手柄半径内）返回 false，场景交基类走正常分发。
+    bool tryHandlePress(const QPointF& scenePos);
 
     // 平移拖拽由场景驱动（按下归属与移动/释放转发都在 CanvasScene）：手势循环在基类
     // DraggableCanvasItem，本图元经 onDragFinished 收到收尾数据并翻译成自身信号。
@@ -84,12 +94,32 @@ protected:
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
     void mouseMoveEvent(QGraphicsSceneMouseEvent* event) override;
     void mouseReleaseEvent(QGraphicsSceneMouseEvent* event) override;
+    // 同步顶层 OBB 覆盖层的场景进出/位置/显隐（顶层图元不随父级自动进出场景、不随父级变换）。
+    QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
     // 平移手势送达（基类钩子）：wasClick→clicked(scenePos)（交上层推进同点连击循环）；
     //   否则→moveRequested(dx,dy)（仅选中且净位移非零时）。
     void onDragFinished(bool wasClick, const QPointF& scenePos, double dx, double dy) override;
 
 private:
     void rebuildPath();   // 由 ann_.shape 重建 path_ 与 bounds_
+
+    // 选中 OBB 高亮框：**顶层图元**（QGraphicsItem 父为空，仅持有 owner 指针），绝对 z＝kAnnotationPreview，
+    //   只绘 OBB 与手柄、不接鼠标（手柄抓取仍在本图元 shape()/mousePress 判定）。顶层是硬约束——Qt 6
+    //   场景按顶层图元子树递归绘制，子图元 z 逃不出父级子树、压不过同层后画的标注。位置跟随 owner
+    //   （场景进出/pos/显隐经 AnnotationItem::itemChange 同步）；坐标系＝owner 局部系（经 pos 平移）。
+    //   嵌套类＝本类成员，可访问私有成员（ann_/computeObb/handleSize_ 等）。
+    class ObbOverlayItem : public QGraphicsItem {
+    public:
+        explicit ObbOverlayItem(AnnotationItem* owner);
+        QRectF boundingRect() const override;
+        void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
+        // 父图元几何/选中变化时调用：报备包围盒变更并重绘（prepareGeometryChange 为保护成员，故经此入口）。
+        void syncGeometry();
+
+    private:
+        AnnotationItem* owner_;
+    };
+    ObbOverlayItem* obbOverlay_{nullptr};
 
     // 定向包围盒（OBB）手柄：4 角双向缩放 + 4 边中点单向缩放 + 1 旋转手柄（仅选中时可拖）。
     enum class Handle { None, TL, T, TR, R, BR, B, BL, L, Rotate };

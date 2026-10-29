@@ -41,7 +41,8 @@ public:
     bool selectedFrame() const { return selected_; }
 
     // 交互态（图层拾取模式）：true 时由场景拾取命中作为候选可拖；false 时不作拾取候选。
-    //   注：图元自身不直接接受鼠标（恒 Qt::NoButton），拾取/拖拽统一由 CanvasScene 路由（支持重叠循环选层）。
+    //   注：拾取/拖拽由 CanvasScene 统一路由（场景按下分支在基类分发前处理），但图元仍须吃左键——
+    //   输入适配器按「接受左键」判定交互图元并即时路由，不吃则图层按下被单击延迟判定扣住（双击窗口）。
     void setInteractive(bool on);
     bool interactive() const { return interactive_; }
 

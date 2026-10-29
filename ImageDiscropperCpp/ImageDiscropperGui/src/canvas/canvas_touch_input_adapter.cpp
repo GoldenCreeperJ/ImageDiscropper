@@ -39,12 +39,17 @@ void TouchInputAdapter::attach(CanvasView& view) {
 void TouchInputAdapter::onPress(CanvasView& view, QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
         const QPoint vp = event->pos();
-        // 双击第二击：距上一有效轻点足够近且足够快 → 适应窗口；吞掉本序列后续事件，
-        // 不进入框选/图元路由（桌面双击无绑定语义，移动端 SPEC 映射为适应窗口）。
+        // 双击第二击：距上一有效轻点足够近且足够快且落在**非交互图元**处且处于**框选态** → 适应窗口；
+        // 吞掉本序列后续事件，不进入框选/图元路由。其余三态的按下是动作手势（落顶点/拾取/选中），
+        // 扣住会吞顶点——双击＝适应窗口仅框选态生效（与桌面路由同一门控口径）。交互图元（选区框/
+        // 落位框等接收左键者）上的双击略过适应窗口——按下照常路由（桌面路由内交互图元即时下发）。
         if (tapClock_.isValid() && tapClock_.elapsed() <= nums::canvas::kDoubleTapGapMs
-            && (vp - lastTapPos_).manhattanLength() <= nums::canvas::kDoubleTapPosScreenPx) {
+            && (vp - lastTapPos_).manhattanLength() <= nums::canvas::kDoubleTapPosScreenPx
+            && view.canvasMode() == CanvasMode::Marquee
+            && !view.interactiveItemAt(event->position())) {
             swallowing_ = true;
             tapClock_.invalidate();          // 已消费，防止三连击连续触发
+            router_.cancelPendingClick();    // 双击成立：等待中的单击不落地
             view.fitToWindow();
             event->accept();
             return;
@@ -55,6 +60,36 @@ void TouchInputAdapter::onPress(CanvasView& view, QMouseEvent* event) {
         pressClock_.restart();
     }
     router_.onPress(view, event);
+}
+
+// 双击正主：QPA 把间隔小于系统双击阈值的第二击合成为 MouseButtonDblClick（不是第二次 press），
+//   挂在 press 上的自检路径等不到它——此处先按落点消歧：交互图元（图层/标注/选区框）上**略过双击**，
+//   按普通点击补发（连击循环照常推进）；底图/空白上：窗口内首击未落地 → 双击成立，适应窗口并作废
+//   单击；首击已落地（间隔 ≥ kDoubleTapGapMs 的中速连击）→ 同样补发普通点击。
+//   吞掉本击的合成 release（press 未入桌面路由，不成对）。
+void TouchInputAdapter::onDoubleClick(CanvasView& view, QMouseEvent* event) {
+    if (event->button() != Qt::LeftButton) { event->ignore(); return; }
+    if (view.interactiveItemAt(event->position())) {
+        // 交互图元上的双击略过适应窗口：普通点击补发（连击循环照常推进）。
+        tapClock_.restart();             // 本击按普通轻点落地：重启轻点时钟（可与后续轻点再组双击）
+        swallowing_ = true;              // 吞掉本击的合成 release（点击已由合成对补发，不成对）
+        router_.onDoubleClick(view, event);
+    } else if (router_.pendingClickActive()) {
+        tapClock_.invalidate();
+        swallowing_ = true;
+        router_.cancelPendingClick();    // 双击成立：等待中的单击不落地（单击/双击不再同时生效）
+        view.fitToWindow();
+    } else {
+        tapClock_.restart();
+        swallowing_ = true;
+        router_.onDoubleClick(view, event);
+    }
+    event->accept();
+}
+
+// 取消等待中的单击（长按/捏合/双击与视图取消路径共用）：扣在桌面路由里的单击不得再补发。
+void TouchInputAdapter::cancelPendingClick() {
+    router_.cancelPendingClick();
 }
 
 // 移动：吞序列或直接吞；否则更新轻点候选（大幅移动即作废）并委托桌面路由。
@@ -70,6 +105,7 @@ void TouchInputAdapter::onMove(CanvasView& view, QMouseEvent* event) {
 void TouchInputAdapter::onRelease(CanvasView& view, QMouseEvent* event) {
     if (swallowing_) {
         swallowing_ = false;                 // 序列结束，恢复正常路由
+        router_.clearSwallowNextRelease();   // 本层吞掉的释放不得让桌面路由的吞释放标志残留到下一击
         event->accept();
         return;
     }
@@ -106,7 +142,10 @@ bool TouchInputAdapter::onGestureEvent(CanvasView& view, QGestureEvent* event) {
     // **Cancelled 除外**——抬指未达长按时限时识别器恒发 Cancelled，若一并置位，每次普通轻点都会被
     // 污染判定、双击永远不成立（真机双击失效的根因之一）。
     if (const auto* hold = dynamic_cast<QTapAndHoldGesture*>(event->gesture(Qt::TapAndHoldGesture))) {
-        if (hold->state() != Qt::GestureCanceled) gestureSeen_ = true;
+        if (hold->state() != Qt::GestureCanceled) {
+            gestureSeen_ = true;
+            router_.cancelPendingClick();   // 长按不是单击：等待中的单击不落地（也免去按住期间定时器补发）
+        }
         if (hold->state() == Qt::GestureFinished) {
             view.gestureCancelCurrent();   // 清长按前落下的合成左键 press 副作用（框选/反选/图元抓取）。
             if (view.annotationDrawActive())
@@ -121,6 +160,7 @@ bool TouchInputAdapter::onGestureEvent(CanvasView& view, QGestureEvent* event) {
     if (!pinch) return false;
     if (!gestureSeen_ && pinch->state() != Qt::GestureCanceled) {
         gestureSeen_ = true;
+        router_.cancelPendingClick();   // 捏合不是单击：等待中的单击不落地
         // 捏合开始：取消第一指可能已启动的框选/平移（QPA 在识别手势前已把第一指
         // 合成鼠标事件进入桌面路由——不取消则缩放时橡皮筋/画布跟着动）。
         view.gestureCancelCurrent();

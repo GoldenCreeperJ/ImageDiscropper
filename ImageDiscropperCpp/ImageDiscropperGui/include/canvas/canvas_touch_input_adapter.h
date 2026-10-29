@@ -41,6 +41,8 @@ public:
     void onPress(CanvasView& view, QMouseEvent* event) override;
     void onMove(CanvasView& view, QMouseEvent* event) override;
     void onRelease(CanvasView& view, QMouseEvent* event) override;
+    void onDoubleClick(CanvasView& view, QMouseEvent* event) override;   // 双击正主：窗口内＝适应窗口，越界中速连击＝补发普通点击（press 路径检测仅作平台兜底）。
+    void cancelPendingClick() override;   // 委托桌面路由作废被扣的单击（长按/捏合/双击/视图取消路径共用）。
 
     // 触控无滚轮：不消费（桌面滚轮语义在 DesktopInputAdapter，不经此处）。
     void onWheel(CanvasView& view, QWheelEvent* event) override;

@@ -35,7 +35,10 @@ void ImageLayerItem::setSelectedFrame(const bool on) {
 void ImageLayerItem::setInteractive(const bool on) {
     if (interactive_ == on) return;
     interactive_ = on;
-    // 图元自身恒不吃鼠标（拾取/拖拽由 CanvasScene 统一路由）：interactive_ 仅作拾取候选门控标志。
+    // 拾取/拖拽仍由 CanvasScene 统一路由（场景按下分支在基类分发前处理，不依赖图元按键受理）；
+    // 但图元必须吃左键：输入适配器以「是否接受左键」（interactiveItemAt）判定交互图元并即时路由——
+    // 不吃左键则图层每次按下都被单击延迟判定扣住（双击窗口 kDoubleTapGapMs），拾取手感明显迟滞。
+    setAcceptedMouseButtons(on ? Qt::LeftButton : Qt::NoButton);
     update();
 }
 

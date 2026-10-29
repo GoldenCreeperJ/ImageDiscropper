@@ -503,6 +503,16 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent* event) {
         event->accept();
         return;
     }
+    // 标注选取态按下：选中标注的 OBB 手柄优先穿透命中——上层标注盖住手柄点位时，按下仍应落到
+    // 选中标注的手柄拖拽（否则选中框形同虚设）；未命中（无选中/不在手柄半径内）交基类走正常分发。
+    if (annotationSelectMode_ && event->button() == Qt::LeftButton) {
+        for (AnnotationItem* it : annoItems_) {
+            if (it->isSelectedState() && it->tryHandlePress(event->scenePos())) {
+                event->accept();
+                return;
+            }
+        }
+    }
     QGraphicsScene::mousePressEvent(event);
 }
 
@@ -518,7 +528,8 @@ void CanvasScene::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
 }
 
 // 场景级释放：结束当前手势（endTranslationDrag 先复位视觉位移，再交图元送达钩子一次性上送
-//   moved / clicked / moveRequested，并返回本次是否为原地点击）；清空拖拽句柄。
+//   moved / clicked / moveRequested，并返回本次是否为原地点击）；清空拖拽句柄与按下残留的抓取
+//   （隐式抓取只在基类释放处理里解除，本分支自行消费事件后必须补清，见 releasePressGrab）。
 //   拾取原地点击 → PickCycle::advanceOnClick 沿候选栈推进一位（首次定点击复位到栈顶＝当前），选中变化才
 //     emit imageLayerPressed（交 CanvasCoordinator selectLayer → setImageLayerSelection 回同步高亮）；
 //   拾取拖拽 → 清循环态。否则交基类。
@@ -534,6 +545,7 @@ void CanvasScene::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
         } else {
             pickCycle_.reset();   // 拖拽不推进循环：清循环态，其后同点单击从无历史重新起算（同标注 moveSelectedBy）。
         }
+        releasePressGrab();
         event->accept();
         return;
     }
@@ -541,10 +553,17 @@ void CanvasScene::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
         DraggableCanvasItem* it = annoDragItem_;
         annoDragItem_ = nullptr;
         it->endTranslationDrag(event->scenePos());   // 原地点击发 clicked、平移发 moveRequested（此后不触碰 it）
+        releasePressGrab();
         event->accept();
         return;
     }
     QGraphicsScene::mouseReleaseEvent(event);
+}
+
+// 清除按下时建立的鼠标抓取（隐式抓取不随场景自持的释放分支解除——基类释放处理未被执行）。
+// 被按项与拖动项可以不同（重叠时按下落在最顶图元、拖动跟随选中项），残留抓取挂在被按项上。
+void CanvasScene::releasePressGrab() const {
+    if (QGraphicsItem* g = mouseGrabberItem()) g->ungrabMouse();
 }
 
 // 标注选取模式：切换全部已提交标注图元的左键可交互性（预览图元恒不可交互，不受影响）。

@@ -61,7 +61,12 @@ inline constexpr double kPickSamePointTolScenePx = 3.0; // 连击循环选层的
 inline constexpr double kAnnoCopyOffsetPx = 16.0;       // 复制标注的错位偏移（场景单位）：复制件与原件错开一截，
                                                         // 一眼可辨且可直接拖走（完全重叠时难以拾取）。
 // ——触控手势判定（canvas_touch_input_adapter.cpp）：双击＝适应窗口，轻点是它的最小单位——
-inline constexpr long long kDoubleTapGapMs = 400;   // 第二击按下距上一击释放的上限；调小则双击要求更手快。
+//   桌面复用口径：kDoubleTapPosScreenPx 兼作桌面「离散第二击」同点判定容差；kTapMoveScreenPx 兼作
+//   桌面扣住单击的拖拽起点阈值（框选拖拽位移 ≤12px 视为单击的一部分、不出路由，见 canvas_desktop_input_adapter.cpp）。
+//   触控与桌面两侧比较的都是 event->pos()——均按视口逻辑像素比较；常量名中的 ScreenPx 指「屏幕空间」
+//   （相对场景空间），非设备像素，调阈值勿乘 DPR。
+inline constexpr long long kDoubleTapGapMs = 300;   // 双击窗口：第二击按下距上一击释放的上限；也是单击延迟判定基准（窗口内合成双击＝适应窗口，
+                                                    // 越界中速连击＝补发普通点击，同点连击循环不被打断）。
 inline constexpr int kDoubleTapPosScreenPx = 64;    // 两击落点曼哈顿距离容差（屏幕像素，手指抖动余量）。
 inline constexpr long long kTapMaxMs = 300;         // 轻点的最长按下时长；超出视为长按，不作双击候选。
 inline constexpr int kTapMoveScreenPx = 12;         // 轻点允许的移动（屏幕像素）；超出即视为拖拽，作废双击候选。
