@@ -66,6 +66,17 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     i18n::bindToolTip(retranslator_, colorBtn_, IDC_GT(tooltip, kStrokeColorBtn));
     i18n::bindFormRow(retranslator_, form, colorBtn_, IDC_GT(label, kStrokeColorFieldLabel));
 
+    // 转角圆角半径（多边形 / 折线顶点倒角；直线 / 圆 / 文字无转角，设置无效）。
+    cornerSpin_ = new QDoubleSpinBox(this);
+    cornerSpin_->setRange(nums::model::kCornerRadiusMinPx, nums::model::kCornerRadiusMaxPx);
+    cornerSpin_->setDecimals(1);
+    cornerSpin_->setSingleStep(nums::model::kCornerRadiusStepPx);
+    cornerSpin_->setValue(nums::model::kDefaultCornerRadiusPx);
+    cornerSpin_->setSuffix(QStringLiteral(" px"));
+    cornerSpin_->setKeyboardTracking(false);
+    i18n::bindToolTip(retranslator_, cornerSpin_, IDC_GT(tooltip, kCornerRadiusSpin));
+    i18n::bindFormRow(retranslator_, form, cornerSpin_, IDC_GT(label, kCornerRadiusFieldLabel));
+
     // 描边粗细。
     strokeSpin_ = makeSpin(this, nums::model::kStrokeWidthMinPx, nums::model::kStrokeWidthMaxPx,
                            QStringLiteral(" px"));
@@ -94,17 +105,6 @@ AnnotationPropPanel::AnnotationPropPanel(QWidget* parent) : QWidget(parent) {
     fontSpin_->setValue(static_cast<int>(nums::model::kDefaultFontSizePx));
     i18n::bindToolTip(retranslator_, fontSpin_, IDC_GT(tooltip, kFontSizeSpin));
     i18n::bindFormRow(retranslator_, form, fontSpin_, IDC_GT(label, kFontSizeFieldLabel));
-
-    // 转角圆角半径（多边形 / 折线顶点倒角；直线 / 圆 / 文字无转角，设置无效）。
-    cornerSpin_ = new QDoubleSpinBox(this);
-    cornerSpin_->setRange(nums::model::kCornerRadiusMinPx, nums::model::kCornerRadiusMaxPx);
-    cornerSpin_->setDecimals(1);
-    cornerSpin_->setSingleStep(nums::model::kCornerRadiusStepPx);
-    cornerSpin_->setValue(nums::model::kDefaultCornerRadiusPx);
-    cornerSpin_->setSuffix(QStringLiteral(" px"));
-    cornerSpin_->setKeyboardTracking(false);
-    i18n::bindToolTip(retranslator_, cornerSpin_, IDC_GT(tooltip, kCornerRadiusSpin));
-    i18n::bindFormRow(retranslator_, form, cornerSpin_, IDC_GT(label, kCornerRadiusFieldLabel));
 
     root->addLayout(form);
 

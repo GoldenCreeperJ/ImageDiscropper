@@ -193,13 +193,14 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"msg::kCliImageArgHelp", "Optional: image path to open at startup."},
     // 帮助菜单正文（桌面 / 移动 / 关于）
     {"msg::kHelpUsageBody",
-        "1) File -> Open Image, or File -> New Canvas (size / background color / procedural pattern).\n"
+        "1) File -> Open Image, or File -> New Canvas (size / background color / procedural pattern; a source image with two-level placement can be attached, and the pattern / image / node appearance each accepts preprocess steps and opacity).\n"
         "2) Pick a mode: Standard Extract / Reverse Remove / Grid Split; polarity Keep Inside / Remove Inside.\n"
-        "3) Standard Extract / Reverse Remove: drag on the canvas to make a selection (Reverse Remove accepts multiple rectangles); orange cut lines span the whole image, green keeps and red removes.\n"
+        "3) Standard Extract / Reverse Remove: drag on the canvas to make a selection (Reverse Remove accepts multiple rectangles), shape / method live on the Parameters page; orange cut lines span the whole image, green keeps and red removes.\n"
         "   Drag the selection / corner handles / cut lines to adjust; arrow keys nudge (Shift for a larger step).\n"
-        "4) Grid Split: the Parameters page on the right sets the origin, cell size and remainder policy; Select All / Invert / Clear Cell Selection and the order policy control the output (the Edit / Mode menus share these entries).\n"
-        "5) Preprocess: the Image menu or the Preprocess page - rotate / flip / grayscale / invert / channel split + a separate canvas size (resize); the queue can be added to, trimmed and reordered.\n"
-        "6) Annotations: Annotation -> Tools picks a shape, then draw on the canvas (the left tool panel works too); the Annotation property page edits styles and duplicates / removes the selected annotation.\n"
+        "4) Grid Split: the Parameters page sets the grid definition (pitch / divisions / weights, one per axis), the remainder and the order;\n"
+        "   on pitch axes the origin can be adjusted right on the canvas by dragging its handles; Select All / Invert / Clear Cell Selection control the output.\n"
+        "5) Preprocess: the Image menu or the Preprocess page - target can be the canvas, the base or the picked layer; rotate / flip / grayscale / invert / channel split + a separate canvas size (resize); the queue can be added to, trimmed and reordered.\n"
+        "6) Annotations: Annotation -> Tools picks a shape, then draw on the canvas (the left tool panel works too); a selected annotation can be dragged to move and its handles scale / rotate it; the Annotation property page edits styles and duplicates / removes the selected annotation.\n"
         "7) Multi-layer canvas: Image -> Add Image Layer; in Image Pick mode drag to place the frame, the Image menu reorders, duplicates and removes layers; the Layers panel toggles each layer's visibility.\n"
         "8) Export: File -> Export; File -> Export Settings switches Separate / Collapse / Rearrange, the format and the burn-in flags; the Export page carries every parameter.\n"
         "9) File -> Save Configuration / Load Configuration: the whole parameter set (annotations and layers included) can be saved/loaded, reused and undone.\n\n"
@@ -208,14 +209,15 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
         "they are not listed here so this text stays accurate after you rebind one.\n"
         "Arrow-key nudging (Shift for a larger step) and Esc-to-finish-a-drawing are fixed keys, not customizable."},
     {"msg::kMobileHelpBody",
-        "1) Load an image with Open on the tool bar, or build a canvas from scratch with New (size / background / pattern).\n"
+        "1) Load an image with Open on the tool bar, or build a canvas from scratch with New (size / background / pattern; a source image with two-level placement can be attached, and the pattern / image / node appearance each accepts preprocess steps and opacity).\n"
         "2) The Mode drawer page picks Standard Extract / Reverse Remove / Grid Split and the Keep/Remove polarity; drag on the canvas to select.\n"
-        "3) The Parameters page sets the cut parameters: shape / method / grid quadruple, remainder policy and order.\n"
-        "4) The Preprocess page: rotate / flip / grayscale / invert / channel split + canvas size.\n"
-        "5) Pick an annotation tool on the Mode page, then draw on the canvas; the Annotation page edits style / stacking / fill, deletes the selection and clears all.\n"
-        "6) The Image page adds, reorders and removes image layers and places the anchor / pivot.\n"
-        "7) The Export page sets the output mode / format / burn-in flags; produce the files with Export on the tool bar.\n"
-        "8) More: load/save configuration, appearance/interaction (selection snap and confirm before rearrange live here), reset all, exit.\n\n"
+        "3) The Parameters page sets the cut parameters: shape / method; Grid Split also offers a per-axis grid definition (pitch / divisions / weights), the remainder and the order; on pitch axes the origin can be adjusted right on the canvas by dragging its handles.\n"
+        "4) Pick an annotation tool on the Mode page, then draw on the canvas (a selected annotation can be dragged to move and its handles scale / rotate it).\n"
+        "5) The Preprocess page: rotate / flip / grayscale / invert / channel split + canvas size; the target can be the canvas, the base or the picked layer.\n"
+        "6) the Annotation page edits style / stacking / fill, duplicates / deletes the selection and clears all.\n"
+        "7) The Image page adds, reorders, duplicates and removes image layers and places the anchor / pivot.\n"
+        "8) The Export page sets the output mode / format / burn-in flags; produce the files with Export on the tool bar.\n"
+        "9) More: load/save configuration, appearance/interaction (selection snap and confirm before rearrange live here), reset all, exit.\n\n"
         "Gestures: pinch to zoom, double-tap to fit the window, long press = right click (long press finishes a drawing; the menu can clear cut lines);\n"
         "the Step pad replaces the arrow keys for nudging the selection."},
     {"msg::kAboutBody",

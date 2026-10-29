@@ -67,7 +67,8 @@ canvas::ImageLayer NewCanvasDialog::buildAttachedLayer(const double factor, cons
 //   factor≠1 为预览代理（源图与图层框尺寸/偏移已由调用方等比缩）。与定稿、与 config 重载同一条合成路径。
 core::Image NewCanvasDialog::composeResult(const generate::PatternParams& p, const int outW, const int outH,
                                            const double factor, const canvas::ImageTransform& layerPlace,
-                                           const canvas::ImageTransform& imgPlace, const ImageFit fit) const {
+                                           const canvas::ImageTransform& imgPlace, const ImageFit fit,
+                                           const bool applyNodeAppearance) const {
     if (imageSource_.empty()) {   // 未选：纯图案底图（底色已烤入像素）。
         auto flat = EngineBridge::generatePattern(outW, outH, p);
         // 图案元素外观：预处理简表 + 元素不透明度（装配序：生成→其预处理→其透明度，与 Core materializeLayer 同口径）。
@@ -75,7 +76,9 @@ core::Image NewCanvasDialog::composeResult(const generate::PatternParams& p, con
             flat = backdropAppearance_->pipeline().applyExec(flat);
         canvas::applyAlpha(flat, static_cast<std::uint8_t>(std::clamp(backdropAppearance_->opacity(), 0, 255)));
         // 节点外观预处理（第三简表）：装配序在区域缩放之后（纯图案按目标尺寸生成、无缩放，直接施）。
-        if (!nodeAppearance_->pipeline().empty())
+        //   新建画布定稿不烘（applyNodeAppearance=false）：随底图声明交 resetBaseWith 回灌 baseSession_、
+        //   由 fadedCanvasBase 边界施加——与配置载入同口径，面板可见可编辑、序列化往返不双应用。
+        if (applyNodeAppearance && !nodeAppearance_->pipeline().empty())
             flat = nodeAppearance_->pipeline().applyExec(flat);
         // 纯图案 makePattern 不施节点 alpha 乘子（合成边界单点施加、防双淡的不变式）：预览在 layerPlace.opacity 上此处施加；
         //   定稿恒以 opacity=255 调本函数（flat 保持不透明，透度另由 baseOpacity/图层 transform 于运行时施加），故不双淡。
@@ -84,6 +87,7 @@ core::Image NewCanvasDialog::composeResult(const generate::PatternParams& p, con
     }
     std::vector<canvas::ImageLayer> layers;   // 无 base（图案元素 backdrop 已含于层内）。
     layers.push_back(buildAttachedLayer(factor, layerPlace, p, outW, outH, imgPlace, fit));
+    if (!applyNodeAppearance) layers.front().preprocess = {};   // 同上：定稿不烘节点外观，交运行时边界施加。
     return EngineBridge::composeCanvas(layers, outW, outH);
 }
 
@@ -129,7 +133,7 @@ void NewCanvasDialog::refreshPreview() const {
         p.dotRadius = scaled(p.dotRadius, factor);
     }
 
-    const core::Image img = composeResult(p, pw, ph, factor, layerPlace, imgPlace, fit);
+    const core::Image img = composeResult(p, pw, ph, factor, layerPlace, imgPlace, fit, /*applyNodeAppearance=*/true);   // 预览恒烘节点外观（所见即所得）。
     if (img.empty()) { previewLabel_->setText(IDC_GTR(label, kBadCanvasSize)); return; }
     const QPixmap pm = toPixmap(img);
     previewLabel_->setPixmap(pm.scaled(previewLabel_->size(), Qt::KeepAspectRatio, Qt::FastTransformation));
@@ -171,7 +175,9 @@ void NewCanvasDialog::accept() {
     // busyOverlayMode() 下发（busyOverlay_）：MobileShell 下为 true 铺满屏幕作全屏遮罩（SPEC §8.2），
     // 桌面为 false 居中小框；两者模态阻断语义一致。
     const auto generate = [&] {
-        flat = composeResult(p, w, h, 1.0, layerPlace, imgPlace, fit);   // 未选源→纯图案；否则单张附加层合成（内层+外层）。
+        // 新建画布定稿不烘节点外观（applyNodeAppearance=!addLayerMode_）：随底图声明交运行时 baseSession_ 边界施加（面板可见可编辑）；
+        //   「添加图层」语境恒烘（节点外观走层声明 preprocess，由 Core materializeLayer 施加，flat 仅作合法性像素、不消费）。
+        flat = composeResult(p, w, h, 1.0, layerPlace, imgPlace, fit, /*applyNodeAppearance=*/addLayerMode_);
     };
     if (static_cast<long long>(w) * static_cast<long long>(h) >= 2LL * 1000 * 1000) {
         runInBusyDialog(this, busyOverlay_, IDC_GTR(status, kNewCanvasGenerateBusy), generate);

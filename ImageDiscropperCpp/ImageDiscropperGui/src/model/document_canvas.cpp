@@ -149,8 +149,16 @@ void Document::resetBaseWith(core::Image flat, std::optional<canvas::ImageLayer>
     //   新建对话框可直接采集底图不透明度（0..255）落此 transform.opacity，故回填值随对话框选择而变。
     baseOpacity_ = baseLayer_.has_value() ? static_cast<std::uint8_t>(std::clamp(baseLayer_->transform.opacity, 0, 255)) : 255;
     if (baseLayer_.has_value()) baseLayer_->transform.opacity = 255;
-    baseSelected_ = false;   // 新建底图：清底图选中态与色彩预处理会话（画布透明度属保留态，此处不改）。
+    baseSelected_ = false;   // 新建底图：清底图选中态；底图色彩预处理会话改为回灌新底图声明（与配置载入同口径：
+                             //   色彩步入 baseSession_、内存声明剥离——恒由 fadedCanvasBase 边界施加，不烘焙 baseImage_，杜绝与 composeBase 双应用）。
     baseSession_.clear();
+    if (baseLayer_.has_value()) {
+        preprocess::PreprocessPipeline colorSteps;
+        for (const auto& step : baseLayer_->preprocess.items())
+            if (preprocess::isColorStep(step)) colorSteps.add(step);
+        baseSession_.setSteps(std::move(colorSteps));
+        baseLayer_->preprocess.clear();   // 内存声明剥离 preprocess（序列化时由 baseSession_ 回填，见 buildSerializableConfig）。
+    }
 
     // 预处理：仅保留色彩步（Gray/Split/Invert），丢弃几何步（Rotate/Flip）与独立 resize，失效 base_ 缓存——
     //   防重放改变工作图尺寸（保留的几何/resize 会把新底图重新缩放/旋转、令图层/标注坐标失去意义）。

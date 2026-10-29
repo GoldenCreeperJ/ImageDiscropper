@@ -102,9 +102,11 @@ void TouchInputAdapter::onContextMenu(CanvasView& view, QContextMenuEvent* event
 // 中心点位移差 → gesturePanDelta（SPEC §8.3 双指平移）；出现手势即作废本序列 tap 判定。
 bool TouchInputAdapter::onGestureEvent(CanvasView& view, QGestureEvent* event) {
     // 长按识别（TapAndHold）：与捏合同一管线，由本类自行合成菜单——Widgets 不自动把长按识别
-    // 转为 QContextMenuEvent。gestureSeen_ 置位使本序列不再被当作轻点/双击（同捏合，防长按误触发适应窗口）。
+    // 转为 QContextMenuEvent。gestureSeen_ 置位使本序列不再被当作轻点/双击（同捏合，防长按误触发适应窗口）；
+    // **Cancelled 除外**——抬指未达长按时限时识别器恒发 Cancelled，若一并置位，每次普通轻点都会被
+    // 污染判定、双击永远不成立（真机双击失效的根因之一）。
     if (const auto* hold = dynamic_cast<QTapAndHoldGesture*>(event->gesture(Qt::TapAndHoldGesture))) {
-        gestureSeen_ = true;
+        if (hold->state() != Qt::GestureCanceled) gestureSeen_ = true;
         if (hold->state() == Qt::GestureFinished) {
             view.gestureCancelCurrent();   // 清长按前落下的合成左键 press 副作用（框选/反选/图元抓取）。
             if (view.annotationDrawActive())
@@ -117,7 +119,7 @@ bool TouchInputAdapter::onGestureEvent(CanvasView& view, QGestureEvent* event) {
     }
     const auto* pinch = dynamic_cast<QPinchGesture*>(event->gesture(Qt::PinchGesture));
     if (!pinch) return false;
-    if (!gestureSeen_) {
+    if (!gestureSeen_ && pinch->state() != Qt::GestureCanceled) {
         gestureSeen_ = true;
         // 捏合开始：取消第一指可能已启动的框选/平移（QPA 在识别手势前已把第一指
         // 合成鼠标事件进入桌面路由——不取消则缩放时橡皮筋/画布跟着动）。

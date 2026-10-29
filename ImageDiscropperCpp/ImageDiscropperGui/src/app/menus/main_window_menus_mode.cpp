@@ -120,6 +120,38 @@ void MainWindowUi::buildModeMenu(MainWindow* w, QMenuBar* bar) {
     mL2->addSeparator();
     w->aToGrid_ = bindAddAction(w->retranslator_, mL2, IDC_GT(label, kToGridButton));
     QObject::connect(w->aToGrid_, &QAction::triggered, w, [w] { w->doc_.convertRectToGrid(); });
+    // L3 网格定义（与「参数」页两轴「定义方式」下拉镜像，面板为真相源）：两级子菜单横向/纵向各三态。
+    // 只切形态不填数值——切换走 ParamPanel::setGridAxisMode（面板以屏上现有数值起手），故不会留下空参数；
+    // 基准点/单元尺寸/份数/权重仍在参数页输入。仅 L3 启用，syncPanels 回同步勾选态。
+    QMenu* mGridDefine = bindAddMenu(w->retranslator_, mMode, IDC_GT(menu, kL3DefineSub));
+    w->mGridDefine_ = mGridDefine;
+    const struct { engine::GridAxisMode mode{}; i18n::TextRef label; } kGridModes[] = {
+        { engine::GridAxisMode::Pitch, IDC_GT(menu, kGridModePitch) },
+        { engine::GridAxisMode::Count, IDC_GT(menu, kGridModeCount) },
+        { engine::GridAxisMode::Weights, IDC_GT(menu, kGridModeWeights) },
+    };
+    const auto addGridDefineAxis = [w, &kGridModes](QMenu* parent, const i18n::TextRef& title,
+                                                    const bool horizontal,
+                                                    std::vector<QAction*>& actions) {
+        QMenu* sub = bindAddMenu(w->retranslator_, parent, title);
+        auto* group = new QActionGroup(w);
+        group->setExclusive(true);
+        actions.resize(3, nullptr);
+        for (const auto&[mode, label] : kGridModes) {
+            QAction* a = bindAddAction(w->retranslator_, group, label);
+            a->setCheckable(true);
+            sub->addAction(a);
+            actions[static_cast<int>(mode)] = a;
+            QObject::connect(a, &QAction::triggered, w,
+                             [w, horizontal, mode = mode] { w->param_->setGridAxisMode(horizontal, mode); });
+        }
+        return sub;
+    };
+    w->mGridDefineH_ = addGridDefineAxis(mGridDefine, IDC_GT(menu, kGridAxisHorizontal), true,
+                                         w->gridModeActionsH_);
+    w->mGridDefineV_ = addGridDefineAxis(mGridDefine, IDC_GT(menu, kGridAxisVertical), false,
+                                         w->gridModeActionsV_);
+    // L3排序策略
     QMenu* mSort = bindAddMenu(w->retranslator_, mMode, IDC_GT(menu, kL3SortSub));
     w->mSort_ = mSort;
     auto* sortGroup = new QActionGroup(w);
@@ -161,38 +193,6 @@ void MainWindowUi::buildModeMenu(MainWindow* w, QMenuBar* bar) {
         w->remainderActions_[static_cast<int>(policy)] = a;
         QObject::connect(a, &QAction::triggered, w, [w, policy = policy] { w->doc_.setRemainder(policy); });
     }
-    // L3 网格定义（与「参数」页两轴「定义方式」下拉镜像，面板为真相源）：两级子菜单横向/纵向各三态。
-    // 只切形态不填数值——切换走 ParamPanel::setGridAxisMode（面板以屏上现有数值起手），故不会留下空参数；
-    // 基准点/单元尺寸/份数/权重仍在参数页输入。仅 L3 启用，syncPanels 回同步勾选态。
-    QMenu* mGridDefine = bindAddMenu(w->retranslator_, mMode, IDC_GT(menu, kL3DefineSub));
-    w->mGridDefine_ = mGridDefine;
-    const struct { engine::GridAxisMode mode{}; i18n::TextRef label; } kGridModes[] = {
-        { engine::GridAxisMode::Pitch, IDC_GT(menu, kGridModePitch) },
-        { engine::GridAxisMode::Count, IDC_GT(menu, kGridModeCount) },
-        { engine::GridAxisMode::Weights, IDC_GT(menu, kGridModeWeights) },
-    };
-    const auto addGridDefineAxis = [w, &kGridModes](QMenu* parent, const i18n::TextRef& title,
-                                                    const bool horizontal,
-                                                    std::vector<QAction*>& actions) {
-        QMenu* sub = bindAddMenu(w->retranslator_, parent, title);
-        auto* group = new QActionGroup(w);
-        group->setExclusive(true);
-        actions.resize(3, nullptr);
-        for (const auto&[mode, label] : kGridModes) {
-            QAction* a = bindAddAction(w->retranslator_, group, label);
-            a->setCheckable(true);
-            sub->addAction(a);
-            actions[static_cast<int>(mode)] = a;
-            QObject::connect(a, &QAction::triggered, w,
-                             [w, horizontal, mode = mode] { w->param_->setGridAxisMode(horizontal, mode); });
-        }
-        return sub;
-    };
-    w->mGridDefineH_ = addGridDefineAxis(mGridDefine, IDC_GT(menu, kGridAxisHorizontal), true,
-                                         w->gridModeActionsH_);
-    w->mGridDefineV_ = addGridDefineAxis(mGridDefine, IDC_GT(menu, kGridAxisVertical), false,
-                                         w->gridModeActionsV_);
-
 }
 
 void MainWindowUi::buildPreprocessMenu(MainWindow* w, QMenuBar* bar) {

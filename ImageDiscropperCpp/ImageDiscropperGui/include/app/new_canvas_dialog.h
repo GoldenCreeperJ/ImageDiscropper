@@ -144,7 +144,7 @@ private:
     // 预览便捷：未选源图→纯图案底图；否则单张图层（内层合成图层框 + 外层落位）走 composeCanvas。factor≠1 为预览代理。
     core::Image composeResult(const generate::PatternParams& p, int outW, int outH, double factor,
                               const canvas::ImageTransform& layerPlace, const canvas::ImageTransform& imgPlace,
-                              ImageFit fit) const;
+                              ImageFit fit, bool applyNodeAppearance) const;
     void refreshPreview() const;                                  // 小尺寸代理生成并缩放到预览标签。
 
     // ---- 三个折叠节构建器（按节拆 TU：src/app/dialogs/new_canvas_dialog_sections.cpp；装配壳

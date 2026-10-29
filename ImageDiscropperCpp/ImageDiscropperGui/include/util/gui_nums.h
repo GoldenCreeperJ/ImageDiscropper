@@ -61,10 +61,10 @@ inline constexpr double kPickSamePointTolScenePx = 3.0; // 连击循环选层的
 inline constexpr double kAnnoCopyOffsetPx = 16.0;       // 复制标注的错位偏移（场景单位）：复制件与原件错开一截，
                                                         // 一眼可辨且可直接拖走（完全重叠时难以拾取）。
 // ——触控手势判定（canvas_touch_input_adapter.cpp）：双击＝适应窗口，轻点是它的最小单位——
-inline constexpr long long kDoubleTapGapMs = 300;   // 第二击按下距上一击释放的上限；调小则双击要求更手快。
+inline constexpr long long kDoubleTapGapMs = 400;   // 第二击按下距上一击释放的上限；调小则双击要求更手快。
 inline constexpr int kDoubleTapPosScreenPx = 64;    // 两击落点曼哈顿距离容差（屏幕像素，手指抖动余量）。
-inline constexpr long long kTapMaxMs = 250;         // 轻点的最长按下时长；超出视为长按，不作双击候选。
-inline constexpr int kTapMoveScreenPx = 8;          // 轻点允许的移动（屏幕像素）；超出即视为拖拽，作废双击候选。
+inline constexpr long long kTapMaxMs = 300;         // 轻点的最长按下时长；超出视为长按，不作双击候选。
+inline constexpr int kTapMoveScreenPx = 12;         // 轻点允许的移动（屏幕像素）；超出即视为拖拽，作废双击候选。
 // ——标注图元（items/annotation_item.cpp）：以下均为 handleSize（随缩放换算的场景手柄基准）的倍数——
 inline constexpr double kAnnoScaleLimit = 50.0;         // 手柄拖拽缩放系数限幅：防一次拖拽把形状放大到失控。
 inline constexpr double kAnnoScaleMinAbs = 0.02;        // 缩放系数绝对值下限：近 0 会使行列式为 0、逆变换退化、形状塌缩。

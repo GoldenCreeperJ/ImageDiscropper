@@ -27,6 +27,10 @@ void PreprocessController::syncLayerMaterialCache(const std::vector<canvas::Imag
     for (const auto& layer : layers) {
         alive.insert(layer.id);
         auto&[preprocess, layerSig] = store.ensure(layer.id);
+        // 声明态镜像：layer.preprocess 是逐层预处理唯一真相源（对话框节点外观 / 配置载入在此写入）——
+        //   会话 steps 随声明回灌，供预处理面板显示与保存序列化（buildSerializableConfig 读会话）读取；
+        //   面板编辑经 commitActive 同时写会话与声明，二者恒同。物化仍以声明为准（Core materializeLayer）。
+        if (preprocess.steps() != layer.preprocess) preprocess.setSteps(layer.preprocess);
         const LayerSig sig = LayerSessionStore::makeSig(layer);
         if (layerSig && *layerSig == sig) continue;   // 来源态未变：复用缓存位图，不重跑预处理
         store.materialized()[layer.id] = EngineBridge::materializeLayer(layer);

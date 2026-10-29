@@ -162,6 +162,8 @@ NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     // 元素外观组（图案/图片两槽位）：步骤或透明度变化即时刷新预览（与合成单一真相源同链）。
     connect(backdropAppearance_, &ElementAppearanceGroup::changed, this, &NewCanvasDialog::onParamsChanged);
     connect(imageAppearance_, &ElementAppearanceGroup::changed, this, &NewCanvasDialog::onParamsChanged);
+    // 节点外观（第三简表）同样即时刷新预览——步骤/不透明度变化重跑合成代理（此前漏接，预览不随节点预处理变化）。
+    connect(nodeAppearance_, &ElementAppearanceGroup::changed, this, &NewCanvasDialog::onParamsChanged);
 
     patternForm_->updateAvailability();
     updateControlAvailability();
