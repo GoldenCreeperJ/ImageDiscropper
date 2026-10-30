@@ -157,7 +157,7 @@ void CanvasView::resizeEvent(QResizeEvent* event) {
 void CanvasView::setCanvasMode(const CanvasMode mode) {
     mode_ = mode;
     const bool draw = mode == CanvasMode::AnnoCreate;
-    if (!draw) annoDrawing_ = false;
+    if (!draw) endStrokeDrag();
     if (input_) input_->cancelPendingClick();
     viewport()->setCursor(draw ? Qt::CrossCursor : Qt::ArrowCursor);
 }
@@ -210,6 +210,8 @@ void CanvasView::keyPressEvent(QKeyEvent* event) {
     if (event->key() == Qt::Key_Escape) {
         if (input_) input_->cancelPendingClick();   // 任一模式 Esc 均作废等待中的单击（框选态 Esc 亦如此）
         if (annotationDrawActive()) {
+            endStrokeDrag();   // 收笔即本笔结束（与 gestureStrokeFinish 同口径）：Esc 也可在左键按住时按下，
+                               // 不退拖拽态则随后的释放会在新草稿落一记多余首顶点。
             emit annoEscape();   // 绘制态 Esc：交上层收笔（折线/画笔）或取消预览
             event->accept();
             return;
@@ -309,9 +311,9 @@ void CanvasView::gestureStrokeHover(const QPoint& viewportPos) {
     emit cursorScenePos(sp);
 }
 
-// 绘制释放：结束拖拽手势并上报落点（两点形状提交 / 文字取文本）。
+// 绘制释放：结束拖拽手势并上报落点（点击式工具在此定落点：折线落顶点 / 文字取文本；两点形状提交）。
 void CanvasView::gestureStrokeEnd(const QPoint& viewportPos) {
-    annoDrawing_ = false;
+    endStrokeDrag();
     emit annoDragEnd(mapToScene(viewportPos));
 }
 
@@ -321,12 +323,17 @@ void CanvasView::gestureStrokeEnd(const QPoint& viewportPos) {
 //（悬停预览与状态栏坐标回报集体失灵），且下一次按下会多落一个顶点。
 void CanvasView::gestureStrokeCancel() {
     if (!annoDrawing_) return;
-    annoDrawing_ = false;
+    endStrokeDrag();
     emit annoDragCancel();
 }
 
 // 收笔：绘制态右键（或等效手势）→ 交上层结束并提交折线 / 取消当前预览。
-void CanvasView::gestureStrokeFinish() { emit annoFinish(); }
+// 同时退出拖拽态：右键可在左键仍按住时触发（双手操作），不退则随后的左键释放会再走一次
+// gestureStrokeEnd，而上层刚把 pathDraft_ 清空 → 落点会被当成「新草稿的首顶点」，凭空多出一段半截折线。
+void CanvasView::gestureStrokeFinish() {
+    endStrokeDrag();
+    emit annoFinish();
+}
 
 // 框选起带：记录起点并显示橡皮筋（同时上报框选起始，供上层清除进行中的标注选中）。
 // 「选取边框」图层隐藏时选区整体不可交互，三种模式均不起带（L1/L2 选区框、L3 单元选择）——
@@ -441,7 +448,7 @@ void CanvasView::showCanvasContextMenu(const QPoint& globalPos) {
 // 绘制态 Esc → annoEscape；绘制态右键/长按收笔与移动端「完成」按钮 → annoFinish），
 // 移动端不新增任何行为分支（SPEC §8.3）。
 void CanvasView::requestNudge(const int dx, const int dy) { emit nudgeSelection(dx, dy); }
-void CanvasView::requestAnnoEscape() { emit annoEscape(); }
-void CanvasView::requestAnnoFinish() { emit annoFinish(); }
+void CanvasView::requestAnnoEscape() { endStrokeDrag(); emit annoEscape(); }
+void CanvasView::requestAnnoFinish() { gestureStrokeFinish(); }   // 与右键/长按收笔同一入口（含退拖拽态）
 
 } // namespace idc::gui

@@ -89,6 +89,8 @@ public:
     // 双指平移（触控）：按视口位移量直接滚动，与 gesturePanUpdate 同一执行链路。
     void gesturePanDelta(const QPoint& deltaViewport) const;
     // 标注绘制手势：起笔 / 拖拽 / 悬停（未按键）/ 释放 / 收笔（右键或等效）。
+    // 拖拽态标志由本视图持着，但落点语义全在上层按工具分派：按住即成形的（两点形状/画笔）在按下起笔，
+    // 点击式的（折线/文字）恒在**释放**定落点。
     void gestureStrokeBegin(const QPoint& viewportPos);
     void gestureStrokeUpdate(const QPoint& viewportPos);
     void gestureStrokeHover(const QPoint& viewportPos);
@@ -145,7 +147,8 @@ signals:
     void resetViewRequested();
     void toggleMasksRequested();
     // 标注绘制手势（仅当前模式为 AnnoCreate 时发出，场景/原图坐标）。
-    // 上层（AnnotationCoordinator）依当前工具决定语义：两点形状→拖拽成形；折线/画笔→逐点追加；文字→落点取文本。
+    // 上层（AnnotationCoordinator）依当前工具决定语义：两点形状→按下记锚点、释放提交；
+    // 画笔→按下起笔、逐帧追点；折线/文字→点击式，落点在释放才定。
     void annoDragStart(const QPointF& scenePos);
     void annoDragMove(const QPointF& scenePos);
     void annoDragEnd(const QPointF& scenePos);
@@ -188,7 +191,11 @@ private:
     QRectF snappedMarqueeSceneRect(const QPoint& a, const QPoint& b) const;
     // 按倍数缩放并钳制到 CanvasPrefs 允许区间 [zoomMin,zoomMax]，随后刷新手柄尺寸与倍率回报。
     void zoomBy(qreal factor);
-    // 把当前变换的缩放钳制回 CanvasPrefs 允许区间（供 fitToWindow 等绝对变换后收敛回区间）。
+    // 退出绘制拖拽态（annoDrawing_ 的唯一置否入口）：收笔 / Esc / 打断 / 离开绘制态均经此。
+    // 必在上报落点或作废**之前**置否——右键与 Esc 可在左键仍按住时触发，不退态则随后的释放会再走
+    // 一次 gestureStrokeEnd，而上层本笔已结算（pathDraft_ 已清）→ 落点被当成新草稿的首顶点。
+    void endStrokeDrag() { annoDrawing_ = false; }
+    // 把当前变换的缩放钳制到 CanvasPrefs 允许区间（供 fitToWindow 等绝对变换后收敛回区间）。
     void clampZoom();
 
     CanvasScene* scene_{nullptr};

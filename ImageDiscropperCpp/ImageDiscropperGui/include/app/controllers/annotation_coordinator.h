@@ -54,10 +54,10 @@ public slots:
     void onAnnoPendingChanged() const;                      // 绘制拖拽预览（橡皮筋）变化：仅实时刷新预览图元。
     void onAnnoSelectionChanged() const;                    // 选中项变化：重绘高亮 + 属性面板同步。
     void onAnnoToolChanged() const;                         // 工具变化：同步工具面板 + 画布绘制态门控。
-    void onAnnoDragStart(const QPointF& scenePos) const;   // 画布绘制手势起点（依工具分派两点/折线/画笔/文字）。
+    void onAnnoDragStart(const QPointF& scenePos) const;   // 画布绘制手势起点（按住即成形：两点形状记锚点/画笔起笔；折线·文字此处不落点）。
     void onAnnoDragMove(const QPointF& scenePos) const;    // 画布绘制手势拖拽（两点形状预览/画笔追点/折线橡皮筋）。
-    void onAnnoDragEnd(const QPointF& scenePos) const;     // 画布绘制手势释放（提交两点形状/画笔）。
-    void onAnnoDragCancel() const;                        // 绘制拖拽被缩放打断：按工具分类作废本笔（两点弃预览 / 画笔收笔 / 折线保留已落顶点）。
+    void onAnnoDragEnd(const QPointF& scenePos) const;     // 画布绘制手势释放（两点提交/画笔收笔/折线落顶点/文字取文本）。
+    void onAnnoDragCancel() const;                        // 绘制拖拽被缩放打断：按工具分类作废本笔（两点弃预览 / 画笔收笔 / 折线本笔尚未落点）。
     void onAnnoHover(const QPointF& scenePos) const;       // 绘制态悬停（未按键）：折线实时预览落点与连线。
     void onAnnoFinish() const;                             // 绘制态右键：收笔折线/画笔草稿（提交）或取消当前两点预览。
     void onAnnoEscape() const;                             // 绘制态 Esc：收笔折线/画笔草稿或取消当前两点预览。

@@ -3,7 +3,7 @@
 // 作用：实现 AnnotationCoordinator（见同名头文件说明）。
 // 分块依据：
 //   - connectSignals：标注域全部信号连接（模型/画布/工具面板/图层面板/导出面板/属性面板）+ 烧录初始同步；
-//   - 手势分派状态机：onAnnoDragStart/Move/End（依工具分派两点/折线/画笔/文字）；
+//   - 手势分派状态机：onAnnoDragStart/Move/End（依工具分派两点/折线/画笔/文字；折线与文字为点击式，落点在释放定）；
 //     onAnnoDragCancel 为缩放打断专用（与释放的提交语义互斥，同样按工具分类作废）；
 //   - 属性/图层/菜单槽：薄编排，直接转交 AnnotationBridge 与画布/面板。
 // ============================================================================
@@ -140,22 +140,16 @@ void AnnotationCoordinator::onAnnoToolChanged() const {
     annoPropPanel_->syncFromModel();
 }
 
-// 绘制手势起点：依当前工具分派——文字落点取文本；折线/画笔起笔；其余两点形状记起点。
+// 绘制手势起点：只有「按住即成形」的工具在按下起笔——画笔起路径草稿（随后逐帧追点）、两点形状记锚点。
+// 折线与文字是**点击式**（一次点击＝按下＋释放），落点恒在**释放**才定（见 onAnnoDragEnd）：按下即落会在
+// 「按住拖到别处再松手」时于按下点多留一个顶点——拖拽不是点击。
 void AnnotationCoordinator::onAnnoDragStart(const QPointF& scenePos) const {
     const core::Point2D p(scenePos.x(), scenePos.y());
     switch (anno_->currentTool()) {
-        case AnnoTool::Text: {
-            bool ok = false;
-            const QString text = QInputDialog::getText(dialogParent_, IDC_GTR(label, kDlgTitleAnnoText),
-                IDC_GTR(label, kDlgLabelAnnoText), QLineEdit::Normal,
-                QString::fromStdString(anno_->currentText()), &ok);
-            if (ok && !text.isEmpty()) anno_->addText(p, text.toStdString());
-            break;
-        }
         case AnnoTool::Polyline:
-            if (anno_->hasPathDraft()) anno_->appendPathPoint(p);
-            else anno_->beginPath(p);
-            break;
+        case AnnoTool::Text:
+        case AnnoTool::Select:
+            break;   // 点击式：本处不做任何落点副作用
         case AnnoTool::Brush:
             anno_->beginPath(p);
             break;
@@ -165,8 +159,8 @@ void AnnotationCoordinator::onAnnoDragStart(const QPointF& scenePos) const {
     }
 }
 
-// 绘制手势拖拽（按住左键移动）：两点形状实时更新预览；画笔追加顶点；折线仅橡皮筋预览。
-// 折线为点击式：顶点已在 onAnnoDragStart（按下）落定，故拖拽中只预览、不追加正式顶点。
+// 绘制手势拖拽（按住左键移动）：两点形状实时更新预览；画笔连续追点；折线仅橡皮筋预览。
+// 折线的顶点在释放才落定，故拖拽中与悬停同义：只把「已落顶点 + 到光标连线」画成橡皮筋，不落正式顶点。
 void AnnotationCoordinator::onAnnoDragMove(const QPointF& scenePos) const {
     const core::Point2D p(scenePos.x(), scenePos.y());
     switch (anno_->currentTool()) {
@@ -185,15 +179,26 @@ void AnnotationCoordinator::onAnnoDragMove(const QPointF& scenePos) const {
     }
 }
 
-// 绘制手势释放：两点形状提交；画笔收笔；折线保持草稿（待 Esc/切换工具收笔）。
+// 绘制手势释放：点击式工具在此定落点——折线落顶点、文字取文本；两点形状提交；画笔收笔。
+// 折线保持草稿（待 Esc / 右键 / 切工具收笔），每次释放只追加一个顶点。
 void AnnotationCoordinator::onAnnoDragEnd(const QPointF& scenePos) const {
-    Q_UNUSED(scenePos);
+    const core::Point2D p(scenePos.x(), scenePos.y());
     switch (anno_->currentTool()) {
+        case AnnoTool::Text: {
+            bool ok = false;
+            const QString text = QInputDialog::getText(dialogParent_, IDC_GTR(label, kDlgTitleAnnoText),
+                IDC_GTR(label, kDlgLabelAnnoText), QLineEdit::Normal,
+                QString::fromStdString(anno_->currentText()), &ok);
+            if (ok && !text.isEmpty()) anno_->addText(p, text.toStdString());
+            break;
+        }
+        case AnnoTool::Polyline:
+            if (anno_->hasPathDraft()) anno_->appendPathPoint(p);
+            else anno_->beginPath(p);
+            break;
         case AnnoTool::Brush:
             anno_->commitPath();
             break;
-        case AnnoTool::Polyline:
-        case AnnoTool::Text:
         case AnnoTool::Select:
             break;
         default:
@@ -205,9 +210,10 @@ void AnnotationCoordinator::onAnnoDragEnd(const QPointF& scenePos) const {
 // 缩放（捏合/滚轮）打断进行中的这一笔：分类作废，绝不当提交处理。
 //   两点形状：半截预览的尺寸已被新缩放乘过、不可信 → 弃掉（此时 pathDraft_ 恒空，cancelPending 不误伤）。
 //   画笔：追到的点迹不可复现 → 收笔提交（与 Esc/右键「有草稿即收笔」同取向）。
-//   折线：顶点是按下即落定的正式数据 → 只退拖拽态、草稿保留可继续加顶点；橡皮筋临时段在桌面由下一次
-//         悬停重建，触控无悬停、下一次落顶点自然覆盖（不会留下错形）。
-//   文字/选取：无拖拽语义。
+//   折线：顶点在释放才落定，按住期间被打断时本笔尚无落点副作用 → 什么都不做即自然作废；此前的
+//         已落顶点保留可继续加。橡皮筋临时段在桌面由下一次悬停重建，触控无悬停、下一次落顶点自然
+//         覆盖（不会留下错形）。
+//   文字/选取：无按下副作用（对话框在释放才弹）。
 void AnnotationCoordinator::onAnnoDragCancel() const {
     switch (anno_->currentTool()) {
         case AnnoTool::Brush:

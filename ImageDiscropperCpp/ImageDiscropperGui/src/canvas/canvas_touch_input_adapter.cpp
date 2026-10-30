@@ -40,8 +40,8 @@ void TouchInputAdapter::onPress(CanvasView& view, QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
         const QPoint vp = event->pos();
         // 双击第二击：距上一有效轻点足够近且足够快且落在**非交互图元**处且处于**框选态** → 适应窗口；
-        // 吞掉本序列后续事件，不进入框选/图元路由。其余三态的按下是动作手势（落顶点/拾取/选中），
-        // 扣住会吞顶点——双击＝适应窗口仅框选态生效（与桌面路由同一门控口径）。交互图元（选区框/
+        // 吞掉本序列后续事件，不进入框选/图元路由。其余三态的按下是动作手势（起笔/拾取/选中），
+        // 扣住会推迟成形与落点——双击＝适应窗口仅框选态生效（与桌面路由同一门控口径）。交互图元（选区框/
         // 落位框等接收左键者）上的双击略过适应窗口——按下照常路由（桌面路由内交互图元即时下发）。
         if (tapClock_.isValid() && tapClock_.elapsed() <= nums::canvas::kDoubleTapGapMs
             && (vp - lastTapPos_).manhattanLength() <= nums::canvas::kDoubleTapPosScreenPx
