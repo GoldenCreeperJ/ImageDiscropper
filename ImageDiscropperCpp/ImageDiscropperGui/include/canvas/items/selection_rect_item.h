@@ -37,6 +37,11 @@ public:
     // 供上层在拖拽期间跳过对选区框的回设与面板回同步（避免逐帧量化抖动与卡顿）。
     bool isDragging() const { return mode_ != DragMode::None; }
 
+    // 外部打断（缩放抢占）收尾拖拽：拖拽中已逐帧实时写回模型，故**不回滚**——按释放同口径量化到整数
+    // 像素后结算一次（跳吸附），使屏上与模型一致并归位 isDragging()。
+    // 必需性：拖拽中途被 ungrab 后释放不再到达本图元，mode_ 残留会令上层永久跳过选区回设与面板同步。
+    void cancelDrag();
+
     // 设置图像边界（用于移动/缩放钳制、吸附，以及贯穿切割线的延伸长度）。
     void setImageBounds(int width, int height);
 

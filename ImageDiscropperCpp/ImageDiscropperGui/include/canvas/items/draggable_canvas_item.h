@@ -35,6 +35,11 @@ public:
     //   返回本次是否为原地点击（场景据此决定是否推进同点连击循环）。
     bool endTranslationDrag(const QPointF& scenePos);
 
+    // 收手势（外部打断版）：撤销视觉位移并归位手势态，**不送达任何钩子**——本次平移作废。
+    // 必需性：捏合/滚轮缩放解除抓取后释放事件不再到达本图元，残留的 isDragging() 会让上层
+    //   永久跳过对本图元的几何回设（撤销 / 面板改数值都不再更新它）。
+    void cancelTranslationDrag();
+
     // 是否正处于平移拖拽手势中（供上层在拖拽期跳过对本图元的几何回设）。
     virtual bool isDragging() const { return gesture_.active(); }
 

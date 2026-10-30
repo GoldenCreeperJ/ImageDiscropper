@@ -57,6 +57,7 @@ public slots:
     void onAnnoDragStart(const QPointF& scenePos) const;   // 画布绘制手势起点（依工具分派两点/折线/画笔/文字）。
     void onAnnoDragMove(const QPointF& scenePos) const;    // 画布绘制手势拖拽（两点形状预览/画笔追点/折线橡皮筋）。
     void onAnnoDragEnd(const QPointF& scenePos) const;     // 画布绘制手势释放（提交两点形状/画笔）。
+    void onAnnoDragCancel() const;                        // 绘制拖拽被缩放打断：按工具分类作废本笔（两点弃预览 / 画笔收笔 / 折线保留已落顶点）。
     void onAnnoHover(const QPointF& scenePos) const;       // 绘制态悬停（未按键）：折线实时预览落点与连线。
     void onAnnoFinish() const;                             // 绘制态右键：收笔折线/画笔草稿（提交）或取消当前两点预览。
     void onAnnoEscape() const;                             // 绘制态 Esc：收笔折线/画笔草稿或取消当前两点预览。

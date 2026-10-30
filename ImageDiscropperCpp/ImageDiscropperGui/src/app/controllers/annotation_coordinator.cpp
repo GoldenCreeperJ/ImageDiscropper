@@ -4,6 +4,7 @@
 // 分块依据：
 //   - connectSignals：标注域全部信号连接（模型/画布/工具面板/图层面板/导出面板/属性面板）+ 烧录初始同步；
 //   - 手势分派状态机：onAnnoDragStart/Move/End（依工具分派两点/折线/画笔/文字）；
+//     onAnnoDragCancel 为缩放打断专用（与释放的提交语义互斥，同样按工具分类作废）；
 //   - 属性/图层/菜单槽：薄编排，直接转交 AnnotationBridge 与画布/面板。
 // ============================================================================
 #include "app/controllers/annotation_coordinator.h"
@@ -50,6 +51,7 @@ void AnnotationCoordinator::connectSignals() {
     connect(view_, &CanvasView::annoDragStart, this, &AnnotationCoordinator::onAnnoDragStart);
     connect(view_, &CanvasView::annoDragMove, this, &AnnotationCoordinator::onAnnoDragMove);
     connect(view_, &CanvasView::annoDragEnd, this, &AnnotationCoordinator::onAnnoDragEnd);
+    connect(view_, &CanvasView::annoDragCancel, this, &AnnotationCoordinator::onAnnoDragCancel);
     connect(view_, &CanvasView::annoHover, this, &AnnotationCoordinator::onAnnoHover);
     connect(view_, &CanvasView::annoFinish, this, &AnnotationCoordinator::onAnnoFinish);
     connect(view_, &CanvasView::annoEscape, this, &AnnotationCoordinator::onAnnoEscape);
@@ -196,6 +198,28 @@ void AnnotationCoordinator::onAnnoDragEnd(const QPointF& scenePos) const {
             break;
         default:
             anno_->commitShape();
+            break;
+    }
+}
+
+// 缩放（捏合/滚轮）打断进行中的这一笔：分类作废，绝不当提交处理。
+//   两点形状：半截预览的尺寸已被新缩放乘过、不可信 → 弃掉（此时 pathDraft_ 恒空，cancelPending 不误伤）。
+//   画笔：追到的点迹不可复现 → 收笔提交（与 Esc/右键「有草稿即收笔」同取向）。
+//   折线：顶点是按下即落定的正式数据 → 只退拖拽态、草稿保留可继续加顶点；橡皮筋临时段在桌面由下一次
+//         悬停重建，触控无悬停、下一次落顶点自然覆盖（不会留下错形）。
+//   文字/选取：无拖拽语义。
+void AnnotationCoordinator::onAnnoDragCancel() const {
+    switch (anno_->currentTool()) {
+        case AnnoTool::Brush:
+            if (anno_->hasPathDraft()) anno_->commitPath();
+            else anno_->cancelPending();
+            break;
+        case AnnoTool::Polyline:
+        case AnnoTool::Text:
+        case AnnoTool::Select:
+            break;
+        default:
+            anno_->cancelPending();
             break;
     }
 }

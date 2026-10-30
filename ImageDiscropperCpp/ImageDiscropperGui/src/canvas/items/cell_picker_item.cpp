@@ -219,6 +219,17 @@ void CellPickerItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
     event->accept();
 }
 
+// 外部打断（缩放抢占）：本序列尚未结算的按下 / 框选 / 调序态一律归位，不发送任何提交信号
+//（拖拽中的橡皮筋与调序反馈仅活在 paint 里，复位标志即消失）。
+void CellPickerItem::cancelDrag() {
+    if (!pressing_ && !marquee_ && !reorderDrag_) return;
+    pressing_ = false;
+    marquee_ = false;
+    reorderDrag_ = false;
+    reorderTarget_ = -1;
+    update();
+}
+
 // 悬停移动：更新悬停单元并局部重绘旧/新单元（大选集下避免整层重绘）。
 void CellPickerItem::hoverMoveEvent(QGraphicsSceneHoverEvent* event) {
     if (const int idx = cellIndexAt(event->scenePos()); idx != hoverIndex_) {

@@ -51,6 +51,11 @@ public:
     void setInteractive(bool on);
     bool isDragging() const { return dragging_; }
 
+    // 外部打断（缩放抢占）取消拖拽：回到按下基线（拖拽中只走 previewed 预览、从未写 Document，
+    // 故弃草稿而非按拖到一半提交），但仍经 committed 通道一发基线值：场景据此重铺网格线并恢复
+    // 点选图元显隐（值未变时 Document 侧早退，不触发重算）。
+    void cancelDrag();
+
 signals:
     // 拖拽中逐帧：新参数（已取整、已钳制在图内），供场景重画网格线（不写 Document）。
     void previewed(const engine::GridParams& params);

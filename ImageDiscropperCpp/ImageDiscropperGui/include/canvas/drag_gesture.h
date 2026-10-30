@@ -13,7 +13,8 @@
 namespace idc::gui {
 
 // DragGesture：单次平移手势三态。start 起手势并复位；moveTo 逐帧记非零位移与累计净位移；
-//   end 复位并返回 {wasClick, dx, dy}——wasClick＝全程无位移（原地点击），dx/dy＝累计净位移。
+//   end 复位并返回 {wasClick, dx, dy}——wasClick＝全程无位移（原地点击），dx/dy＝累计净位移；
+//   cancel 复位但不吐结果（外部打断：本次手势既不算是点击也不算是拖动）。
 class DragGesture {
 public:
     struct Result {
@@ -50,6 +51,14 @@ public:
         accX_ = 0.0;
         accY_ = 0.0;
         return r;
+    }
+
+    // 外部打断（如缩放抢占）归位：只清状态、不吐 Result——调用方据此不得提交任何手势结果。
+    void cancel() {
+        active_ = false;
+        moved_ = false;
+        accX_ = 0.0;
+        accY_ = 0.0;
     }
 
     bool active() const { return active_; }

@@ -258,8 +258,12 @@ void DesktopInputAdapter::flushPendingClick() {
 
 // 滚轮：一格 ×1.15 / ÷1.15 的步进缩放（以滚轮事件处的光标为原点，显式锚定、不依赖视图内部鼠标位）。
 // 缩放即切换视图目标：等待中的单击不再落地（避免缩放后补出一记迟到点击）。
+// 缩放前先作窄口径取消：进行中的绘制拖拽 / 图元拖拽若继续，后续落点会按新缩放换算、与手势起点的
+// 旧缩放混算（形状尺寸被乘进倍率）；触控板双指捏合上的就是本通道。平移 / 框选不动——
+//「空格按住 + 滚轮缩放」是常用组合，一并取消平移会迫使松键重来（见 CanvasView::gestureCancelForZoom）。
 void DesktopInputAdapter::onWheel(CanvasView& view, QWheelEvent* event) {
     cancelPendingClick();
+    view.gestureCancelForZoom();
     const qreal factor = event->angleDelta().y() > 0
         ? nums::canvas::kWheelZoomFactor : 1.0 / nums::canvas::kWheelZoomFactor;
     view.gestureStepZoomAt(event->position().toPoint(), factor);

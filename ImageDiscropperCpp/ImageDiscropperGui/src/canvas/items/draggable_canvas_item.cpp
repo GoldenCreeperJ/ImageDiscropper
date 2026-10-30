@@ -29,6 +29,14 @@ bool DraggableCanvasItem::endTranslationDrag(const QPointF& scenePos) {
     return wasClick;
 }
 
+// 外部打断收尾：与 endTranslationDrag 同一复位路径，但不取结果也不送达——位移只挂在 item 位置上
+//（从未回写模型），归零即彻底撤销本次平移，上层无需知道发生过拖动。
+void DraggableCanvasItem::cancelTranslationDrag() {
+    if (!gesture_.active()) return;
+    gesture_.cancel();
+    setPos(QPointF(0, 0));
+}
+
 void DraggableCanvasItem::onDragFinished(bool, const QPointF&, double, double) {}
 
 void DraggableCanvasItem::applyVisualOffset() {

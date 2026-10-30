@@ -264,19 +264,21 @@ void CanvasView::gesturePanEnd() {
     viewport()->unsetCursor();
 }
 
-// 取消进行中的框选/平移（见头文件声明）：捏合开始前由触控适配器调用，
-// 避免第一指合成鼠标事件已启动的橡皮筋/平移与双指缩放并存。
+// 缩放前的窄口径取消（见头文件声明）：只结束会被缩放污染几何的那两类进行中手势。
+void CanvasView::gestureCancelForZoom() {
+    gestureStrokeCancel();
+    if (scene_) scene_->cancelActiveItemDrag();
+}
+
+// 取消进行中的框选 / 平移 / 绘制 / 图元拖拽（见头文件声明）：捏合与长按开始前由触控适配器调用。
+// 图元拖拽的归位与抓取解除均在 CanvasScene::cancelActiveItemDrag 内（那里才知道哪个图元在手势中）。
 void CanvasView::gestureCancelCurrent() {
+    gestureCancelForZoom();
     if (panning_) gesturePanEnd();
     if (rubber_) {
         rubber_ = false;
         if (rubberBand_) rubberBand_->hide();
     }
-    // 图元拖拽：第一指按在选区框手柄/标注图元上时 QGraphicsView 已开始拖拽
-    //（场景 mouse grabber 持有）——捏合期间合成 move 会继续拖动图元、图形随之偏移。
-    // ungrabMouse 后图元不再接收移动事件，缩放不再带动图形。
-    if (scene_ && scene_->mouseGrabberItem())
-        scene_->mouseGrabberItem()->ungrabMouse();
 }
 
 // 双指平移（触控）：按视口位移量直接滚动，与 gesturePanUpdate 同一执行链路，
@@ -311,6 +313,16 @@ void CanvasView::gestureStrokeHover(const QPoint& viewportPos) {
 void CanvasView::gestureStrokeEnd(const QPoint& viewportPos) {
     annoDrawing_ = false;
     emit annoDragEnd(mapToScene(viewportPos));
+}
+
+// 绘制拖拽被外部打断（缩放抢占）：退拖拽态并发「作废本笔」意图（与 gestureStrokeEnd 分立：
+// 释放是提交语义，打断绝不能当提交）。不需落点——各工具的作废都不读坐标。
+// annoDrawing_ 在此必须归零：否则它恒真——onMove 的 strokeActive() 分支会吞掉其后每一帧移动
+//（悬停预览与状态栏坐标回报集体失灵），且下一次按下会多落一个顶点。
+void CanvasView::gestureStrokeCancel() {
+    if (!annoDrawing_) return;
+    annoDrawing_ = false;
+    emit annoDragCancel();
 }
 
 // 收笔：绘制态右键（或等效手势）→ 交上层结束并提交折线 / 取消当前预览。

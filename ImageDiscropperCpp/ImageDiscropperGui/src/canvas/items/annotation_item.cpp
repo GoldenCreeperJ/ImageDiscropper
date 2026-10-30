@@ -319,6 +319,19 @@ void AnnotationItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
     event->ignore();
 }
 
+// 外部打断（缩放抢占）取消手柄拖拽：与释放的「无变化」分支同一复位路径（预览参数归一、重报备包围盒），
+// 差别是不发 transformRequested；面板回显落回形状当前累积值（拖拽中回显的是 累积∘预览，弃预览后不能残留半截）。
+void AnnotationItem::cancelHandleDrag() {
+    if (activeHandle_ == Handle::None) return;
+    activeHandle_ = Handle::None;
+    previewSx_ = 1.0; previewSy_ = 1.0; previewRot_ = 0.0;
+    if (ann_.shape)
+        emit transformPreview(ann_.shape->obbScaleX(), ann_.shape->obbScaleY(), ann_.shape->obbRotationDeg());
+    prepareGeometryChange();
+    rebuildPath();
+    update();
+}
+
 // ---- 场景驱动的平移拖拽：手势循环在基类 DraggableCanvasItem，本图元只做送达翻译 ----
 // 收尾数据翻译：原地点击→clicked(scenePos)（交上层推进同点连击循环，不触发平移）；
 // 拖动→moveRequested(dx,dy)（仅选中且净位移非零时；上层委托 Core 重建几何）。

@@ -135,6 +135,13 @@ public:
     // 选区框是否正被用户拖拽（供上层在拖拽期间跳过回设/面板回同步）。
     bool isDraggingSelection() const { return selItem_ && selItem_->isDragging(); }
 
+    // 外部打断（缩放抢占）：把各图元尚未结算的手势就地归位，再解除鼠标抓取。
+    // 必需性：ungrab 后释放事件不再到达被拖图元，其 isDragging() 会恒真——上层据此跳过几何回设，
+    // 该图元从此拒绝模型回写（撤销 / 面板改数值都不再更新它），预览态 OBB / 半截形状/幽灵橡皮筋也会留在屏上。
+    // 同时刻至多一个图元在手势中，故结算会写回模型的通道（选区量化 / 网格手柄 committed）逐个短路只走一个，
+    // 免在写回触发的刷新中握旧指针。
+    void cancelActiveItemDrag();
+
     // ---- 标注图层 ----
     // 依 AnnotationBridge 增量维护标注矢量图元（每个 Core Annotation 一个 AnnotationItem）+ 拖拽预览图元。
     // 增量维护（按数量增删末位、逐个刷新几何），绝不 clear+重建（否则拖拽中删除正在处理事件的图元→崩溃）。

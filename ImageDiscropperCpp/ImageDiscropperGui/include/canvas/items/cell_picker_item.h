@@ -48,6 +48,10 @@ public:
     // 是否正处于拖拽框选手势中。
     bool isMarqueeing() const { return marquee_; }
 
+    // 外部打断（缩放抢占）取消本序列：清按下 / 框选 / 调序态并重绘，不发任何提交信号
+    //（打断点既非有效落点也非点击，与释放路径的三条结算分支互斥）。
+    void cancelDrag();
+
     // 框选命中查询：返回与给定场景矩形相交的全部单元序号（纯几何查询，不含网格推导）。
     // 供 CanvasView 的橡皮筋框选（可能从图像外起拖，未被本图元 grab）在 L3 下路由到单元选择。
     std::vector<int> cellsIntersecting(const QRectF& sceneRect) const;

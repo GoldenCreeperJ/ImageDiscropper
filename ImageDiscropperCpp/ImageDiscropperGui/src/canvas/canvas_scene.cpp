@@ -566,6 +566,37 @@ void CanvasScene::releasePressGrab() const {
     if (QGraphicsItem* g = mouseGrabberItem()) g->ungrabMouse();
 }
 
+// 外部打断（捏合/滚轮缩放抢占）：各图元尚未结算的手势就地归位，最后解除抓取（必要性见头文件）。
+// 归位取向按「本图元拖拽中是否已写模型」分两类：只动本地预览/视觉位移的→作废（手柄预览、标注与
+// 落位框平移、网格基准手柄）；拖拽中已逐帧写模型的→不回滚，按释放同口径就地结算（选区框）。
+void CanvasScene::cancelActiveItemDrag() {
+    if (pickDragItem_) {
+        pickDragItem_->cancelTranslationDrag();
+        pickDragItem_ = nullptr;
+        pickCycle_.reset();   // 本次拖拽永不结算：循环态无从推进，与释放路径的拖拽分支同口径。
+    }
+    if (annoDragItem_) {
+        annoDragItem_->cancelTranslationDrag();
+        annoDragItem_ = nullptr;
+    }
+    // 手柄预览不碰模型（提交只在释放的 transformRequested），逐个归位无重入风险。
+    for (AnnotationItem* it : annoItems_) it->cancelHandleDrag();
+    // 以下两条结算会写回模型并触发刷新（图元有可能在其中被重建），而同时刻只可能一个图元在手势中，
+    // 故命中即短路：不在循环里握可能失效的旧指针。
+    if (selItem_ && selItem_->isDragging()) {
+        selItem_->cancelDrag();
+    } else {
+        for (SelectionRectItem* it : multiRectItems_)
+            if (it->isDragging()) { it->cancelDrag(); break; }
+    }
+    if (pickerItem_) pickerItem_->cancelDrag();   // 纯本地按下态、不发信号
+    if (gridLayer_.handlesReady()) {
+        if (GridHandleItem* h = gridLayer_.originHandle(); h && h->isDragging()) h->cancelDrag();
+        else if (GridHandleItem* h = gridLayer_.cellHandle(); h && h->isDragging()) h->cancelDrag();
+    }
+    releasePressGrab();   // 解除抓取放最后：上面各归位路径都不依赖抓取状态
+}
+
 // 标注选取模式：切换全部已提交标注图元的左键可交互性（预览图元恒不可交互，不受影响）。
 // 开→标注可点选 / 拖拽 / 手柄；关→标注不吃鼠标，框选 / 拾取手势不被抢走。
 void CanvasScene::setAnnotationSelectMode(const bool on) {

@@ -401,4 +401,17 @@ void SelectionRectItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
     event->accept();
 }
 
+// 外部打断（缩放抢占）收尾：与释放的结算路径同构（先归位拖拽态再 emit，使本图元 isDragging()==false，
+// 上层照常回设与同步面板），差别是不做吸附——打断点并非用户要定的落位，不做磁吸修正。
+// emit 恒为最后一句：rectChanged 会写回模型并触发刷新，本图元有可能在其中被重建。
+void SelectionRectItem::cancelDrag() {
+    if (mode_ == DragMode::None) return;
+    mode_ = DragMode::None;
+    dragEdge_ = -1;
+    prepareGeometryChange();
+    rect_ = quantizeRect(rect_, hasBounds_ ? imgW_ : 0, hasBounds_ ? imgH_ : 0);
+    update();
+    emit rectChanged(rect_.normalized());
+}
+
 } // namespace idc::gui

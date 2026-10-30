@@ -78,9 +78,14 @@ public:
     void gesturePanBegin(const QPoint& viewportPos);
     void gesturePanUpdate(const QPoint& viewportPos);
     void gesturePanEnd();
-    // 取消进行中的框选/平移（触控捏合开始前调用：第一指合成鼠标事件可能在手势
-    // 识别前已启动框选——不取消则缩放与框选冲突）。标注绘制态不在此取消。
+    // 取消进行中的框选 / 平移 / 绘制拖拽 / 图元拖拽（触控捏合与长按开始前调用）：第一指合成鼠标事件
+    // 可能在手势识别前已启动这些手势——不取消则缩放与它们并存，落点按新旧缩放混算、几何被乘进倍率。
+    // 绘制拖拽的作废取向按工具分类（见 gestureStrokeCancel），图元拖拽的归位口径见
+    // CanvasScene::cancelActiveItemDrag。
     void gestureCancelCurrent();
+    // 缩放前的窄口径取消：只结束「会被缩放污染几何」的手势（绘制拖拽 + 图元拖拽），不动平移 / 框选。
+    // 与 gestureCancelCurrent 分立：桌面「空格按住 + 滚轮缩放」是常用组合，一并取消平移会迫使松键重来。
+    void gestureCancelForZoom();
     // 双指平移（触控）：按视口位移量直接滚动，与 gesturePanUpdate 同一执行链路。
     void gesturePanDelta(const QPoint& deltaViewport) const;
     // 标注绘制手势：起笔 / 拖拽 / 悬停（未按键）/ 释放 / 收笔（右键或等效）。
@@ -89,6 +94,9 @@ public:
     void gestureStrokeHover(const QPoint& viewportPos);
     void gestureStrokeEnd(const QPoint& viewportPos);
     void gestureStrokeFinish();
+    // 绘制拖拽被外部打断（缩放抢占）：退拖拽态并发「作废本笔」意图。绝不能走 gestureStrokeEnd 的
+    // 提交语义（分类落法见 AnnotationCoordinator::onAnnoDragCancel）。
+    void gestureStrokeCancel();
     // 框选（橡皮筋带）：起 / 更新 / 收（释放时过滤 ≤3px 误触并映射回场景坐标）。
     // 矩形边恒吸附整数像素（场景坐标）：绘制与上报同一取整口径，做到「看到的就是得到的像素框」。
     void gestureMarqueeBegin(const QPoint& viewportPos);
@@ -141,6 +149,8 @@ signals:
     void annoDragStart(const QPointF& scenePos);
     void annoDragMove(const QPointF& scenePos);
     void annoDragEnd(const QPointF& scenePos);
+    // 绘制拖拽被缩放打断：上层按工具分类作废本笔（两点形状弃预览 / 画笔收笔 / 折线保留已落顶点）。
+    void annoDragCancel();
     // 绘制态下鼠标悬停（未按键移动）：供折线「橡皮筋」实时预览落点与连线（左键点击才落顶点）。
     void annoHover(const QPointF& scenePos);
     // 绘制态下右键：收笔 / 退出当前绘制手势（折线在此结束并提交，不弹视图右键菜单）。

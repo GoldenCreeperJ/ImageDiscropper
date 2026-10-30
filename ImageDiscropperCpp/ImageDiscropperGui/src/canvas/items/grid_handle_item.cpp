@@ -27,7 +27,7 @@ GridHandleItem::GridHandleItem(const Role role, QGraphicsItem* parent)
 
 // 包围盒：手柄方框外扩 2px（抓取区与描边溢出）；以 (0,0) 为中心，落点由 pos 决定。
 QRectF GridHandleItem::boundingRect() const {
-    const qreal m = 2.0;
+    constexpr qreal m = 2.0;
     const qreal h = handleSize_ / 2.0 + m;
     return {-h, -h, 2.0 * h, 2.0 * h};
 }
@@ -127,6 +127,17 @@ void GridHandleItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
     if (!dragging_) { event->ignore(); return; }
     dragging_ = false;
     event->accept();
+    emit committed(params_);
+}
+
+// 外部打断（缩放抢占）：拖拽中的参数是预览草稿（Document 未动），回落到按下基线后走同一
+// committed 通道——发的是原值，Document 侧早退无重算，但场景得以据此重铺网格线并恢复点选图元显隐
+//（previewed 拖拽期把 pickerItem_ 隐了，不归位就一直看不到单元高亮）。
+void GridHandleItem::cancelDrag() {
+    if (!dragging_) return;
+    dragging_ = false;
+    params_ = dragBase_;
+    update();
     emit committed(params_);
 }
 

@@ -62,6 +62,12 @@ public:
     // 未命中（未选中/无形状/不在手柄半径内）返回 false，场景交基类走正常分发。
     bool tryHandlePress(const QPointF& scenePos);
 
+    // 外部打断（缩放抢占）取消手柄拖拽：弃掉预览回到当前形状，不发 transformRequested（提交语义只属于释放）。
+    // 与 tryHandlePress 的显式抓取配套：抓取被场景解除后释放不再到达本图元，activeHandle_ 必须就地归位，
+    // 否则 isDragging() 恒真——上层跳过对本图元的几何回设，此标注从此拒绝模型回写且永久显示预览态 OBB。
+    // 解除抓取由场景统一负责（本方法不碰鼠标）。
+    void cancelHandleDrag();
+
     // 平移拖拽由场景驱动（按下归属与移动/释放转发都在 CanvasScene）：手势循环在基类
     // DraggableCanvasItem，本图元经 onDragFinished 收到收尾数据并翻译成自身信号。
 
