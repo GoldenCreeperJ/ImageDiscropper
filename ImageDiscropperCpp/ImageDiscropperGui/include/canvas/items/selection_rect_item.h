@@ -37,6 +37,18 @@ public:
     // 供上层在拖拽期间跳过对选区框的回设与面板回同步（避免逐帧量化抖动与卡顿）。
     bool isDragging() const { return mode_ != DragMode::None; }
 
+    // ---- 场景级按下路由（L2 多矩形重叠区的循环点选，见 CanvasScene::mousePressEvent）----
+    // 该点按下是否会在本图元上成立手势（手柄 > 边 > 框内，与 mousePressEvent 严格同一口径）：
+    // 纯查询、不改状态，供场景收集重叠命中栈（顶在前）。
+    bool hitTestPress(const QPointF& scenePos) const;
+    // 以场景坐标起一次拖拽手势（等价于本图元收到左键按下）：命中即置拖拽态、发 dragStarted 并返回 true，
+    // 未命中返回 false。必需性：重叠时「被按到的顶图元」与「应被拖动的图元」可以不同（拖动跟随选中项），
+    // 而事件只交付一个图元，故由场景判定归属后显式起手势；随后的 move/release 仍由本图元既有处理器
+    // 接收（场景起手势后已 grabMouse，基类照常送达抓取者）。
+    bool beginPressAt(const QPointF& scenePos);
+    // 本次手势是否发生过位移（原地点击判据）：场景据此决定释放后推进同点连击循环还是清循环态。
+    bool gestureMoved() const { return dragMoved_; }
+
     // 外部打断（缩放抢占）收尾拖拽：拖拽中已逐帧实时写回模型，故**不回滚**——按释放同口径量化到整数
     // 像素后结算一次（跳吸附），使屏上与模型一致并归位 isDragging()。
     // 必需性：拖拽中途被 ungrab 后释放不再到达本图元，mode_ 残留会令上层永久跳过选区回设与面板同步。
@@ -89,6 +101,16 @@ private:
     // 边序号：0=Left,1=Right,2=Top,3=Bottom。
     enum EdgeIndex { EdgeLeft = 0, EdgeRight = 1, EdgeTop = 2, EdgeBottom = 3 };
 
+    // 按下命中解析的结果：手势模式 + 拖边序号 + 缩放固定对角。
+    struct PressHit {
+        DragMode mode{DragMode::None};
+        int edge{-1};
+        QPointF fixed{};
+    };
+    // 按下命中解析（手柄 > 边 > 框内）：命中填 out 并返回 true。mousePressEvent 与场景命中栈查询共用
+    // 本口径，杜绝两处判定分叉（场景据此认定「点得到」与图元据此起手势必须一致）。
+    bool resolvePress(const QPointF& scenePos, PressHit& out) const;
+
     // 返回四个角手柄中心点（顺序：TL, TR, BL, BR）。
     void cornerPoints(QPointF& tl, QPointF& tr, QPointF& bl, QPointF& br) const;
     // 命中测试：返回被点中的角手柄序号(0..3)，未命中返回 -1。
@@ -118,6 +140,8 @@ private:
     int dragEdge_{-1};       // Edge 模式下正在拖动的边序号
     QPointF fixedPoint_;     // 缩放时固定不动的对角
     QPointF lastPos_;        // 上次场景坐标（移动增量用）
+    QPointF pressPos_;       // 本次手势的按下点（原地点击判定的比较基准）
+    bool dragMoved_{false};  // 本次手势收到过非零位移（零 Qt 阈值：与 DragGesture 的 moved 判定同口径）
 };
 
 } // namespace idc::gui

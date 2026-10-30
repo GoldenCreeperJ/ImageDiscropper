@@ -72,8 +72,11 @@ AnnotationBridge.changed/selectionChanged/toolChanged → history_->updateEnable
 - `PreprocessController::connectSignals()`：`PreprocessPanel` 轻队列意图信号（`stepAppendRequested`/`stepReplaceRequested`/`stepRemoveRequested`/`stepMoveRequested`/`resetRequested`）+ 独立尺寸区意图信号（`resizeAppliedRequested`/`resizeScaleRequested`/`resizeClearedRequested`）→ 对应槽。
 - `CanvasCoordinator::connectSignals()`：画布/场景/参数面板/工具面板意图信号——`rubberSelect`/`nudgeSelection`/
   `clearCutRequested`/`selectionEdited`/`multiRectEdited`/`cellToggled`/`cellsMarqueeSelected`/`cellReordered`/
-  `rectSelected`/`modeChanged`/`imageLayerPressed`/`basePickRequested`/`pickDeselectRequested`/`imageLayerMoved`/
+  `rectSelected`/`multiRectSelectionRequested`/`modeChanged`/`imageLayerPressed`/`basePickRequested`/`pickDeselectRequested`/`imageLayerMoved`/
     `gridParamsEdited`（L3 网格基准手柄释放：一次性 `Document::setGridParams`，拖拽中不写 Document） → 对应槽。
+  L2 多矩形选中回另有一条**画布→面板**的单行通道：`multiRectSelectionRequested(index)`（场景按下路由或重叠区同点
+  连击下探发出）→ `ParamPanel::selectRectRow(index)` → `rectSelected` → `setActiveMultiRect`（下一次按下的路由基准），
+  因此列表选中后可在重叠处直接拖那个框、连击下探也会把列表行与坐标框一起跟过去（SPEC §8.2）。
 - `SessionController::connectSignals()`：`LayerEditPanel` 9 意图信号（层序/落位/画布尺寸/添加/清空/不透明度）+
   `LayerPanel.imageLayerVisibilityChanged` → Document 声明态 CRUD。
 - `ExportController::connectSignals()`：`ExportPanel.exportRequested → onExport`。

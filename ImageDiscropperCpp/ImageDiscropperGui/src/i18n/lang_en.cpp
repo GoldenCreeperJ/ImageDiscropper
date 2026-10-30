@@ -84,7 +84,7 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"menu::kSortRowMajor", "Row-Major"},
     {"menu::kSortColMajor", "Column-Major"},
     {"menu::kSortCustom", "Custom"},
-    {"menu::kSortReverse", "Reverse All"},
+    {"menu::kSortReverse", "Reverse"},
     {"menu::kSortSnake", "Snake Order"},
     {"menu::kRemainderDiscard", "Discard Partial"},
     {"menu::kRemainderKeep", "Keep Partial"},

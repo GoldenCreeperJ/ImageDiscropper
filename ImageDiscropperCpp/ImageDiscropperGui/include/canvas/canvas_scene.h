@@ -111,6 +111,7 @@ public:
     // 是否有任一多矩形选区框正被拖拽（供上层在拖拽期间跳过面板回同步）。
     bool isDraggingMultiRect() const;
     // 设置当前高亮（选中）的多矩形下标（-1 = 无）：对应选区框颜色略微加强，其余恢复普通。
+    // 选中态同时是重叠区按下的路由基准（见 mousePressEvent 的多矩形分支：命中栈内含选中项则拖它）。
     void setActiveMultiRect(int index);
 
     // 依 Document 的选择集与排序策略刷新单元点选图元的高亮（L3）。
@@ -214,6 +215,9 @@ protected:
     //   按下＝resolveOnPress（保持已选层、拖动跟随选中项），无拖动释放＝advanceOnClick（沿栈推进一位）。
     //   标注选取态另有一道**手柄优先穿透**（见实现）：选中标注的 OBB 手柄被上层标注盖住时按下仍落到手柄拖拽。
     //   非拾取模式 / 拾取点无候选 → 交基类走既有图元交互。
+    // L2 多矩形选区框走同一套循环语义但自备一份循环态（multiRectCycle_）：各框同 z，靠 z 序自动抓取时
+    //   被压住的旧矩形永远点不到，故按下归属由场景按命中栈判定（见实现）。本路由靠 grabMouse() 显式接管
+    //   move/release，释放交基类送达后仍须归还抓取（显式抓取不随基类释放解除，见 releasePressGrab）。
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
     void mouseMoveEvent(QGraphicsSceneMouseEvent* event) override;
     void mouseReleaseEvent(QGraphicsSceneMouseEvent* event) override;
@@ -229,8 +233,9 @@ private:
     // 网格线图层隐藏 → 手柄不可拖（隐藏图层=不可交互）。
     void refreshGridHandleInteraction() const;
 
-    // 场景驱动拖拽的释放收尾：清除按下时建立的鼠标抓取。本场景的释放分支自行消费事件、不交基类，
-    // 而隐式抓取只在基类释放处理里随「最后按键抬起」解除——不清理则被按图元残留抓取，后续按下全被
+    // 场景驱动拖拽的释放收尾：清除按下时建立的鼠标抓取。两条遗留路径都需归还——隐式抓取（基类自动抓取）
+    // 只在基类释放处理里随「最后按键抬起」解除（场景自持的释放分支不交基类时须补清）；显式抓取（图元自调
+    // grabMouse，如 L2 多矩形场景路由）即使交了基类也不解除。不清理则被按图元残留抓取，后续按下全被
     // 其吞掉（桌面靠悬停 move 触发 Qt 的自清理特例勉强恢复；触控无悬停 move，穿透选中即由此失效）。
     void releasePressGrab() const;
 
@@ -238,6 +243,10 @@ private:
     std::vector<int> layerStackAt(const QPointF& scenePos) const;
     // 按 id 取回对应的落位框图元（无则 nullptr）。
     ImageLayerItem* imageLayerItemById(int id) const;
+
+    // 收集 scenePos 处命中的 L2 多矩形选区框下标（按 zValue 降序、同 z 则后加入者在前＝顶在前）；
+    // 命中口径为「按下能在该框上成立手势」（手柄 / 边 / 框内，委托 SelectionRectItem::hitTestPress）。
+    std::vector<int> multiRectStackAt(const QPointF& scenePos) const;
 
     // 重算场景矩形 = 内容边界 + 外圈余量（余量为视图注入的视口口径值，横/纵各自一个，故左右与上下可不等量）。
     // 内容边界本身可以不对称（补白只在某一侧伸出），场景矩形随之不对称——这是正确行为：整幅场景小于视口时 Qt
@@ -260,6 +269,9 @@ signals:
     void cellReordered(int fromIndex, int toIndex);
     // L2 多矩形：某个选区框被拖动/缩放（转发自对应 SelectionRectItem），index 为其在列表中的下标。
     void multiRectEdited(int index, const QRectF& sceneRect);
+    // L2 多矩形：某选区框被场景路由为本次目标（按下即选中，及重叠区同点连击下探后）——
+    // index 为其在列表中的下标，交上层回灌参数面板的列表选中行（选中行反过来经 setActiveMultiRect 回灌本场景）。
+    void multiRectSelectionRequested(int index);
     // L3 网格基准手柄释放：拖拽中只本地预览（不写 Document），释放时把最终参数一次性上交，
     // 由 CanvasCoordinator 走 Document::setGridParams（沿用「改网格几何→清空单元选择集」既有行为）。
     void gridParamsEdited(int originX, int originY, int cellWidth, int cellHeight);
@@ -298,6 +310,8 @@ private:
     int multiBoundsW_{-1};                 // 上次下发给多矩形图元的图像宽（变化时才重推边界）
     int multiBoundsH_{-1};                 // 上次下发给多矩形图元的图像高
     int activeMultiRect_{-1};              // 当前高亮（选中）的多矩形下标（-1 = 无）
+    PickCycle<int> multiRectCycle_;        // 多矩形重叠区的同点连击循环态（与图层拾取同一状态机，各自一份）
+    int multiRectPressIndex_{-1};          // 本次按下已由场景路由的多矩形下标（-1 = 无；释放时据此判点击/拖拽）
 
     int imgW_{0};
     int imgH_{0};

@@ -76,6 +76,29 @@ void CanvasScene::updateMultiRects(const std::vector<engine::RectRegion>& rects)
     multiBoundsH_ = imgH_;
 }
 
+// 收集 scenePos 处命中的多矩形选区框下标，按叠放序「顶在前」返回（与 layerStackAt 同口径）：
+// zValue 降序，同 z（多矩形全取 zorder::kSelection）则后加入者（绘制在上）在前。
+// 只收可见且不拒左键的候选（「隐藏图层=不可交互」与标注选取态的让位均由 acceptedMouseButtons 反映）；
+// 命中口径由图元自己回答（与它接按下的判定一致），本处不做几何计算。
+std::vector<int> CanvasScene::multiRectStackAt(const QPointF& scenePos) const {
+    struct Hit { int index; qreal z; };
+    std::vector<Hit> hits;
+    for (int i = 0; i < multiRectItems_.size(); ++i) {
+        const SelectionRectItem* it = multiRectItems_[i];
+        if (!it->isVisible() || !(it->acceptedMouseButtons() & Qt::LeftButton)) continue;
+        if (!it->hitTestPress(scenePos)) continue;
+        hits.push_back({i, it->zValue()});
+    }
+    std::ranges::sort(hits, [](const Hit& a, const Hit& b) {
+        if (a.z != b.z) return a.z > b.z;
+        return a.index > b.index;
+    });
+    std::vector<int> stack;
+    stack.reserve(hits.size());
+    for (const auto&[index, z] : hits) stack.push_back(index);
+    return stack;
+}
+
 // 清空多矩形选区框（非 MultiRect / 换图时）。
 void CanvasScene::clearMultiRects() {
     for (auto* item : multiRectItems_) { removeItem(item); delete item; }
@@ -83,6 +106,8 @@ void CanvasScene::clearMultiRects() {
     multiBoundsW_ = -1;   // 重置边界缓存，下次重建时重推图像边界。
     multiBoundsH_ = -1;
     activeMultiRect_ = -1; // 无矩形时无高亮。
+    multiRectPressIndex_ = -1;   // 旧图元已销毁：按下归属与循环态一并归零（下标不再可解引用）。
+    multiRectCycle_.reset();
 }
 
 // 设置多矩形选区框的手柄尺寸（同时缓存供后续新建图元使用）。
@@ -99,6 +124,7 @@ bool CanvasScene::isDraggingMultiRect() const {
 }
 
 // 设置当前高亮（选中）的多矩形下标：对应选区框颜色略微加强，其余恢复普通。
+// 选中态兼作重叠区按下的路由基准（CanvasScene::mousePressEvent）：面板行选中或画布连击下探都经此回灌。
 void CanvasScene::setActiveMultiRect(const int index) {
     activeMultiRect_ = index;
     for (int i = 0; i < multiRectItems_.size(); ++i)

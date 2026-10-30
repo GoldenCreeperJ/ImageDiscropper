@@ -62,6 +62,8 @@ public slots:
     void onSelectionEdited(const QRectF& sceneRect) const; // 拖动/缩放/拖边既有选区。
     void onMultiRectEdited(int index, const QRectF& sceneRect) const; // L2 多矩形：拖动/缩放第 index 个选区框。
     void onRectSelected(int index) const;            // L2 多矩形：面板列表选中行→高亮画布对应选区框。
+    void onMultiRectSelectionRequested(int index) const;
+                                                     // L2 多矩形：画布按下/连击下探选定某选区框→回灌列表选中行。
     void onCellToggled(int index) const;                   // L3 单击切换某单元。
     void onCellsMarquee(const std::vector<int>& indices) const; // L3 拖拽框选单元。
     void onCellReordered(int fromIndex, int toIndex) const;     // L3 Custom 拖拽调序。

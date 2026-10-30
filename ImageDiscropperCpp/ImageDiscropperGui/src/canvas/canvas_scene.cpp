@@ -513,6 +513,30 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent* event) {
             }
         }
     }
+    // L2 多矩形重叠路由：各选区框同 z，交基类自动抓取时永远是最后追加者吃到按下，被压住的旧矩形
+    //   在画布上再也拖不到。改为场景按命中栈路由：resolveOnPress——当前选中（面板列表行回灌的
+    //   activeMultiRect_）仍在命中栈内则保持它（拖动跟随选中项，列表选中后可直接拖），否则取栈顶。
+    //   手势在被路由的图元上显式起（beginPressAt）并由其 grabMouse 接管后续 move/release：事件只交付
+    //   一个图元，而「被按到的顶图元」与「应被拖动的图元」可以不同。未命中任何框 → 落基类（不抢抓取，
+    //   视图据此起橡皮筋框选追加新矩形）。
+    if (!multiRectItems_.isEmpty() && event->button() == Qt::LeftButton) {
+        const std::vector<int> stack = multiRectStackAt(event->scenePos());
+        const std::optional<int> current =
+            activeMultiRect_ >= 0 ? std::optional(activeMultiRect_) : std::nullopt;
+        if (const std::optional<int> target = PickCycle<int>::resolveOnPress(stack, current);
+            target && *target < multiRectItems_.size()) {
+            // beginPressAt 内部的 dragStarted 只经 selectionInteractionStarted 清标注选中（只重建标注图元、
+            // 不动多矩形图元），故本行之后 it 仍有效；随后才抢抓取与 emit（回灌链若重建图元也不影响已抢好的抓取）。
+            if (SelectionRectItem* it = multiRectItems_[*target]; it->beginPressAt(event->scenePos())) {
+                multiRectPressIndex_ = *target;
+                it->grabMouse();   // 基类把后续移动/释放照常送达本图元（它未必是光标下的顶图元）
+                // 按下即选中：不握 it 指针再往下走（回灌链有可能重建图元），故 emit 放末句。
+                emit multiRectSelectionRequested(*target);
+                event->accept();
+                return;
+            }
+        }
+    }
     QGraphicsScene::mousePressEvent(event);
 }
 
@@ -533,6 +557,14 @@ void CanvasScene::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
 //   拾取原地点击 → PickCycle::advanceOnClick 沿候选栈推进一位（首次定点击复位到栈顶＝当前），选中变化才
 //     emit imageLayerPressed（交 CanvasCoordinator selectLayer → setImageLayerSelection 回同步高亮）；
 //   拾取拖拽 → 清循环态。否则交基类。
+//   多矩形同构：原地点击（图元自报手势未位移）→ 沿栈下探一位并 emit multiRectSelectionRequested；
+//     拖拽 → 清循环态（其后同点单击从无历史重新起算）。用 advanceFromTarget 而非 advanceOnClick：
+//     按下阶段已把目标定好（可能是从列表选中的下层框），游标未指向它时本次只定位不推进，
+//     否则单击会把刚选中的下层框弹回栈顶（等于又选到别的框）。结算（吸附/量化/写回模型）仍由图元自己的
+//     释放处理完成，故先取点击判据再交基类送达，emit 排在基类之后（不与 rectChanged 的写回链重入）。
+//     基类送达后必须补 releasePressGrab()：本次抓取是 grabMouse() 的**显式**抓取，而基类释放只自动解除
+//     隐式抓取（显式抓取恒保留至 ungrabMouse），不归还则该图元永久持抓取——后续 grabMouse 命中「已是
+//     抓取者」直接早退，移动/释放全送到旧图元，新目标拖不动且卡在拖拽态（与标注穿透路径同一教训）。
 void CanvasScene::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
     if (pickDragItem_) {
         DraggableCanvasItem* it = pickDragItem_;
@@ -557,10 +589,31 @@ void CanvasScene::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
         event->accept();
         return;
     }
+    if (multiRectPressIndex_ >= 0) {
+        const int index = multiRectPressIndex_;
+        multiRectPressIndex_ = -1;
+        // 原地点击判据必须在交基类**之前**取：基类送达后图元已归位拖拽态（手势内位移标志仍留存，
+        // 但下标可能因本次写回触发的刷新而失效，此处提前取图元指针只为读该标志，不做其他事）。
+        const SelectionRectItem* it = index < multiRectItems_.size() ? multiRectItems_[index] : nullptr;
+        const bool wasClick = it && !it->gestureMoved();
+        const QPointF p = event->scenePos();
+        QGraphicsScene::mouseReleaseEvent(event);   // 送达抓取者：本图元自行吸附/量化并写回模型
+        releasePressGrab();   // 显式抓取不随基类释放自动解除，点击/拖拽两条路径都要归还
+        if (!wasClick) {
+            multiRectCycle_.reset();
+            return;
+        }
+        const std::optional<int> next = multiRectCycle_.advanceFromTarget(
+            index, p.x(), p.y(), multiRectStackAt(p), nums::canvas::kPickSamePointTolScenePx);
+        if (next && *next != activeMultiRect_) emit multiRectSelectionRequested(*next);
+        return;
+    }
     QGraphicsScene::mouseReleaseEvent(event);
 }
 
-// 清除按下时建立的鼠标抓取（隐式抓取不随场景自持的释放分支解除——基类释放处理未被执行）。
+// 清除按下时建立的鼠标抓取。两条遗留路径都需归还：
+//   · 隐式抓取（基类自动抓取）只在基类释放处理里随「最后按键抬起」解除——场景自持的释放分支不交基类时须补清；
+//   · 显式抓取（图元自调 grabMouse，如 L2 多矩形场景路由）**即使交了基类也不解除**（基类只回收隐式抓取）。
 // 被按项与拖动项可以不同（重叠时按下落在最顶图元、拖动跟随选中项），残留抓取挂在被按项上。
 void CanvasScene::releasePressGrab() const {
     if (QGraphicsItem* g = mouseGrabberItem()) g->ungrabMouse();
@@ -589,6 +642,9 @@ void CanvasScene::cancelActiveItemDrag() {
         for (SelectionRectItem* it : multiRectItems_)
             if (it->isDragging()) { it->cancelDrag(); break; }
     }
+    // 被打断的本笔永不结算：按下归属与循环态一并归零，重入从新目标重新起算。
+    multiRectPressIndex_ = -1;
+    multiRectCycle_.reset();
     if (pickerItem_) pickerItem_->cancelDrag();   // 纯本地按下态、不发信号
     if (gridLayer_.handlesReady()) {
         if (GridHandleItem* h = gridLayer_.originHandle(); h && h->isDragging()) h->cancelDrag();

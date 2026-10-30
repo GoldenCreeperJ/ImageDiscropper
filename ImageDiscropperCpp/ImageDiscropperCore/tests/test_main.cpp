@@ -692,6 +692,7 @@ static void testDragGesture() {
 
 // ---------------------------------------------------------------------------
 // 同点连击循环选层（零 Qt 值类型，跨模块直编）测试：按下解析纯查询 / 点击推进 / 复位
+//   （含按下已路由目标的 advanceFromTarget：外部选中的下层目标不弹回栈顶，及游标位重合的不可区分局限）
 // ---------------------------------------------------------------------------
 static void testPickCycle() {
     using namespace idc;
@@ -754,6 +755,44 @@ static void testPickCycle() {
         CHECK(c.advanceOnClick(10, 10, stack, tol) == std::optional{2});
         c.reset();
         CHECK(c.advanceOnClick(10, 10, stack, tol) == std::optional{3});
+    }
+
+    // advanceFromTarget：同点同栈且游标已指向目标 → 下探一位（连击链，到底回顶）。
+    {
+        Cycle c;
+        const std::vector stack{3, 2, 1};
+        CHECK(c.advanceFromTarget(3, 10, 10, stack, tol) == std::optional{3});   // 首击取栈顶：只定位
+        CHECK(c.advanceFromTarget(3, 10, 10, stack, tol) == std::optional{2});   // 续击：下探
+        CHECK(c.advanceFromTarget(2, 10, 10, stack, tol) == std::optional{1});
+        CHECK(c.advanceFromTarget(1, 10, 10, stack, tol) == std::optional{3});   // 到底回顶
+    }
+
+    // advanceFromTarget：目标来自外部选中（不在连击链上，游标未指向它）→ 本次点击只对齐游标、
+    // 不弹回栈顶（否则列表选中的下层框会被单击换选到最顶那个）；其后同点续击从该层往下探。
+    {
+        Cycle c;
+        const std::vector stack{3, 2, 1};
+        CHECK(c.advanceFromTarget(2, 10, 10, stack, tol) == std::optional{2});   // 列表选中 2：保持
+        CHECK(c.advanceFromTarget(2, 10, 10, stack, tol) == std::optional{1});   // 续击下探
+    }
+
+    // advanceFromTarget 的已知局限：判据只看状态（同点同栈且游标已指向 target），不看 target 的来历——
+    // 外部选中的目标恰落在游标位时与「连击链继续」不可区分，本击仍按下探处理。
+    {
+        Cycle c;
+        const std::vector stack{3, 2, 1};
+        CHECK(c.advanceFromTarget(3, 10, 10, stack, tol) == std::optional{3});   // 首击无历史：只定位栈顶
+        // 目标仍是 3（等同于刚从列表外部选中）：状态与连击链续击完全同形 → 仍下探到 2。
+        CHECK(c.advanceFromTarget(3, 10, 10, stack, tol) == std::optional{2});
+    }
+
+    // advanceFromTarget：目标不在栈内（栈已变）→ 对齐栈顶；空栈 → 清态返回 nullopt。
+    {
+        Cycle c;
+        const std::vector stack{3, 2, 1};
+        CHECK(c.advanceFromTarget(9, 10, 10, stack, tol) == std::optional{3});
+        CHECK(!c.advanceFromTarget(3, 10, 10, {}, tol).has_value());
+        CHECK(c.advanceFromTarget(2, 10, 10, stack, tol) == std::optional{2});   // 清态后重新定位
     }
 
     std::cout << "[pick_cycle] OK\n";

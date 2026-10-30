@@ -45,6 +45,10 @@ void CanvasCoordinator::connectSignals() {
     // L3 网格基准手柄释放：拖拽中场景只本地预览，此处一次性写回 Document（继承「改网格几何→清空选择集」既有行为）。
     connect(scene_, &CanvasScene::gridParamsEdited, this, &CanvasCoordinator::onGridParamsEdited);
     connect(param_, &ParamPanel::rectSelected, this, &CanvasCoordinator::onRectSelected);
+    // L2 多矩形：画布上按下即选中 / 重叠区同点连击下探 → 回灌参数面板列表选中行（行变化再经
+    // rectSelected → setActiveMultiRect 回灌场景高亮与按下路由基准，链条自洽）。
+    connect(scene_, &CanvasScene::multiRectSelectionRequested, this,
+            &CanvasCoordinator::onMultiRectSelectionRequested);
     // 画布四态互斥模式（「交互模式」面板顶部按钮）→ 落地：切视图模式 + 场景图元可交互性 + 取消前态选中。
     connect(toolPanel_, &ModeToolPanel::modeChanged, this, &CanvasCoordinator::applyCanvasMode);
     // 画布上拾取图片图层（转发自 ImageLayerItem）：按下选中该层（预处理目标切到该层）并刷新当前态提示。
@@ -180,6 +184,12 @@ void CanvasCoordinator::onMultiRectEdited(const int index, const QRectF& sceneRe
 // L2 多矩形：面板列表选中行变化 → 高亮画布上对应选区框（-1 清除高亮）。
 void CanvasCoordinator::onRectSelected(const int index) const {
     if (scene_) scene_->setActiveMultiRect(index);
+}
+
+// L2 多矩形：画布侧选定某选区框（按下路由或重叠区连击下探）→ 把列表选中行切到它，
+// 从而同步回填四个坐标 spinbox。selectRectRow 对越界与「已是该行」自行早退。
+void CanvasCoordinator::onMultiRectSelectionRequested(const int index) const {
+    param_->selectRectRow(index);
 }
 
 // L3 单击切换某单元：写回 Document（触发刷新与点选图元高亮更新）。

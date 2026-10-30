@@ -315,37 +315,66 @@ void SelectionRectItem::applySnap(const bool preserveSize) {
     rect_ = QRectF(QPointF(l, t), QPointF(rr, b)).normalized();
 }
 
-// 按下：四角手柄缩放 / 抓边拖动（＝移动切割线）/ 框内整体移动 / 框外忽略（交视图新建选区）。
-void SelectionRectItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
-    if (!hasBounds_) { event->ignore(); return; }
-    const QPointF p = event->scenePos();
+// 按下命中解析（手柄 > 边 > 框内）：命中填 out 并返回 true；未命中返回 false。
+// mousePressEvent 与场景重叠命中栈查询（CanvasScene::multiRectStackAt）共用本口径。
+bool SelectionRectItem::resolvePress(const QPointF& p, PressHit& out) const {
+    if (!hasBounds_) return false;
     if (const int h = hitHandle(p); h >= 0) {
         // 四角缩放：固定对角不动。TL<->BR、TR<->BL。手柄 0..3 为 TL/TR/BL/BR，对角序号 = 3 - h。
         QPointF tl, tr, bl, br;
         cornerPoints(tl, tr, bl, br);
         const QPointF corners[4]{tl, tr, bl, br};
-        mode_ = DragMode::Resize;
-        fixedPoint_ = corners[3 - h];
-    } else {
-        if (const int e = hitEdge(p); e >= 0) {
-            mode_ = DragMode::Edge;   // 抓边（或其贯穿延伸段）：沿法向拖动该边＝移动对应切割线。
-            dragEdge_ = e;
-        } else if (borderVisible_ && rect_.normalized().contains(p)) {
-            mode_ = DragMode::Move;   // 框内且未压边、且边框可见：整体平移选区（边框隐藏时无填充区可拖）。
-        } else {
-            event->ignore();          // 点在框外且未压线：让视图处理为「框选新选区」。
-            return;
-        }
+        out.mode = DragMode::Resize;
+        out.fixed = corners[3 - h];
+        return true;
     }
-    lastPos_ = p;
-    event->accept();
-    // 手势确立（移动 / 缩放 / 拖边任一）：上报拖拽开始，供上层清除标注选中（拖动选区边框时标注 OBB 手柄即时消失）。
+    if (const int e = hitEdge(p); e >= 0) {
+        out.mode = DragMode::Edge;   // 抓边（或其贯穿延伸段）：沿法向拖动该边＝移动对应切割线。
+        out.edge = e;
+        return true;
+    }
+    if (borderVisible_ && rect_.normalized().contains(p)) {
+        out.mode = DragMode::Move;   // 框内且未压边、且边框可见：整体平移选区（边框隐藏时无填充区可拖）。
+        return true;
+    }
+    return false;
+}
+
+// 该点按下是否会成立手势（纯查询）：供场景收集重叠命中栈。
+bool SelectionRectItem::hitTestPress(const QPointF& scenePos) const {
+    PressHit hit;
+    return resolvePress(scenePos, hit);
+}
+
+// 场景路由入口：以给定场景坐标起一次手势（与收到按下等价）。
+// 手势确立（移动 / 缩放 / 拖边任一）即上报 dragStarted，供上层清除标注选中（与图元自收按下同语义）。
+bool SelectionRectItem::beginPressAt(const QPointF& scenePos) {
+    PressHit hit;
+    if (!resolvePress(scenePos, hit)) return false;
+    mode_ = hit.mode;
+    dragEdge_ = hit.edge;
+    fixedPoint_ = hit.fixed;
+    lastPos_ = scenePos;
+    pressPos_ = scenePos;
+    dragMoved_ = false;
     emit dragStarted();
+    return true;
+}
+
+// 按下：四角手柄缩放 / 抓边拖动（＝移动切割线）/ 框内整体移动 / 框外忽略（交视图新建选区）。
+void SelectionRectItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
+    if (beginPressAt(event->scenePos())) {
+        event->accept();
+        return;
+    }
+    event->ignore();   // 点在框外且未压线：让视图处理为「框选新选区」。
 }
 
 // 移动：整体平移 / 对角缩放 / 单边法向拖动，实时钳制并发信号。
 void SelectionRectItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     const QPointF p = event->scenePos();
+    // 原地点击 vs 拖拽的判据：本手势是否收到过非零位移（与设备像素阈值、视图缩放均无关）。
+    if (mode_ != DragMode::None && p != pressPos_) dragMoved_ = true;
     if (mode_ == DragMode::Move) {
         const QPointF d = p - lastPos_;
         QRectF r = rect_.normalized().translated(d);
@@ -381,8 +410,11 @@ void SelectionRectItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
 }
 
 // 释放：应用吸附、整数像素量化、先退出拖拽态再发最终信号（使上层这一次做完整回设与面板回同步）。
+// 结算以「手势真发生过位移」为条件：原地单击（含只压住手柄/边而不动）没写过任何几何，
+// 若仍走吸附会把框磁吸到图像边/中线（用户没拖它），也会白写一次模型；位移判据同时供场景
+// 判定本次是「循环点选」还是「拖拽」（见 CanvasScene::mouseReleaseEvent）。
 void SelectionRectItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
-    const bool wasDragging = mode_ != DragMode::None;
+    const bool wasDragging = mode_ != DragMode::None && dragMoved_;
     // 整体移动须保持宽高：吸附时只平移不逐边独立吸附（否则移动会变成尺寸突变）。
     const bool preserveSize = mode_ == DragMode::Move;
     if (wasDragging && snapEnabled_) applySnap(preserveSize);
@@ -406,8 +438,10 @@ void SelectionRectItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
 // emit 恒为最后一句：rectChanged 会写回模型并触发刷新，本图元有可能在其中被重建。
 void SelectionRectItem::cancelDrag() {
     if (mode_ == DragMode::None) return;
+    const bool wasDragging = dragMoved_;   // 从未位移：本图元没写过任何东西，只需归位拖拽态、无需结算。
     mode_ = DragMode::None;
     dragEdge_ = -1;
+    if (!wasDragging) return;
     prepareGeometryChange();
     rect_ = quantizeRect(rect_, hasBounds_ ? imgW_ : 0, hasBounds_ ? imgH_ : 0);
     update();

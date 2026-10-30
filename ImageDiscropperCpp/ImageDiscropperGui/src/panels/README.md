@@ -39,6 +39,8 @@ Document 发 `changed()` → app 层 `PreviewController` 刷新预览；反向�
   选「多矩形并集」时显示矩形列表 `l2RectList_`（容器 `l2MultiBox_`）：在画布**空白处拖拽框选逐个追加**，矩形本身**可直接拖动/四角缩放/拖边调整**（每个矩形一个 `SelectionRectItem`，见 canvas/），选中项坐标回填 x1/y1/x2/y2 微调，
   另有「删除选中 / 清空」按钮（`onRectDel/ClearClicked`）；重建列表时 `syncingRectList_` 抑制选中信号回环。（追加经由画布空白处拖拽框选，无独立「添加」按钮。）
   选中行变化经信号 `rectSelected(index)` 通知 CanvasCoordinator 高亮画布上对应选区框（-1 清除）；`selectRectRow(index)`/`updateRectListItem(index)` 供画布拖拽时定向跟随选中与实时回显尺寸（仅改单行文本/选中行，不重建整表）。
+  该选中行同时是**画布重叠区的按下路由基准**：列表选中某矩形后，在相互压住的处直接按就能拖它（不会被最上层那个抢走）；
+  画布上的按下即选中与同点连击下探也经 `selectRectRow` 把列表行与 x1/y1/x2/y2 一起拉过来（口径见 SPEC §8.2 与 src/canvas README）。
 - **L3 页**：每轴一个「定义方式」combo（周期 / 分割数 / 比例，索引与 Core `GridAxisMode` 枚举序一致）+ `QStackedWidget` 三形态页——周期（基准点 x0/y0 + 单元宽/高 cw/ch，两者均可写百分比串、按本轴方向取基准换算）、分割数（份数 spin）、比例（权重 `QLineEdit`，收 `1,2,1` 与 `25%,50%,25%`、非法回显旧值）+ 余量策略 combo（仅当至少一个周期轴可用，否则置灰并显同屏说明）；两轴可各用各的，切换定义方式时以屏上现有数值起手。
   + 选择集（全选/反选/清空按钮）
   + 排序（策略 combo row-major/column-major/custom + 整体逆序/蛇形复选框）；派生行列数与已选单元数为**只读回显**。
