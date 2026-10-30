@@ -32,6 +32,13 @@ public:
     void setLayerId(const int id) { id_ = id; }
     int layerId() const { return id_; }
 
+    // 层序堆叠键（由场景逐帧刷新）：Core 的 zOrder（叠放次序**属性**，越大越靠顶）与该层在
+    //   Document::layers() 数组中的位序（同 zOrder 时靠后者在上，SPEC §7）——两个正交维度，
+    //   与 Qt z 无关：本图元不解释其含义，只供 CanvasScene::layerStackAt 作两级排序判据消费。
+    void setStackKeys(const int zOrder, const int arrayIndex) { zOrder_ = zOrder; arrayIndex_ = arrayIndex; }
+    int stackZOrder() const { return zOrder_; }
+    int stackArrayIndex() const { return arrayIndex_; }
+
     // 载入落位矩形（场景/画布坐标，左上原点）；变化时重置几何缓存并重绘。
     void setPlacement(const QRectF& rect);
     QRectF placement() const { return rect_; }
@@ -64,6 +71,8 @@ protected:
 
 private:
     int id_{0};
+    int zOrder_{0};       // Core 叠放次序属性（层序一级判据，与 Qt z 无关）。
+    int arrayIndex_{0};   // 在 layers_ 数组中的位序（同 zOrder 时破平，与 zOrder 正交）。
     QRectF rect_{};        // 落位矩形（item 坐标＝场景坐标，pos 恒 0，除拖拽临时位移）。
     bool selected_{false};
     bool interactive_{false};

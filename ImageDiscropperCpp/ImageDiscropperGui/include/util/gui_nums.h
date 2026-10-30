@@ -56,13 +56,19 @@ inline constexpr double kFitToWindowKeepRatio = 0.94;   // 适应窗口时内容
                                                         // 默认余量 3% 下 0.94＋2×3%＝1.00，适配后场景矩形恰等于视口、不出滚动条；
                                                         // 适应窗口**不读 scrollMarginPercent**——否则大的滚动余量会
                                                         // 把内容挤到 (1－2×百分比) 乃至趋零、退化成“缩到最小尺寸”。
-inline constexpr double kPickSamePointTolScenePx = 3.0; // 连击循环选层的「近似同点」容差（场景单位）：
-                                                        // 调大则手指微抖更易续上同一候选栈。
+inline constexpr double kPickSamePointTolScreenPx = 24.0; // 连击循环选层「近似同点」容差的**屏幕基准**（视口逻辑像素）：
+                                                        // 由视图按当前缩放折算成场景单位下发（与手柄/抓边带同一条换算链，见
+                                                        // CanvasView::updateHandleSize）。取屏幕口径是**硬要求**：本值比较的是两击的
+                                                        // **场景**坐标差，若写成场景像素，1× 缩放下它就等于 3 逻辑像素，手指微抖直接被判
+                                                        // 「换点」→ 游标每回复位 0（循环点选只在放大后才可用）。
+                                                        // 护栏仍在：候选栈不同即判「栈变化」，容差再宽也不会把相邻不重叠的两个目标串成一次连击。
+inline constexpr double kFallbackPickTolScenePx = 24.0;   // 视图尚未下发时的**场景口径**兜底初值（等效 1× 缩放；与上行同值纯属巧合，
+                                                        // 处理方式同 kFallbackHandleScenePx）。
 inline constexpr double kAnnoCopyOffsetPx = 16.0;       // 复制标注的错位偏移（场景单位）：复制件与原件错开一截，
                                                         // 一眼可辨且可直接拖走（完全重叠时难以拾取）。
 // ——触控手势判定（canvas_touch_input_adapter.cpp）：双击＝适应窗口，轻点是它的最小单位——
 //   桌面复用口径：kDoubleTapPosScreenPx 兼作桌面「离散第二击」同点判定容差；kTapMoveScreenPx 兼作
-//   桌面扣住单击的拖拽起点阈值（框选拖拽位移 ≤12px 视为单击的一部分、不出路由，见 canvas_desktop_input_adapter.cpp）。
+//   桌面扣住单击的拖拽起点阈值（非绘制态的空白拖拽位移 ≤12px 视为单击的一部分、不出路由，见 canvas_desktop_input_adapter.cpp）。
 //   触控与桌面两侧比较的都是 event->pos()——均按视口逻辑像素比较；常量名中的 ScreenPx 指「屏幕空间」
 //   （相对场景空间），非设备像素，调阈值勿乘 DPR。
 inline constexpr long long kDoubleTapGapMs = 300;   // 双击窗口：第二击按下距上一击释放的上限；也是单击延迟判定基准（窗口内合成双击＝适应窗口，

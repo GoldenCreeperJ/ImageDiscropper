@@ -170,6 +170,8 @@ set(IDC_GUI_CANVAS_SRC
         src/canvas/canvas_scene.cpp
         src/canvas/canvas_scene_rects.cpp
         src/canvas/canvas_scene_annotations.cpp
+        src/canvas/canvas_scene_grid.cpp
+        src/canvas/canvas_scene_layers.cpp
         src/canvas/canvas_view.cpp
         src/canvas/items/mask_layer.cpp
         src/canvas/items/grid_layer.cpp

@@ -92,8 +92,9 @@ void AnnotationBridge::selectAt(const core::Point2D p) {
     emit changed();
 }
 
-void AnnotationBridge::cycleAt(const core::Point2D p) {
-    editor_.selectAnnotation(editor_.cycleAt(p));   // 原地点击：同点连击沿命中栈循环下探
+void AnnotationBridge::cycleAt(const core::Point2D p, const double samePointTol) {
+    // 同点连击沿命中栈循环下探；容差由调用方按当前缩放传入（与图层拾取 / L2 多矩形同一口径）。
+    editor_.selectAnnotation(editor_.cycleAt(p, samePointTol));
     emit selectionChanged();
     emit changed();
 }

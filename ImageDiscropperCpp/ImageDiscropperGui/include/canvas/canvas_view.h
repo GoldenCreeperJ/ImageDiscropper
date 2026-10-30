@@ -168,7 +168,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
-    void mouseDoubleClickEvent(QMouseEvent* event) override;   // 双击：适配器路由（仅框选态空白＝适应窗口；交互图元/其余模式＝补发两次普通点击）。
+    void mouseDoubleClickEvent(QMouseEvent* event) override;   // 双击：适配器路由（非绘制态空白＝适应窗口；交互图元/绘制态＝补发两次普通点击）。
                                                               // 不调基类：图元恒收不到 DblClick——将来「双击标注＝编辑文字」等图元级双击语义
                                                               // 需在适配器里按落点显式下发。
     void keyPressEvent(QKeyEvent* event) override;
@@ -181,7 +181,8 @@ protected:
 
 private:
     // 依当前视图缩放换算选区手柄的场景尺寸（屏幕基准由适配器提供：桌面约 8 屏幕px，
-    // 触控 ≥12pt，SPEC §8.3），并下发给选区框。
+    // 触控 ≥12pt，SPEC §8.3），并下发给选区框；连击循环的「近似同点」容差也在此按同一换算
+    // 下发给场景（本函数是屏幕基准→场景单位的唯一下发点，故所有随缩放变化的量都挂此处）。
     void updateHandleSize();
     // 按当前视口尺寸与缩放把滚动余量注入场景（横 = 视口宽×百分比、纵 = 视口高×百分比，再除以 m11 折算为场景单位）；
     // 缩放基准变化（updateHandleSize）与视口尺寸变化（resizeEvent）两个入口共用。

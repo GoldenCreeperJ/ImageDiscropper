@@ -41,7 +41,9 @@ public:
     }
 
     // 无拖动点击的释放：按同点连击规则推进游标并返回应选中 id；空栈清态返回 nullopt。
-    //   tol：判定「近似同点」的场景坐标容差（由调用方按口径传入，如 nums::canvas::kPickSamePointTolScenePx）。
+    //   tol：判定「近似同点」的场景坐标容差——**必须由调用方按当前缩放折算后传入**（屏幕基准
+    //   nums::canvas::kPickSamePointTolScreenPx / scale，见 CanvasView::updateHandleSize 的下发）。
+    //   写成固定场景像素会让容差随缩放反向变化：缩小时手指抖动即被判「换点」、游标恒复位。
     std::optional<IdT> advanceOnClick(const double x, const double y,
                                       const std::vector<IdT>& stack, const double tol) {
         if (stack.empty()) { reset(); return std::nullopt; }

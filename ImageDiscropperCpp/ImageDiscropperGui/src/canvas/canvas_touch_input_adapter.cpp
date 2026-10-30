@@ -35,17 +35,19 @@ void TouchInputAdapter::attach(CanvasView& view) {
     view.setMouseTracking(false);
 }
 
-// 按下：先做双击过滤（第二击 = 适应窗口并吞掉本序列），否则记轻点候选并委托桌面路由。
+// 按下：先做双击过滤（第二击 = 适应窗口并吞掉本序列），否则记轻点候选并委托桌面路由（后者的
+//   扣单击延迟判定同样只对非绘制态的空白落点生效）。
 void TouchInputAdapter::onPress(CanvasView& view, QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
         const QPoint vp = event->pos();
-        // 双击第二击：距上一有效轻点足够近且足够快且落在**非交互图元**处且处于**框选态** → 适应窗口；
-        // 吞掉本序列后续事件，不进入框选/图元路由。其余三态的按下是动作手势（起笔/拾取/选中），
-        // 扣住会推迟成形与落点——双击＝适应窗口仅框选态生效（与桌面路由同一门控口径）。交互图元（选区框/
-        // 落位框等接收左键者）上的双击略过适应窗口——按下照常路由（桌面路由内交互图元即时下发）。
+        // 双击第二击：距上一有效轻点足够近且足够快且落在**非交互图元**处且处于**非绘制态** → 适应窗口；
+        // 吞掉本序列后续事件，不进入框选/图元路由。绘制态（AnnoCreate）的按下是落顶点/起笔的动作手势，
+        // 扣住会推迟成形、快速连点还会被误判成双击而丢点，故照常即时路由——双击＝适应窗口覆盖
+        // 框选/拾取/标注选取三态的空白（与桌面路由同一门控口径）。交互图元（选区框/落位框/图层/标注
+        // 等接收左键者）上的双击略过适应窗口——按下照常路由（桌面路由内交互图元即时下发）。
         if (tapClock_.isValid() && tapClock_.elapsed() <= nums::canvas::kDoubleTapGapMs
             && (vp - lastTapPos_).manhattanLength() <= nums::canvas::kDoubleTapPosScreenPx
-            && view.canvasMode() == CanvasMode::Marquee
+            && view.canvasMode() != CanvasMode::AnnoCreate
             && !view.interactiveItemAt(event->position())) {
             swallowing_ = true;
             tapClock_.invalidate();          // 已消费，防止三连击连续触发
@@ -64,8 +66,8 @@ void TouchInputAdapter::onPress(CanvasView& view, QMouseEvent* event) {
 
 // 双击正主：QPA 把间隔小于系统双击阈值的第二击合成为 MouseButtonDblClick（不是第二次 press），
 //   挂在 press 上的自检路径等不到它——此处先按落点消歧：交互图元（图层/标注/选区框）上**略过双击**，
-//   按普通点击补发（连击循环照常推进）；底图/空白上：窗口内首击未落地 → 双击成立，适应窗口并作废
-//   单击；首击已落地（间隔 ≥ kDoubleTapGapMs 的中速连击）→ 同样补发普通点击。
+//   按普通点击补发（连击循环照常推进）；底图/空白上（非绘制态）：窗口内首击未落地 → 双击成立，适应窗口并作废
+//   单击；首击已落地（间隔 ≥ kDoubleTapGapMs 的中速连击，或绘制态根本不扣单击）→ 同样补发普通点击。
 //   吞掉本击的合成 release（press 未入桌面路由，不成对）。
 void TouchInputAdapter::onDoubleClick(CanvasView& view, QMouseEvent* event) {
     if (event->button() != Qt::LeftButton) { event->ignore(); return; }

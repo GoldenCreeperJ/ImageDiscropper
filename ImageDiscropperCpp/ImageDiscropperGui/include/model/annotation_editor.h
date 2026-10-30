@@ -96,8 +96,10 @@ public:
 
     // 同点连击循环（原地点击语义）：委托 PickCycle::advanceOnClick——与上次命中同点（容差内）且候选栈不变
     // → 沿栈下探一位（到底回顶）；换点 / 栈变化 → 重置为最顶。未命中清循环态返回 nullopt。
-    std::optional<std::size_t> cycleAt(const core::Point2D& p) {
-        return pickCycle_.advanceOnClick(p.x, p.y, set_.hitTestAll(p), nums::canvas::kPickSamePointTolScenePx);
+    // samePointTol 为「近似同点」容差（**场景单位**），由调用方按当前缩放从屏幕基准折算传入（本类零 Qt、
+    // 不知道缩放，取不到视图）；口径详见 nums::canvas::kPickSamePointTolScreenPx 注。
+    std::optional<std::size_t> cycleAt(const core::Point2D& p, const double samePointTol) {
+        return pickCycle_.advanceOnClick(p.x, p.y, set_.hitTestAll(p), samePointTol);
     }
 
     // 清循环态（拖动提交时调用）：拖拽不推进循环，其后的同点单击应从「无历史」重新起算，

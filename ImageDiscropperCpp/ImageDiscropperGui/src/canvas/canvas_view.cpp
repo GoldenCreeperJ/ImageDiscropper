@@ -119,6 +119,7 @@ void CanvasView::clampZoom() {
 
 // 依当前缩放换算选区手柄的场景尺寸（屏幕基准由适配器提供，桌面同既有的 8 屏幕px），
 // 保证手柄屏幕观感恒定；触控下基准 ≥12pt 自动扩宽抓取带（SPEC §8.3，图元无需知晓）。
+// 本函数同时是「屏幕基准 → 场景单位」的唯一下发点（连击同点容差也在此重算）。
 void CanvasView::updateHandleSize() {
     const qreal m11 = transform().m11();
     emit zoomChanged(m11);       // 回报当前缩放倍数（所有缩放入口都经过此函数）。
@@ -132,6 +133,9 @@ void CanvasView::updateHandleSize() {
     scene_->setAnnotationHandleSize(hs); // 标注控制点手柄同步随缩放换算。
     scene_->setGridHandleSize(hs); // L3 网格基准手柄（基准点 / 单元尺寸）同步随缩放换算。
     if (scene_->cellPickerItem()) scene_->cellPickerItem()->setOverlayScale(hs); // L3 点选阈值/重绘余量同步随缩放换算。
+    // 连击循环选层的「近似同点」容差同样按屏幕基准折算下发：它是与两击**场景**坐标差比较的量，
+    // 不随缩放重算就会在缩小时把手指（或鼠标）微抖判成「换点」，使循环只能在放大时用（SPEC §8.2/§8.3）。
+    scene_->setPickSamePointTol(nums::canvas::kPickSamePointTolScreenPx / m11);
 }
 
 // 滚动余量注入：横 = 视口宽×百分比、纵 = 视口高×百分比，再除以 m11 折算为场景单位。内容（原图 ∪ 补白单元）
@@ -179,7 +183,7 @@ void CanvasView::wheelEvent(QWheelEvent* event) { input_->onWheel(*this, event);
 // 鼠标按下：交给适配器路由（平移 / 绘制 / 图元优先 / 框选）。
 void CanvasView::mousePressEvent(QMouseEvent* event) { input_->onPress(*this, event); }
 
-// 双击：适配器路由（框选态空白＝适应窗口；交互图元/其余模式＝补发两次普通点击；触控＝窗口内
+// 双击：适配器路由（非绘制态空白＝适应窗口；交互图元/绘制态＝补发两次普通点击；触控＝窗口内
 //   适应窗口、越界中速连击补发普通点击——快速双轻点被 QPA 合成为本事件而非第二次 press，双击检测的正主在此）。
 void CanvasView::mouseDoubleClickEvent(QMouseEvent* event) { input_->onDoubleClick(*this, event); }
 

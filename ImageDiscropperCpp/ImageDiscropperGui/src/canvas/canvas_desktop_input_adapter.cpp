@@ -26,11 +26,11 @@ DesktopInputAdapter::DesktopInputAdapter() {
     QObject::connect(&clickTimer_, &QTimer::timeout, &clickTimer_, [this] { flushPendingClick(); });
 }
 
-// 单击延迟判定（双击成立时单击不落地，二者不再同时生效）——仅对**框选态（默认态）的底图/空白**生效：
-//   其余三态（绘制/拾取/标注选取）的左键按下都是动作手势（起笔/拾取/选中），扣住会把成形与选中
-//   推迟到窗口到期（且迟到的补发落点已不是用户看的当前位置），故即时路由；其上的双击由 onDoubleClick
-//   补发两次普通点击——双击＝适应窗口只在框选态生效。
-//   框选态内再按落点细分：交互图元（选区框/落位框等接收左键者）上的按下即时路由——对应位置的双击会
+// 单击延迟判定（双击成立时单击不落地，二者不再同时生效）——对**非绘制态（框选/拾取/标注选取）的底图/空白**生效：
+//   绘制态（AnnoCreate）的左键按下是落顶点/起笔的动作手势，扣住会把成形推迟到窗口到期（且迟到的补发
+//   落点已不是用户看清的当前位置），且快速连点落两个顶点会被误判成双击而丢点，故本态不扣、即时路由。
+//   其余三态的空白落点都无“连点即丢动作”的风险，双击＝适应窗口因此三态均生效。
+//   再按落点细分：交互图元（选区框/落位框/图层/标注等接收左键者）上的按下即时路由——对应位置的双击会
 //   略过适应窗口、按两次普通点击处理（见 onDoubleClick），单击双击无同发冲突，无需延迟判定
 //   （同点连击循环即时推进）。底图/空白上的干净左键按下先扣住不路由；窗口（kDoubleTapGapMs——本应用
 //   双击界限）内若来同点第二击（onDoubleClick / 离散第二击按下）→ 单击作废、仅落适应窗口；窗口到期 →
@@ -40,7 +40,7 @@ DesktopInputAdapter::DesktopInputAdapter() {
 void DesktopInputAdapter::onPress(CanvasView& view, QMouseEvent* event) {
     swallowNextRelease_ = false;   // 新按下到达：上一记吞释放标记作废（触控层自吞后不得残留）
     if (event->button() == Qt::LeftButton && !view.panArmed()
-        && view.canvasMode() == CanvasMode::Marquee) {
+        && view.canvasMode() != CanvasMode::AnnoCreate) {
         if (view.interactiveItemAt(event->position())) {
             cancelPendingClick();   // 换点：作废上一记空画布单击（不得再补发，避免误反选/误拾取）
             routePress(view, event);
@@ -204,8 +204,8 @@ void DesktopInputAdapter::routeRelease(CanvasView& view, QMouseEvent* event) {
 // 双击事件（QPA 合成，间隔小于系统双击阈值的第二击）：先按落点消歧——
 //   交互图元（选区框/落位框等接收左键者）上：**略过双击**，按普通点击补发（press+release 对，
 //   原位置原修饰键）——同点连击循环照常推进，双击界限不吞图元点击；
-//   底图/空白上：窗口内首击未落地（clickHeld_）→ 双击成立：作废等待中的单击、适应窗口（仅框选态会
-//   扣单击，见 onPress）；首击已落地（间隔 ≥ kDoubleTapGapMs 的中速连击）→ 同样补发普通点击。
+//   底图/空白上：窗口内首击未落地（clickHeld_）→ 双击成立：作废等待中的单击、适应窗口（非绘制态
+//   均扣单击，见 onPress）；首击已落地（间隔 ≥ kDoubleTapGapMs 的中速连击或绘制态）→ 同样补发普通点击。
 //   任何分支都消费了本击的 press，其随后的真实 release 由 swallowNextRelease_ 吞掉（不成对）。
 void DesktopInputAdapter::onDoubleClick(CanvasView& view, QMouseEvent* event) {
     if (event->button() != Qt::LeftButton) { event->ignore(); return; }

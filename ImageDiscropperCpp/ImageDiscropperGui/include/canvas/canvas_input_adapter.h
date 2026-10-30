@@ -38,7 +38,7 @@ public:
     virtual void onPress(CanvasView& view, QMouseEvent* event) = 0;
     virtual void onMove(CanvasView& view, QMouseEvent* event) = 0;
     virtual void onRelease(CanvasView& view, QMouseEvent* event) = 0;
-    // 双击：适配器路由（桌面＝框选态空白适应窗口、交互图元/其余模式补发两次普通点击；
+    // 双击：适配器路由（桌面＝非绘制态空白适应窗口、交互图元/绘制态补发两次普通点击；
     //       触控＝窗口内适应窗口、越界中速连击补发普通点击——快速双轻点被 QPA 合成为本事件而非第二次 press）。
     virtual void onDoubleClick(CanvasView& view, QMouseEvent* event) = 0;
     virtual void onWheel(CanvasView& view, QWheelEvent* event) = 0;

@@ -11,7 +11,7 @@
 //         移动                      → 平移 / 绘制拖拽 / 绘制悬停 / 交付图元 + 框选更新 + 光标回报
 //         滚轮一格                  → gestureStepZoom(×1.15 或 ÷1.15)（缩放锚定光标下）
 //         右键（绘制态 / 普通）     → gestureStrokeFinish / 上下文菜单 → request*()
-//         双击（QPA 合成）          → 仅**框选态且落点无交互图元**＝适应窗口；交互图元/其余模式＝补发两次普通点击
+//         双击（QPA 合成）          → 非绘制态且落点无交互图元＝适应窗口；交互图元/绘制态＝补发两次普通点击
 //       本类状态仅「单击延迟判定 / 未配对释放吞掉」两项（双击成立时单击不落地、合成对后的真实释放不重复路由）。
 //       **单视图实例**：CanvasView 各持独立 unique_ptr，本类状态（含单一定时器与 heldView_）只服务所属视图，
 //       不得跨视图共享实例。
@@ -35,7 +35,8 @@ public:
     void onPress(CanvasView& view, QMouseEvent* event) override;
     void onMove(CanvasView& view, QMouseEvent* event) override;
     void onRelease(CanvasView& view, QMouseEvent* event) override;
-    // 双击（QPA 合成）：框选态空白＝窗口内双击适应窗口；交互图元/其余模式/越界中速连击＝补发普通点击（合成 press+release 对）。
+    // 双击（QPA 合成）：非绘制态空白＝窗口内双击适应窗口；
+    //   交互图元/绘制态/越界中速连击＝补发普通点击（合成 press+release 对）。
     void onDoubleClick(CanvasView& view, QMouseEvent* event) override;
     void onWheel(CanvasView& view, QWheelEvent* event) override;
     void onContextMenu(CanvasView& view, QContextMenuEvent* event) override;

@@ -209,6 +209,13 @@ public:
     int imageWidth() const { return imgW_; }
     int imageHeight() const { return imgH_; }
 
+    // 连击循环选层的「近似同点」容差（场景单位）：由视图按当前缩放从**屏幕基准**折算下发
+    //（与手柄/抓边带同一条换算链，见 CanvasView::updateHandleSize）。三条拾取路径（图层落位框 /
+    // L2 多矩形 / 标注）共用此口径——标注侧由上层取本值传入 AnnotationBridge::cycleAt。
+    // 取屏幕口径的缘由见 nums::canvas::kPickSamePointTolScreenPx 注。
+    void setPickSamePointTol(const qreal sceneUnits) { pickTolScene_ = sceneUnits; }
+    qreal pickSamePointTol() const { return pickTolScene_; }
+
 protected:
     // 图层拾取模式的**场景级**命中与拖拽：重叠落位框不靠 z 序取最顶，而是同点**点击**（按下-释放无拖动）
     //   沿叠放序循环切换选中层（去 z 序依赖，仿 Figma；循环态由 pickCycle_ 承担，与标注拾取共用同实现）。
@@ -326,6 +333,7 @@ private:
     bool baseVisible_{true};                     // 底图显隐（图层面板开关；纯显示，状态栏取色据此判定）
     DraggableCanvasItem* pickDragItem_{nullptr}; // 拾取模式下正被场景驱动的拖拽图元（图层落位框）
     PickCycle<int> pickCycle_;                   // 同点连击循环选层状态（见 canvas/pick_cycle.h；与标注拾取共用同实现）
+    qreal pickTolScene_{nums::canvas::kFallbackPickTolScenePx};  // 连击「近似同点」容差（场景单位，随缩放换算；视图下发前按 1× 兜底）
     std::optional<int> pickedLayerId_;           // 当前选中的图片图层 id（按下保持选中的判定基准；由选中回灌）
     bool annotationSelectMode_{false};           // 标注选取模式（默认关＝框选态，标注不吃鼠标）
     DraggableCanvasItem* annoDragItem_{nullptr}; // 标注选取模式下正被场景驱动的平移拖拽图元（选中项，非被按项）

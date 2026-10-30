@@ -113,7 +113,8 @@ public:
 
     // ---- 选择 / 移动 / 删除（复用 Core，不在 GUI 算几何）----
     void selectAt(core::Point2D p);     // 按下选中（命中栈内保持当前选中，否则选最顶；委托 editor_.pickAt）
-    void cycleAt(core::Point2D p);      // 原地点击推进同点连击循环（重叠标注轮流选中；委托 editor_.cycleAt）
+    void cycleAt(core::Point2D p, double samePointTol);   // 原地点击推进同点连击循环（重叠标注轮流选中；委托 editor_.cycleAt）
+                                                // samePointTol 为「近似同点」容差（场景单位），由调用方按当前缩放从屏幕基准折算传入。
     void clearSelection();                   // 取消选中
     std::optional<std::size_t> selectedIndex() const { return editor_.selectedAnnotationIndex(); }
     // 平移选中标注：委托 Core Shape::translateWorld 就地偏移形状自身参数，**保留具体类型**

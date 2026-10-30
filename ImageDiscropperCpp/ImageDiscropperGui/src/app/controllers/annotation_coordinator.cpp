@@ -259,8 +259,10 @@ void AnnotationCoordinator::onAnnotationSelect(const QPointF& scenePos) const {
 }
 
 // Select 工具下原地点击某标注图元：推进同点连击循环（重叠标注轮流选中）。
+// 同点容差取场景当前值（由视图按缩放从屏幕基准折算下发），与图层拾取 / L2 多矩形三条路径同一口径：
+// 写死场景像素会让缩小时手指微抖被判「换点」、循环只在放大时可用。
 void AnnotationCoordinator::onAnnotationClicked(const QPointF& scenePos) const {
-    anno_->cycleAt(core::Point2D(scenePos.x(), scenePos.y()));
+    anno_->cycleAt(core::Point2D(scenePos.x(), scenePos.y()), scene_->pickSamePointTol());
 }
 
 // 拖动选中标注：委托 Core 平移其几何（下标须与当前选中项一致，防御误触）。

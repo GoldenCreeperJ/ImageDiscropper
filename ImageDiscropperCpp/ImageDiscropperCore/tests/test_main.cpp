@@ -613,9 +613,11 @@ static void testAnnotation() {
         ed.selectAnnotation(std::nullopt);
 
         // 一次点击 = pickAt + cycleAt：每次只推进一位；自顶向下循环并回绕。
+        //   cycleAt 的同点容差由调用方传入（GUI 侧按缩放从屏幕基准折算），此处取固定 5.0 验行为。
+        constexpr double pickTol = 5.0;
         auto clickOnce = [&](const core::Point2D& pt) {
             ed.selectAnnotation(ed.pickAt(pt));
-            ed.selectAnnotation(ed.cycleAt(pt));
+            ed.selectAnnotation(ed.cycleAt(pt, pickTol));
             return ed.selectedAnnotationIndex();
         };
         CHECK(*clickOnce(p) == 2);   // 首击选最顶
