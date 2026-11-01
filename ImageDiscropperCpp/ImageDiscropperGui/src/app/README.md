@@ -128,6 +128,7 @@ AnnotationBridge.changed         → onAnnoBridgeChanged     → scene_->updateA
 AnnotationBridge.selectionChanged→ onAnnoSelectionChanged → 同上（高亮选中项）
 AnnotationBridge.toolChanged     → onAnnoToolChanged      → toolPanel_->syncFromModel + annoPropPanel_->syncFromModel（绘制态门控不在此，由画布四态模式机承担）
 ModeToolPanel.toolSelected       → onToolSelected         → 先 commitPath 收笔→ anno_->setTool
+CanvasView.annoFinish           → onAnnoFinish           → 有草稿则 commitPath，否则 cancelPending（绘制态右键 / 长按 / 移动端「完成」，以及四态切换离开绘制态时由 `CanvasView::setCanvasMode` 自发）
 CanvasView.annoDragStart/Move/End→ onAnnoDrag*           → 依工具分派：按住即成形者按下起笔（两点形状 begin/update/commit、画笔 begin/append/commit）；
                                                              点击式者落点在释放定（折线 begin/append、文字 QInputDialog 取文本→addText）
 CanvasView.annoEscape           → onAnnoEscape           → 有草稿则 commitPath，否则 cancelPending
@@ -142,6 +143,8 @@ AnnotationPropPanel.colorPicked/stroke/fill/text/fontSize → anno_->setColor/se
 - **绘制态门控**：由画布四态模式机承担——`CanvasView::annotationDrawActive()` 恒为「当前模式 == AnnoCreate」的派生查询：
   该态下左键手势被路由到标注绘制（橡皮筋选区让位），其余三态（框选/图片拾取/标注选取）维持既有选区与单元交互。
   工具本身（`AnnotationBridge::toolChanged`）只同步工具面板与属性页，**不据工具直切绘制态**。
+  切离 AnnoCreate 时由视图先收笔（`CanvasCoordinator::applyCanvasMode` 第一步就是 `setCanvasMode`），故该收笔恒早于
+  各态的选中清理与 `setTool(Select)`（后者内部 `cancelPending` 会丢弃未提交草稿）。
 - **隐藏即禁用（图片/标注图层）**：两图层隐藏时 `MainWindow::syncPanels` → `MainWindowUi::syncLayerAvailability` 把对应入口整域置灰——画布模式动作与工具面板按钮（图片→图片拾取，标注→标注选取/绘制）、右侧属性页（`layerEditPanel_`/`annoPropPanel_`）、整域菜单（`mLayers_`/`mAnno_`）；若当前正处被禁模式则回落框选。信号源：`LayerPanel::imageLayerVisibilityChanged`/`annotationVisibilityChanged` → `syncPanels`。
 - **base 同步**：`openImageFromPath` 载新图后 `annoBridge_.setBaseImage(doc_.working())`（新图＝新标注会话）；`onImageChanged` 末尾 `scene_->updateAnnotations(annoBridge_)`（预处理恒不清标注）；`PreprocessController::commitPipeline` 尺寸门仅清框选（不清标注/图层）。
 - **撤销/重做**：标注菜单驱动 `anno_->undo()/redo()`（→ Core 分层快照，**不绑 Ctrl+Z/Y**）；Delete 键（经 `MainWindow::keyPressEvent` 转发）/菜单删除选中→`removeSelected()`；清除全部二次确认（父窗口为注入的 MainWindow）→`clearAll()`。

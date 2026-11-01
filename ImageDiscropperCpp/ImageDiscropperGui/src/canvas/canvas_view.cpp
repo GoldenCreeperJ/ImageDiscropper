@@ -156,12 +156,21 @@ void CanvasView::resizeEvent(QResizeEvent* event) {
     updateScrollMargins();
 }
 
-// 画布四态互斥模式：切换当前交互态；离开标注创建态时复位拖拽手势标志，并按态设光标。
+// 画布四态互斥模式：切换当前交互态；离开标注创建态时收笔、复位拖拽手势标志，并按态设光标。
 // 切态即换交互目标：等待中的延迟单击不再落地（避免切到绘制态后补出一记迟到的退化顶点等）。
 void CanvasView::setCanvasMode(const CanvasMode mode) {
+    const bool leavingDraw = annotationDrawActive() && mode != CanvasMode::AnnoCreate;
     mode_ = mode;
     const bool draw = mode == CanvasMode::AnnoCreate;
-    if (!draw) endStrokeDrag();
+    if (!draw) {
+        endStrokeDrag();
+        // 离开绘制态即收笔，取向与 Esc / 右键 / 切工具一致（有草稿则提交，无草稿只清预览）：
+        //   不收则折线草稿与橡皮筋预览残留进非绘制态，而那三态没有任何通道再点掉它；
+        //   切到标注选取态时，紧随其后的 setTool(Select) 还会在其内部 cancelPending 里静默丢掉已落顶点。
+        // 本函数是四态切换的唯一下发点（面板按钮 / 菜单 / 编程式切态 / 被禁回落均经此），故收笔挂此处，
+        // 且必然早于上层 applyCanvasMode 里的 setTool。
+        if (leavingDraw) emit annoFinish();
+    }
     if (input_) input_->cancelPendingClick();
     viewport()->setCursor(draw ? Qt::CrossCursor : Qt::ArrowCursor);
 }

@@ -51,6 +51,7 @@ public:
 
     // 画布四态互斥模式：设定当前交互态并复位非绘制态手势标志、切换光标。
     // 标注创建态（AnnoCreate）即绘制态门控：其余三态左键手势不进入标注绘制。
+    // 从 AnnoCreate 切走时先收笔（发 annoFinish），免得折线草稿与橡皮筋预览残留到无收笔入口的态里。
     void setCanvasMode(CanvasMode mode);
     CanvasMode canvasMode() const { return mode_; }
 
@@ -156,7 +157,8 @@ signals:
     void annoDragCancel();
     // 绘制态下鼠标悬停（未按键移动）：供折线「橡皮筋」实时预览落点与连线（左键点击才落顶点）。
     void annoHover(const QPointF& scenePos);
-    // 绘制态下右键：收笔 / 退出当前绘制手势（折线在此结束并提交，不弹视图右键菜单）。
+    // 收笔意图：绘制态下右键，或从绘制态切入其余三态（离开即本笔结束，上层据此提交折线 / 清预览）。
+    // 绘制态下右键不弹视图右键菜单，折线在此结束并提交。
     void annoFinish();
     // 绘制态下按 Esc：交上层收笔（折线/画笔）或取消当前预览。
     void annoEscape();
