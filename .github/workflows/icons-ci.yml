@@ -27,9 +27,12 @@ jobs:
         id: iconcache
         uses: actions/cache@v5
         with:
-          # 只缓存派生子目录：整目录缓存会连带覆盖提交版脚本/README/手工 xml。
+          # 只缓存派生子目录与派生母版：整目录缓存会连带覆盖提交版脚本/README/手工 xml。
           path: &icon-products |
-            assets/icon.png
+            assets/icons/icon.png
+            assets/icons/icon_round.png
+            assets/icons/icon_mac.svg
+            assets/icons/icon_round_mac.png
             assets/icons/android/
             assets/icons/ios/
             assets/icons/linux/

@@ -21,7 +21,12 @@ Desktop.ini
 
 # 图标派生资产（不入库：CI icons job 动态生成；本地构建前跑一次 assets/icons/regenerate.sh 生成，
 # 已忽略故 status 恒干净。母版 assets/icon.svg 与生成脚本/手工 xml 仍入库）
-/assets/icon.png
+# 逐条枚举而非 /assets/icons/*.png：后者会连累入库的 icons/icon-readme.png（README 展示小图，
+# 已跟踪文件虽仍跟踪但 status 不再显示其改动，属陷阱）。
+/assets/icons/icon.png
+/assets/icons/icon_round.png
+/assets/icons/icon_mac.svg
+/assets/icons/icon_round_mac.png
 /assets/icons/windows/
 /assets/icons/mac/
 /assets/icons/linux/

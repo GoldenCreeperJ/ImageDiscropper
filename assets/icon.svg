@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024">
-<rect width="1024" height="1024" x="0" y="0" fill="#b9c495"/>
-<path d="M640 384 1040 384 1040 640 640 640 640 1040 384 1040 384 640-16 640-16 384 384 384 384-16 640-16Z" fill="#f2c3c3" stroke="#ff8c00" stroke-width="32"/>
-<rect width="256" height="256" x="384" y="384" fill="#f4bfac" stroke="#ff8c00" stroke-width="32"/>
-<path d="M320 320 448 320 448 448 320 448ZM576 320 704 320 704 448 576 448ZM320 576 448 576 448 704 320 704ZM576 576 704 576 704 704 576 704Z" fill="#fff" stroke="#ff8c00" stroke-width="16"/>
+    <rect width="1024" height="1024" x="0" y="0" fill="#b9c495" rx="128" ry="128"/>
+    <path d="M640 384 1040 384 1040 640 640 640 640 1040 384 1040 384 640-16 640-16 384 384 384 384-16 640-16Z" fill="#f2c3c3" stroke="#ff8c00" stroke-width="32"/>
+    <rect width="256" height="256" x="384" y="384" fill="#f4bfac" stroke="#ff8c00" stroke-width="32"/>
+    <path d="M320 320 448 320 448 448 320 448ZM576 320 704 320 704 448 576 448ZM320 576 448 576 448 704 320 704ZM576 576 704 576 704 704 576 704Z" fill="#fff" stroke="#ff8c00" stroke-width="16" stroke-linejoin="round"/>
 </svg>

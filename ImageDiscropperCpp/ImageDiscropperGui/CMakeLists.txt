@@ -376,7 +376,7 @@ endforeach()
 # macOS 发布形态：各可执行以 .app 捆绑包输出（CD 打包为 zip 分发，按名取 idc_gui.app）。
 # 非 Apple 平台忽略该属性；idc_gui_mobile 同样 bundle（mac 预览免弹终端窗），
 # bundle 标识符按目标名区分（com.imagediscropper.idc_gui / .idc_gui_mobile），互不冲突。
-# 应用图标：源为仓库根 assets/icon.png（1024），派生尺寸与 idc.icns 生成步骤见 assets/icons/README.md
+# 应用图标：源为 assets/icons/icon.png（1024 直角满幅母版），派生尺寸与 idc.icns 生成步骤见 assets/icons/README.md
 # （make_icns.sh，需 macOS iconutil）。icns 已生成时自动注入 bundle Resources，未生成则退回系统默认图标。
 foreach(_idc_exe ${_idc_gui_exes})
     set_target_properties(${_idc_exe} PROPERTIES

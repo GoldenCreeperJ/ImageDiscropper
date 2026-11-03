@@ -1,6 +1,6 @@
 # ImageDiscropper
 
-<p align="center"><img src="assets/icon-readme.png" width="128" alt="ImageDiscropper 图标"></p>
+<p align="center"><img src="assets/icons/icon-readme.png" width="128" alt="ImageDiscropper 图标"></p>
 
 [![CI](https://github.com/GoldenCreeperJ/ImageDiscropper/actions/workflows/ci.yml/badge.svg)](https://github.com/GoldenCreeperJ/ImageDiscropper/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
@@ -53,7 +53,7 @@ ImageDiscropper/
 │   └── ImageDiscropperGui/      #   GUI：Qt 6 桌面前端（可执行 idc_gui）
 ├── ImageDiscropperRust/         # Rust 引擎实现（规划中：core/cli 两 crate；GUI 壳与前端在 ImageDiscropperWeb）
 ├── ImageDiscropperWeb/          # Web 前端实现 monorepo（规划中：Tauri/Electron/Wails 壳 + 一份共享前端；RN 暂缓）
-└── assets/                      # 共享资产：icon.svg 图标母版 + icons/ 派生脚本（派生物不入库）+ sample.png 样例图
+└── assets/                      # 共享资产：icon.svg 图标母版 + icons/ 图标派生（脚本、三套母版与各平台产物均在此，派生物不入库）+ sample.png 样例图
 ```
 
 ```text

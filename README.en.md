@@ -1,6 +1,6 @@
 # ImageDiscropper
 
-<p align="center"><img src="assets/icon-readme.png" width="128" alt="ImageDiscropper icon"></p>
+<p align="center"><img src="assets/icons/icon-readme.png" width="128" alt="ImageDiscropper icon"></p>
 
 [![CI](https://github.com/GoldenCreeperJ/ImageDiscropper/actions/workflows/ci.yml/badge.svg)](https://github.com/GoldenCreeperJ/ImageDiscropper/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
@@ -54,7 +54,7 @@ ImageDiscropper/
 │   └── ImageDiscropperGui/      #   GUI: Qt 6 desktop frontend (executable idc_gui)
 ├── ImageDiscropperRust/         # Rust engine implementation (planned: core/cli crates; GUI shell & frontend live in ImageDiscropperWeb)
 ├── ImageDiscropperWeb/          # Web frontend monorepo (planned: Tauri/Electron/Wails shells + one shared frontend; RN deferred)
-└── assets/                      # shared assets: icon.svg master + icons/ derivation scripts (derivatives not committed) + sample.png
+└── assets/                      # shared assets: icon.svg master + icons/ icon derivation (scripts, the three masters and per-platform products all live here; derivatives not committed) + sample.png
 ```
 
 ```text

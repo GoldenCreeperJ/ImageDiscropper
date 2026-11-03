@@ -1,8 +1,9 @@
 #!/bin/bash
 # ============================================================================
 # 文件：assets/icons/make_icns.sh
-# 作用：从本目录 mac/icon_NxN.png（iconset 命名，由母版 assets/icon.png 经 ffmpeg 派生）
-#       打包生成 mac/idc.icns——需在 macOS 上运行（依赖系统 iconutil）。
+# 作用：从本目录 mac/icon_NxN.png（iconset 命名，由本目录 macOS 专用 **squircle 母版** icon_round_mac.png
+#       经 ffmpeg 派生、已按 Apple 模板留 20% 透明边）打包生成 mac/idc.icns——需在 macOS 上运行
+#       （依赖系统 iconutil）。iconutil 原样保留各 png 的 alpha 与轮廓，不再加工形状。
 # 用法：cd assets/icons && bash make_icns.sh
 # ============================================================================
 set -euo pipefail
