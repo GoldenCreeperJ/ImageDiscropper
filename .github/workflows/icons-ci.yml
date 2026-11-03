@@ -2,12 +2,13 @@
 # （手动验证）无条件调用。本 job 是图标产物的唯一生产者——**派生资产不入库**（已
 # gitignore），管线内所需图标全部来自本 job：
 #   · 构建按输入缓存：key = hash(icon.svg, regenerate.sh)，未变则恢复上次构建产物、
-#     跳过重跑（regenerate.sh 已验证确定性，缓存产物 ≡ 新鲜构建）；
+#     跳过重跑（regenerate.sh 已验证确定性，同一工具链代内缓存产物 ≡ 新鲜构建）；
 #   · 上传 artifact `icon-products`，各构建腿（cpp-build.yml）下载落地——
 #     派生物不入库后，CI/CD 构建腿的图标**唯一来源**就是本产物；
 #   · 失败 → job 红，下游 needs 腿被跳过。
 # 缓存策略（两条，各司其职）：
-#   · 产物缓存（icon-products-*）：key = hash(svg, 脚本)。命中即免构建；不用
+#   · 产物缓存（icon-products-*）：key = hash(svg, 脚本)，工具链版本不入 key——上游
+#     轮换不打断缓存命中，代价是缓存逐出后的重建会产出换代产物。命中即免构建；不用
 #     restore-keys——前缀回退会取到旧 svg 的产物。失败轮次 post 步骤仍会存
 #     （内容 = 该 key 的规范输出，语义自洽，不污染后续）。
 #   · 产物不走 cache 走 artifact：cache 承载「免重建」，artifact 承载「生产者→消费者」。
@@ -48,23 +49,32 @@ jobs:
       - name: Fetch and unpack icon toolchain
         if: steps.iconcache.outputs.cache-hit != 'true'
         run: |
+          DL_PAGE=$(curl -fsSL --http1.1 --retry 3 --retry-all-errors --retry-delay 2 \
+          "https://inkscape.org/release/inkscape-1.4.3/gnulinux/appimage/dl/")
+          GALLERY_PATH=$(printf %s "$DL_PAGE" \
+          | grep -oE 'url=/gallery/item/[0-9]+/[A-Za-z0-9._-]+' | head -1 | sed 's|^url=||') || true
+          if [ -n "$GALLERY_PATH" ]; then
+          APPIMAGE_URL="https://inkscape.org$GALLERY_PATH"
+          else
+          APPIMAGE_NAME=$(printf %s "$DL_PAGE" \
+          | grep -oE 'Inkscape-[0-9a-f]+-x86_64\.AppImage\.sig' | head -1 | sed 's/\.sig$//') || true
+          test -n "$APPIMAGE_NAME" || { echo "::error::无法从 Inkscape 发布页解析 AppImage 下载路径"; exit 1; }
+          APPIMAGE_URL="https://media.inkscape.org/dl/resources/file/$APPIMAGE_NAME"
+          fi
           mkdir -p /tmp/icontools && cd /tmp/icontools
-          # Inkscape 1.4.3 官方 AppImage；免 FUSE 解包（runner 无 libfuse2），
-          # squashfs-root/AppRun 即可执行入口。
+          # Inkscape 官方 AppImage；免 FUSE 解包（runner 无 libfuse2），squashfs-root/AppRun 即可执行入口。
           # 下载健壮性：--http1.1 规避 HTTP/2 流断开（curl 92 PROTOCOL_ERROR 常见于这两个源）；
           # --retry-all-errors 对协议类瞬时错误重试 3 次（默认 --retry 只覆盖超时/5xx）。
           curl -fsSL --http1.1 --retry 3 --retry-all-errors --retry-delay 2 -o inkscape.AppImage \
-            "https://media.inkscape.org/dl/resources/file/Inkscape-e7c3feb-x86_64.AppImage"
+            "$APPIMAGE_URL"
           chmod +x inkscape.AppImage
           ./inkscape.AppImage --appimage-extract >/dev/null
           rm inkscape.AppImage
-          # ffmpeg 静态构建：BtbN/FFmpeg-Builds 的**日期 tag 钉死**发布（GitHub 托管稳定；
-          # 旧源 johnvansickle.com 个人站不稳定且旧版本会从 old-releases 下架导致 404）。
-          # curl -f：404 立即红而非拿到错误页。
+          # ffmpeg 静态构建：BtbN 滚动 latest tag——显式 tag 直链，永不过期。curl -f：404 立即红而非拿到错误页。
           curl -fsSL --http1.1 --retry 3 --retry-all-errors --retry-delay 2 -o ffmpeg.tar.xz \
-            "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-13-13-05/ffmpeg-N-127507-g24e860f6d3-linux64-gpl.tar.xz"
-          tar -xJf ffmpeg.tar.xz
-          mv ffmpeg-N-127507-g24e860f6d3-linux64-gpl ffmpeg
+            "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
+          mkdir -p ffmpeg
+          tar -xJf ffmpeg.tar.xz --strip-components=1 -C ffmpeg
           rm ffmpeg.tar.xz
 
       # 原地重跑全流程（脚本按自身位置推导仓库根，输出即写回 checkout）。

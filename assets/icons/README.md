@@ -14,7 +14,7 @@ bash assets/icons/regenerate.sh
 
 脚本跨平台（Git Bash / Linux / macOS / CI ubuntu runner），依赖三种工具（可用环境变量 `INKSCAPE` / `FFMPEG` / `PYTHON` 覆盖默认路径）：
 
-- 光栅化：Inkscape 或 rsvg-convert（rsvg 仅本地兜底——CI 用钉版 Inkscape，见「CI 动态构建」）；
+- 光栅化：Inkscape 或 rsvg-convert（rsvg 仅本地兜底——CI 用 Inkscape 1.4.3，构建取发布页现役，见「CI 动态构建」）；
 - 尺寸 / 打包：ffmpeg（lanczos 缩放；多流 mux 直接出 .ico）；
 - macOS squircle 母版：python3 以 **XML 解析**把背景 `rect` 就地改写为角部超椭圆 `path`（命中数必为 1，否则报错）；
 - Android 自适应前景：python3 以 **XML 解析**删除 `fill` 等于背景色（大小写不敏感）的 `rect`/`path`，并断言恰好删掉 1 个——命中数不为 1 即报错退出，不会静默把背景留在前景层里（确定性 100%、零阈值）。副作用：ElementTree 重写输出会丢弃注释与 DOCTYPE，母版当前无二者，日后若加入需知情。
@@ -47,7 +47,7 @@ bash assets/icons/regenerate.sh
 图标在 CI / CD / verify 每次**动态构建、派生物不入库**，各构建腿图标的唯一来源即流转产物。完整流程与缓存策略以 [`.github/workflows/icons-ci.yml`](../../.github/workflows/icons-ci.yml) 为准，要点：
 
 - `icons-ci.yml` 是**唯一生产者**，由 `ci.yml`（每次 CI）、`cd.yml`（每次发布）、`cpp-verify.yml`（手动验证）无条件调用；按 `hash(icon.svg, regenerate.sh)` 命中产物缓存则跳过重跑，miss 则现场跑 `regenerate.sh` 全流程并上传 artifact `icon-products`（本目录的母版 png/svg + 各平台子目录 + android res 密度系列）。
-- 工具链**钉版、按需下载**（Inkscape 1.4.3 官方 AppImage + BtbN ffmpeg 静态构建）——Inkscape 抗锯齿像素级敏感，**本地须同为 Inkscape 1.4.3**，否则与缓存产物微差；runner 钉 `ubuntu-24.04`、本 job 零 apt 安装。
+- 工具链 URL 一律取**稳定形态**（BtbN 滚动 `latest` tag 直链；Inkscape 由 1.4.3 发布页在运行时解析现役下载路径——页内 Gallery 重定向为准、`.sig` 文件名解析兜底）。
 - 消费端各构建腿（`cpp-build.yml` 的 Download generated icons 步骤，早于 configure）下载 `icon-products` 落地；腿经 `needs: icons` 等产物，产物缺失即报错（无提交版可回退）。
 
 ## 尺寸取舍依据（常见疑问）
