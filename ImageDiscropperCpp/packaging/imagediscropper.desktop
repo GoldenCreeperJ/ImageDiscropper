@@ -7,4 +7,5 @@ Exec=idc_gui
 Icon=imagediscropper
 Terminal=false
 Categories=Graphics;2DGraphics;RasterGraphics;
+MimeType=image/png;image/jpeg;image/bmp;image/webp;image/gif;image/x-tga;application/json;
 StartupNotify=true

@@ -9,6 +9,7 @@
 #include <QCheckBox>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QImageReader>
 #include <QMessageBox>
 
 #include "app/controllers/doc_history.h"
@@ -23,6 +24,7 @@
 #include "panels/layer_edit_panel.h"
 #include "panels/layer_panel.h"
 #include "panels/mode_tool_panel.h"
+#include "util/gui_nums.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 
@@ -113,7 +115,11 @@ void SessionController::onNew() const {
 //   · 勾选附加图片 路 → 图片层：携「适应 + 图片相对图层」内层落位烘进图层框的像素（图层内容）+ 外层「图层相对底图」落位作 transform，另携源图相对名 provenance（位图不入配置、无法由配方复现）。
 //   · 未勾选（纯图案）路 → 纯图案层：携 PatternParams，合成时按 transform 尺寸经 makePattern 现算（配方入 config、可导出、可复现）。
 // id / zOrder 由 Document::addImageLayer 统一分配。
-void SessionController::onAddImageLayer() const {
+void SessionController::onAddImageLayer() const { onAddImageLayerFromPath(QString()); }
+
+// 从已有源图路径添加图片图层：与 onAddImageLayer 同一对话框采参链，仅差在 exec() 前是否预置源图
+//   （path 非空 → applyImageSourceFromPath 自动勾「附加图片」并载入源图；主界面拖入图片「作图片图层」即走此）。
+void SessionController::onAddImageLayerFromPath(const QString& path) const {
     if (!doc_->hasImage()) {
         status_->notify(IDC_GTR(status, kSessionNeedImageForLayer), true);
         return;
@@ -122,6 +128,7 @@ void SessionController::onAddImageLayer() const {
     NewCanvasDialog dlg(dialogParent_);
     dlg.setAddLayerMode(doc_->canvasWidth(), doc_->canvasHeight());   // 宽高预填真实画布（可改＝图层扁平尺寸）。
     dlg.setBusyOverlayMode(preprocess_->busyOverlayMode());
+    if (!path.isEmpty()) dlg.applyImageSourceFromPath(path);   // 拖入预置源图（桌面；空路径＝菜单原交互，不预置）。
     if (dlg.exec() != QDialog::Accepted) return;
 
     canvas::ImageLayer layer;
@@ -201,6 +208,7 @@ void SessionController::onDestroyAll() const {
 }
 
 // 从给定路径载入图像（委托 EngineBridge → Core readImageFile），成功后建预览并刷新。
+// 大图（总像素≥阈值）的解码 + 预览重建可耗时数秒，包一层模态忙碌框避免用户误以为卡死；小图直开免闪。
 void SessionController::openImageFromPath(const QString& path) const {
     if (path.isEmpty()) return;
 
@@ -208,23 +216,37 @@ void SessionController::openImageFromPath(const QString& path) const {
     // 读文件路径开不了——EngineBridge::loadImage 内部先经 materializeForRead 物化为真实临时路径再解码，
     // 故此处直接委托、无需再内联拷贝（桌面平台返回本地路径，物化分支不触发）。doc_ 与提示仍保留原始路径。
     const bool isContent = path.startsWith(QString::fromUtf8(texts::ident::kContentUriScheme));
-    core::Image img;
-    if (QString err; !EngineBridge::loadImage(path, img, err)) {
-        // content:// 物化/解码失败给专用提示；其余透传解码错误（均非模态）。
-        status_->notify(isContent ? IDC_GTR(status, kSessionOpenContentFailed)
-                                  : IDC_GTR(status, kSessionOpenFailed).arg(err), true);
-        return;
-    }
-    doc_->setImage(std::move(img), path); // 触发 imageChanged。
-    anno_->setBaseImage(doc_->working()); // 新图＝新标注会话（Core setImage 清空旧标注）。
-    history_->reset();          // 换图开新撤销会话：清空跨图历史（快照不含图像，跨图撤销无意义）。
-    // 会话记忆（UiPrefs，QSettings 应用级、非 §7、不入撤销栈）：本地可再开路径记 MRU + 回写上次打开目录；
-    // content://（SAF 临时内容 URI）不可复用直开，跳过 MRU。
-    if (!isContent) {
-        UiPrefs::instance().addRecentFile(path);
-        UiPrefs::instance().setLastOpenDir(QFileInfo(path).absolutePath());
-    }
-    status_->notify(IDC_GTR(status, kSessionOpened).arg(path).arg(doc_->width()).arg(doc_->height()), false);
+
+    // 尺寸经 QImageReader 只读图片头取得（不解码像素、近乎零成本），据此在解码**前**判定是否大图；
+    // content://（SAF）或非 QImageReader 支持的格式读不到尺寸 → 按小图处理、不弹框（物化仍在 Core 解码内进行）。
+    // 阈值取总像素 ≥2M，与新建画布定稿忙碌框同口径（逐像素/重采样在此量级以上开始可感）。
+    const QSize dim = QImageReader(path).size();
+    const bool bigImage = dim.isValid()
+                          && static_cast<long long>(dim.width()) * dim.height() >= nums::app::kBusyDialogPixelThreshold;
+
+    const auto doOpen = [&] {
+        core::Image img;
+        if (QString err; !EngineBridge::loadImage(path, img, err)) {
+            // content:// 物化/解码失败给专用提示；其余透传解码错误（均非模态）。
+            status_->notify(isContent ? IDC_GTR(status, kSessionOpenContentFailed)
+                                      : IDC_GTR(status, kSessionOpenFailed).arg(err), true);
+            return;
+        }
+        doc_->setImage(std::move(img), path); // 触发 imageChanged（同步重建预览底图 + 刷新，一并计入忙碌框内）。
+        anno_->setBaseImage(doc_->working()); // 新图＝新标注会话（Core setImage 清空旧标注）。
+        history_->reset();          // 换图开新撤销会话：清空跨图历史（快照不含图像，跨图撤销无意义）。
+        // 会话记忆（UiPrefs，QSettings 应用级、非 §7、不入撤销栈）：本地可再开路径记 MRU + 回写上次打开目录；
+        // content://（SAF 临时内容 URI）不可复用直开，跳过 MRU。
+        if (!isContent) {
+            UiPrefs::instance().addRecentFile(path);
+            UiPrefs::instance().setLastOpenDir(QFileInfo(path).absolutePath());
+        }
+        status_->notify(IDC_GTR(status, kSessionOpened).arg(path).arg(doc_->width()).arg(doc_->height()), false);
+    };
+
+    if (bigImage) runInBusyDialog(dialogParent_, preprocess_->busyOverlayMode() && dialogParent_ != nullptr,
+                                  IDC_GTR(status, kSessionOpenBusy), doOpen);   // 父窗与全屏标志与 PreprocessController::runWithBusyDialog 同口径。
+    else doOpen();
 }
 
 } // namespace idc::gui

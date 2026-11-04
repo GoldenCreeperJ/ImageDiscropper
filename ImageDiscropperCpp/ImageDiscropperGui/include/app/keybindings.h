@@ -37,10 +37,10 @@ class QAction;
 
 namespace idc::gui {
 
-// 可自定义的命令集：既有 8 组合键（Action）+ 7 画布单键（Route），共 15 条。
+// 可自定义的命令集：既有 9 组合键（Action）+ 7 画布单键（Route），共 16 条。
 // 枚举序即注册表序与编辑器行序；新增命令须同步注册表默认键与显示 TextRef（见 .cpp）。
 enum class CommandId {
-    New, Open, Export, Undo, Redo, ZoomIn, ZoomOut, Fit,                  // Action：组合键
+    New, Open, Export, Undo, Redo, ZoomIn, ZoomOut, Fit, PasteImage,      // Action：组合键
     ModeL1, ModeL2, ModeL3, PolarityKeep, PolarityRemove,                 // Route：画布单键
     ClearSelection, DeleteAnnotation,
     Count

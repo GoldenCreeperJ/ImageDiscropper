@@ -34,6 +34,8 @@
 class QBoxLayout;
 class QCheckBox;
 class QComboBox;
+class QDragEnterEvent;
+class QDropEvent;
 class QGridLayout;
 class QLabel;
 class QPushButton;
@@ -113,6 +115,10 @@ public:
     // 合成语义与新建画布完全一致（装配序见 §2.2a 唯一口径 + 越界裁剪），不叠底图、不撑大。
     void setAddLayerMode(int canvasW, int canvasH);
 
+    // 供主界面拖入图片「作图片图层」时预置源图（SessionController::onAddImageLayerFromPath 在 exec() 前调用）：
+    // 确保「附加图片」开关打开，再按 path 走与「选源图」一致的解码/落位/预览链（loadImageSource）。
+    void applyImageSourceFromPath(const QString& path);
+
     // 父窗口 Resize/Move（旋转）→ 重跑形态链：与屏幕几何信号互为备份——Android 旋转会重建 QScreen
     //   对象，旧屏对象上的信号连接随其销毁失效；父窗口事件恒定存活（同护栏挂父窗口的口径）。
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -120,6 +126,10 @@ public:
     //   并收尺寸（幂等：同尺寸不再触发事件）。**不摆位置**：Android 对话框位置由平台管理（居中/贴边），
     //   本窗主动 move 会与平台摆位成环（打开卡死/旋转闪退）；位置交给平台与护栏的父窗口回中。
     void resizeEvent(QResizeEvent* event) override;
+    // 对话框开着时把图片直接拖入即填源图槽（「可识别打开的 dialog」）：单文件且为图片后缀才接受，
+    //   dropEvent 转 applyImageSourceFromPath（与「选源图」同链）。桌面模态 exec() 期间拖拽路由到本对话框。
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
 private slots:
     void onPickImage();          // 弹出文件对话框选源图，经 EngineBridge::loadImage 解码到 imageSource_。
@@ -127,6 +137,10 @@ private slots:
     void accept() override;      // 全尺寸生成结果并交存后接受。
 
 private:
+    // 已取得 path 后的源图载入体（onPickImage / applyImageSourceFromPath / dropEvent 共用）：
+    //   EngineBridge::loadImage 解码 → 落 imageSource_/imageSourcePath_（persistForProvenance）/路径行 →
+    //   syncCanvasSizeToSource → onParamsChanged。失败仅回显于路径行、不改现有源图。
+    void loadImageSource(const QString& path);
     void updateControlAvailability() const;                       // 依附加图片开关/语境/适应方式显隐落位组并锁定尺寸（图案相关显隐在 PatternFormWidget 内）。
     void syncCanvasSizeToSource() const;                           // Native 适应下把顶部宽/高（图层尺寸）回填为源图原生尺寸。
     void resizeToContent();                                        // 折叠/展开变化：重算表单滚动区最小宽并让窗口跟上（同主窗页签切换更新滚动区最小宽手法）。

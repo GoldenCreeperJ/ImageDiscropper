@@ -182,6 +182,15 @@ QWidget* AppearanceDialog::buildOtherTab() {
         defaultExportDirEdit_->setText(d);
         UiPrefs::instance().setDefaultExportDir(d);
     });
+    // 导出后打开所在文件夹（写 UiPrefs，仅桌面生效）：与「默认输出文件夹」同组同呈现口径——移动端
+    // 导出落相册、无文件夹语义，export_controller 的 Android 分支不读本值，但开关同显（知道有此桌面能力）。
+    openExportDirCheck_ = makeCheckBox(retranslator_, exportBox, IDC_GT(menu, kOpenExportDir));
+    openExportDirCheck_->setChecked(UiPrefs::instance().openExportFolderAfterExport());
+    i18n::bindToolTip(retranslator_, openExportDirCheck_, IDC_GT(tooltip, kOpenExportDir));
+    connect(openExportDirCheck_, &QCheckBox::toggled, this, [](const bool on) {
+        UiPrefs::instance().setOpenExportFolderAfterExport(on);
+    });
+    eform->addRow(QString(), openExportDirCheck_);
     // ---- 其他页 · 确认与吸附（选区吸附写 CanvasPrefs，两项导出前确认写 UiPrefs；均即时落盘）----
     // 吸附属画布交互语义，故与两项导出前确认同归本组；三项均构造时读单例初值、toggled 即时写回对应单例。
     auto* confirmBox = makeGroupBox(retranslator_, content, IDC_GT(label, kConfirmSnapBoxTitle));

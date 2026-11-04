@@ -9,8 +9,12 @@
 #include "app/controllers/preprocess_controller.h"
 
 #include <QApplication>
-#include <QProgressDialog>
+#include <QDialog>
+#include <QLabel>
+#include <QProgressBar>
 #include <QScreen>
+#include <QTimer>
+#include <QVBoxLayout>
 
 #include <algorithm>
 #include <cmath>
@@ -138,20 +142,28 @@ void PreprocessController::commitPipeline(const preprocess::PreprocessPipeline& 
 // 在应用级模态、不可取消的忙碌对话框内同步执行 op（单点实现，见头文件说明）。
 void runInBusyDialog(QWidget* parent, const bool fullscreen, const QString& text,
                      const std::function<void()>& op) {
-    QProgressDialog dlg(text, QString(), 0, 0, parent);
+    QDialog dlg(parent);
     dlg.setWindowTitle(IDC_GTR(label, kDlgTitleBusy));
-    dlg.setWindowModality(Qt::ApplicationModal); // 模态阻断全部其他窗口的输入。
-    dlg.setCancelButton(nullptr);                // 不可取消（耗时操作中途无法安全回退）。
-    dlg.setMinimumDuration(0);                   // 立即显示，不等阈值。
-    dlg.setRange(0, 0);                          // 不确定进度（忙碌滚动样式）。
-    dlg.show();
+    dlg.setWindowModality(Qt::ApplicationModal);
+    auto* body = new QVBoxLayout(&dlg);
+    auto* textLabel = new QLabel(text, &dlg);
+    textLabel->setWordWrap(true);
+    auto* bar = new QProgressBar(&dlg);
+    bar->setRange(0, 0);
+    bar->setTextVisible(false);
+    body->addWidget(textLabel);
+    body->addWidget(bar);
+    dlg.setMinimumWidth(320);
+    dlg.adjustSize();
     if (fullscreen && parent) {
-        // 移动端全屏遮罩（SPEC §8.2）：忙碌对话框铺满屏幕替代桌面居中小对话框，模态语义不变。
         dlg.setGeometry(QApplication::primaryScreen()->geometry());
     }
-    QApplication::processEvents();               // 先让对话框绘制出来，再进入耗时处理。
-    op();
-    dlg.close();
+    QTimer::singleShot(60, &dlg, [&dlg, &op] {
+        dlg.repaint();
+        op();
+        dlg.done(0);
+    });
+    dlg.exec();
 }
 
 // 在模态忙碌对话框内同步执行 op：含 resize 的重采样在大图上可能耗时，委托 runInBusyDialog

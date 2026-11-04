@@ -8,11 +8,13 @@
 
 #include <QCheckBox>
 #include <QDateTime>
+#include <QDesktopServices>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QStandardPaths>
+#include <QUrl>
 
 #include "app/controllers/burn_in_reminder.h"
 #include "app/controllers/preprocess_controller.h"
@@ -187,6 +189,15 @@ void ExportController::onExport() {
         }
 #endif
         status_->notify(IDC_GTR(status, kExportOk).arg(path), false);
+#ifndef Q_OS_ANDROID
+        // 导出完成后打开所在文件夹（桌面偏好「外观/交互→其他→输出」，默认关）：Separate 的 path 即输出目录、
+        // 单文件式取文件所在目录。打开失败静默——产物路径已在状态栏回报，文件管理器缺席/失败不构成导出失败。
+        if (UiPrefs::instance().openExportFolderAfterExport()) {
+            const QString dir = cfg.exportParams.mode == engine::ExportMode::Separate
+                                    ? path : QFileInfo(path).absolutePath();
+            QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+        }
+#endif
     } else {
 #ifdef Q_OS_ANDROID
         if (!tempRoot.isEmpty()) QDir(tempRoot).removeRecursively();

@@ -51,6 +51,7 @@ inline constexpr char kUiLastExportDir[]     = "lastExportDir";     // 导出对
 inline constexpr char kUiDefaultExportDir[]  = "defaultExportDir";  // 默认输出文件夹（用户预设的导出起始目录，仅桌面；空＝不预设）。
 inline constexpr char kUiConfirmRearrange[]  = "confirmRearrange";  // 重排前二次确认开关。
 inline constexpr char kUiConfirmBurnIn[]     = "confirmBurnIn";     // 未烧录（有标注/图层却没勾烧录）导出前提醒开关。
+inline constexpr char kUiOpenExportDir[]     = "openExportDir";     // 导出完成后打开所在文件夹开关（仅桌面生效，默认关）。
 inline constexpr char kUiLanguage[]          = "language";           // 界面语言偏好（值见下方 kLangAuto 与 core 的两个语言码）。
 inline constexpr char kUiThemeMode[]         = "themeMode";          // 深浅色主题偏好（值见 util/theme.h：system/light/dark）。
 // 界面语言偏好的**取值**（数据而非文案：写进 QSettings，由 app/main.cpp 与外观对话框同源读写）。
@@ -107,6 +108,7 @@ inline constexpr char kBurnAnnotation[]    = "烧录标注";
 inline constexpr char kBurnImageLayers[]   = "烧录图片图层";
 inline constexpr char kConfirmRearrange[]  = "重排前二次确认";      // 开关态存 UiPrefs（ui/confirmRearrange）。
 inline constexpr char kConfirmBurnIn[]     = "未烧录时导出前提醒";  // 开关态存 UiPrefs（ui/confirmBurnIn）。
+inline constexpr char kOpenExportDir[]     = "导出后打开所在文件夹";  // 开关态存 UiPrefs（ui/openExportDir，仅桌面生效）。
 inline constexpr char kFileLoadConfig[]    = "加载配置(&L)…";
 inline constexpr char kFileSaveConfig[]    = "保存配置(&C)…";
 inline constexpr char kFileExit[]          = "退出(&X)";
@@ -119,6 +121,7 @@ inline constexpr char kEditCellsAll[]    = "全选单元(&A)";   // L3 选择集
 inline constexpr char kEditCellsInvert[] = "反选单元(&I)";
 inline constexpr char kEditCellsClear[]  = "清空单元选择(&L)";
 inline constexpr char kEditResetAll[]    = "重置全部(&Z)";
+inline constexpr char kEditPasteImage[]  = "粘贴图片(&P)…";   // 剪贴板图片暂存后作底图/图层（仅桌面，默认 Ctrl+V）。
 // ——模式（L1/L2/L3 + 极性 + 画布四态 + 切割参数）——
 inline constexpr char kMenuMode[]           = "模式(&M)";
 inline constexpr char kModeL1[]             = "标准提取";   // 三项互斥，即模式预设（Tier 代号 L1/L2/L3 属内部术语，不对用户展示）。
@@ -625,5 +628,10 @@ inline constexpr char kReadSourceFailedFmt[]   = "读取失败：%1";   // 源�
 inline constexpr char kSummaryBaseFmt[]        = "%1×%2 · %3 · 底色(%4,%5,%6,%7)";
 inline constexpr char kSummaryFgPartFmt[]      = " · 前景(%1,%2,%3,%4)";   // 非纯色图案追加。
 inline constexpr char kSummaryAttachPartFmt[]  = " · 附图(%1, %2)";        // 附加图片路追加（短名 + 源图名）。
+// 主界面拖入图片时的落点选择框（src/app/main_window.cpp dropEvent；作底图 / 作图片图层二选一）。
+inline constexpr char kDropAskTitle[]          = "拖入图片";     // 消息框标题。
+inline constexpr char kDropAskText[]           = "将此图片作为底图还是图片图层？";   // 消息框正文。
+inline constexpr char kDropAsBase[]            = "作为底图";     // 按钮一（转 SessionController::openImageFromPath）。
+inline constexpr char kDropAsLayer[]           = "作为图片图层"; // 按钮二（转 SessionController::onAddImageLayerFromPath）。
 } // namespace label
 } // namespace idc::gui::texts

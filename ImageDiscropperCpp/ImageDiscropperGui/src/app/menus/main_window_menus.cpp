@@ -25,6 +25,7 @@
 #include "app/keybindings.h"
 #include "app/app_prefs.h"
 #include "app/main_window.h"
+#include "canvas/canvas_view.h"   // 粘贴图片：把 Ctrl+V 动作挂在 view_（WidgetWithChildrenShortcut 需完整 QWidget 类型）。
 #include "panels/export_panel.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
@@ -176,6 +177,16 @@ void MainWindowUi::buildEditMenu(MainWindow* w, QMenuBar* bar) {
     QAction* aDestroyAll = bindAddAction(w->retranslator_, mEdit, IDC_GT(menu, kEditResetAll));
     i18n::bindToolTip(w->retranslator_, aDestroyAll, IDC_GT(tooltip, kResetAll));
     QObject::connect(aDestroyAll, &QAction::triggered, w, [w] { w->session_->onDestroyAll(); });
+    mEdit->addSeparator();
+    // 粘贴图片（仅桌面）：剪贴板图片→定角色（底图/图层）。默认键 Ctrl+V（QKeySequence::Paste），由 KeyBindings 回落到注册表。
+    // Ctrl+V 不取窗口全局作用（会抓走输入框的文本粘贴）：改 WidgetWithChildrenShortcut + 挂在画布视图上，
+    // 仅当画布（或其子件）聚焦时生效；菜单项本身不受此限，任何时候点菜单都能触发。
+    QAction* aPasteImage = bindAddAction(w->retranslator_, mEdit, IDC_GT(menu, kEditPasteImage));
+    KeyBindings::instance().registerAction(CommandId::PasteImage, aPasteImage);
+    aPasteImage->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    if (w->view_) w->view_->addAction(aPasteImage);
+    i18n::bindToolTip(w->retranslator_, aPasteImage, IDC_GT(tooltip, kPasteImage));
+    QObject::connect(aPasteImage, &QAction::triggered, w, [w] { w->onPasteImage(); });
 
 }
 

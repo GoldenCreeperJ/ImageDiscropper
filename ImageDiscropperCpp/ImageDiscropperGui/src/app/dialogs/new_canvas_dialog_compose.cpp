@@ -28,6 +28,7 @@
 #include "model/engine_bridge.h"     // composeCanvas / generatePattern（像素生成走桥接）
 #include "panels/element_appearance_group.h"   // pipeline()/opacity()（两元素外观与节点外观采集）
 #include "util/image_qt_adapter.h"   // toPixmap（core::Image → QPixmap 预览）
+#include "util/gui_nums.h"
 #include "i18n/gui_texts.h"
 #include "i18n/gui_i18n.h"
 
@@ -179,7 +180,7 @@ void NewCanvasDialog::accept() {
         //   「添加图层」语境恒烘（节点外观走层声明 preprocess，由 Core materializeLayer 施加，flat 仅作合法性像素、不消费）。
         flat = composeResult(p, w, h, 1.0, layerPlace, imgPlace, fit, /*applyNodeAppearance=*/addLayerMode_);
     };
-    if (static_cast<long long>(w) * static_cast<long long>(h) >= 2LL * 1000 * 1000) {
+    if (static_cast<long long>(w) * static_cast<long long>(h) >= nums::app::kBusyDialogPixelThreshold) {
         runInBusyDialog(this, busyOverlay_, IDC_GTR(status, kNewCanvasGenerateBusy), generate);
     } else {
         generate();

@@ -24,6 +24,8 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFont>
@@ -35,15 +37,19 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMargins>
+#include <QMimeData>
 #include <QPixmap>
+#include <QList>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScreen>
+#include <QSet>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QTimer>
 #include <QToolButton>
+#include <QUrl>
 #include <QVBoxLayout>
 
 #include <iterator>   // std::size（旋转重钳时刻数组遍历）
@@ -64,9 +70,21 @@
 
 namespace idc::gui {
 
+namespace {
+// 拖入判据：图片后缀集（与 label::kFilterOpenImage / kFilterSourceImage 扩展名同步）；大小写不敏感。
+bool isImageSuffix(const QString& suffix) {
+    static const QSet kImage{
+        QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"), QStringLiteral("bmp"),
+        QStringLiteral("webp"), QStringLiteral("gif"), QStringLiteral("tga")};
+    return kImage.contains(suffix.toLower());
+}
+} // namespace
+
 NewCanvasDialog::NewCanvasDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle(IDC_GTR(label, kDlgTitleNewCanvas));
     setModal(true);
+    // 对话框开着时允许把图片直接拖入填源图槽（「可识别打开的 dialog」；判据见 dragEnterEvent）。
+    setAcceptDrops(true);
 
     auto* root = rootLayout_ = new QVBoxLayout(this);
     // 主体（表单 + 预览）装进纵向可滑外壳：小屏 / 横屏超高时内部滚动，配合底部固定按钮行 + 屏幕尺寸护栏，
@@ -214,12 +232,18 @@ void NewCanvasDialog::updateControlAvailability() const {
     heightSpin_->setEnabled(!lockSize);
 }
 
-// 选源图：经 QFileDialog 取路径 → EngineBridge::loadImage（委托 Core 解码）→ 缓存到 imageSource_。
+// 选源图：经 QFileDialog 取路径 → 交 loadImageSource 解码/落位/预览（与拖入同一载入体）。
 void NewCanvasDialog::onPickImage() {
     const QString path = QFileDialog::getOpenFileName(
         this, IDC_GTR(label, kDlgTitlePickSourceImage), QString(),
         IDC_GTR(label, kFilterSourceImage));
     if (path.isEmpty()) return;
+    loadImageSource(path);
+}
+
+// 已取得 path 后的源图载入体：EngineBridge::loadImage（委托 Core 解码）→ 缓存到 imageSource_ →
+//   留存原始/持久化路径作 provenance → 回填路径行 → 原生适应回填尺寸 → 刷预览。解码失败仅在路径行回显报因、不动现有源图。
+void NewCanvasDialog::loadImageSource(const QString& path) {
     core::Image img;
     if (QString err; !EngineBridge::loadImage(path, img, err)) {
         // 长错误串（含 content:// 内容 URI）按宽省略号截断，避免撑宽表单主体；完整文转入 tooltip。
@@ -241,6 +265,30 @@ void NewCanvasDialog::onPickImage() {
     imagePathLabel_->setText(QFileInfo(imageSourcePath_).fileName());
     syncCanvasSizeToSource();   // 原生时把顶部宽/高（图层尺寸）回填为源图尺寸（非原生不操作）。
     onParamsChanged();
+}
+
+// 供「拖图片作图片图层」预置源图（exec() 前调）：先确保「附加图片」开关打开（触发节展开 + 尺寸回填），
+//   再按 path 走与「选源图」一致的载入链。
+void NewCanvasDialog::applyImageSourceFromPath(const QString& path) {
+    if (path.isEmpty()) return;
+    if (attachImageCheck_ && !attachImageCheck_->isChecked()) attachImageCheck_->setChecked(true);
+    loadImageSource(path);
+}
+
+// 对话框开着时拖入单张本地图片 → 接受（填源图槽）；多文件/非图片一律不识别（默认忽略）。
+void NewCanvasDialog::dragEnterEvent(QDragEnterEvent* event) {
+    if (!event->mimeData()->hasUrls()) return;
+    const QList<QUrl> urls = event->mimeData()->urls();
+    if (urls.size() != 1 || !urls.first().isLocalFile()) return;
+    if (!isImageSuffix(QFileInfo(urls.first().toLocalFile()).suffix())) return;
+    event->acceptProposedAction();
+}
+
+void NewCanvasDialog::dropEvent(QDropEvent* event) {
+    const QList<QUrl> urls = event->mimeData()->urls();
+    if (urls.size() != 1 || !urls.first().isLocalFile()) return;
+    applyImageSourceFromPath(urls.first().toLocalFile());
+    event->acceptProposedAction();
 }
 
 // 原生适应（图层尺寸恒等于源图尺寸）：回填顶部宽/高为源图原生尺寸（信号阻塞，不触发预览联动——由调用方收尾）。

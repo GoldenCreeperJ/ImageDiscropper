@@ -42,6 +42,7 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"menu::kBurnImageLayers", "Burn In Image Layers"},
     {"menu::kConfirmRearrange", "Confirm Before Rearrange"},
     {"menu::kConfirmBurnIn", "Remind Before Export If Not Burned In"},
+    {"menu::kOpenExportDir", "Open Containing Folder After Export"},
     {"menu::kFileLoadConfig", "Load Configuration(&L)…"},
     {"menu::kFileSaveConfig", "Save Configuration(&C)…"},
     {"menu::kFileExit", "Exit(&X)"},
@@ -54,6 +55,7 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"menu::kEditCellsInvert", "Invert Cell Selection(&I)"},
     {"menu::kEditCellsClear", "Clear Cell Selection(&L)"},
     {"menu::kEditResetAll", "Reset All(&Z)"},
+    {"menu::kEditPasteImage", "Paste Image(&P)…"},
     // 模式（L1/L2/L3 + 极性 + 画布四态 + 子菜单入口）
     {"menu::kMenuMode", "Mode(&M)"},
     {"menu::kModeL1", "Standard Extract"},
@@ -485,6 +487,10 @@ constexpr core::I18nEntry kEntriesEn[] = {
     {"label::kSummaryBaseFmt", "%1×%2 · %3 · bg(%4,%5,%6,%7)"},
     {"label::kSummaryFgPartFmt", " · fg(%1,%2,%3,%4)"},
     {"label::kSummaryAttachPartFmt", " · attached(%1, %2)"},
+    {"label::kDropAskTitle", "Dropped Image"},
+    {"label::kDropAskText", "Use this image as the base or as an image layer?"},
+    {"label::kDropAsBase", "As Base"},
+    {"label::kDropAsLayer", "As Image Layer"},
 };
 
 } // namespace

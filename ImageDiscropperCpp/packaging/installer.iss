@@ -48,11 +48,13 @@ english.CreateDesktopIcon=Create a desktop icon
 english.AutoStartTask=Start with Windows
 english.RunAfterInstall=Run {#AppName}
 english.UninstallProgram=Uninstall %1
+english.OpenWithIDC=Open with ImageDiscropper
 chinesesimp.AdditionalTasks=附加任务：
 chinesesimp.CreateDesktopIcon=创建桌面快捷方式
 chinesesimp.AutoStartTask=开机自启动
 chinesesimp.RunAfterInstall=运行 {#AppName}
 chinesesimp.UninstallProgram=卸载 %1
+chinesesimp.OpenWithIDC=用 ImageDiscropper 打开
 
 [Files]
 Source: "{#SRC}\idc_gui.exe"; DestDir: "{app}"
@@ -64,6 +66,13 @@ Name: "autostart"; Description: "{cm:AutoStartTask}"; GroupDescription: "{cm:Add
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; ValueData: """{app}\idc_gui.exe"""; Tasks: autostart
+; 「打开方式」注册（**不抢默认关联**）：为图片感知类型（image）与 .json 各挂一个动词——右键菜单可见、
+; 双击仍走用户原默认程序。用 SystemFileAssociations 一次覆盖全类，不逐扩展名注册；卸载时整键删除
+; （uninsdeletekey 挂在叶子键上，卸载即清）。
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\image\shell\{#AppName}"; ValueType: string; ValueName: ""; ValueData: "{cm:OpenWithIDC}"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\image\shell\{#AppName}\command"; ValueType: string; ValueName: ""; ValueData: """{app}\idc_gui.exe"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.json\shell\{#AppName}"; ValueType: string; ValueName: ""; ValueData: "{cm:OpenWithIDC}"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\.json\shell\{#AppName}\command"; ValueType: string; ValueName: ""; ValueData: """{app}\idc_gui.exe"" ""%1"""
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\idc_gui.exe"

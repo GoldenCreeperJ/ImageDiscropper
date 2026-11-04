@@ -107,7 +107,7 @@ void ConfigController::onSaveConfig() {
     status_->notify(savedMsg, false);
 }
 
-// 加载配置：读 JSON → DocHistory::recordConfigLoad（抑制采集地应用 + 压栈，载入本身可一步撤销）。
+// 加载配置：桌面直接进 runLoadFlow（路径由对话框选）；移动端先列表预选路径再转 runLoadFlow。
 void ConfigController::onLoadConfig() {
     QString path;
 #ifdef Q_OS_ANDROID
@@ -123,6 +123,17 @@ void ConfigController::onLoadConfig() {
     if (!ok || name.isEmpty()) return;
     path = dir + u'/' + name;
 #endif
+    runLoadFlow(path);
+}
+
+// 从拖入路径加载配置：直接进 runLoadFlow（路径预填对话框，用户确认资产导入选项后载入）。
+void ConfigController::loadConfigFromPath(const QString& path) { runLoadFlow(path); }
+
+// 载入流程主体（onLoadConfig / loadConfigFromPath 共用）：以 presetPath 预填路径行 → ConfigIoDialog(Load) 采集路径
+//   与资产选项 → 解析 + 资产解码 + 底图重生 → DocHistory::recordConfigLoad（抑制采集地应用 + 压栈，载入本身可一步撤销）
+//   → 队列重放 → 标注还原 → 回报。
+void ConfigController::runLoadFlow(const QString& presetPath) {
+    QString path = presetPath;
 
     // 资产四选项显式化：对话框采集「是否导入（解析 file 层像素，不勾则全部降级占位）+ 从哪里导入（资产来源，空＝自动查找链）」。
     // 是否导入在解析配置前无法预知 file 层有无，故资产分组恒可用（无 file 层时勾选亦为空操作，无害）。

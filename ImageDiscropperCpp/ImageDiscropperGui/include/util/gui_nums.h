@@ -206,6 +206,8 @@ inline constexpr int kPrefZoomMinPercentDefault = 5;        // 缩放下限 0.05
 inline constexpr int kPrefZoomMaxPercentDefault = 4000;     // 缩放上限 40 倍。
 inline constexpr int kPrefNewWidthPxDefault = 1024;         // 「新建画布」对话框默认宽（每次新建确定后自动记住）。
 inline constexpr int kPrefNewHeightPxDefault = 768;
+inline constexpr long long kBusyDialogPixelThreshold = 2LL * 1000 * 1000;  // 总像素 ≥ 此值才弹忙碌框（逐像素/重采样在此量级以上开始可感）；
+                                                                          // openImageFromPath（session_controller.cpp）与新建画布定稿（new_canvas_dialog_compose.cpp）共用。
 } // namespace app
 
 // model：标注编辑器出厂默认属性与输入边界（src/model/**、属性面板与图层编辑面板共用）。

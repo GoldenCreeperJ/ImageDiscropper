@@ -45,6 +45,7 @@ const std::vector<CommandDef>& KeyBindings::registry() {
         {CommandId::ZoomIn, KeyKind::Action, QKeySequence(QKeySequence::ZoomIn), IDC_GT(menu, kZoomIn)},
         {CommandId::ZoomOut, KeyKind::Action, QKeySequence(QKeySequence::ZoomOut), IDC_GT(menu, kZoomOut)},
         {CommandId::Fit, KeyKind::Action, QKeySequence(Qt::CTRL | Qt::Key_0), IDC_GT(menu, kFitToWindow)},
+        {CommandId::PasteImage, KeyKind::Action, QKeySequence(QKeySequence::Paste), IDC_GT(menu, kEditPasteImage)},
         // —— 单键类（Route：KeyRouter 表驱动分派，不走 QAction/QShortcut）——
         {CommandId::ModeL1, KeyKind::Route, QKeySequence(Qt::Key_1), IDC_GT(menu, kModeL1)},
         {CommandId::ModeL2, KeyKind::Route, QKeySequence(Qt::Key_2), IDC_GT(menu, kModeL2)},
@@ -93,6 +94,7 @@ QString KeyBindings::idKey(const CommandId id) {
         case CommandId::ZoomIn: return QStringLiteral("zoomIn");
         case CommandId::ZoomOut: return QStringLiteral("zoomOut");
         case CommandId::Fit: return QStringLiteral("fit");
+        case CommandId::PasteImage: return QStringLiteral("pasteImage");
         case CommandId::ModeL1: return QStringLiteral("mode1");
         case CommandId::ModeL2: return QStringLiteral("mode2");
         case CommandId::ModeL3: return QStringLiteral("mode3");

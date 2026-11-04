@@ -57,6 +57,7 @@
 
 namespace idc::gui {
 
+
 // 构造（桌面）：装配全部部件 + 接线（顺序承重，见 src/app/README.md「编排」——
 // connectAll 必须先于历史 reset，否则首次 availabilityChanged 丢失、撤销/重做动作不会置灰）。
 // 语言热切换走原地重放（retranslateUi），窗口不销毁，故 doc_/annoBridge_ 按值随窗持有即可。
@@ -70,6 +71,8 @@ MainWindow::MainWindow(QWidget* parent)
     resize(nums::app::kWindowWidthPx, nums::app::kWindowHeightPx);
     buildDesktopUi();
     initCore();
+    // 桌面拖拽导入开关（移动端走 MobileShellTag 构造、不经此，触屏无拖拽）。
+    setAcceptDrops(true);
 }
 
 // 移动端骨架构造：仅做 QObject 挂接；标题/尺寸与部件装配、initCore
@@ -448,5 +451,6 @@ void MainWindow::onHistoryAvailabilityChanged(const bool canUndo, const bool can
     if (aUndo_) aUndo_->setEnabled(canUndo);
     if (aRedo_) aRedo_->setEnabled(canRedo);
 }
+
 
 } // namespace idc::gui

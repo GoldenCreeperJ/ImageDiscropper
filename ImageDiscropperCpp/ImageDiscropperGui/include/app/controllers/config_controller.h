@@ -12,6 +12,7 @@
 #include "core/percent.h"   // core::PercentHints（载入的百分比几何字段，保存时原样回写）
 
 class QWidget;
+class QString;
 
 namespace idc::gui {
 
@@ -42,8 +43,15 @@ public:
 public slots:
     void onSaveConfig();   // 保存配置：当前作业配置写为 §7 schema JSON（委托 EngineBridge → Core）。
     void onLoadConfig();   // 加载配置：读 JSON → 底图重生 → DocHistory::recordConfigLoad → 队列重放 → 标注还原。
+    // 从指定路径加载配置（主界面拖入 JSON 时走此入口）：仍弹 ConfigIoDialog（路径预填）采集资产导入选项，
+    //   确认后走与 onLoadConfig 同一条解析/注入链（runLoadFlow）。
+    void loadConfigFromPath(const QString& path);
 
 private:
+    // 载入流程主体（onLoadConfig / loadConfigFromPath 共用）：以 presetPath 预填 ConfigIoDialog(Load) 路径行
+    //   → exec 采集路径与资产选项 → 解析 + 资产解码 + 底图重生 + recordConfigLoad + 队列重放 + 标注还原 + 回报。
+    void runLoadFlow(const QString& presetPath);
+
     Document* doc_{nullptr};
     AnnotationBridge* anno_{nullptr};
     PreprocessController* preprocess_{nullptr};

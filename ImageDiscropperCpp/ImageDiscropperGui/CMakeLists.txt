@@ -253,6 +253,7 @@ set(IDC_GUI_APP_SRC
         src/app/controllers/export_controller.cpp
         src/app/controllers/key_router.cpp
         src/app/main_window.cpp
+        src/app/main_window_import.cpp
         src/app/menus/main_window_menus.cpp
         src/app/menus/main_window_menus_mode.cpp
         src/app/menus/main_window_menus_canvas.cpp
@@ -378,6 +379,8 @@ endforeach()
 # bundle 标识符按目标名区分（com.imagediscropper.idc_gui / .idc_gui_mobile），互不冲突。
 # 应用图标：源为 assets/icons/icon.png（1024 直角满幅母版），派生尺寸与 idc.icns 生成步骤见 assets/icons/README.md
 # （make_icns.sh，需 macOS iconutil）。icns 已生成时自动注入 bundle Resources，未生成则退回系统默认图标。
+# Info.plist 走仓库模板（MacOSXBundleInfo.plist.in）：在 CMake 默认键之上声明 CFBundleDocumentTypes
+# （public.image / public.json 的「打开方式」，不抢默认关联——与 installer.iss / .desktop 同一口径）。
 foreach(_idc_exe ${_idc_gui_exes})
     set_target_properties(${_idc_exe} PROPERTIES
             MACOSX_BUNDLE TRUE
@@ -385,6 +388,7 @@ foreach(_idc_exe ${_idc_gui_exes})
             MACOSX_BUNDLE_GUI_IDENTIFIER "com.imagediscropper.${_idc_exe}"
             MACOSX_BUNDLE_BUNDLE_VERSION "${IDC_GUI_VERSION}"
             MACOSX_BUNDLE_SHORT_VERSION_STRING "${IDC_GUI_VERSION}"
+            MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/../packaging/MacOSXBundleInfo.plist.in"
     )
 endforeach()
 set(_idc_icns "${CMAKE_CURRENT_SOURCE_DIR}/../../assets/icons/mac/idc.icns")

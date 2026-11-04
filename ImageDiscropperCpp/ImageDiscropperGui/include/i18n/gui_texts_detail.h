@@ -22,12 +22,14 @@ inline constexpr char kBurnAnnotation[] = "导出时把标注合成进像素（�
 inline constexpr char kBurnImageLayers[] = "导出时并入图片图层（与图层面板「显示」仅预览正交）。";
 inline constexpr char kConfirmRearrange[] = "重排有风险时导出前二次确认；关则直接导出。";
 inline constexpr char kConfirmBurnIn[] = "有标注或图片图层却未勾选对应烧录时，导出前弹框提醒；关则直接导出。";
+inline constexpr char kOpenExportDir[] = "导出完成后用系统文件管理器打开产物所在文件夹（仅桌面；导出即弹窗，打扰性动作默认关）。";;
 inline constexpr char kLoadConfig[] = "从配置文件还原切割/排序/导出参数；可撤销。";
 inline constexpr char kSaveConfig[] = "把当前参数存为配置文件，同尺寸图像可复用。";
 inline constexpr char kUndo[] = "撤销上一步（标注或选区/排序/导出参数）。";
 inline constexpr char kRedo[] = "重做：恢复上一步被撤销的操作。";
 inline constexpr char kClearSelection[] = "清除选区与切割线（网格/多矩形/单矩形）。";
 inline constexpr char kResetAll[] = "清空图层/标注/预处理/选区，仅留底图。";
+inline constexpr char kPasteImage[] = "把剪贴板上的图片作为底图或图片图层（仅桌面）。";
 inline constexpr char kModeL3[] = "网格分割：铺满全图的网格 + 单元选择 + 排序。";
 inline constexpr char kPolarityKeep[] = "保留选区内的单元（绿色遮罩）。";
 inline constexpr char kPolarityRemove[] = "剔除选区内的单元（红色遮罩），保留其余部分。";
@@ -210,6 +212,7 @@ inline constexpr char kExportGalleryPartial[]     = "部分成功：已导出 %1
 inline constexpr char kSessionOpened[]           = "已打开：%1（%2×%3）";   // 路径 + 宽×高。
 inline constexpr char kSessionOpenFailed[]       = "打开失败：%1";
 inline constexpr char kSessionOpenContentFailed[] = "打开失败：无法读取该内容提供者地址";   // Android SAF 内容复制失败。
+inline constexpr char kSessionOpenBusy[]       = "正在打开图像，请稍候…";   // 大图（总像素≥阈值）解码 + 重建预览时的忙碌框正文（按图片头尺寸判定；小图直开不弹）。
 inline constexpr char kSessionNewFailedBadSize[] = "新建失败：尺寸非法";               // Core 回空图（超护栏）。
 inline constexpr char kSessionNewOk[]            = "已新建：%1（保留图层/标注/色彩预处理）";   // %1 为对话框汇总行。
 inline constexpr char kSessionNeedImageForLayer[] = "请先打开或新建一张图像，再添加图片图层。";
@@ -220,6 +223,8 @@ inline constexpr char kSessionLayersCleared[]    = "已清空全部图片图层�
 inline constexpr char kSessionNothingToReset[]   = "无图像可重置";
 inline constexpr char kSessionAllReset[]         = "已重置全部（保留底图）";
 inline constexpr char kSessionAllResetNoBase[]   = "已重置全部（含底图，画布已清空）；可「打开/新建」重新载入图像";
+inline constexpr char kSessionPasteNoImage[]  = "剪贴板没有可粘贴的图片。";   // 仅桌面（app/main_window.cpp::onPasteImage）。
+inline constexpr char kSessionPasteSaveFailed[] = "粘贴失败：无法将剪贴板图片暂存为临时文件。";   // 仅桌面（同上：QImage::save 写盘失败）。
 // 配置存取回报（app/controllers/config_controller.cpp）：
 inline constexpr char kConfigSaved[]        = "配置已保存：%1";
 inline constexpr char kConfigSaveFailed[]   = "保存配置失败：%1";
@@ -381,6 +386,7 @@ inline constexpr char kCliImageArgHelp[] = "可选：启动时自动打开的图
 // 多段拼接待逐字保留（行首空格与空行是排版的一部分）；\n 在字节串里同一含义，经 fromUtf8 后逐字节相同。
 inline constexpr char kHelpUsageBody[] =
     "1) 文件→打开图像，或文件→新建画布（尺寸/底色/程序化图案，可附加源图与两级落位；图案/图片/节点外观可加预处理与透明度）。\n"
+    "   桌面另支持导入：把单张图片或一份配置直接拖入窗口，或按 Ctrl+V 粘贴剪贴板图片（画布聚焦时；任何时候也可走「编辑→粘贴图片」）——图片会询问作底图还是作图片图层，配置（.json）直接载入。\n"
     "2) 选择模式：标准提取 / 反向剔除 / 网格分割；极性「保留/删除框内」。\n"
     "3) 标准提取/反向剔除：在画布上拖拽出选区（反向剔除可多矩形），形状/方式在「参数」页；橙色切割线贯穿全图，绿色为保留、红色为删除。\n"
     "   拖动选区/四角手柄/切割线调整；方向键微调（Shift 大步）。\n"
@@ -391,7 +397,7 @@ inline constexpr char kHelpUsageBody[] =
     "7) 多层画布：图层→添加图片图层；图片拾取态可拖拽落位框，图层菜单可排序/复制/删除图层；「图层」面板控制各层显隐。\n"
     "8) 导出：文件→导出；文件→导出设置可切分离/坍缩/重排、格式与烧录开关，「导出」页有完整参数。\n"
     "9) 文件→保存配置/加载配置：整套参数（含标注与图层）可保存/加载、可复用、可撤销。\n\n"
-    "快捷键（模式/极性/清除/删除、撤销重做、打开/新建/导出、缩放）均可在「视图→外观/交互…」对话框的\n"
+    "快捷键（模式/极性/清除/删除、撤销重做、打开/新建/导出/粘贴图片、缩放）均可在「视图→外观/交互…」对话框的\n"
     "「快捷键」页查看与自定义（改绑即时生效、跨会话保存），此处不再罗列以免改绑后失效。\n"
     "方向键微调选区（Shift 大步）、绘制态按 Esc 收笔为固定操作键，不在自定义之列。";
 // 移动「更多」菜单的使用说明正文（src/mobile/mobile_shell_ui.cpp）：与桌面正文同构但把手势替代了快捷键；

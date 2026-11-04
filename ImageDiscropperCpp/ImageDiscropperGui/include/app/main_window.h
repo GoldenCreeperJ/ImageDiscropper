@@ -31,6 +31,8 @@
 
 class QAction;
 class QDockWidget;
+class QDragEnterEvent;
+class QDropEvent;
 class QKeyEvent;
 class QMenu;
 class QScrollArea;
@@ -97,6 +99,12 @@ protected:
     // 此处只转发（仍须为 QMainWindow 虚函数）。数值输入时天然不触发（NFR-5）。
     void keyPressEvent(QKeyEvent* event) override;
 
+    // 拖拽导入（仅桌面，构造里 setAcceptDrops(true)）：一次仅接受单文件且后缀属图片/JSON。
+    //   图片→弹选择框（作底图 openImageFromPath / 作图片图层 onAddImageLayerFromPath）；JSON→ loadConfigFromPath。
+    //   多文件/未知后缀不识别；创建类对话框开着时拖拽由该对话框自行接收（不落到本窗）。
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
+
 private slots:
     // Document 信号响应。
     void onImageChanged() const;   // 换图：重建预览底图并刷新。
@@ -112,6 +120,9 @@ private slots:
     void onRedo() const;
     // 撤销/重做可用性回灌：刷新编辑菜单/工具栏动作启用态。
     void onHistoryAvailabilityChanged(bool canUndo, bool canRedo) const;
+    // 剪贴板粘贴图片（编辑菜单「粘贴图片」/ Ctrl+V，仅桌面）：图片先暂存为临时 PNG，
+    // 再走与拖入同一选择/落地链（chooseImageRoleAndApply）；剪贴板无图则状态栏回报。
+    void onPasteImage();
 
 private:
     friend class MainWindowUi;  // 装配建造者直接回填部件指针并连接私有槽。
@@ -128,6 +139,9 @@ private:
     // 按当前语言实测左右栏内容自然宽并抬高最小宽（std::max(设计下限, sizeHint)，
     // 见 main_window_ui.cpp 说明）：语言热切换后文本长度变化，需重跑一次以免英文长标签截断。
     void applyPanelMinWidths();
+
+    // 拖入/粘贴共用的图片定角色入口：弹三选框（作底图 openImageFromPath / 作图片图层 onAddImageLayerFromPath，取消无操）。
+    void chooseImageRoleAndApply(const QString& path);
 
     // 状态与桥接（单一真相源 + 唯一标注域入口）：按值持有，随窗口构造/析构。
     Document doc_;

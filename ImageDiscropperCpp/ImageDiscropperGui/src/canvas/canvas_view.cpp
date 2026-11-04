@@ -47,6 +47,15 @@ CanvasView::CanvasView(CanvasScene* scene, QWidget* parent)
     setResizeAnchor(AnchorViewCenter);
     setDragMode(NoDrag);                     // 拖拽逻辑自管
     setMouseTracking(true);                                 // 无按键也回报光标位置
+    // 内容小于视口时（某维无滚动条）centerOn 使不上力，该维位置由 alignment 决定；显式居中，
+    // 否则超大图适配后（竖图宽度、横图高度远小于视口）会按 Qt 默认贴左上，表现为“打开大图左上角对齐”。
+    setAlignment(Qt::AlignCenter);
+    // 拖拽导入：QGraphicsView 默认把 viewport 注册为放置目标，拖拽落到画布时 target 即 viewport；而 viewport
+    // 未覆盖 dragEnterEvent，默认实现直接 ignore，Qt 不再继续向父级上溯→画布区从此收不到拖拽（而工具栏等
+    // 未被注册的控件才会沿父链走到 MainWindow）。故显式关掉 view 与其 viewport 的 acceptDrops，使拖拽沿父链
+    // 上溯到 MainWindow 的 dragEnterEvent/dropEvent（与工具栏区同一传播路径；判定/落地全在主窗口，视图零导入语义）。
+    setAcceptDrops(false);
+    viewport()->setAcceptDrops(false);
     setBackgroundBrush(Palette::instance().background());   // 画布深灰（本目录 README「画布视觉规范」；可「视图→外观/配色…」自定义）
 #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
     input_ = std::make_unique<TouchInputAdapter>();         // 触控：合成鼠标路由复用桌面 + pinch/双击（SPEC §8.3）
@@ -85,6 +94,9 @@ void CanvasView::resetZoom() { resetTransform(); updateHandleSize(); }
 // 与「内容边界 + 外圈滚动余量」自算不同：滚动余量是**平移范围**偏好（视口各边百分比），不该拿来限制适配缩放；
 // 否则用户把滚动余量调大时，适配会把内容挤到 (1－2×余量百分比) 乃至趋零、退化成“缩到最小尺寸”。
 // 倍率 = 视口×固定适配比例 / 内容（横纵取小），令内容最长边铺到视口的 kFitToWindowKeepRatio；clampZoom 兜到允许区间。
+// 【居中必为末步】updateHandleSize→updateScrollMargins 会按新倍率重推滚动余量、进而 setSceneRect 撑大场景矩形；
+// 若 centerOn 排在它之前，Qt 在 sceneRect 变化后保留原滚动偏移值 → 内容被甩回左上（大图 target 小、余量撑得夸张，
+// 故只在超大图上明显，小图 target 接近旧倍率而几乎不偏移）。故先定倍率→再推余量→最后才居中。
 void CanvasView::fitToWindow() {
     if (const QRectF content = scene_ ? scene_->contentBounds() : QRectF(); !content.isEmpty()) {
         const QSize vp = viewport()->size();
@@ -93,8 +105,10 @@ void CanvasView::fitToWindow() {
                                       vp.height() * keep / content.height());
         if (target > 0.0) {
             setTransform(QTransform().scale(target, target));   // 绝对倍率（非累乘），与 fitInView 同口径。
-            centerOn(content.center());                          // 内容不对称（补白只伸一侧）时居中的也是内容。
             clampZoom();   // 自算结果可能超出允许区间（极小图 + 极大视口），钳回边界。
+            updateHandleSize();                          // 先按最终倍率重推滚动余量（会改 sceneRect），居中前必须定好。
+            centerOn(content.center());                  // 帧末居中：sceneRect 此后不再变，不会被撑大撑回左上。
+            return;
         }
     }
     updateHandleSize();

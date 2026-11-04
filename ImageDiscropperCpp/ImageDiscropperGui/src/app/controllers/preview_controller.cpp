@@ -126,17 +126,22 @@ void PreviewController::rebuildPreviewPixmap() {
 
     // 底图：非图层画布→working_（全量即底图）；图层画布→仅底图合成（不含叠加层，故隐藏底图时图层覆盖不受牵连）。
     const core::Image baseOnly = doc_->hasLayers() ? preprocess_->composeLayerCanvasForExport(false) : doc_->working();
-    double bsx = 1.0, bsy = 1.0;
     // 场景坐标 = 原图像素坐标；底图用放大系数把预览 pixmap 铺到原图尺寸。
-    scene_->setBaseImage(toPreview(baseOnly, bsx, bsy), bsx, bsy, doc_->width(), doc_->height());
+    // 必须先把 toPreview 求出来（它写 bsx/bsy），再单独作为实参传入：不可把「写 bsx/bsy 的 toPreview」
+    // 与「读 bsx/bsy 的实参」塞进同一次调用——C++ 函数实参求值顺序未定（MSVC 右→左），大图降采样时
+    // bsx/bsy 会被先读成初始 1.0，预览 pixmap 便不放大铺回原图尺寸 → 底图缩在 contentBounds 左上（仅大图现形）。
+    double bsx = 1.0, bsy = 1.0;
+    const QPixmap basePreview = toPreview(baseOnly, bsx, bsy);
+    scene_->setBaseImage(basePreview, bsx, bsy, doc_->width(), doc_->height());
     // 取色真相源不再常驻留存：失效惰性缓存（仅在「图层隐藏 + 状态栏取色」时按需物化，见 displayBaseImage()）。
     displayBaseImage_ = core::Image{};
     displayBaseValid_ = false;
 
     // 图层覆盖：图层于透明底合成（非图层画布返回空 → 清空覆盖）；可见性由场景 imageLayersVisible 落地（纯显示切换）。
-    double osx = 1.0, osy = 1.0;
     const core::Image layers = doc_->hasLayers() ? preprocess_->composeLayersForDisplay() : core::Image{};
-    scene_->setImageLayerOverlay(toPreview(layers, osx, osy), osx, osy, doc_->width(), doc_->height());
+    double osx = 1.0, osy = 1.0;
+    const QPixmap layersPreview = toPreview(layers, osx, osy);   // 同底图：先独立求值写出 osx/osy 再传参，杜绝实参求值顺序未定。
+    scene_->setImageLayerOverlay(layersPreview, osx, osy, doc_->width(), doc_->height());
     // 同上：取色真相源惰性化（仅在「底图隐藏 + 状态栏取色」时按需物化，见 displayLayersImage()）。
     displayLayersImage_ = core::Image{};
     displayLayersValid_ = false;

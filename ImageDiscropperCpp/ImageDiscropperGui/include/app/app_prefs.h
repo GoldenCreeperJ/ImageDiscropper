@@ -75,6 +75,11 @@ public:
     // 决议只反映「默认 > 上次」两级；「本次手输」由导出调用点在 doc_ 层先行短路，不进本方法。
     QString exportSeedDir() const;
 
+    // 导出完成后用系统文件管理器打开产物所在文件夹（**仅桌面生效**，默认关——弹文件管理器属打扰性动作，
+    // 留给用户显式开启；移动端导出落相册，本开关不参与）。
+    bool openExportFolderAfterExport() const { return openExportFolderAfterExport_; }
+    void setOpenExportFolderAfterExport(bool on);
+
     static constexpr int kMaxRecent = 8;
 
 private:
@@ -89,6 +94,7 @@ private:
     QString defaultExportDir_;   // 默认输出文件夹（初值空，由构造函数从 QSettings 覆盖；仅桌面）。
     bool confirmRearrangeRisk_ = true;
     bool confirmBurnInOnExport_ = true;
+    bool openExportFolderAfterExport_ = false;   // 导出完成后打开所在文件夹（默认关；仅桌面生效）。
 };
 
 } // namespace idc::gui

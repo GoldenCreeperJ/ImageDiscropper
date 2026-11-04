@@ -9,14 +9,15 @@ Android 包源目录）、Windows 安装包脚本与 Linux 桌面入口。
 
 ## 文件清单
 
-| 文件 / 目录                           | 作用                                                                                                                                                                                                                       |
-|-----------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `installer.iss`                   | Inno Setup 6 安装包脚本：安装 `idc_gui.exe` + `idc.exe`（全局/当前用户可选、目录可自定义、简中/英文双语向导），创建开始菜单/桌面快捷方式与卸载器，可选开机自启动（HKCU Run 键）                                                                                                        |
-| `languages/ChineseSimplified.isl` | 仓库自带的 6.7.1 兼容中文语言文件（官方中文仅存在于 issrc main 分支、未随任何发布版分发，故自带以摆脱构建机 Inno 安装内容依赖；由官方翻译按键表过滤生成）                                                                                                                                |
-| `app_icon.rc`                     | Windows 资源脚本：把多尺寸 `idc.ico`（16/20/24/32/40/48/64/128/256，BMP/DIB 条目）嵌入 `idc_gui.exe`，供任务栏/资源管理器/安装器显示；由 GUI CMakeLists `target_sources(idc_gui PRIVATE ../packaging/app_icon.rc)` 编译；相对路径以本文件所在目录为基准（`../../assets/...`） |
-| `resources.qrc`                   | Qt 资源：内嵌 256px 应用图标（`/icons/app_icon.png`），`main.cpp` 经 `setWindowIcon` 挂到 QApplication——窗口/任务栏图标，Linux 裸二进制分发的主要载体；图标派生物不入库，文件由 `assets/icons/regenerate.sh` 生成                                                         |
-| `android/`                        | Qt Android 包源目录（`QT_ANDROID_PACKAGE_SOURCE_DIR`）：`AndroidManifest.xml` + `res/` 启动器图标（`mipmap-*` 密度 png 为派生物不入库，由 `regenerate.sh` 步骤 ⑥ 生成；`colors.xml` / `mipmap-anydpi-v26/ic_launcher.xml` 为手工自适应图标配置，入库）              |
-| `imagediscropper.desktop`         | Linux 桌面入口（`Icon=imagediscropper`，hicolor 主题图标另见 `assets/icons/linux/`）                                                                                                                                                  |
+| 文件 / 目录                           | 作用                                                                                                                                                                                                                                                        |
+|-----------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `installer.iss`                   | Inno Setup 6 安装包脚本：安装 `idc_gui.exe` + `idc.exe`（全局/当前用户可选、目录可自定义、简中/英文双语向导），创建开始菜单/桌面快捷方式与卸载器，可选开机自启动（HKCU Run 键）；另经 `SystemFileAssociations` 为图片类与 `.json` 注册「打开方式」动词（**不抢默认关联**，卸载整键删除）                                                                 |
+| `languages/ChineseSimplified.isl` | 仓库自带的 6.7.1 兼容中文语言文件（官方中文仅存在于 issrc main 分支、未随任何发布版分发，故自带以摆脱构建机 Inno 安装内容依赖；由官方翻译按键表过滤生成）                                                                                                                                                                 |
+| `app_icon.rc`                     | Windows 资源脚本：把多尺寸 `idc.ico`（16/20/24/32/40/48/64/128/256，BMP/DIB 条目）嵌入 `idc_gui.exe`，供任务栏/资源管理器/安装器显示；由 GUI CMakeLists `target_sources(idc_gui PRIVATE ../packaging/app_icon.rc)` 编译；相对路径以本文件所在目录为基准（`../../assets/...`）                                  |
+| `resources.qrc`                   | Qt 资源：内嵌 256px 应用图标（`/icons/app_icon.png`），`main.cpp` 经 `setWindowIcon` 挂到 QApplication——窗口/任务栏图标，Linux 裸二进制分发的主要载体；图标派生物不入库，文件由 `assets/icons/regenerate.sh` 生成                                                                                          |
+| `MacOSXBundleInfo.plist.in`       | macOS `.app` 的 Info.plist 模板（GUI CMakeLists 经 `MACOSX_BUNDLE_INFO_PLIST` 消费）：在 CMake 默认键之上声明 `CFBundleDocumentTypes`——public.image / public.json 的「打开方式」能力（`LSHandlerRank=Alternate`，**不抢默认关联**，只进 Finder 的 Open With 列表），与 installer.iss / .desktop 同一口径 |
+| `android/`                        | Qt Android 包源目录（`QT_ANDROID_PACKAGE_SOURCE_DIR`）：`AndroidManifest.xml` + `res/` 启动器图标（`mipmap-*` 密度 png 为派生物不入库，由 `regenerate.sh` 步骤 ⑥ 生成；`colors.xml` / `mipmap-anydpi-v26/ic_launcher.xml` 为手工自适应图标配置，入库）                                               |
+| `imagediscropper.desktop`         | Linux 桌面入口（`Icon=imagediscropper`，hicolor 主题图标另见 `assets/icons/linux/`）；`MimeType=` 声明图片格式与 `.json` 的「打开方式」关联（同口径不抢默认）                                                                                                                                    |
 
 ## 打包约定
 

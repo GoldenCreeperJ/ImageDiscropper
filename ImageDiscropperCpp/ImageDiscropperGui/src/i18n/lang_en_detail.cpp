@@ -39,6 +39,7 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"status::kSessionOpened", "Opened: %1 (%2×%3)"},
     {"status::kSessionOpenFailed", "Open failed: %1"},
     {"status::kSessionOpenContentFailed", "Open failed: cannot read that content provider address"},
+    {"status::kSessionOpenBusy", "Opening the image, please wait…"},
     {"status::kSessionNewFailedBadSize", "New canvas failed: invalid size"},
     {"status::kSessionNewOk", "Created: %1 (keeps layers/annotations/color preprocess)"},
     {"status::kSessionNeedImageForLayer", "Open or create an image before adding an image layer."},
@@ -49,6 +50,8 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"status::kSessionNothingToReset", "No image to reset"},
     {"status::kSessionAllReset", "Reset everything (base image kept)"},
     {"status::kSessionAllResetNoBase", "Reset everything (base image deleted too; canvas cleared) - use Open/New to load an image again"},
+    {"status::kSessionPasteNoImage", "No image to paste on the clipboard."},
+    {"status::kSessionPasteSaveFailed", "Paste failed: could not save the clipboard image to a temporary file."},
     // 配置存取回报
     {"status::kConfigSaved", "Configuration saved: %1"},
     {"status::kConfigSaveFailed", "Failed to save the configuration: %1"},
@@ -194,6 +197,7 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     // 帮助菜单正文（桌面 / 移动 / 关于）
     {"msg::kHelpUsageBody",
         "1) File -> Open Image, or File -> New Canvas (size / background color / procedural pattern; a source image with two-level placement can be attached, and the pattern / image / node appearance each accepts preprocess steps and opacity).\n"
+        "   On the desktop you can also import: drop a single image or config file onto the window, or press Ctrl+V to paste a clipboard image (when the canvas has focus; Edit -> Paste Image always works) - an image asks whether to use it as the base or as an image layer, and a config (.json) loads directly.\n"
         "2) Pick a mode: Standard Extract / Reverse Remove / Grid Split; polarity Keep Inside / Remove Inside.\n"
         "3) Standard Extract / Reverse Remove: drag on the canvas to make a selection (Reverse Remove accepts multiple rectangles), shape / method live on the Parameters page; orange cut lines span the whole image, green keeps and red removes.\n"
         "   Drag the selection / corner handles / cut lines to adjust; arrow keys nudge (Shift for a larger step).\n"
@@ -204,7 +208,7 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
         "7) Multi-layer canvas: Image -> Add Image Layer; in Image Pick mode drag to place the frame, the Image menu reorders, duplicates and removes layers; the Layers panel toggles each layer's visibility.\n"
         "8) Export: File -> Export; File -> Export Settings switches Separate / Collapse / Rearrange, the format and the burn-in flags; the Export page carries every parameter.\n"
         "9) File -> Save Configuration / Load Configuration: the whole parameter set (annotations and layers included) can be saved/loaded, reused and undone.\n\n"
-        "Shortcuts (mode/polarity/clear/delete, undo/redo, open/new/export, zoom) can be viewed and rebound in the\n"
+        "Shortcuts (mode/polarity/clear/delete, undo/redo, open/new/export/paste image, zoom) can be viewed and rebound in the\n"
         "View menu's Appearance/Interaction dialog, on the Shortcuts page (effective immediately, saved across sessions);\n"
         "they are not listed here so this text stays accurate after you rebind one.\n"
         "Arrow-key nudging (Shift for a larger step) and Esc-to-finish-a-drawing are fixed keys, not customizable."},
@@ -232,12 +236,14 @@ constexpr core::I18nEntry kEntriesEnDetail[] = {
     {"tooltip::kBurnImageLayers", "On export, merge in the image layers (independent from the Layers panel’s “Show”, which is preview-only)."},
     {"tooltip::kConfirmRearrange", "Confirm before export when rearrange is risky; off exports directly."},
     {"tooltip::kConfirmBurnIn", "Remind before export when annotations or image layers exist but their burn-in is unchecked; off exports directly."},
+    {"tooltip::kOpenExportDir", "After a successful export, open the output folder in the system file manager (desktop only; off by default to avoid popping windows)."},
     {"tooltip::kLoadConfig", "Restore cut/sort/export parameters from a config file; undoable."},
     {"tooltip::kSaveConfig", "Save current parameters to a config file, reusable for same-size images."},
     {"tooltip::kUndo", "Undo the last step (annotation, or selection/sort/export parameters)."},
     {"tooltip::kRedo", "Redo: reapply the last undone operation."},
     {"tooltip::kClearSelection", "Clear the selection and cut lines (grid / multi-rect / single-rect)."},
     {"tooltip::kResetAll", "Clear layers / annotations / preprocessing / selection, keeping only the base."},
+    {"tooltip::kPasteImage", "Use the image on the clipboard as the base or as an image layer (desktop only)."},
     {"tooltip::kModeL3", "Grid splitting: a grid tiled over the whole image + cell selection + ordering."},
     {"tooltip::kPolarityKeep", "Keep the cells inside the selection (green mask)."},
     {"tooltip::kPolarityRemove", "Remove the cells inside the selection (red mask), keep the rest."},

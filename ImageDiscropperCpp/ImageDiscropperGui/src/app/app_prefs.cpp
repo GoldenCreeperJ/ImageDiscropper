@@ -28,10 +28,12 @@ const QString kKeyConfirmBurnIn = QString::fromUtf8(texts::ident::kUiConfirmBurn
 const QString kKeyLanguage = QString::fromUtf8(texts::ident::kUiLanguage);
 const QString kKeyThemeMode = QString::fromUtf8(texts::ident::kUiThemeMode);
 const QString kKeyDefaultExport = QString::fromUtf8(texts::ident::kUiDefaultExportDir);
+const QString kKeyOpenExportDir = QString::fromUtf8(texts::ident::kUiOpenExportDir);
 const QString kDefaultLanguage = QString::fromUtf8(texts::ident::kLangAuto);   // 缺省跟随系统 locale
 const auto kDefaultThemeMode = QStringLiteral("system");   // 缺省跟随系统深浅（与 theme::Mode::System 同字）
 constexpr bool kDefaultConfirmRearrange = true;
 constexpr bool kDefaultConfirmBurnIn = true;
+constexpr bool kDefaultOpenExportDir = false;   // 打开所在文件夹属打扰性动作，默认关。
 
 } // namespace
 
@@ -49,6 +51,7 @@ UiPrefs::UiPrefs() {
     lastExportDir_ = st.value(kKeyLastExport).toString();
     confirmRearrangeRisk_ = st.value(kKeyConfirmRearrange, kDefaultConfirmRearrange).toBool();
     confirmBurnInOnExport_ = st.value(kKeyConfirmBurnIn, kDefaultConfirmBurnIn).toBool();
+    openExportFolderAfterExport_ = st.value(kKeyOpenExportDir, kDefaultOpenExportDir).toBool();
     language_ = st.value(kKeyLanguage, kDefaultLanguage).toString();
     themeMode_ = st.value(kKeyThemeMode, kDefaultThemeMode).toString();
     defaultExportDir_ = st.value(kKeyDefaultExport).toString();   // 缺省空（不预设）。
@@ -119,6 +122,16 @@ void UiPrefs::setConfirmBurnInOnExport(const bool on) {
     QSettings st;
     st.beginGroup(kGroup);
     st.setValue(kKeyConfirmBurnIn, confirmBurnInOnExport_);
+    st.endGroup();
+    st.sync();
+}
+
+void UiPrefs::setOpenExportFolderAfterExport(const bool on) {
+    if (openExportFolderAfterExport_ == on) return;
+    openExportFolderAfterExport_ = on;
+    QSettings st;
+    st.beginGroup(kGroup);
+    st.setValue(kKeyOpenExportDir, openExportFolderAfterExport_);
     st.endGroup();
     st.sync();
 }

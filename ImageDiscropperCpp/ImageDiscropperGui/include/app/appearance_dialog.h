@@ -105,6 +105,9 @@ private:
     QCheckBox* snapCheck_{nullptr};
     QCheckBox* confirmBurnInCheck_{nullptr};
     QCheckBox* confirmRearrangeCheck_{nullptr};
+    // 导出后打开所在文件夹（写 UiPrefs，仅桌面生效）：开关本身两壳同显——与「默认输出文件夹」同一
+    // 呈现口径（移动端导出走相册固定目录、无文件夹语义，开关不参与但可见以便知道有此桌面能力）。
+    QCheckBox* openExportDirCheck_{nullptr};
     // —— 快捷键编辑区（仅 shortcutsEnabled_ 时构建）——
     bool shortcutsEnabled_ = true;                    // 构造参数：移动端传 false 关闭「快捷键」Tab。
     QTabWidget* tabs_{nullptr};                        // 外层多页容器（配色 / 其他 / 快捷键）。

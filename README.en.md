@@ -35,10 +35,10 @@ This project is primarily AI-led (~99%), and the documentation is AI-generated a
 - **Pre-processing layer**: rotate, flip, resize, grayscale, invert, channel split; independent vector **annotation layer** (optional burn-in at export).
 - **Multi-layer canvas model**: a canvas = a base (the underlay) plus an array of layers stacked above it; an image is placed along two distinct paths as either a **base image** or a **layer image**. Authoritative terms and persistence details (`generate` / `layers` sections): [`SPEC.md`](SPEC.md) §2.2.
 - **Local processing, lossless first** (NFR-1/2): images never leave your machine; cutting is pure pixel relocation — only JPEG output is lossy.
-- **GUI + CLI frontends**: Qt 6 desktop app (live preview, draggable cut lines, undo/redo) plus the `idc` command line (scriptable, config-driven).
+- **GUI + CLI frontends**: Qt 6 desktop app (live preview, draggable cut lines, undo/redo, drag & clipboard import, "Open with" file association) plus the `idc` command line (scriptable, config-driven).
 - **Switchable UI language (Simplified Chinese / English)**: all three layers share one hand-rolled translation catalog (no Qt Linguist involved). The GUI picks it from the language drop-down in *Appearance / Interaction…* (applies immediately); the CLI uses `--lang`. The source language is zh-CN and untranslated keys fall back to it automatically. Mechanism: [`ImageDiscropperCpp/README.md`](ImageDiscropperCpp/README.md) (Chinese).
 - **Global light / dark theme**: three modes — follow system / light / dark (follow-system re-applies when the OS scheme flips at runtime); canvas colors and interaction preferences are customizable via the *Appearance / Interaction…* dialog and remembered across sessions.
-- **Customizable shortcuts**: 15 commands in one registry, rebindable on the *Appearance / Interaction → Shortcuts* page (applies immediately, saved across sessions, conflict detection, unbindable); help text no longer hard-codes key names.
+- **Customizable shortcuts**: 16 commands in one registry, rebindable on the *Appearance / Interaction → Shortcuts* page (applies immediately, saved across sessions, conflict detection, unbindable); help text no longer hard-codes key names.
 
 ```text
 Source → ① cut-line set → ② induced grid → ③ selection set → ④ polarity (Keep/Remove) → ⑤ export (Collapse/Rearrange)
